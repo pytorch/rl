@@ -4,17 +4,86 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+import multiprocessing as mp
+
+import queue
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future
+from multiprocessing.synchronize import Event as MPEvent
+from statistics import mean
+from typing import Any, Literal
 
 import torch
 from tensordict import lazy_stack
 from tensordict.base import TensorDictBase
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
+from tensordict.utils import NestedKey
 from torch import nn
 
+from torchrl.modules.inference_server._client import _REMOTE_INTERACTION_TYPE_KEY
+from torchrl.modules.inference_server._config import (
+    InferenceDeviceConfig,
+    InferenceServerConfig,
+)
 from torchrl.modules.inference_server._transport import InferenceTransport
+from torchrl.weight_update import (
+    SharedMemWeightSyncScheme,
+    WeightStrategy,
+    WeightSyncScheme,
+)
+
+_CODE_TO_INTERACTION_TYPE = {
+    0: InteractionType.MODE,
+    1: InteractionType.MEDIAN,
+    2: InteractionType.MEAN,
+    3: InteractionType.RANDOM,
+    4: InteractionType.DETERMINISTIC,
+}
+
+
+def _normalize_tensordict_device_metadata(data: TensorDictBase) -> TensorDictBase:
+    target_device = data.device
+    if target_device is not None:
+        target_device = torch.device(target_device)
+    for value in data.values(include_nested=True, leaves_only=True):
+        value_device = getattr(value, "device", None)
+        if value_device is None:
+            continue
+        value_device = torch.device(value_device)
+        if target_device is None:
+            target_device = value_device
+        elif value_device != target_device:
+            return data
+
+    if target_device is None:
+        return data
+
+    needs_normalization = data.device != target_device
+    if not needs_normalization:
+        for value in data.values(include_nested=True, leaves_only=False):
+            if isinstance(value, TensorDictBase) and value.device != target_device:
+                needs_normalization = True
+                break
+    if not needs_normalization:
+        return data
+
+    data = data.copy()
+    data.clear_device_()
+    return data.to(target_device)
+
+
+def _default_collate(items: list[TensorDictBase]) -> TensorDictBase:
+    return lazy_stack(
+        [
+            _normalize_tensordict_device_metadata(item)
+            if isinstance(item, TensorDictBase)
+            else item
+            for item in items
+        ]
+    )
 
 
 class InferenceServer:
@@ -43,7 +112,20 @@ class InferenceServer:
         collate_fn (Callable, optional): function used to stack a list of
             TensorDicts into a batch. Default: :func:`~tensordict.lazy_stack`.
         device (torch.device or str, optional): device to move batches to
-            before calling the model. ``None`` means no device transfer.
+            before calling the model. This is kept as an alias for
+            ``policy_device`` for backward compatibility. ``None`` means no
+            device transfer.
+        policy_device (torch.device or str, optional): device that owns the
+            policy and receives batched requests before model execution.
+            If omitted, ``device`` is used.
+        output_device (torch.device or str, optional): device where individual
+            inference results are moved before being returned to actors. This
+            is useful when a CUDA policy serves CPU environment workers.
+        collect_stats (bool, optional): if ``True``, collect lightweight
+            batching, queue-wait, and forward-latency statistics. Defaults to
+            ``True``.
+        stats_window_size (int, optional): number of recent timing samples
+            kept for percentile statistics. Defaults to ``1024``.
         weight_sync: an optional
             :class:`~torchrl.weight_update.WeightSyncScheme` used to receive
             updated model weights from a trainer. When set, the server polls
@@ -51,6 +133,23 @@ class InferenceServer:
         weight_sync_model_id (str, optional): the model identifier used when
             initialising the weight sync scheme on the receiver side.
             Default: ``"policy"``.
+        server_config (InferenceServerConfig, optional): structured server
+            configuration. Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, ``timeout``, ``collect_stats``, and
+            ``stats_window_size`` keyword arguments (passing any of them
+            alongside a config raises, even when the value equals the
+            default).
+        device_config (InferenceDeviceConfig, optional): structured device
+            placement configuration. Mutually exclusive with ``device``,
+            ``policy_device``, and ``output_device``. The server consumes
+            ``policy_device`` and ``output_device`` only; ``env_device`` is
+            used as a fallback for ``output_device`` and ``storing_device``
+            is rejected (it is a collector-level setting).
+        policy_version (int, optional): initial behavior-policy version
+            attached to inference outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
 
     Example:
         >>> from tensordict.nn import TensorDictModule
@@ -75,28 +174,232 @@ class InferenceServer:
         model: nn.Module,
         transport: InferenceTransport,
         *,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        timeout: float | None = None,
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
+        policy_device: torch.device | str | None = None,
+        output_device: torch.device | str | None = None,
+        collect_stats: bool | None = None,
+        stats_window_size: int | None = None,
         weight_sync=None,
         weight_sync_model_id: str = "policy",
+        server_config: InferenceServerConfig | None = None,
+        device_config: InferenceDeviceConfig | None = None,
+        shutdown_event: threading.Event | MPEvent | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
     ):
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (
+                max_batch_size,
+                min_batch_size,
+                timeout,
+                collect_stats,
+                stats_window_size,
+            )
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, timeout, collect_stats, and stats_window_size "
+                "keyword arguments."
+            )
+        # Unset kwargs fall back to the (given or default) config values, so
+        # the signature carries no duplicated default literals.
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if timeout is None:
+            timeout = _server_defaults.timeout
+        if collect_stats is None:
+            collect_stats = _server_defaults.collect_stats
+        if stats_window_size is None:
+            stats_window_size = _server_defaults.stats_window_size
+        if device_config is not None:
+            if (
+                device is not None
+                or policy_device is not None
+                or output_device is not None
+            ):
+                raise ValueError(
+                    "device_config is mutually exclusive with device, "
+                    "policy_device, and output_device."
+                )
+            if device_config.storing_device is not None:
+                raise ValueError(
+                    "storing_device is a collector-level setting that the "
+                    "server does not consume. The server only uses "
+                    "policy_device and output_device (with env_device as a "
+                    "fallback for output_device). Pass storing_device to the "
+                    "collector instead."
+                )
+            policy_device = device_config.policy_device
+            output_device = device_config.server_output_device()
         self.model = model
         self.transport = transport
         self.max_batch_size = max_batch_size
         self.min_batch_size = min_batch_size
         self.timeout = timeout
-        self.collate_fn = collate_fn if collate_fn is not None else lazy_stack
-        self.device = torch.device(device) if device is not None else None
+        self.collate_fn = collate_fn if collate_fn is not None else _default_collate
+        policy_device = device if policy_device is None else policy_device
+        self.policy_device = (
+            torch.device(policy_device) if policy_device is not None else None
+        )
+        self.device = self.policy_device
+        self.output_device = (
+            torch.device(output_device) if output_device is not None else None
+        )
         self.weight_sync = weight_sync
         self._weight_sync_model_id = weight_sync_model_id
+        self._policy_version = int(policy_version)
+        # Optional multiprocessing.Value mirror so a parent process can read
+        # the live version of a server running in a child process.
+        self._policy_version_shared = None
+        self.policy_version_key = policy_version_key
+        self.collect_stats = collect_stats
+        self.stats_window_size = stats_window_size
 
-        self._shutdown_event = threading.Event()
+        self._shutdown_event = (
+            threading.Event() if shutdown_event is None else shutdown_event
+        )
         self._worker: threading.Thread | None = None
         # Protects model access during weight updates
         self._model_lock = threading.Lock()
+        self._stats_lock = threading.Lock()
+        self._reset_stats()
+
+        if self.policy_device is not None and hasattr(self.model, "to"):
+            self.model.to(self.policy_device)
+
+    # -- stats ---------------------------------------------------------------
+
+    def _reset_stats(self) -> None:
+        self._stats_started_at = time.monotonic()
+        self._num_requests = 0
+        self._num_batches = 0
+        self._num_weight_updates = 0
+        self._batch_sizes: list[int] = []
+        self._queue_wait_ms: list[float] = []
+        self._forward_ms: list[float] = []
+
+    @staticmethod
+    def _percentile(values: list[float], percentile: float) -> float:
+        if not values:
+            return 0.0
+        sorted_values = sorted(values)
+        index = int(round((len(sorted_values) - 1) * percentile))
+        return float(sorted_values[index])
+
+    def _extend_window(self, target: list, values: list) -> None:
+        target.extend(values)
+        excess = len(target) - self.stats_window_size
+        if excess > 0:
+            del target[:excess]
+
+    def _record_batch_stats(
+        self,
+        *,
+        batch_size: int,
+        queue_wait_ms: list[float],
+        forward_ms: float,
+    ) -> None:
+        if not self.collect_stats:
+            return
+        with self._stats_lock:
+            self._num_requests += batch_size
+            self._num_batches += 1
+            self._extend_window(self._batch_sizes, [batch_size])
+            self._extend_window(self._queue_wait_ms, queue_wait_ms)
+            self._extend_window(self._forward_ms, [forward_ms])
+
+    def stats(self, *, reset: bool = False) -> dict[str, float | int]:
+        """Return lightweight inference-server throughput statistics.
+
+        Args:
+            reset (bool, optional): if ``True``, clear counters after taking
+                the snapshot. Defaults to ``False``.
+
+        Returns:
+            A dictionary with request/batch counts, rates, average batch size,
+            and p50/p95 queue and forward latencies in milliseconds.
+        """
+        with self._stats_lock:
+            elapsed = max(time.monotonic() - self._stats_started_at, 1e-12)
+            num_requests = self._num_requests
+            num_batches = self._num_batches
+            batch_sizes = list(self._batch_sizes)
+            queue_wait_ms = list(self._queue_wait_ms)
+            forward_ms = list(self._forward_ms)
+            result = {
+                "requests": num_requests,
+                "batches": num_batches,
+                "requests_per_s": num_requests / elapsed,
+                "batches_per_s": num_batches / elapsed,
+                "avg_batch_size": float(mean(batch_sizes)) if batch_sizes else 0.0,
+                "p50_queue_ms": self._percentile(queue_wait_ms, 0.50),
+                "p95_queue_ms": self._percentile(queue_wait_ms, 0.95),
+                "p50_forward_ms": self._percentile(forward_ms, 0.50),
+                "p95_forward_ms": self._percentile(forward_ms, 0.95),
+                "policy_version": self._policy_version,
+                "weight_updates": self._num_weight_updates,
+            }
+            if reset:
+                self._reset_stats()
+            return result
+
+    @property
+    def policy_version(self) -> int:
+        """The current behavior-policy version served with inference outputs."""
+        return self._policy_version
+
+    def _mark_weight_update(self) -> None:
+        with self._stats_lock:
+            self._policy_version += 1
+            self._num_weight_updates += 1
+            if self._policy_version_shared is not None:
+                self._policy_version_shared.value = self._policy_version
+
+    def update_policy_weights_(self, model_id=None, policy_or_weights=None, **kwargs):
+        """Weight-sync cascade hook: record an applied weight update.
+
+        Weight-sync schemes cascade to their ``context`` after applying
+        weights to the registered model. The server installs itself as the
+        scheme context (when none is set) so that the policy version is
+        bumped exactly when weights are actually applied -- including
+        shared-memory schemes whose background receiver thread applies
+        weights outside the server's polling loop.
+        """
+        self._mark_weight_update()
+
+    def update_model(
+        self,
+        update_fn: Callable[[nn.Module], Any],
+        *,
+        mark_weight_update: bool = True,
+    ) -> Any:
+        """Apply an in-place update to the served model under the model lock.
+
+        Args:
+            update_fn (Callable): function called with ``self.model`` while
+                inference is blocked by the server's model lock.
+            mark_weight_update (bool, optional): if ``True``, increment the
+                behavior-policy version and weight-update counter after
+                ``update_fn`` succeeds. Defaults to ``True``.
+
+        Returns:
+            The value returned by ``update_fn``.
+        """
+        with self._model_lock:
+            result = update_fn(self.model)
+            if mark_weight_update:
+                self._mark_weight_update()
+        return result
 
     # -- lifecycle ------------------------------------------------------------
 
@@ -147,14 +450,68 @@ class InferenceServer:
             )
         if not ws.synchronized_on_receiver:
             ws.connect(worker_idx=0)
+        # Ride the scheme's post-application cascade so the version is bumped
+        # when weights are actually applied (see update_policy_weights_).
+        if isinstance(ws, WeightSyncScheme) and ws.context is None:
+            ws.context = self
 
     def _poll_weight_update(self) -> None:
         """Non-blocking check for fresh weights from the trainer."""
         ws = self.weight_sync
         if ws is None:
             return
+        if isinstance(ws, SharedMemWeightSyncScheme):
+            # Shared-memory schemes apply weights in place through a
+            # background receiver thread started at connect() time; polling
+            # receive() here would re-apply and re-count the same shared
+            # buffer on every server iteration. Version bumps arrive through
+            # the update_policy_weights_ cascade instead.
+            return
         with self._model_lock:
-            ws.receive(timeout=0.0)
+            weights = ws.receive(timeout=0.0)
+            if weights is not None and getattr(ws, "context", None) is not self:
+                # When the server is the scheme context, receive() already
+                # cascaded into update_policy_weights_; do not count twice.
+                self._mark_weight_update()
+
+    def _set_policy_version(self, result_batch: TensorDictBase) -> TensorDictBase:
+        """Annotate inference outputs with the behavior policy version."""
+        if self.policy_version_key is None:
+            return result_batch
+        device = result_batch.device
+        if device is None:
+            device = self.output_device or self.policy_device or torch.device("cpu")
+        version = torch.full(
+            result_batch.batch_size,
+            self.policy_version,
+            dtype=torch.long,
+            device=device,
+        )
+        return result_batch.set(self.policy_version_key, version)
+
+    def _interaction_type_context(self, batch: TensorDictBase):
+        code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
+        if code is None:
+            return contextlib.nullcontext(), batch
+        if not isinstance(code, torch.Tensor):
+            interaction_type_value = _CODE_TO_INTERACTION_TYPE[int(code)]
+        else:
+            flat_code = code.reshape(-1)
+            if flat_code.numel() == 0:
+                return contextlib.nullcontext(), batch.exclude(
+                    _REMOTE_INTERACTION_TYPE_KEY, inplace=False
+                )
+            interaction_code = int(flat_code[0].item())
+            if not flat_code.eq(interaction_code).all():
+                raise RuntimeError(
+                    "InferenceServer received a mixed interaction-type batch. "
+                    "Use homogeneous server requests or a smaller max_batch_size."
+                )
+            interaction_type_value = _CODE_TO_INTERACTION_TYPE[interaction_code]
+        return (
+            set_interaction_type(interaction_type_value),
+            batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False),
+        )
 
     @torch.no_grad()
     def _run(self) -> None:
@@ -166,7 +523,14 @@ class InferenceServer:
 
                 self.transport.wait_for_work(timeout=self.timeout)
 
-                items, callbacks = self.transport.drain(self.max_batch_size)
+                drain_with_timing = getattr(self.transport, "drain_with_timing", None)
+                if drain_with_timing is None:
+                    items, callbacks = self.transport.drain(self.max_batch_size)
+                    submitted_at = [None] * len(items)
+                else:
+                    items, callbacks, submitted_at = drain_with_timing(
+                        self.max_batch_size
+                    )
                 if not items:
                     continue
 
@@ -178,19 +542,46 @@ class InferenceServer:
                         if remaining <= 0:
                             break
                         self.transport.wait_for_work(timeout=remaining)
-                        more_items, more_cbs = self.transport.drain(
-                            self.max_batch_size - len(items)
-                        )
+                        if drain_with_timing is None:
+                            more_items, more_cbs = self.transport.drain(
+                                self.max_batch_size - len(items)
+                            )
+                            more_submitted_at = [None] * len(more_items)
+                        else:
+                            more_items, more_cbs, more_submitted_at = drain_with_timing(
+                                self.max_batch_size - len(items)
+                            )
                         items.extend(more_items)
                         callbacks.extend(more_cbs)
-
-                batch = self.collate_fn(items)
-                if self.device is not None:
-                    batch = batch.to(self.device)
+                        submitted_at.extend(more_submitted_at)
 
                 try:
+                    now = time.monotonic()
+                    queue_wait_ms = [
+                        (now - item_submitted_at) * 1000.0
+                        for item_submitted_at in submitted_at
+                        if item_submitted_at is not None
+                    ]
+                    batch = self.collate_fn(items)
+                    if self.policy_device is not None:
+                        batch = batch.to(self.policy_device)
+                    forward_start = time.monotonic()
                     with self._model_lock:
-                        results = self.model(batch).unbind(0)
+                        interaction_context, batch = self._interaction_type_context(
+                            batch
+                        )
+                        with interaction_context:
+                            result_batch = self.model(batch)
+                        if self.output_device is not None:
+                            result_batch = result_batch.to(self.output_device)
+                        result_batch = self._set_policy_version(result_batch)
+                    forward_ms = (time.monotonic() - forward_start) * 1000.0
+                    self._record_batch_stats(
+                        batch_size=len(callbacks),
+                        queue_wait_ms=queue_wait_ms,
+                        forward_ms=forward_ms,
+                    )
+                    results = result_batch.unbind(0)
                     if len(results) != len(callbacks):
                         raise RuntimeError(
                             f"Model returned {len(results)} results for a "
@@ -224,6 +615,458 @@ class InferenceServer:
 
     def __del__(self) -> None:
         if self._worker is not None and self._worker.is_alive():
+            self.shutdown(timeout=1.0)
+
+
+def _process_server_entry(
+    policy_factory: Callable[[], nn.Module],
+    transport: InferenceTransport,
+    server_kwargs: dict,
+    shutdown_event: MPEvent,
+    ready_queue,
+    control_queue,
+    control_response_queue,
+    policy_version_value=None,
+) -> None:
+    """Run an :class:`InferenceServer` loop inside a child process."""
+    try:
+        model = policy_factory()
+        server = InferenceServer(
+            model=model,
+            transport=transport,
+            shutdown_event=shutdown_event,
+            **server_kwargs,
+        )
+        # Mirror the live policy version into shared memory so the parent's
+        # ProcessInferenceServer.policy_version stays accurate.
+        server._policy_version_shared = policy_version_value
+        server.start()
+    except BaseException as exc:
+        # The ready queue is only used for the startup handshake. Failures
+        # after a successful handshake propagate through the child's exit
+        # code instead, so that a restart cannot pick up a stale sentinel.
+        ready_queue.put((False, repr(exc)))
+        raise
+    ready_queue.put((True, None))
+    try:
+        while not shutdown_event.is_set():
+            if not server.is_alive:
+                # The serve loop died (its own finally already drained and
+                # rejected pending requests). Exit with an error so the
+                # parent sees a dead process instead of a healthy control
+                # plane fronting a dead server.
+                raise RuntimeError(
+                    "InferenceServer serve loop died inside the server process."
+                )
+            try:
+                request_id, command, kwargs = control_queue.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            try:
+                if command == "stats":
+                    payload = server.stats(**kwargs)
+                elif command == "health":
+                    payload = {
+                        "alive": server.is_alive,
+                        "policy_version": server.policy_version,
+                    }
+                elif command == "update_model_weights":
+                    weights = kwargs["weights"]
+                    mark_weight_update = kwargs.get("mark_weight_update", True)
+                    with server._model_lock:
+                        if hasattr(server.model, "load_policy_weights"):
+                            server.model.load_policy_weights(weights)
+                        else:
+                            WeightStrategy(extract_as="tensordict").apply_weights(
+                                server.model,
+                                weights.to(server.policy_device)
+                                if server.policy_device is not None
+                                else weights,
+                            )
+                        if mark_weight_update:
+                            server._mark_weight_update()
+                    payload = {"accepted": True}
+                elif command == "shutdown":
+                    shutdown_event.set()
+                    payload = {"accepted": True}
+                else:
+                    raise RuntimeError(f"Unknown process-server command: {command}")
+            except Exception as exc:
+                control_response_queue.put((request_id, False, repr(exc)))
+            else:
+                control_response_queue.put((request_id, True, payload))
+    finally:
+        # Join the serve loop without a deadline: its shutdown path drains
+        # and rejects pending requests, which must not be skipped even when
+        # a slow forward pass is in flight (clients would hang forever).
+        # The parent enforces the hard deadline via process.join/terminate.
+        server.shutdown(timeout=None)
+
+
+class ProcessInferenceServer:
+    """Dedicated-process wrapper around :class:`InferenceServer`.
+
+    This server is intended for actor/env workers that communicate through a
+    queue-based transport such as
+    :class:`~torchrl.modules.inference_server.MPTransport`. Clients must be
+    created from the transport before :meth:`start` so that the child process
+    inherits their response queues.
+
+    Args:
+        policy_factory (Callable[[], nn.Module]): picklable factory that creates
+            the policy inside the server process.
+        transport (InferenceTransport): transport shared with actor clients.
+
+    Keyword Args:
+        max_batch_size (int, optional): maximum requests per forward pass.
+        min_batch_size (int, optional): minimum requests to accumulate before
+            dispatching a partial batch.
+        timeout (float, optional): wait timeout in seconds.
+        collate_fn (Callable, optional): collate function for requests.
+        device (torch.device or str, optional): alias for ``policy_device``.
+        policy_device (torch.device or str, optional): policy execution device.
+        output_device (torch.device or str, optional): actor response device.
+        collect_stats (bool, optional): forwarded to :class:`InferenceServer`.
+        stats_window_size (int, optional): forwarded to :class:`InferenceServer`.
+        weight_sync: optional weight synchronization scheme.
+        weight_sync_model_id (str, optional): model id for weight sync.
+        server_config (InferenceServerConfig, optional): structured server
+            configuration. Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, ``timeout``, ``collect_stats``, and
+            ``stats_window_size`` keyword arguments.
+        device_config (InferenceDeviceConfig, optional): structured device
+            placement configuration. Mutually exclusive with ``device``,
+            ``policy_device``, and ``output_device``. Same field subset as
+            :class:`InferenceServer`: ``storing_device`` is rejected.
+        policy_version (int, optional): initial behavior-policy version
+            attached to inference outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
+        mp_context: multiprocessing context or start-method name. Defaults to
+            ``"spawn"``.
+        startup_timeout (float, optional): seconds :meth:`start` waits for the
+            child process to build the policy and report readiness. Increase
+            this when the policy factory loads a large checkpoint. Defaults to
+            ``300.0``.
+
+    Examples:
+        >>> import multiprocessing as mp
+        >>> import torch.nn as nn
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.inference_server import MPTransport
+        >>> def make_policy():
+        ...     return TensorDictModule(
+        ...         nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
+        ...     )
+        >>> ctx = mp.get_context("spawn")
+        >>> transport = MPTransport(ctx=ctx)
+        >>> client = transport.client()
+        >>> server = ProcessInferenceServer(
+        ...     policy_factory=make_policy,
+        ...     transport=transport,
+        ...     mp_context=ctx,
+        ... )
+        >>> server.start()
+        >>> server.shutdown()
+    """
+
+    def __init__(
+        self,
+        *,
+        policy_factory: Callable[[], nn.Module],
+        transport: InferenceTransport,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        timeout: float | None = None,
+        collate_fn: Callable | None = None,
+        device: torch.device | str | None = None,
+        policy_device: torch.device | str | None = None,
+        output_device: torch.device | str | None = None,
+        collect_stats: bool | None = None,
+        stats_window_size: int | None = None,
+        weight_sync=None,
+        weight_sync_model_id: str = "policy",
+        server_config: InferenceServerConfig | None = None,
+        device_config: InferenceDeviceConfig | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
+        mp_context: str | mp.context.BaseContext | None = None,
+        startup_timeout: float = 300.0,
+    ) -> None:
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (
+                max_batch_size,
+                min_batch_size,
+                timeout,
+                collect_stats,
+                stats_window_size,
+            )
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, timeout, collect_stats, and stats_window_size "
+                "keyword arguments."
+            )
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if timeout is None:
+            timeout = _server_defaults.timeout
+        if collect_stats is None:
+            collect_stats = _server_defaults.collect_stats
+        if stats_window_size is None:
+            stats_window_size = _server_defaults.stats_window_size
+        if device_config is not None:
+            if (
+                device is not None
+                or policy_device is not None
+                or output_device is not None
+            ):
+                raise ValueError(
+                    "device_config is mutually exclusive with device, "
+                    "policy_device, and output_device."
+                )
+            if device_config.storing_device is not None:
+                raise ValueError(
+                    "storing_device is a collector-level setting that the "
+                    "server does not consume. The server only uses "
+                    "policy_device and output_device (with env_device as a "
+                    "fallback for output_device). Pass storing_device to the "
+                    "collector instead."
+                )
+            policy_device = device_config.policy_device
+            output_device = device_config.server_output_device()
+        self.policy_factory = policy_factory
+        self.transport = transport
+        self.startup_timeout = startup_timeout
+        if isinstance(mp_context, str):
+            self._ctx = mp.get_context(mp_context)
+        elif mp_context is None:
+            self._ctx = mp.get_context("spawn")
+        else:
+            self._ctx = mp_context
+        self._shutdown_event = self._ctx.Event()
+        self._ready_queue = self._ctx.Queue()
+        self._control_queue = self._ctx.Queue()
+        self._control_response_queue = self._ctx.Queue()
+        self._next_control_request_id = 0
+        # Serializes control round trips across caller threads (see
+        # _request_control).
+        self._control_lock = threading.Lock()
+        self._process: mp.Process | None = None
+        self._server_kwargs = {
+            "max_batch_size": max_batch_size,
+            "min_batch_size": min_batch_size,
+            "timeout": timeout,
+            "collate_fn": collate_fn,
+            "device": device,
+            "policy_device": policy_device,
+            "output_device": output_device,
+            "collect_stats": collect_stats,
+            "stats_window_size": stats_window_size,
+            "weight_sync": weight_sync,
+            "weight_sync_model_id": weight_sync_model_id,
+            "policy_version": policy_version,
+            "policy_version_key": policy_version_key,
+        }
+        # Live mirror of the child's policy version ("q" = signed 64-bit).
+        self._policy_version_value = self._ctx.Value("q", int(policy_version))
+
+    @property
+    def policy_version(self) -> int:
+        """The live behavior-policy version of the child server."""
+        return int(self._policy_version_value.value)
+
+    def start(self) -> ProcessInferenceServer:
+        """Start the child process and wait until the policy is initialized."""
+        if self.is_alive:
+            raise RuntimeError("Server is already running.")
+        self._shutdown_event.clear()
+        self._process = self._ctx.Process(
+            target=_process_server_entry,
+            kwargs={
+                "policy_factory": self.policy_factory,
+                "transport": self.transport,
+                "server_kwargs": self._server_kwargs,
+                "shutdown_event": self._shutdown_event,
+                "ready_queue": self._ready_queue,
+                "control_queue": self._control_queue,
+                "control_response_queue": self._control_response_queue,
+                "policy_version_value": self._policy_version_value,
+            },
+            daemon=True,
+            name="ProcessInferenceServer",
+        )
+        self._process.start()
+        try:
+            ok, payload = self._ready_queue.get(timeout=self.startup_timeout)
+        except queue.Empty:
+            self.shutdown(timeout=1.0)
+            raise TimeoutError(
+                f"ProcessInferenceServer did not report readiness within "
+                f"{self.startup_timeout} seconds. If the policy factory loads a "
+                f"large checkpoint, increase startup_timeout."
+            ) from None
+        if not ok:
+            self.shutdown(timeout=1.0)
+            raise RuntimeError(f"ProcessInferenceServer failed to start: {payload}")
+        return self
+
+    def _request_control(
+        self,
+        command: Literal["stats", "health", "update_model_weights", "shutdown"],
+        kwargs: dict | None = None,
+        timeout: float = 5.0,
+    ):
+        if self._process is None:
+            raise RuntimeError("ProcessInferenceServer is not running.")
+        if not self._process.is_alive():
+            raise RuntimeError(
+                "ProcessInferenceServer process is not alive "
+                f"(exitcode={self._process.exitcode})."
+            )
+        # The response queue is shared, so the whole request/response cycle
+        # is serialized: without the lock, two threads calling stats()/
+        # health() concurrently could pop and discard each other's replies.
+        with self._control_lock:
+            request_id = self._next_control_request_id
+            self._next_control_request_id += 1
+            self._control_queue.put((request_id, command, kwargs or {}))
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Timed out waiting for ProcessInferenceServer {command!r}."
+                    )
+                try:
+                    response_id, ok, payload = self._control_response_queue.get(
+                        timeout=remaining
+                    )
+                except queue.Empty:
+                    raise TimeoutError(
+                        f"Timed out waiting for ProcessInferenceServer {command!r}."
+                    ) from None
+                if response_id != request_id:
+                    # Stale reply from an earlier timed-out request; calls are
+                    # serialized by the lock, so it can be safely discarded.
+                    continue
+                if not ok:
+                    raise RuntimeError(
+                        f"ProcessInferenceServer {command!r} failed: {payload}"
+                    )
+                return payload
+
+    def shutdown(self, timeout: float | None = 5.0) -> None:
+        """Signal the child process to stop and wait for it to exit."""
+        if self.is_alive:
+            try:
+                self._request_control("shutdown", timeout=timeout or 5.0)
+            except Exception:
+                pass
+        self._shutdown_event.set()
+        process = self._process
+        if process is None:
+            return
+        process.join(timeout=timeout)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=timeout)
+        self._process = None
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether the child process is alive."""
+        return self._process is not None and self._process.is_alive()
+
+    def stats(
+        self, *, reset: bool = False, timeout: float = 5.0
+    ) -> dict[str, float | int]:
+        """Return process-server stats from the child process.
+
+        This is a blocking control-plane round trip: it can take up to
+        ``timeout`` seconds and raises :class:`TimeoutError` when the child
+        does not answer in time, or :class:`RuntimeError` when the child is
+        not running.
+
+        Args:
+            reset (bool, optional): if ``True``, reset counters in the child
+                process after taking the snapshot.
+            timeout (float, optional): seconds to wait for the child's
+                answer. Defaults to ``5.0``.
+        """
+        return self._request_control("stats", {"reset": reset}, timeout=timeout)
+
+    def update_model_weights(
+        self,
+        weights: TensorDictBase,
+        *,
+        mark_weight_update: bool = True,
+        timeout: float = 300.0,
+    ) -> dict[str, bool]:
+        """Apply TensorDict weights to the model hosted by the child process.
+
+        This is a blocking control-plane round trip; large models can take a
+        while to transfer and apply, hence the generous default timeout.
+
+        Args:
+            weights (TensorDictBase): weights to apply to the child's model.
+            mark_weight_update (bool, optional): whether to bump the child's
+                behavior-policy version. Defaults to ``True``.
+            timeout (float, optional): seconds to wait for the child to apply
+                the weights. Defaults to ``300.0``.
+        """
+        return self._request_control(
+            "update_model_weights",
+            {"weights": weights, "mark_weight_update": mark_weight_update},
+            timeout=timeout,
+        )
+
+    def health(self, *, timeout: float = 5.0) -> dict[str, int | bool | None]:
+        """Return a lightweight child-process health snapshot.
+
+        Never raises on a dead or unresponsive child; degraded fields are
+        reported in the returned dictionary instead (``process_alive`` /
+        ``control_error``), so this is safe to call from monitoring loops.
+
+        Args:
+            timeout (float, optional): seconds to wait for the child's
+                answer. Defaults to ``5.0``.
+        """
+        process = self._process
+        result = {
+            "process_alive": process.is_alive() if process is not None else False,
+            "pid": process.pid if process is not None else None,
+            "exitcode": process.exitcode if process is not None else None,
+        }
+        if process is not None and process.is_alive():
+            try:
+                result.update(self._request_control("health", timeout=timeout))
+            except (RuntimeError, TimeoutError) as exc:
+                # The child may have died between the liveness check and the
+                # control round trip; a health probe reports that instead of
+                # raising.
+                result["process_alive"] = (
+                    process.is_alive() if process is not None else False
+                )
+                result["exitcode"] = process.exitcode if process is not None else None
+                result["control_error"] = repr(exc)
+        return result
+
+    def __enter__(self) -> ProcessInferenceServer:
+        return self.start()
+
+    def __exit__(self, *exc_info) -> None:
+        self.shutdown()
+
+    def __del__(self) -> None:
+        if self.is_alive:
             self.shutdown(timeout=1.0)
 
 

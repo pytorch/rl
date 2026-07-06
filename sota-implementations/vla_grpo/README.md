@@ -166,8 +166,8 @@ vendored modeling code under `openvla_oft/` comes from
 [SimpleVLA-RL](https://github.com/PRIME-RL/SimpleVLA-RL) (MIT).
 
 Important compatibility note: the official continuous-head OpenVLA-OFT
-checkpoints are not interchangeable with this token-head variant. Use the
-SimpleVLA-RL SFT checkpoints, for example `Haozhan72/*`:
+checkpoints are not interchangeable with this token-head variant for GRPO
+training. Use the SimpleVLA-RL SFT checkpoints, for example `Haozhan72/*`:
 
 ```python
 from openvla import OpenVLAOFTWrapper
@@ -196,29 +196,47 @@ pytest sota-implementations/vla_grpo/test_openvla.py
 ## What gets logged
 
 With a logger configured (`logger.backend=wandb`, the default), each iteration
-logs reward curves (`train/reward_mean`, `train/reward_max`), success rate, and
-throughput split into collection and optimization:
+logs the training success rate (`train/success_rate`), trajectory-return
+aggregates (`collector/trajectory_return_sum`,
+`collector/trajectory_return_max`), and throughput split into collection and
+optimization:
 
 - `throughput/inference_env_steps_per_s`
 - `throughput/inference_decisions_per_s`
 - `throughput/train_decisions_per_s`
 - `throughput/optim_steps_per_s`
 
-Eval rollouts can also be rendered to video (`logger.record_video=true`, on by
-default). A dedicated single-environment recorder is built with
-`from_pixels=True`: `ToyVLAEnv` renders the tracking scene, while `LiberoEnv`
-exposes its camera. `torchrl.record.VideoRecorder` writes
-`logger.video_episodes` greedy episodes to `eval/video` on every eval. wandb
-video encoding needs `moviepy` from the `dev` dependency group. Disable videos
-with `logger.record_video=false`.
+The collector path is fixed: a TorchRL `MultiCollector` launches rollout
+workers, each worker owns a sync `ParallelEnv(envs_per_collector)`, and all
+workers plus the evaluator share one process policy server.
 
-Checkpointing is shared by the toy and LIBERO configs. `checkpoint_latest.pt`
-is written to the hydra run directory every `checkpoint.save_iter` iterations;
+```bash
+python sota-implementations/vla_grpo/vla-grpo.py --config-name vla_grpo_libero
+```
+
+Rollout clients request random sampling; eval and video clients request
+deterministic decoding from the same server, so rollout and eval are synced by
+one explicit TensorDict weight update after each optimizer step. The replay
+buffer is passed to the collector and receives complete trajectories as they
+finish; training waits until the consuming replay buffer has enough sampleable
+decisions.
+
+With the thread evaluator backend, eval rollouts are rendered to video whenever
+a logger is configured. A dedicated single-environment evaluator is built with
+`from_pixels=True`: `ToyVLAEnv` renders the tracking scene, while `LiberoEnv`
+exposes its camera. `torchrl.record.VideoRecorder` writes the evaluator rollout
+to `eval/video` on every eval. wandb video encoding needs `moviepy` from the
+`dev` dependency group. Process-backend evaluator video dumping still needs a
+TorchRL-side remote `VideoRecorder.dump` path.
+
+Checkpointing is shared by the toy and LIBERO configs. `checkpoint_latest`
+is written as a TensorDict directory in the hydra run directory every
+`checkpoint.save_iter` iterations;
 resume with:
 
 ```bash
 python sota-implementations/vla_grpo/vla-grpo.py \
-  checkpoint.resume=/path/to/checkpoint_latest.pt
+  checkpoint.resume=/path/to/checkpoint_latest
 ```
 
 ## LIBERO configuration details
@@ -226,8 +244,10 @@ python sota-implementations/vla_grpo/vla-grpo.py \
 The full LIBERO config follows the SimpleVLA-RL hyper-parameter shape:
 
 - groups of `n=8` rollouts per initial state;
-- 64 initial states per iteration, for 512 trajectories before dynamic
-  filtering;
+- 40 initial states per iteration (`collector.groups_per_iter`), for 320
+  trajectories before dynamic filtering -- one aligned group wave across the
+  320 rollout envs; the paper uses 64 initial states (512 trajectories) per
+  iteration, which is a known deviation of the shipped config;
 - 512 base environment steps, or 64 chunk decisions, per episode;
 - rollout temperature 1.6 and greedy evaluation;
 - dynamic sampling bounds `(0.1, 0.9)` to drop groups that are all failure or
@@ -241,47 +261,53 @@ A sequence-level ratio remains available as a config switch for ablations, but
 for a 56-token action chunk it saturates the clip range much more easily than
 per-token ratios.
 
-LIBERO simulation runs in parallel worker processes (`env.num_envs`, one MuJoCo
-instance each), and policy inference batches across workers. Group accounting is
-the main thing to keep in mind: GRPO needs repeated attempts from the same
-initial state under the same policy. Each worker owns a disjoint `group_id`
-block so advantages never mix across unrelated groups.
+LIBERO simulation runs through `collector.num_collectors` MultiCollector
+workers. Each worker hosts a synchronous
+`ParallelEnv(collector.envs_per_collector)`. Policy inference runs on the
+shared process server and each worker owns a disjoint `group_id` block so
+advantages never mix across unrelated groups.
 
-Because groups are repeated serially within each worker, `env.num_envs` should
-not exceed `collector.groups_per_iter`; otherwise many same-policy collection
-polls are needed before each worker can finish all `group_size` rollouts for a
-group and the replay buffer receives advantaged decisions. For best throughput,
-set `env.num_envs` to a divisor of `collector.groups_per_iter`, often the same
-value.
+Without `env.parallel_group_repeats`, groups are repeated serially within each
+worker, so the total rollout worker count should not exceed
+`collector.groups_per_iter`. For that serial mode, set
+`collector.num_collectors * collector.envs_per_collector` to a divisor of
+`collector.groups_per_iter`, often the same value.
 
-When `env.parallel_group_repeats=true`, `env.num_envs / collector.group_size`
-logical workers each run one repeated-initial-state group in parallel. In this
-mode, prefer setting `collector.groups_per_iter` to that logical worker count
-so one target group wave is aligned. If `collector.candidate_group_size` is
-larger than `collector.group_size`, each worker in a logical group repeats the
-same initial state serially enough times to produce up to the requested
-candidate count. For example, 8 parallel workers x 2 serial repeats gives at
-most 16 candidates. Groups can be written earlier if the candidates already
-contain a useful selected subset.
+When `env.parallel_group_repeats=true`, the shared replay buffer centralizes
+`MCAdvantage` write state, so same-initial-state groups may straddle
+subcollectors. The logical worker count is the total rollout worker count
+divided by `collector.group_size`. In this mode, prefer setting
+`collector.groups_per_iter` to that logical worker count so one target group
+wave is aligned. If `collector.candidate_group_size` is larger than
+`collector.group_size`, each worker in a logical group repeats the same initial
+state serially enough times to produce up to the requested candidate count. For
+example, 8 parallel workers x 2 serial repeats gives at most 16 candidates.
+Groups can be written earlier if the candidates already contain a useful
+selected subset.
 
-The replay-buffer writer polls the collector at one outer step per worker, so
-complete trajectories are handed to the replay buffer shortly after they finish
-instead of waiting for a full max-length rollout from every worker.
+The training script starts the collector once, waits until the consuming replay
+buffer has enough sampleable decisions, pauses collection, runs the PPO update,
+clears incomplete same-policy advantage queues and partial trajectories, pushes
+the TensorDict policy weights to the shared policy server, and then lets the
+collector resume.
 `MCAdvantage` runs as the replay-buffer transform and keeps incomplete groups
-queued across same-policy polls until all siblings arrive.
-`max_collect_batches_per_iter` sets the safety cap in target group waves, and
-`collector.min_replay_decisions` can require a minimum number of useful replay
-decisions before the PPO update.
+queued only within a single policy window. `collector.min_replay_decisions` can
+require a minimum number of useful replay decisions before the PPO update.
+Set `TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES=1` to keep grouping state in each replay
+writer instead of a multiprocessing manager. At every policy boundary the
+trainer reads those worker-local counters while collection is paused, clears
+their queues, and resets in-flight collector trajectories before the policy
+version advances.
 
 Candidate selection is delegated to `MCAdvantageSelector` (`first`, `uniform`,
 or `balanced`), so the replay-buffer transform owns the sample-selection policy
-while the collector only supplies same-policy completed trajectories. At the
-policy-update boundary the replay buffer, incomplete advantage queues, and
-in-flight collector trajectories are cleared before the next policy is rolled
-out. LIBERO workers stamp parallel-repeat group ids from the cycled
-initial-state id so fast and slow sibling workers can still complete a
-same-initial-state GRPO group under the same policy even when their episode
-lengths differ.
+while the collector only supplies same-policy completed trajectories. The
+consuming replay buffer removes sampled decisions after
+`buffer.consume_after_n_samples` samples, and the policy-boundary pause keeps
+rollout and optimization phases explicit. LIBERO workers stamp
+parallel-repeat group ids from the cycled initial-state id so fast and slow
+sibling workers can still complete a same-initial-state GRPO group under the
+same policy even when their episode lengths differ.
 
 Run the LIBERO recipe with:
 
@@ -295,31 +321,82 @@ Requirements beyond the toy scale: LIBERO (see the `torchrl.envs.LiberoEnv`
 docs for install notes), `transformers`, `timm`, `Pillow`, and `peft` when
 `policy.lora_rank` is set.
 
+For reference-parity rollouts, set `policy.image_backend=tensorflow`. This uses
+the SimpleVLA JPEG, Lanczos resize, and center-crop order. Normalized
+vocabulary-tail action tokens are detokenized through the NumPy float64 CPU
+path before the gripper transform is applied once in the environment. Use
+`env.train_init_state_mode=fixed env.train_init_state_id=<id>` for a fixed
+LIBERO initial state. `collector.policy_micro_batch_size` only slices actual
+model calls inside the inference-server policy; it does not change PPO
+minibatching.
+
 ## Hardware notes
 
-- The default configuration trains a LoRA adapter (`policy.lora_rank: 32`) on a
-  single GPU while the simulation workers occupy CPU cores. Rollout wall-clock
-  dominates, so scale `env.num_envs` with the available cores first, while
-  keeping it within the GRPO grouping constraint above.
-- Set `collector.policy_device` to a different CUDA device to keep rollout
-  inference on a separate policy replica. The training loop copies only the
-  trainable state dict after optimizer updates, so this split is intended for
-  LoRA/adapters rather than full-parameter fine-tuning.
+- The default H100 configuration trains a LoRA adapter
+  (`policy.lora_rank: 32`) on `policy.device: cuda:0` and serves rollout plus
+  evaluator inference from `collector.policy_device: cuda:1`. Four
+  collectors each run `ParallelEnv(80)` for 320 rollout envs total. On
+  single-GPU runs, override `policy.device=null`,
+  `collector.policy_device=null`, `collector.num_collectors=1`, and
+  `collector.envs_per_collector` to the number of local envs.
+- Rollout wall-clock dominates, so scale `collector.num_collectors` and
+  `collector.envs_per_collector` with the available CPU cores while keeping
+  the GRPO grouping constraint above. The H100 default uses
+  `collector.num_collectors=4`, `collector.envs_per_collector=80`,
+  `collector.groups_per_iter=40`, and parallel group repeats enabled. The
+  training loop pushes TensorDict policy weights to the shared policy server
+  after optimizer updates.
 - Headless LIBERO rendering uses MuJoCo/robosuite EGL by default
   (`env.render_backend: egl`). `env.render_gpu_ids` controls the EGL-visible
-  render device ids assigned to workers, round-robin. The default `[0]` works
-  on a single-GPU allocation; on a multi-GPU node, override it, for example
-  `env.render_gpu_ids=[0,1,2,3]`, to spread render workers across GPUs. These
-  ids are the devices visible to EGL inside the process/container and may not
-  match global CUDA ordinals.
-- Set `logger.eval_process=true` to move greedy eval into a dedicated process.
-  Use `logger.eval_device` for its policy device and `env.eval_render_gpu_ids`
-  for its EGL render workers; when the latter is left null, eval reuses
-  `env.render_gpu_ids`.
+  render device ids assigned to rollout workers, round-robin. The H100 default
+  spreads rollout rendering over `[2,3,4,5]` and reserves
+  `env.eval_render_gpu_ids=[7]` for eval/video rendering. These ids are the
+  devices visible to EGL inside the process/container and may not match global
+  CUDA ordinals.
+- Use `logger.eval_backend` for the TorchRL evaluator backend. The evaluator
+  shares the same policy server as rollout and uses `env.eval_render_gpu_ids`
+  for EGL rendering; when the latter is left null, eval reuses
+  `env.render_gpu_ids`. The LIBERO default uses `process` to isolate simulator
+  work; use `thread` only when local VideoRecorder dumping is required. Note
+  the caveat: with a logger, the thread backend swaps the eval env for a
+  single-env video recorder bound to the first task, so on a multi-task suite
+  `eval/success_rate` covers one task instead of the whole suite (and
+  `env.eval_num_envs` is ignored). This requires the explicit opt-in
+  `logger.record_video_single_task=true`.
 - Minimal CUDA containers often lack the NVIDIA EGL/GLVND userspace stack.
   Before debugging TorchRL, verify that `libEGL_nvidia`, `libnvidia-eglcore`,
   `libGLX_nvidia`, and `/usr/share/glvnd/egl_vendor.d/10_nvidia.json` are
   visible in the runtime.
+- On an H200 container with the 595 driver, the userspace libraries can be
+  extracted without installing Debian packages into the image:
+
+  ```bash
+  mkdir -p /opt/nvidia-595-deb/download /opt/nvidia-595-deb/extract
+  cd /opt/nvidia-595-deb/download
+  apt-get download \
+    libnvidia-gl-595 libegl1 libglvnd0 libopengl0 libgl1 libgles2 libglx0
+  for deb in ./*.deb; do
+    dpkg-deb -x "$deb" /opt/nvidia-595-deb/extract
+  done
+
+  export LIBDIR=/opt/nvidia-595-deb/extract/usr/lib/x86_64-linux-gnu
+  export LD_LIBRARY_PATH="$LIBDIR:${LD_LIBRARY_PATH:-}"
+  export LD_PRELOAD="$LIBDIR/libOpenGL.so.0${LD_PRELOAD:+:$LD_PRELOAD}"
+  export __EGL_VENDOR_LIBRARY_FILENAMES=/opt/nvidia-595-deb/extract/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+  export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl ROBOT_PLATFORM=LIBERO
+
+  python - <<'PY'
+  from OpenGL import EGL, GL
+  import mujoco
+  from libero.libero import benchmark
+
+  assert EGL is not None and GL.glGetError is not None
+  assert mujoco is not None and benchmark is not None
+  PY
+  ```
+
+  The validated parity runtime pins `mujoco==3.2.3`, `robosuite==1.4.1`,
+  `transformers==4.40.1`, and `peft==0.11.1`.
 - Full-parameter fine-tuning of the 7B model requires sharded training (FSDP)
   and a multi-GPU inference/training split with explicit weight
   synchronization. That topology should be sized on the target hardware:

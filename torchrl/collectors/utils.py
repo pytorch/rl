@@ -458,7 +458,7 @@ def _map_weight(
 
 def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
     """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
-    for key in (("next", "done"), ("next", "terminated")):
+    for key in (("next", "done"), ("next", "terminated"), ("next", "truncated")):
         signal = chunk.get(key, None)
         if signal is not None and signal[-1].any().item():
             return True
