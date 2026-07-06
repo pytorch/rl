@@ -43,7 +43,10 @@ benchmarks.
 
 ## The pieces in this directory
 
-The directory contains two versions of the same idea.
+The directory contains two versions of the same idea, plus
+`compare_simplevla_rollouts.py`, a standalone script that rolls the same
+checkpoint through both the TorchRL stack and the SimpleVLA-RL/VeRL reference
+rollout and writes a JSON parity report.
 
 ### Toy scale: learn the algorithm without a robot simulator
 
@@ -179,6 +182,27 @@ policy = OpenVLAOFTWrapper.from_pretrained(
 )
 tokenizer = policy.action_tokenizer  # decode tokens -> env actions
 ```
+
+The wrapper also has an explicit `policy.mode=l1` path for the official
+continuous OpenVLA-OFT reference checkpoints. That mode loads the released
+`action_head--150000_checkpoint.pt` and
+`proprio_projector--150000_checkpoint.pt` components, uses two images
+(`agentview` plus wrist) and the 8-D OpenVLA proprio vector, and writes a
+continuous `("vla_action", "chunk")`. It is meant to validate the environment,
+image preprocessing, proprio normalization, and evaluator/collector path
+against the supervised reference policy:
+
+```text
+policy.mode=l1
+policy.checkpoint=moojink/openvla-7b-oft-finetuned-libero-spatial
+policy.use_wrist_image=true
+policy.use_proprio=true
+policy.num_images_in_input=2
+policy.lora_rank=0
+```
+
+The PPO update still expects token log-probabilities, so this mode is for
+reference/evaluation probes until a continuous-action GRPO loss is added.
 
 Before spending RL compute on a checkpoint, validate the loading path by
 evaluating the SFT checkpoint greedily on its LIBERO suite through
@@ -328,7 +352,10 @@ path before the gripper transform is applied once in the environment. Use
 `env.train_init_state_mode=fixed env.train_init_state_id=<id>` for a fixed
 LIBERO initial state. `collector.policy_micro_batch_size` only slices actual
 model calls inside the inference-server policy; it does not change PPO
-minibatching.
+minibatching. `compare_simplevla_rollouts.py` automates the parity check: it
+evaluates the same `(task_id, init-state id)` trajectories through the TorchRL
+stack and the SimpleVLA-RL/VeRL reference rollout side by side and reports
+per-trajectory token/action/success agreement.
 
 ## Hardware notes
 
