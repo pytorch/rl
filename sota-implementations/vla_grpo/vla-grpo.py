@@ -90,7 +90,6 @@ def main(cfg):  # noqa: F821
         start_iter = load_checkpoint(
             cfg.checkpoint.resume, policy, optim, scheduler, train_device
         )
-        sync_policy_server(policy_server, policy)
         torchrl_logger.info(
             "Resumed from %s at iteration %d.", cfg.checkpoint.resume, start_iter
         )
@@ -98,7 +97,8 @@ def main(cfg):  # noqa: F821
     target_replay_decisions = replay_ready_target(cfg)
     episodes_per_iter = cfg.collector.groups_per_iter * candidate_group_size(cfg)
     total_episodes = start_iter * episodes_per_iter
-    sync_policy_server(policy_server, policy)
+    weight_sync_trainable_only = bool(cfg.train.weight_sync_trainable_only)
+    sync_policy_server(policy_server, policy, trainable_only=weight_sync_trainable_only)
     collector.start()
 
     pbar = tqdm.tqdm(total=cfg.collector.total_iters, initial=start_iter)
@@ -127,7 +127,9 @@ def main(cfg):  # noqa: F821
                 )
                 group_metrics = advantage_metrics(advantage_transform, collector)
                 reset_collection_state(advantage_transform, collector)
-                sync_policy_server(policy_server, policy)
+                sync_policy_server(
+                    policy_server, policy, trainable_only=weight_sync_trainable_only
+                )
 
             eval_metrics = {}
             if iteration % cfg.logger.eval_iter == 0:
@@ -192,7 +194,7 @@ def main(cfg):  # noqa: F821
                 scheduler,
                 cfg.collector.total_iters - 1,
             )
-        if cfg.logger.eval_async:
+        if cfg.logger.eval_async and evaluator.pending:
             final_async = evaluator.wait(timeout=cfg.logger.eval_timeout_s)
             if final_async is not None:
                 log_metrics(logger, final_async, cfg.collector.total_iters)

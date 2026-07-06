@@ -9,20 +9,25 @@
 env:
   backend: libero
   task_suite: libero_spatial # libero_spatial | libero_object | libero_goal | libero_10
-  task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] # one worker per task (num_envs must cover them)
+  task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] # one rollout worker per task; the collector env total must cover them
+  # Only consumed by the standalone make_env tooling path (e.g. probe scripts);
+  # the training env count is collector.num_collectors * collector.envs_per_collector
+  # and evaluation uses env.eval_num_envs.
   num_envs: 80
   # false: each worker replays group_size rollouts serially for one group.
   # true: group_size workers share the same task/init state/group id and
   # collect a GRPO group in parallel. This improves group-completion throughput
-  # but requires num_envs to be a multiple of collector.group_size and, to cover
-  # all tasks in one wave, num_envs >= len(task_ids) * collector.group_size.
+  # but requires the collector env total (collector.num_collectors *
+  # collector.envs_per_collector) to be a multiple of collector.group_size and,
+  # to cover all tasks in one wave, that total to be at least
+  # len(task_ids) * collector.group_size.
   # For lowest boundary waste, set collector.groups_per_iter to the logical
-  # worker count (num_envs / collector.group_size). Asking each logical worker
-  # to advance through multiple group ids in one collector batch creates
-  # partial groups when episodes have variable lengths. Additional collector
-  # batches can overcollect under one policy, but without a group barrier they
-  # may also drift; the LIBERO wrapper groups parallel repeats by cycled
-  # init-state id to reduce this waste.
+  # worker count (collector env total / collector.group_size). Asking each
+  # logical worker to advance through multiple group ids in one collector batch
+  # creates partial groups when episodes have variable lengths. Additional
+  # collector batches can overcollect under one policy, but without a group
+  # barrier they may also drift; the LIBERO wrapper groups parallel repeats by
+  # cycled init-state id to reduce this waste.
   parallel_group_repeats: true
   eval_num_envs: 10 # parallel MuJoCo processes (evaluation); >= len(task_ids)
   camera_height: 256
@@ -124,7 +129,8 @@ buffer:
 loss:
   clip_epsilon: [0.2, 0.28] # asymmetric DAPO Clip-Higher (per-token, see ratio_level)
   ratio_level: token # the paper's semantics: one clipped ratio per action token
-  ppo_epochs: 1
+  # epochs are controlled by buffer.consume_after_n_samples: each decision
+  # leaves the buffer after that many sampling passes
   mini_batch_size: 16 # decisions per micro-batch (one forward)
   accumulate_batches: 8 # optimizer step every N micro-batches (grad accumulation)
 
@@ -133,6 +139,13 @@ optim:
   weight_decay: 0.0
   warmup_updates: 10 # constant-with-warmup, in optimizer steps
   max_grad_norm: 1.0
+
+train:
+  # true: push only requires_grad=True parameters (the LoRA adapters) to the
+  # rollout policy server on each sync; the server applies the partial
+  # TensorDict in place, so frozen base weights stay untouched. false ships
+  # the full parameter/buffer set (~14 GB in bf16 for the 7B policy).
+  weight_sync_trainable_only: true
 
 logger:
   backend: wandb
@@ -148,6 +161,10 @@ logger:
   eval_timeout_s: 1800.0
   eval_device: null # null = rollout device; set e.g. cuda:7 for eval
   video_fps: 8 # frames per second of the logged video (one frame per decision)
+  # eval_backend=thread with a logger records video from a single env bound to
+  # task_ids[0]; on a multi-task suite this silently narrows eval/success_rate
+  # to one task, so it requires this explicit opt-in.
+  record_video_single_task: false
 
 checkpoint:
   save_iter: 25

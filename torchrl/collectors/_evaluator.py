@@ -85,6 +85,7 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.weight_update.weight_sync_schemes import WeightStrategy
@@ -703,11 +704,15 @@ def _extract_metrics_from_trajectories(
     done_keys: NestedKey,
     metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     eval_time: float | None = None,
+    on_missing_traj_info: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Extract evaluation metrics from a trajectory batch produced by a collector.
 
     *traj_batch* can be padded with a ``("collector", "mask")`` boolean field
     or flat (``traj_format="cat"``) with ``("collector", "traj_ids")``.
+    When neither field is present the whole batch is treated as a single
+    trajectory and *on_missing_traj_info* (if provided) is invoked so the
+    caller can warn about potentially wrong episode metrics.
     """
     episode_rewards = []
     episode_lengths = []
@@ -726,6 +731,8 @@ def _extract_metrics_from_trajectories(
     else:
         traj_ids = traj_batch.get(("collector", "traj_ids"), None)
         if traj_ids is None:
+            if on_missing_traj_info is not None:
+                on_missing_traj_info()
             trajectories = [traj_batch]
         else:
             traj_ids = traj_ids.reshape(-1)
@@ -995,6 +1002,7 @@ class _ThreadEvalBackend(_EvalBackend):
         # Collector (created lazily)
         self._collector = None
         self._collector_iter = None  # persistent iterator for multi-collector
+        self._warned_missing_traj_info = False
 
         # Threading state
         self._lock = threading.Lock()
@@ -1221,6 +1229,19 @@ class _ThreadEvalBackend(_EvalBackend):
             self._done_keys,
             self._metrics_fn,
             eval_time=time.perf_counter() - eval_start,
+            on_missing_traj_info=self._warn_missing_traj_info,
+        )
+
+    def _warn_missing_traj_info(self) -> None:
+        """Warn (once per instance) that trajectory boundaries are unknown."""
+        if self._warned_missing_traj_info:
+            return
+        self._warned_missing_traj_info = True
+        torchrl_logger.warning(
+            "Evaluator: the collected batch carries neither ('collector', 'mask') "
+            "nor ('collector', 'traj_ids'); treating the whole batch as a single "
+            "trajectory. Episode metrics (reward, episode_length, num_episodes) "
+            "may be wrong if the batch actually contains several trajectories."
         )
 
     def dump_video(self, step: int | None = None) -> None:

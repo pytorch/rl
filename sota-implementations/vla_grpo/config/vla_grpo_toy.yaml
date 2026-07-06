@@ -69,7 +69,8 @@ buffer:
 loss:
   clip_epsilon: [0.2, 0.28] # asymmetric DAPO clip; a float gives symmetric clipping
   ratio_level: sequence # sequence: one ratio per decision; token: one per action token
-  ppo_epochs: 1
+  # epochs are controlled by buffer.consume_after_n_samples: each decision
+  # leaves the buffer after that many sampling passes
   mini_batch_size: 64 # decisions per micro-batch
   accumulate_batches: 1 # optimizer step every N micro-batches
 
@@ -78,6 +79,13 @@ optim:
   weight_decay: 0.0
   warmup_updates: 1 # linear LR warmup, in optimizer steps (1 = no warmup)
   max_grad_norm: 1.0
+
+train:
+  # true: push only requires_grad=True parameters to the rollout policy server
+  # on each sync (partial in-place update on the receiving side); false ships
+  # the full parameter/buffer set. TinyVLA trains all parameters, so this only
+  # skips buffers at toy scale; it matters for the LoRA LIBERO config.
+  weight_sync_trainable_only: true
 
 logger:
   backend: wandb
@@ -93,6 +101,10 @@ logger:
   eval_timeout_s: 300.0
   eval_device: null # null = rollout device; set e.g. cuda:7 for eval
   video_fps: 4 # frames per second of the logged video (one frame per decision)
+  # eval_backend=thread with a logger records video from a single env bound to
+  # the first task; only relevant for multi-task suites (the toy env has one
+  # task, so recording never narrows evaluation here).
+  record_video_single_task: false
 
 checkpoint:
   save_iter: 25 # save every N iterations (0 disables)

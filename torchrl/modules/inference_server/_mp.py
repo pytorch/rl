@@ -41,6 +41,7 @@ class MPTransport(QueueBasedTransport):
     ):
         super().__init__()
         self._ctx = ctx if ctx is not None else mp.get_context("spawn")
+        self._use_manager = bool(use_manager)
         self._manager = self._ctx.Manager() if use_manager else None
         if self._manager is None:
             self._request_queue: mp.Queue = self._ctx.Queue()
@@ -50,9 +51,21 @@ class MPTransport(QueueBasedTransport):
             self._response_queues = self._manager.dict()
 
     def _make_response_queue(self) -> mp.Queue:
-        if self._manager is None:
-            return self._ctx.Queue()
-        return self._manager.Queue()
+        if self._manager is not None:
+            return self._manager.Queue()
+        if self._use_manager:
+            # The manager handle is dropped by __getstate__: an unpickled copy
+            # cannot create manager-backed response queues, and falling back to
+            # a raw mp.Queue would fail later (and confusingly) when registered
+            # in the manager-backed response-queue dict.
+            raise RuntimeError(
+                "Cannot create a client from an unpickled manager-backed "
+                "MPTransport: the manager handle is not serialized. Clients of "
+                "a manager-backed MPTransport must be created with "
+                "transport.client() in the owning process before "
+                "pickling/sending the transport."
+            )
+        return self._ctx.Queue()
 
     def __getstate__(self) -> dict:
         state = super().__getstate__()
@@ -60,6 +73,15 @@ class MPTransport(QueueBasedTransport):
         return state
 
     def close(self) -> None:
+        """Release transport resources.
+
+        Shuts down the multiprocessing manager backing the request/response
+        queues when the transport was built with ``use_manager=True``
+        (a no-op otherwise). The process that owns the transport must call
+        this once the server and all clients are done with it:
+        :class:`~torchrl.modules.inference_server.ProcessInferenceServer`
+        does not close the transport on ``shutdown()``.
+        """
         if self._manager is not None:
             self._manager.shutdown()
 
@@ -67,6 +89,9 @@ class MPTransport(QueueBasedTransport):
         """Create an actor-side client with a dedicated response queue.
 
         Must be called in the parent process **before** spawning children.
+        In particular, a manager-backed transport (``use_manager=True``)
+        loses its manager handle when pickled, so calling this on an
+        unpickled copy raises a :class:`RuntimeError`.
 
         Returns:
             A :class:`_QueueInferenceClient` that can be passed to a child

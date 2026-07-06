@@ -132,6 +132,19 @@ def _peft_lora_tools():
     return _get_peft_model, _LoraConfig
 
 
+def _cfg_get(section, key: str, default=None):
+    """Read an optional key from a config section.
+
+    Works for mappings (``DictConfig``, ``dict``) through ``.get`` and for
+    attribute-style sections (``SimpleNamespace``, dataclasses) through
+    ``getattr`` with a default.
+    """
+    getter = getattr(section, "get", None)
+    if callable(getter):
+        return getter(key, default)
+    return getattr(section, key, default)
+
+
 def candidate_group_size(cfg) -> int:
     """Number of rollout candidates collected for each GRPO group."""
     return int(cfg.collector.candidate_group_size or cfg.collector.group_size)
@@ -449,7 +462,7 @@ def _make_libero_worker(
             from_pixels=from_pixels,
             max_episode_steps=cfg.env.max_env_steps,
             init_state_mode=("cycle" if eval_mode else cfg.env.train_init_state_mode),
-            init_state_id=int(getattr(cfg.env, "train_init_state_id", 0)),
+            init_state_id=int(_cfg_get(cfg.env, "train_init_state_id", 0)),
             group_repeats=worker_group_repeats,
             group_id_offset=group_id_offset,
             group_id_mode="init_state" if parallel_group_repeats else "episode",
@@ -459,8 +472,7 @@ def _make_libero_worker(
 def _num_envs_from_cfg(cfg, *, eval_mode: bool = False) -> int:
     if cfg.env.backend == "toy":
         return 1
-    else:
-        return int(cfg.env.eval_num_envs if eval_mode else cfg.env.num_envs)
+    return int(_cfg_get(cfg.env, "eval_num_envs" if eval_mode else "num_envs", 1))
 
 
 def _validate_libero_env_count(
@@ -765,14 +777,42 @@ def make_optimizer(cfg, loss_module: ClipPPOLoss):
 _WEIGHT_STRATEGY = WeightStrategy(extract_as="tensordict")
 
 
-def policy_weights(policy: torch.nn.Module) -> TensorDictBase:
-    """Detached CPU TensorDict snapshot of a policy's parameters and buffers."""
-    return _WEIGHT_STRATEGY.extract_weights(policy).data.detach().clone().cpu()
+def policy_weights(
+    policy: torch.nn.Module, *, trainable_only: bool = False
+) -> TensorDictBase:
+    """Detached CPU TensorDict snapshot of a policy's parameters and buffers.
+
+    With ``trainable_only=True`` the snapshot keeps only the tensors with
+    ``requires_grad=True`` (e.g. the LoRA adapters), which is enough for
+    weight syncs to a server policy built from the same checkpoint: the
+    receiving :class:`~torchrl.weight_update.WeightStrategy` applies a partial
+    TensorDict in place, leaving frozen weights and buffers untouched.
+    """
+    weights = _WEIGHT_STRATEGY.extract_weights(policy)
+    if trainable_only:
+        weights = weights.apply(
+            lambda tensor: tensor if tensor.requires_grad else None,
+            filter_empty=True,
+        )
+    return weights.data.detach().clone().cpu()
 
 
-def sync_policy_server(policy_server: ProcessInferenceServer, policy: torch.nn.Module):
-    """Push trainer policy weights to the shared process policy server."""
-    return policy_server.update_model_weights(policy_weights(policy))
+def sync_policy_server(
+    policy_server: ProcessInferenceServer,
+    policy: torch.nn.Module,
+    *,
+    trainable_only: bool = True,
+):
+    """Push trainer policy weights to the shared process policy server.
+
+    ``trainable_only=True`` (see ``train.weight_sync_trainable_only``) ships
+    only the ``requires_grad=True`` parameters through the control channel;
+    with a 7B LoRA policy that is a few hundred MB instead of the ~14 GB full
+    bf16 parameter set.
+    """
+    return policy_server.update_model_weights(
+        policy_weights(policy, trainable_only=trainable_only)
+    )
 
 
 def apply_policy_weights(
@@ -874,7 +914,7 @@ def make_collector(
     transport = MPTransport(ctx=ctx, use_manager=True)
     eval_client = transport.client()
     rollout_clients = [transport.client() for _ in range(num_collectors)]
-    policy_micro_batch_size = getattr(cfg.collector, "policy_micro_batch_size", None)
+    policy_micro_batch_size = _cfg_get(cfg.collector, "policy_micro_batch_size", None)
     server = ProcessInferenceServer(
         policy_factory=partial(
             make_policy,
@@ -1032,6 +1072,21 @@ def make_evaluator(
 ) -> Evaluator:
     """Build the TorchRL evaluator used by the VLA GRPO recipe."""
     record_video = logger is not None and cfg.logger.eval_backend == "thread"
+    if record_video and cfg.env.backend == "libero":
+        task_ids = list(cfg.env.task_ids)
+        if len(task_ids) > 1 and not bool(
+            _cfg_get(cfg.logger, "record_video_single_task", False)
+        ):
+            raise ValueError(
+                "logger.eval_backend='thread' with a logger replaces the eval "
+                "env with a single-env video recorder bound to task "
+                f"{task_ids[0]}, so eval/success_rate would cover 1 of the "
+                f"{len(task_ids)} configured env.task_ids (and "
+                "env.eval_num_envs would be ignored). Set "
+                "logger.record_video_single_task=true to opt in to "
+                "single-task eval video, or keep logger.eval_backend="
+                "'process' for suite-wide evaluation without video."
+            )
     env_factory = partial(
         _make_eval_env,
         cfg,
@@ -1178,7 +1233,15 @@ def update(
             ess.append(loss_vals["ESS"].detach().mean())
             if micro_batches % accumulate == 0:
                 optimizer_step()
-        if micro_batches % accumulate:
+        tail_micro_batches = micro_batches % accumulate
+        if tail_micro_batches:
+            # Each micro-batch loss was divided by the full `accumulate`, but
+            # the tail optimizer step accumulated fewer micro-batches. Rescale
+            # the accumulated gradients so the tail step averages over the
+            # micro-batches that actually contributed to it.
+            for param in loss_module.parameters():
+                if param.grad is not None:
+                    param.grad.mul_(accumulate / tail_micro_batches)
             optimizer_step()
 
     train_time = max(train_timer.elapsed(), 1e-9)

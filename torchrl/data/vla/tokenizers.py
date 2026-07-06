@@ -178,8 +178,9 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
     map ``a_env = 0.5 * (a + 1) * (q99 - q01 + 1e-8) + q01`` applied to the
     dimensions selected by ``mask`` (the gripper dimension is typically
     excluded). To reproduce the reference MuJoCo action path exactly, decoding
-    with normalization statistics is performed in NumPy float64 on CPU. See
-    :meth:`from_norm_stats`.
+    with normalization statistics is performed in NumPy float64 on CPU; the
+    result is cast back to ``float32`` on the input tokens' device. See
+    :meth:`from_norm_stats` and :meth:`decode`.
 
     Args:
         num_bins (int): number of bin edges per action dimension (the OpenVLA
@@ -296,7 +297,9 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
             norm_low = self.norm_low.to(device=actions.device, dtype=actions.dtype)
             norm_high = self.norm_high.to(device=actions.device, dtype=actions.dtype)
             norm_mask = self.norm_mask.to(actions.device)
-            scale = (norm_high - norm_low).clamp_min(1e-8)
+            # same affine convention as decode / the OpenVLA reference:
+            # a = 2 * (a_env - q01) / (q99 - q01 + 1e-8) - 1
+            scale = norm_high - norm_low + 1e-8
             normalized = 2.0 * (actions - norm_low) / scale - 1.0
             actions = torch.where(norm_mask, normalized, actions)
         digitized = self._digitize(actions)
@@ -305,6 +308,19 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         return self.num_bins - digitized
 
     def decode(self, tokens: torch.Tensor) -> torch.Tensor:
+        """Map token ids back to continuous actions ``[..., action_dim]``.
+
+        When normalization statistics are set (see :meth:`from_norm_stats`),
+        the de-tokenization and the q01/q99 un-normalization are computed in
+        NumPy float64 on CPU for bit-exact parity with the OpenVLA-OFT
+        reference implementation. This incurs a device-to-host round-trip
+        (and a host sync) on every call when ``tokens`` lives on an
+        accelerator; the result is moved back to ``tokens.device`` and cast
+        to the tokenizer's working dtype (``float32``).
+
+        Without statistics, decoding runs entirely on ``tokens.device`` and
+        returns bin centers in ``[-1, 1]``.
+        """
         if self.norm_low is not None:
             # LIBERO executes CPU actions. Reproduce SimpleVLA's NumPy float64
             # de-tokenization before handing those values to MuJoCo; float32
@@ -319,9 +335,9 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
             bin_centers = (bins[:-1] + bins[1:]) / 2.0
             index = np.clip(digitized - 1, a_min=0, a_max=bin_centers.shape[0] - 1)
             actions = bin_centers[index]
-            norm_low = self.norm_low.detach().numpy()
-            norm_high = self.norm_high.detach().numpy()
-            norm_mask = self.norm_mask.detach().numpy().astype(bool)
+            norm_low = self.norm_low.detach().cpu().numpy()
+            norm_high = self.norm_high.detach().cpu().numpy()
+            norm_mask = self.norm_mask.detach().cpu().numpy().astype(bool)
             unnormalized = (
                 0.5 * (actions + 1.0) * (norm_high - norm_low + 1e-8) + norm_low
             )
@@ -335,40 +351,21 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
                     actions = np.where(gripper, binary, actions)
                 if self.gripper_invert:
                     actions = np.where(gripper, -actions, actions)
-            return torch.from_numpy(np.ascontiguousarray(actions))
+            # ride the input device and the tensor-path output dtype so the
+            # float64 CPU detour does not leak into downstream action chunks
+            return torch.from_numpy(np.ascontiguousarray(actions)).to(
+                device=tokens.device, dtype=self.bin_centers.dtype
+            )
 
         # operate on the tokens' device (policy and env may differ): move the
-        # small lookup/normalization buffers there so the output rides the
-        # input device
+        # small lookup buffer there so the output rides the input device
         bin_centers = self.bin_centers.to(tokens.device)
         if self.full_vocab_size is not None:
             digitized = self.full_vocab_size - tokens
         else:
             digitized = self.num_bins - tokens
         index = (digitized - 1).clamp(0, bin_centers.shape[0] - 1)
-        actions = bin_centers[index]
-        if self.norm_low is not None:
-            norm_low = self.norm_low.to(device=tokens.device, dtype=actions.dtype)
-            norm_high = self.norm_high.to(device=tokens.device, dtype=actions.dtype)
-            norm_mask = self.norm_mask.to(tokens.device)
-            unnormalized = 0.5 * (actions + 1.0) * (norm_high - norm_low) + norm_low
-            actions = torch.where(norm_mask, unnormalized, actions)
-        if (
-            self.gripper_binarize or self.gripper_invert
-        ) and self.norm_mask is not None:
-            # the gripper dims are the *unmasked* ones (not min-max normalized).
-            # Robots expect a firm open/close, not the continuous bin value the
-            # model emits: binarize to +/-1 by sign (optionally invert the
-            # open/close convention).
-            gripper = ~self.norm_mask.to(tokens.device)
-            if self.gripper_binarize:
-                binval = (actions > self.gripper_binarize_threshold).to(
-                    actions.dtype
-                ) * 2.0 - 1.0
-                actions = torch.where(gripper, binval, actions)
-            if self.gripper_invert:
-                actions = torch.where(gripper, -actions, actions)
-        return actions
+        return bin_centers[index]
 
     @classmethod
     def from_norm_stats(

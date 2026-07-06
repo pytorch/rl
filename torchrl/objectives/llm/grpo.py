@@ -1063,6 +1063,18 @@ class MCAdvantage(Transform):
     their transform inside the replay-buffer actor; use :class:`RayMCAdvantage`
     when only the grouping transform state should be centralized in Ray.
 
+    .. note:: Setting the environment variable
+        ``TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES=1`` turns :meth:`share_memory_`
+        into a no-op: the grouping queues and counters stay process-local
+        instead of being moved to a multiprocessing manager. Use this to skip
+        the manager round-trips when a single process writes to the replay
+        buffer, or when every trajectory of a group is guaranteed to be
+        produced by the same writer process. Caveat: with multiple writer
+        processes, a GRPO group whose trajectories span several workers can
+        never complete -- each worker only sees its local fraction of the
+        group, so those trajectories are held in memory forever and never
+        written to the buffer.
+
     .. warning:: This transform will flatten the input tensordicts and therefore is not compatible yet with replay
         buffers hosting storages of more than one dimension.
 
@@ -1240,6 +1252,12 @@ class MCAdvantage(Transform):
         if self.is_shared:
             return self
         if os.environ.get("TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES") == "1":
+            torchrl_logger.info(
+                "MCAdvantage.share_memory_ skipped because "
+                "TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES=1: grouping queues stay "
+                "process-local, so GRPO groups whose trajectories span several "
+                "writer processes will never complete."
+            )
             return self
         manager = mp.Manager()
         queues = {group: list(queue) for group, queue in self.queues.items()}
@@ -1329,12 +1347,20 @@ class MCAdvantage(Transform):
 
     @staticmethod
     def _concrete_if_possible(tensordict: TensorDictBase) -> TensorDictBase:
-        """Materialize lazy inputs unless their tensor leaves are ragged."""
+        """Materialize lazy inputs unless their tensor leaves are ragged.
+
+        Ragged leaves (e.g. variable-length token sequences in a lazy stack)
+        cannot be stacked into a contiguous tensordict; returning the lazy
+        input unchanged is always safe, so any ``RuntimeError`` raised by
+        ``contiguous()`` falls back to it rather than pattern-matching the
+        (version-dependent) error message.
+        """
         try:
             return tensordict.contiguous()
         except RuntimeError as err:
-            if "Failed to stack tensors within a tensordict" not in str(err):
-                raise
+            torchrl_logger.debug(
+                f"MCAdvantage: keeping lazy tensordict; contiguous() failed with: {err}"
+            )
             return tensordict
 
     @staticmethod

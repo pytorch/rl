@@ -180,27 +180,6 @@ policy = OpenVLAOFTWrapper.from_pretrained(
 tokenizer = policy.action_tokenizer  # decode tokens -> env actions
 ```
 
-The wrapper also has an explicit `policy.mode=l1` path for the official
-continuous OpenVLA-OFT reference checkpoints. That mode loads the released
-`action_head--150000_checkpoint.pt` and
-`proprio_projector--150000_checkpoint.pt` components, uses two images
-(`agentview` plus wrist) and the 8-D OpenVLA proprio vector, and writes a
-continuous `("vla_action", "chunk")`. It is meant to validate the environment,
-image preprocessing, proprio normalization, and evaluator/collector path
-against the supervised reference policy:
-
-```text
-policy.mode=l1
-policy.checkpoint=moojink/openvla-7b-oft-finetuned-libero-spatial
-policy.use_wrist_image=true
-policy.use_proprio=true
-policy.num_images_in_input=2
-policy.lora_rank=0
-```
-
-The PPO update still expects token log-probabilities, so this mode is for
-reference/evaluation probes until a continuous-action GRPO loss is added.
-
 Before spending RL compute on a checkpoint, validate the loading path by
 evaluating the SFT checkpoint greedily on its LIBERO suite through
 `torchrl.envs.LiberoEnv` (`init_state_mode="cycle"`, 50 trials/task) and compare
@@ -217,8 +196,10 @@ pytest sota-implementations/vla_grpo/test_openvla.py
 ## What gets logged
 
 With a logger configured (`logger.backend=wandb`, the default), each iteration
-logs reward curves (`train/reward_mean`, `train/reward_max`), success rate, and
-throughput split into collection and optimization:
+logs the training success rate (`train/success_rate`), trajectory-return
+aggregates (`collector/trajectory_return_sum`,
+`collector/trajectory_return_max`), and throughput split into collection and
+optimization:
 
 - `throughput/inference_env_steps_per_s`
 - `throughput/inference_decisions_per_s`
@@ -263,8 +244,10 @@ python sota-implementations/vla_grpo/vla-grpo.py \
 The full LIBERO config follows the SimpleVLA-RL hyper-parameter shape:
 
 - groups of `n=8` rollouts per initial state;
-- 64 initial states per iteration, for 512 trajectories before dynamic
-  filtering;
+- 40 initial states per iteration (`collector.groups_per_iter`), for 320
+  trajectories before dynamic filtering -- one aligned group wave across the
+  320 rollout envs; the paper uses 64 initial states (512 trajectories) per
+  iteration, which is a known deviation of the shipped config;
 - 512 base environment steps, or 64 chunk decisions, per episode;
 - rollout temperature 1.6 and greedy evaluation;
 - dynamic sampling bounds `(0.1, 0.9)` to drop groups that are all failure or
@@ -374,7 +357,12 @@ minibatching.
   shares the same policy server as rollout and uses `env.eval_render_gpu_ids`
   for EGL rendering; when the latter is left null, eval reuses
   `env.render_gpu_ids`. The LIBERO default uses `process` to isolate simulator
-  work; use `thread` only when local VideoRecorder dumping is required.
+  work; use `thread` only when local VideoRecorder dumping is required. Note
+  the caveat: with a logger, the thread backend swaps the eval env for a
+  single-env video recorder bound to the first task, so on a multi-task suite
+  `eval/success_rate` covers one task instead of the whole suite (and
+  `env.eval_num_envs` is ignored). This requires the explicit opt-in
+  `logger.record_video_single_task=true`.
 - Minimal CUDA containers often lack the NVIDIA EGL/GLVND userspace stack.
   Before debugging TorchRL, verify that `libEGL_nvidia`, `libnvidia-eglcore`,
   `libGLX_nvidia`, and `/usr/share/glvnd/egl_vendor.d/10_nvidia.json` are

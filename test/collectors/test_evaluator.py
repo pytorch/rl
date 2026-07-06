@@ -14,7 +14,11 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import Evaluator
-from torchrl.collectors._evaluator import _freeze_vecnorm, _wrap_env_factory_frozen
+from torchrl.collectors._evaluator import (
+    _extract_metrics_from_trajectories,
+    _freeze_vecnorm,
+    _wrap_env_factory_frozen,
+)
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import Compose, RewardSum, StepCounter, VecNormV2
@@ -748,6 +752,28 @@ class TestEvaluatorBatchedMetrics:
             assert 1 <= metrics["eval/episode_length"] <= 6
         finally:
             evaluator.shutdown()
+
+    def test_missing_traj_info_fallback_invokes_callback(self):
+        """Without mask/traj_ids the batch is one trajectory and the caller is told."""
+        num_steps = 6
+        batch = TensorDict(
+            {
+                ("next", "reward"): torch.ones(num_steps, 1),
+                ("next", "done"): torch.zeros(num_steps, 1, dtype=torch.bool),
+            },
+            batch_size=[num_steps],
+        )
+        calls = []
+        metrics = _extract_metrics_from_trajectories(
+            batch,
+            ("next", "reward"),
+            ("next", "done"),
+            None,
+            on_missing_traj_info=lambda: calls.append(1),
+        )
+        assert len(calls) == 1
+        assert metrics["num_episodes"] == 1
+        assert metrics["reward"] == pytest.approx(float(num_steps))
 
     def test_batched_async_metrics(self):
         """Async eval with batched env produces correct metrics."""

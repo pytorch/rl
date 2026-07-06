@@ -465,8 +465,38 @@ class TestVocabTailActionTokenizer:
             np.asarray(norm_high) - np.asarray(norm_low) + 1e-8
         ) + np.asarray(norm_low)
         decoded = tok.decode(tokens)
-        assert decoded.dtype == torch.float64
-        np.testing.assert_array_equal(decoded.numpy(), expected)
+        # the affine runs in NumPy float64 for reference parity, then the
+        # result is cast back to the tokenizer's float32 working dtype
+        assert decoded.dtype == torch.float32
+        np.testing.assert_array_equal(decoded.numpy(), expected.astype(np.float32))
+
+    def test_decode_norm_stats_output_dtype_and_device(self):
+        # the NumPy float64 detour must not leak float64 (or a device change)
+        # into the returned action chunk
+        norm_low = torch.tensor([-0.5, 0.0])
+        norm_high = torch.tensor([0.5, 2.0])
+        tok = VocabTailActionTokenizer(256, norm_low=norm_low, norm_high=norm_high)
+        tokens = tok.encode(torch.tensor([[0.1, 1.0], [-0.2, 0.5]]))
+        decoded = tok.decode(tokens)
+        assert decoded.dtype == torch.float32
+        assert decoded.device == tokens.device
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_decode_norm_stats_cuda(self):
+        norm_low = torch.tensor([-0.5, 0.0])
+        norm_high = torch.tensor([0.5, 2.0])
+        tok = VocabTailActionTokenizer(
+            256, norm_low=norm_low, norm_high=norm_high
+        ).cuda()
+        actions = torch.tensor([[0.1, 1.0], [-0.2, 0.5]], device="cuda")
+        tokens = tok.encode(actions)
+        assert tokens.device.type == "cuda"
+        decoded = tok.decode(tokens)
+        assert decoded.device.type == "cuda"
+        assert decoded.dtype == torch.float32
+        ref = VocabTailActionTokenizer(256, norm_low=norm_low, norm_high=norm_high)
+        torch.testing.assert_close(decoded.cpu(), ref.decode(tokens.cpu()))
 
     def test_from_norm_stats(self):
         norm_stats = {
