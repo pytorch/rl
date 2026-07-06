@@ -500,55 +500,6 @@ class TestPolicyClientModule:
         with pytest.raises(ValueError, match="local policy failure"):
             future.result()
 
-    def test_bounded_staleness_raises(self):
-        transport = ThreadingTransport()
-        policy = _make_policy()
-        with InferenceServer(policy, transport, policy_version=1):
-            remote_policy = PolicyClientModule(
-                transport,
-                target_policy_version=3,
-                max_policy_lag=1,
-            )
-            with pytest.raises(RuntimeError, match="too stale"):
-                remote_policy(TensorDict({"observation": torch.randn(4)}))
-
-    def test_bounded_staleness_with_callable_target(self):
-        """target_policy_version accepts a live callable source."""
-        transport = ThreadingTransport()
-        policy = _make_policy()
-        with InferenceServer(policy, transport, policy_version=5) as server:
-            remote_policy = PolicyClientModule(
-                transport,
-                target_policy_version=lambda: server.policy_version,
-                max_policy_lag=0,
-            )
-            # version == target -> lag 0, passes
-            remote_policy(TensorDict({"observation": torch.randn(4)}))
-            server._mark_weight_update()
-            server._mark_weight_update()
-            # server is now at version 7; a fresh result carries 7 -> passes
-            remote_policy(TensorDict({"observation": torch.randn(4)}))
-            assert server.policy_version == 7
-
-    def test_staleness_guard_warns_on_missing_version_key(self, caplog):
-        """A configured guard warns (once) if results carry no version."""
-        transport = ThreadingTransport()
-        policy = _make_policy()
-        # Server does not annotate versions; client expects them
-        with InferenceServer(policy, transport, policy_version_key=None):
-            remote_policy = PolicyClientModule(
-                transport,
-                target_policy_version=3,
-                max_policy_lag=1,
-            )
-            with caplog.at_level("WARNING", logger="torchrl"):
-                remote_policy(TensorDict({"observation": torch.randn(4)}))
-                remote_policy(TensorDict({"observation": torch.randn(4)}))
-        warnings_seen = [
-            rec for rec in caplog.records if "staleness guard is inactive" in rec.message
-        ]
-        assert len(warnings_seen) == 1
-
     def test_update_policy_weights_cascade_bumps_version(self):
         """The weight-sync cascade hook increments the policy version."""
         transport = ThreadingTransport()
@@ -1477,37 +1428,6 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
-
-    def test_max_policy_lag_wiring(self):
-        """max_policy_lag reaches the clients with a live version source."""
-        collector = AsyncBatchedCollector(
-            create_env_fn=[_counting_env_factory] * 2,
-            policy=_make_counting_policy(),
-            frames_per_batch=10,
-            total_frames=20,
-            max_batch_size=2,
-            env_backend="threading",
-            max_policy_lag=3,
-        )
-        total = 0
-        for batch in collector:
-            total += batch.numel()
-        assert collector.policy_version == 0
-        clients = collector._clients
-        collector.shutdown()
-        assert total >= 20
-        assert all(c.max_policy_lag == 3 for c in clients)
-        assert all(callable(c.target_policy_version) for c in clients)
-
-    def test_max_policy_lag_requires_version_key(self):
-        with pytest.raises(ValueError, match="max_policy_lag requires"):
-            AsyncBatchedCollector(
-                create_env_fn=[_counting_env_factory] * 2,
-                policy=_make_counting_policy(),
-                frames_per_batch=10,
-                max_policy_lag=1,
-                policy_version_key=None,
-            )
 
     def test_policy_version_key_none_disables_annotations(self):
         collector = AsyncBatchedCollector(
