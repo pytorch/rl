@@ -29,7 +29,6 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import InteractionType, TensorDictSequential
 from tensordict.utils import NestedKey, unravel_key
-from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.data.vla import (
