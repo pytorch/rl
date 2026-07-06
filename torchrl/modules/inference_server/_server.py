@@ -23,7 +23,10 @@ from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
-from torchrl.modules.inference_server._client import _REMOTE_INTERACTION_TYPE_KEY
+from torchrl.modules.inference_server._client import (
+    _NO_INTERACTION_TYPE_CODE,
+    _REMOTE_INTERACTION_TYPE_KEY,
+)
 from torchrl.modules.inference_server._config import (
     InferenceDeviceConfig,
     InferenceServerConfig,
@@ -424,7 +427,7 @@ class InferenceServer:
         if code is None:
             return contextlib.nullcontext(), batch
         if not isinstance(code, torch.Tensor):
-            interaction_type_value = _CODE_TO_INTERACTION_TYPE[int(code)]
+            interaction_code = int(code)
         else:
             flat_code = code.reshape(-1)
             if flat_code.numel() == 0:
@@ -437,11 +440,12 @@ class InferenceServer:
                     "InferenceServer received a mixed interaction-type batch. "
                     "Use homogeneous server requests or a smaller max_batch_size."
                 )
-            interaction_type_value = _CODE_TO_INTERACTION_TYPE[interaction_code]
-        return (
-            set_interaction_type(interaction_type_value),
-            batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False),
-        )
+        batch = batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False)
+        if interaction_code == _NO_INTERACTION_TYPE_CODE:
+            # Sentinel: the caller had no active interaction context.
+            return contextlib.nullcontext(), batch
+        interaction_type_value = _CODE_TO_INTERACTION_TYPE[interaction_code]
+        return set_interaction_type(interaction_type_value), batch
 
     @torch.no_grad()
     def _run(self) -> None:
