@@ -20,7 +20,9 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.modules.inference_server import (
     InferenceClient,
+    InferenceDeviceConfig,
     InferenceServer,
+    InferenceServerConfig,
     InferenceTransport,
     MPTransport,
     ProcessInferenceServer,
@@ -282,6 +284,88 @@ class TestInferenceServerCore:
         assert stats["batches"] >= 1
         assert stats["avg_batch_size"] > 0
         assert stats["p95_forward_ms"] >= 0
+
+    def test_structured_config(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server_config = InferenceServerConfig(max_batch_size=2, timeout=0.001)
+        device_config = InferenceDeviceConfig(policy_device="cpu", output_device="cpu")
+        with InferenceServer(
+            policy,
+            transport,
+            server_config=server_config,
+            device_config=device_config,
+        ) as server:
+            # The config values must actually land on the server
+            assert server.max_batch_size == 2
+            assert server.timeout == 0.001
+            assert server.policy_device == torch.device("cpu")
+            assert server.output_device == torch.device("cpu")
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+            stats = server.stats()
+        assert result["action"].device.type == "cpu"
+        assert stats["requests"] == 1
+
+    def test_server_config_exclusive_even_at_default_values(self):
+        """Passing an explicit kwarg equal to the default still raises."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            InferenceServer(
+                policy,
+                transport,
+                max_batch_size=64,
+                server_config=InferenceServerConfig(max_batch_size=8),
+            )
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            InferenceServer(
+                policy,
+                transport,
+                device="cpu",
+                device_config=InferenceDeviceConfig(policy_device="cpu"),
+            )
+
+    def test_device_config_env_device_fallback_and_storing_device_rejected(self):
+        config = InferenceDeviceConfig(env_device="cpu")
+        assert config.server_output_device() == torch.device("cpu")
+        config = InferenceDeviceConfig(env_device="cpu", output_device="meta")
+        assert config.server_output_device() == torch.device("meta")
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with pytest.raises(ValueError, match="storing_device is a collector-level"):
+            InferenceServer(
+                policy,
+                transport,
+                device_config=InferenceDeviceConfig(storing_device="cpu"),
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_device_config_cuda_roundtrip(self):
+        """device_config must actually drive the policy and output moves."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        seen_devices = []
+        inner_forward = policy.module.forward
+
+        def recording_forward(x):
+            seen_devices.append(x.device)
+            return inner_forward(x)
+
+        policy.module.forward = recording_forward
+        with InferenceServer(
+            policy,
+            transport,
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0", output_device="cpu"
+            ),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}, device="cpu"))
+        assert result["action"].device.type == "cpu"
+        assert all(device.type == "cuda" for device in seen_devices)
+        assert next(policy.parameters()).device.type == "cuda"
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -1041,9 +1125,8 @@ class TestAsyncBatchedCollector:
             policy_factory=_make_counting_policy,
             frames_per_batch=10,
             total_frames=20,
-            max_batch_size=2,
             env_backend="threading",
-            server_backend="process",
+            server_config=InferenceServerConfig(backend="process", max_batch_size=2),
         )
         total = 0
         for batch in collector:
@@ -1052,13 +1135,8 @@ class TestAsyncBatchedCollector:
         assert total >= 20
 
     def test_invalid_server_backend_raises(self):
-        with pytest.raises(ValueError, match="server_backend"):
-            AsyncBatchedCollector(
-                create_env_fn=[_counting_env_factory] * 2,
-                policy_factory=_make_counting_policy,
-                frames_per_batch=10,
-                server_backend="not-a-backend",
-            )
+        with pytest.raises(ValueError, match="backend"):
+            InferenceServerConfig(backend="not-a-backend")
 
     def test_server_death_raises_instead_of_hanging(self):
         """Killing the server process surfaces an error in the iterator."""
@@ -1067,9 +1145,8 @@ class TestAsyncBatchedCollector:
             policy_factory=_make_counting_policy,
             frames_per_batch=10,
             total_frames=-1,
-            max_batch_size=2,
             env_backend="threading",
-            server_backend="process",
+            server_config=InferenceServerConfig(backend="process", max_batch_size=2),
         )
         try:
             iterator = iter(collector)
@@ -1082,6 +1159,30 @@ class TestAsyncBatchedCollector:
                     next(iterator)
         finally:
             collector.shutdown(timeout=0.5)
+
+    def test_device_config_and_server_config(self):
+        """Collector accepts structured device and server config objects."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            server_config=InferenceServerConfig(max_batch_size=2),
+            device_config=InferenceDeviceConfig(
+                policy_device="cpu",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+        )
+        total = 0
+        for batch in collector:
+            assert batch.device is None or batch.device.type == "cpu"
+            total += batch.numel()
+        stats = collector.server_stats()
+        collector.shutdown()
+        assert total >= 20
+        assert stats["requests"] > 0
 
 
 # =============================================================================

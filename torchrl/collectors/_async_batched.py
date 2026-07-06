@@ -17,7 +17,9 @@ from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_l
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
 from torchrl.modules.inference_server import (
+    InferenceDeviceConfig,
     InferenceServer,
+    InferenceServerConfig,
     ProcessInferenceServer,
     ThreadingTransport,
 )
@@ -72,15 +74,17 @@ def _env_loop(
     client: Callable | None,
     result_queue: queue.Queue,
     shutdown_event: threading.Event,
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
 ):
-    """Per-env worker thread using pool slot for env execution and InferenceServer for policy.
+    """Per-env worker thread using a pool slot and inference-server policy.
 
     Each thread owns one slot in the :class:`~torchrl.envs.AsyncEnvPool` and
     one inference client.  The pool handles the actual environment execution in
     whatever backend it was configured with (threading, multiprocessing, etc.),
     while this thread coordinates the send/recv cycle and inference submission.
 
-        reset -> infer (blocking) -> step_send -> step_recv -> put transition -> infer -> ...
+        reset -> infer -> step_send -> step_recv -> put transition -> infer -> ...
     """
     if client is None:
         client = transport.client()
@@ -91,9 +95,13 @@ def _env_loop(
         action_td = client(obs)
 
         while not shutdown_event.is_set():
+            if env_device is not None:
+                action_td = action_td.to(env_device)
             pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
             cur_td, next_obs = pool.async_step_and_maybe_reset_recv(env_index=env_id)
             cur_td.set(_ENV_IDX_KEY, env_id)
+            if storing_device is not None:
+                cur_td = cur_td.to(storing_device)
             result_queue.put(cur_td)
             if shutdown_event.is_set():
                 break
@@ -104,7 +112,11 @@ def _env_loop(
 
 
 class AsyncBatchedCollector(BaseCollector):
-    """Asynchronous collector that pairs per-env threads with an :class:`~torchrl.envs.AsyncEnvPool` and an :class:`~torchrl.modules.InferenceServer`.
+    """Asynchronous collector with env slots and a policy server.
+
+    The collector pairs per-env coordinator threads with an
+    :class:`~torchrl.envs.AsyncEnvPool` and an
+    :class:`~torchrl.modules.InferenceServer`.
 
     Unlike :class:`~torchrl.collectors.Collector`, this collector fully
     decouples environment stepping from policy inference:
@@ -158,14 +170,19 @@ class AsyncBatchedCollector(BaseCollector):
             object.  When provided, it takes precedence over
             ``policy_backend``.  When ``None`` (default) a transport is
             created automatically from the resolved ``policy_backend``.
-        device (torch.device or str, optional): device for policy inference.
-            Kept as an alias for ``policy_device``.  Defaults to ``None``.
-        policy_device (torch.device or str, optional): device used by the
-            inference server for policy execution.  If omitted, ``device`` is
-            used.
-        output_device (torch.device or str, optional): device where action
-            TensorDicts are moved before being sent back to env workers.
+        device (torch.device or str, optional): device for policy inference
+            (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
             Defaults to ``None``.
+        server_config (InferenceServerConfig, optional): structured server
+            configuration: execution ``backend`` (``"thread"`` runs the serve
+            loop in this process, ``"process"`` a dedicated server process
+            requiring ``policy_factory``), batching, and stats settings.
+            Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, and ``server_timeout`` keyword arguments.
+        device_config (InferenceDeviceConfig, optional): structured device
+            placement (``policy_device``, ``output_device``, ``env_device``,
+            ``storing_device``) for the whole collection pipeline. Mutually
+            exclusive with ``device``.
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -182,11 +199,6 @@ class AsyncBatchedCollector(BaseCollector):
             ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
             ``"monarch"``.  Falls back to ``backend`` when ``None``.
             Defaults to ``None``.
-        server_backend (str, optional): execution backend for the policy
-            server itself. ``"thread"`` runs the server loop in a background
-            thread in this process. ``"process"`` runs a dedicated process and
-            requires ``policy_factory`` with a multiprocessing policy
-            transport. Defaults to ``"thread"``.
         reset_at_each_iter (bool, optional): whether to reset all envs at the
             start of every collection batch.  Defaults to ``False``.
         postproc (Callable, optional): post-processing transform applied to
@@ -238,9 +250,9 @@ class AsyncBatchedCollector(BaseCollector):
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        server_timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        server_timeout: float | None = None,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
         backend: Literal[
@@ -256,24 +268,53 @@ class AsyncBatchedCollector(BaseCollector):
         weight_sync_model_id: str = "policy",
         verbose: bool = False,
         create_env_kwargs: dict | list[dict] | None = None,
-        policy_device: torch.device | str | None = None,
-        output_device: torch.device | str | None = None,
-        server_backend: Literal["thread", "process"] = "thread",
+        server_config: InferenceServerConfig | None = None,
+        device_config: InferenceDeviceConfig | None = None,
     ):
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
         if policy is None and policy_factory is None:
             raise TypeError("One of policy or policy_factory must be provided.")
-        if server_backend not in ("thread", "process"):
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (max_batch_size, min_batch_size, server_timeout)
+        ):
             raise ValueError(
-                f"server_backend={server_backend!r} is not supported. "
-                "Expected 'thread' or 'process'."
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, and server_timeout keyword arguments."
             )
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        server_backend = _server_defaults.backend
         if server_backend == "process" and policy_factory is None:
             raise TypeError(
-                "server_backend='process' requires policy_factory so the policy "
-                "can be constructed inside the server process."
+                "InferenceServerConfig(backend='process') requires "
+                "policy_factory so the policy can be constructed inside the "
+                "server process."
             )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if server_timeout is None:
+            server_timeout = _server_defaults.timeout
+        if device_config is not None:
+            if device is not None:
+                raise ValueError("device_config is mutually exclusive with device.")
+            policy_device = device_config.policy_device
+            output_device = device_config.server_output_device()
+            env_device = device_config.env_device
+            storing_device = device_config.storing_device
+        else:
+            policy_device = device
+            output_device = None
+            env_device = None
+            storing_device = None
+        self._env_device = torch.device(env_device) if env_device is not None else None
+        self._storing_device = (
+            torch.device(storing_device) if storing_device is not None else None
+        )
 
         # ---- resolve policy ---------------------------------------------------
         self._policy_factory = policy_factory
@@ -303,8 +344,8 @@ class AsyncBatchedCollector(BaseCollector):
         if server_backend == "process":
             if policy_backend not in (None, "multiprocessing"):
                 raise ValueError(
-                    "server_backend='process' requires policy_backend=None or "
-                    "'multiprocessing'."
+                    "InferenceServerConfig(backend='process') requires "
+                    "policy_backend=None or 'multiprocessing'."
                 )
             effective_policy_backend = "multiprocessing"
         self._policy_backend = effective_policy_backend
@@ -317,7 +358,6 @@ class AsyncBatchedCollector(BaseCollector):
         self._transport = transport
 
         # ---- build inference server -------------------------------------------
-        policy_device = device if policy_device is None else policy_device
         if server_backend == "process":
             self._server = ProcessInferenceServer(
                 policy_factory=policy_factory,
@@ -329,6 +369,8 @@ class AsyncBatchedCollector(BaseCollector):
                 output_device=output_device,
                 weight_sync=weight_sync,
                 weight_sync_model_id=weight_sync_model_id,
+                collect_stats=_server_defaults.collect_stats,
+                stats_window_size=_server_defaults.stats_window_size,
             )
         else:
             self._server = InferenceServer(
@@ -341,6 +383,8 @@ class AsyncBatchedCollector(BaseCollector):
                 output_device=output_device,
                 weight_sync=weight_sync,
                 weight_sync_model_id=weight_sync_model_id,
+                collect_stats=_server_defaults.collect_stats,
+                stats_window_size=_server_defaults.stats_window_size,
             )
 
         # ---- collector settings -----------------------------------------------
@@ -409,6 +453,8 @@ class AsyncBatchedCollector(BaseCollector):
                     "client": self._clients[i],
                     "result_queue": self._result_queue,
                     "shutdown_event": self._shutdown_event,
+                    "env_device": self._env_device,
+                    "storing_device": self._storing_device,
                 },
                 daemon=True,
                 name=f"AsyncBatchedCollector-env-{i}",
@@ -426,7 +472,7 @@ class AsyncBatchedCollector(BaseCollector):
     def policy(self) -> Callable:
         """The policy passed to the inference server.
 
-        With ``server_backend="process"`` the policy only exists inside the
+        With ``InferenceServerConfig(backend="process")`` the policy only exists inside the
         server process, so this returns the ``policy_factory`` instead.
         """
         if self._policy is not None:

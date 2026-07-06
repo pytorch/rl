@@ -19,6 +19,10 @@ from tensordict import lazy_stack
 from tensordict.base import TensorDictBase
 from torch import nn
 
+from torchrl.modules.inference_server._config import (
+    InferenceDeviceConfig,
+    InferenceServerConfig,
+)
 from torchrl.modules.inference_server._transport import InferenceTransport
 
 
@@ -69,6 +73,18 @@ class InferenceServer:
         weight_sync_model_id (str, optional): the model identifier used when
             initialising the weight sync scheme on the receiver side.
             Default: ``"policy"``.
+        server_config (InferenceServerConfig, optional): structured server
+            configuration. Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, ``timeout``, ``collect_stats``, and
+            ``stats_window_size`` keyword arguments (passing any of them
+            alongside a config raises, even when the value equals the
+            default).
+        device_config (InferenceDeviceConfig, optional): structured device
+            placement configuration. Mutually exclusive with ``device``,
+            ``policy_device``, and ``output_device``. The server consumes
+            ``policy_device`` and ``output_device`` only; ``env_device`` is
+            used as a fallback for ``output_device`` and ``storing_device``
+            is rejected (it is a collector-level setting).
 
     Example:
         >>> from tensordict.nn import TensorDictModule
@@ -93,19 +109,71 @@ class InferenceServer:
         model: nn.Module,
         transport: InferenceTransport,
         *,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        timeout: float | None = None,
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
         policy_device: torch.device | str | None = None,
         output_device: torch.device | str | None = None,
-        collect_stats: bool = True,
-        stats_window_size: int = 1024,
+        collect_stats: bool | None = None,
+        stats_window_size: int | None = None,
         weight_sync=None,
         weight_sync_model_id: str = "policy",
+        server_config: InferenceServerConfig | None = None,
+        device_config: InferenceDeviceConfig | None = None,
         shutdown_event: threading.Event | MPEvent | None = None,
     ):
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (
+                max_batch_size,
+                min_batch_size,
+                timeout,
+                collect_stats,
+                stats_window_size,
+            )
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, timeout, collect_stats, and stats_window_size "
+                "keyword arguments."
+            )
+        # Unset kwargs fall back to the (given or default) config values, so
+        # the signature carries no duplicated default literals.
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if timeout is None:
+            timeout = _server_defaults.timeout
+        if collect_stats is None:
+            collect_stats = _server_defaults.collect_stats
+        if stats_window_size is None:
+            stats_window_size = _server_defaults.stats_window_size
+        if device_config is not None:
+            if (
+                device is not None
+                or policy_device is not None
+                or output_device is not None
+            ):
+                raise ValueError(
+                    "device_config is mutually exclusive with device, "
+                    "policy_device, and output_device."
+                )
+            if device_config.storing_device is not None:
+                raise ValueError(
+                    "storing_device is a collector-level setting that the "
+                    "server does not consume. The server only uses "
+                    "policy_device and output_device (with env_device as a "
+                    "fallback for output_device). Pass storing_device to the "
+                    "collector instead."
+                )
+            policy_device = device_config.policy_device
+            output_device = device_config.server_output_device()
         self.model = model
         self.transport = transport
         self.max_batch_size = max_batch_size
@@ -398,9 +466,10 @@ class ProcessInferenceServer:
     """Dedicated-process wrapper around :class:`InferenceServer`.
 
     This server is intended for actor/env workers that communicate through a
-    queue-based transport such as :class:`~torchrl.modules.inference_server.MPTransport`.
-    Clients must be created from the transport before :meth:`start` so that the
-    child process inherits their response queues.
+    queue-based transport such as
+    :class:`~torchrl.modules.inference_server.MPTransport`. Clients must be
+    created from the transport before :meth:`start` so that the child process
+    inherits their response queues.
 
     Args:
         policy_factory (Callable[[], nn.Module]): picklable factory that creates
@@ -420,6 +489,14 @@ class ProcessInferenceServer:
         stats_window_size (int, optional): forwarded to :class:`InferenceServer`.
         weight_sync: optional weight synchronization scheme.
         weight_sync_model_id (str, optional): model id for weight sync.
+        server_config (InferenceServerConfig, optional): structured server
+            configuration. Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, ``timeout``, ``collect_stats``, and
+            ``stats_window_size`` keyword arguments.
+        device_config (InferenceDeviceConfig, optional): structured device
+            placement configuration. Mutually exclusive with ``device``,
+            ``policy_device``, and ``output_device``. Same field subset as
+            :class:`InferenceServer`: ``storing_device`` is rejected.
         mp_context: multiprocessing context or start-method name. Defaults to
             ``"spawn"``.
         startup_timeout (float, optional): seconds :meth:`start` waits for the
@@ -453,20 +530,70 @@ class ProcessInferenceServer:
         *,
         policy_factory: Callable[[], nn.Module],
         transport: InferenceTransport,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        timeout: float | None = None,
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
         policy_device: torch.device | str | None = None,
         output_device: torch.device | str | None = None,
-        collect_stats: bool = True,
-        stats_window_size: int = 1024,
+        collect_stats: bool | None = None,
+        stats_window_size: int | None = None,
         weight_sync=None,
         weight_sync_model_id: str = "policy",
+        server_config: InferenceServerConfig | None = None,
+        device_config: InferenceDeviceConfig | None = None,
         mp_context: str | mp.context.BaseContext | None = None,
         startup_timeout: float = 300.0,
     ) -> None:
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (
+                max_batch_size,
+                min_batch_size,
+                timeout,
+                collect_stats,
+                stats_window_size,
+            )
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, timeout, collect_stats, and stats_window_size "
+                "keyword arguments."
+            )
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if timeout is None:
+            timeout = _server_defaults.timeout
+        if collect_stats is None:
+            collect_stats = _server_defaults.collect_stats
+        if stats_window_size is None:
+            stats_window_size = _server_defaults.stats_window_size
+        if device_config is not None:
+            if (
+                device is not None
+                or policy_device is not None
+                or output_device is not None
+            ):
+                raise ValueError(
+                    "device_config is mutually exclusive with device, "
+                    "policy_device, and output_device."
+                )
+            if device_config.storing_device is not None:
+                raise ValueError(
+                    "storing_device is a collector-level setting that the "
+                    "server does not consume. The server only uses "
+                    "policy_device and output_device (with env_device as a "
+                    "fallback for output_device). Pass storing_device to the "
+                    "collector instead."
+                )
+            policy_device = device_config.policy_device
+            output_device = device_config.server_output_device()
         self.policy_factory = policy_factory
         self.transport = transport
         self.startup_timeout = startup_timeout
