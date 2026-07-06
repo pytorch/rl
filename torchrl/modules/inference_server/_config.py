@@ -99,6 +99,12 @@ class InferenceServerConfig:
             throughput and latency stats. Defaults to ``True``.
         stats_window_size (int, optional): number of recent timing samples kept
             for percentile stats. Defaults to ``1024``.
+        max_inflight_per_env (int, optional): maximum unresolved remote-policy
+            requests each environment coordinator may have inflight (consumed
+            by :class:`~torchrl.collectors.AsyncBatchedCollector` when
+            building its clients). Defaults to ``None`` (unbounded), so the
+            guard never throttles by surprise; set an explicit bound when
+            backpressure is wanted.
 
     Examples:
         >>> import torch
@@ -130,10 +136,16 @@ class InferenceServerConfig:
     timeout: float = 0.01
     collect_stats: bool = True
     stats_window_size: int = 1024
+    max_inflight_per_env: int | None = None
 
     def __post_init__(self) -> None:
         if self.backend not in ("thread", "process"):
             raise ValueError(
                 f"backend={self.backend!r} is not supported. "
                 "Expected 'thread' or 'process'."
+            )
+        if self.max_inflight_per_env is not None and self.max_inflight_per_env < 1:
+            raise ValueError(
+                f"max_inflight_per_env must be at least 1 (got "
+                f"{self.max_inflight_per_env}); use None to disable the guard."
             )

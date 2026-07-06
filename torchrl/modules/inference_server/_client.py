@@ -4,8 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import queue
+import threading
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
+from typing import Any
 
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
@@ -25,6 +28,72 @@ class _ImmediateFuture:
         if isinstance(self._result, BaseException):
             raise self._result
         return self._result
+
+
+class _InflightGuardedFuture:
+    """Future proxy that frees an inflight slot when the request *completes*.
+
+    Callback-capable futures (:class:`concurrent.futures.Future`) release
+    through ``add_done_callback``, so a dropped or cancelled future cannot
+    leak its slot. Pull-based futures (e.g. queue transports) release when a
+    completed result is first observed through :meth:`result` or
+    :meth:`done`. In both cases a ``result(timeout=...)`` that times out does
+    **not** free the slot -- the request is still running on the server, and
+    releasing early would let the number of genuinely inflight requests
+    exceed ``max_inflight``. Garbage collection of the proxy releases the
+    slot as a last resort so an abandoned pull-based future cannot
+    permanently exhaust the guard.
+    """
+
+    def __init__(self, future, release: Callable[[], None]) -> None:
+        self.future = future
+        self._release_cb = release
+        self._released = False
+        self._release_lock = threading.Lock()
+        add_done_callback = getattr(future, "add_done_callback", None)
+        if add_done_callback is not None:
+            add_done_callback(lambda _fut: self._release_once())
+
+    def _release_once(self) -> None:
+        with self._release_lock:
+            if self._released:
+                return
+            self._released = True
+        self._release_cb()
+
+    def done(self) -> bool:
+        is_done = self.future.done()
+        if is_done:
+            self._release_once()
+        return is_done
+
+    def result(self, timeout: float | None = None) -> TensorDictBase:
+        try:
+            result = self.future.result(timeout=timeout)
+        except (queue.Empty, TimeoutError):
+            # The request is still inflight on the server; keep the slot.
+            raise
+        except BaseException:
+            self._release_once()
+            raise
+        self._release_once()
+        return result
+
+    def __getattr__(self, name: str) -> Any:
+        # __getattr__ only fires for missing attributes; route through
+        # __dict__ explicitly so a partially-initialised proxy (e.g. during
+        # unpickling) raises AttributeError instead of recursing.
+        try:
+            future = object.__getattribute__(self, "future")
+        except AttributeError:
+            raise AttributeError(name) from None
+        return getattr(future, name)
+
+    def __del__(self) -> None:
+        try:
+            self._release_once()
+        except Exception:
+            pass
 
 
 class PolicyClientModule(TensorDictModuleBase):
@@ -59,6 +128,12 @@ class PolicyClientModule(TensorDictModuleBase):
             module. The full input TensorDict is still sent to the server.
         out_keys (sequence of NestedKey, optional): output keys advertised by
             the module.
+        max_inflight (int, optional): maximum number of unresolved
+            asynchronous requests submitted through this module; further
+            :meth:`submit` calls block until a slot frees up. A slot is
+            freed when its request *completes* (including errors), not when
+            ``result()`` is first called; a timed-out ``result()`` keeps the
+            slot. Must be at least ``1``. ``None`` means unbounded.
 
     .. note::
         Version tracking is an instance of the generic *service-stamped
@@ -114,13 +189,45 @@ class PolicyClientModule(TensorDictModuleBase):
         *,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
+        max_inflight: int | None = None,
     ) -> None:
         super().__init__()
         if isinstance(client, InferenceTransport):
             client = client.client()
+        if max_inflight is not None and max_inflight < 1:
+            raise ValueError(
+                f"max_inflight must be at least 1 (got {max_inflight}); "
+                "use None to disable the guard."
+            )
         self.client = client
         self.in_keys = list(in_keys or [])
         self.out_keys = list(out_keys or [])
+        self.max_inflight = max_inflight
+        self._inflight_sem = (
+            threading.BoundedSemaphore(max_inflight)
+            if max_inflight is not None
+            else None
+        )
+
+    def __getstate__(self):
+        # Semaphores are not picklable; the guard is a per-process resource,
+        # so a fresh one (with a full complement of slots) is rebuilt on
+        # unpickling. This keeps clients picklable per the Client contract.
+        state = super().__getstate__()
+        state = dict(state)
+        state["_inflight_sem"] = None
+        return state
+
+    def __setstate__(self, state) -> None:
+        super().__setstate__(state)
+        if self.max_inflight is not None:
+            self._inflight_sem = threading.BoundedSemaphore(self.max_inflight)
+
+    def _acquire_inflight(self) -> Callable[[], None]:
+        if self._inflight_sem is None:
+            return lambda: None
+        self._inflight_sem.acquire()
+        return self._inflight_sem.release
 
     def submit(self, tensordict: TensorDictBase) -> Future | _ImmediateFuture:
         """Submit a TensorDict request and return a future-like object.
@@ -137,14 +244,24 @@ class PolicyClientModule(TensorDictModuleBase):
             and errors are deferred to ``result()`` on a reduced future that
             only implements ``done()`` and ``result()``.
         """
+        release = self._acquire_inflight()
         submit = getattr(self.client, "submit", None)
         if submit is None:
+            # The plain-callable path runs eagerly, so the request has
+            # already completed here: free the slot immediately.
             try:
                 result = self.client(tensordict)
                 return _ImmediateFuture(result)
             except Exception as exc:
                 return _ImmediateFuture(exc)
-        return submit(tensordict)
+            finally:
+                release()
+        try:
+            future = submit(tensordict)
+        except BaseException:
+            release()
+            raise
+        return _InflightGuardedFuture(future, release)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self.submit(tensordict).result()

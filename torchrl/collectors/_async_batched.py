@@ -399,6 +399,7 @@ class AsyncBatchedCollector(BaseCollector):
                 policy_version_key=policy_version_key,
             )
         self._policy_version_key = policy_version_key
+        self._max_inflight_per_env = _server_defaults.max_inflight_per_env
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -446,7 +447,10 @@ class AsyncBatchedCollector(BaseCollector):
         # inherited by the child process.
         if self._clients is None:
             self._clients = [
-                PolicyClientModule(self._transport.client())
+                PolicyClientModule(
+                    self._transport.client(),
+                    max_inflight=self._max_inflight_per_env,
+                )
                 for _ in range(self._num_envs)
             ]
 

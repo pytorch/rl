@@ -437,6 +437,7 @@ class TestPolicyClientModule:
                 transport,
                 in_keys=["observation"],
                 out_keys=["action"],
+                max_inflight=1,
             )
             td = TensorDict({"observation": torch.randn(4)})
             result = remote_policy(td)
@@ -507,6 +508,136 @@ class TestPolicyClientModule:
         assert server.policy_version == 0
         server.update_policy_weights_()
         assert server.policy_version == 1
+
+    def test_max_inflight_validation(self):
+        with pytest.raises(ValueError, match="max_inflight must be at least 1"):
+            PolicyClientModule(lambda td: td, max_inflight=0)
+        with pytest.raises(ValueError, match="max_inflight must be at least 1"):
+            PolicyClientModule(lambda td: td, max_inflight=-3)
+        with pytest.raises(ValueError, match="max_inflight_per_env"):
+            InferenceServerConfig(max_inflight_per_env=0)
+
+    def test_max_inflight_survives_pickling(self):
+        """The guard is rebuilt on unpickle; clients stay picklable."""
+        remote_policy = PolicyClientModule(_echo_client, max_inflight=2)
+        restored = pickle.loads(pickle.dumps(remote_policy))
+        assert restored.max_inflight == 2
+        assert restored._inflight_sem is not None
+        # The rebuilt guard still enforces the limit
+        release_one = restored._acquire_inflight()
+        release_two = restored._acquire_inflight()
+        acquired = restored._inflight_sem.acquire(blocking=False)
+        assert not acquired
+        release_one()
+        release_two()
+        result = restored(TensorDict({"observation": torch.randn(4)}))
+        assert "observation" in result.keys()
+
+    def test_max_inflight_blocks_until_completion(self):
+        """The guard blocks a second submit and frees on completion (not result())."""
+
+        class _ManualClient:
+            def __init__(self):
+                self.futures = []
+
+            def submit(self, td):
+                fut = concurrent.futures.Future()
+                self.futures.append(fut)
+                return fut
+
+        client = _ManualClient()
+        remote = PolicyClientModule(client, max_inflight=1)
+        remote.submit(TensorDict({}))
+        second_done = threading.Event()
+
+        def _second_submit():
+            remote.submit(TensorDict({}))
+            second_done.set()
+
+        t = threading.Thread(target=_second_submit, daemon=True)
+        t.start()
+        time.sleep(0.2)
+        assert not second_done.is_set()  # guard enforced
+        # Completing the first request frees the slot even though result()
+        # is never called on it (done-callback release).
+        client.futures[0].set_result(TensorDict({}))
+        assert second_done.wait(timeout=5.0)
+        t.join(timeout=5.0)
+
+    def test_max_inflight_releases_on_error(self):
+        """A failed request frees its slot; the guard cannot deadlock."""
+
+        class _ManualClient:
+            def __init__(self):
+                self.futures = []
+
+            def submit(self, td):
+                fut = concurrent.futures.Future()
+                self.futures.append(fut)
+                return fut
+
+        client = _ManualClient()
+        remote = PolicyClientModule(client, max_inflight=1)
+        fut = remote.submit(TensorDict({}))
+        client.futures[0].set_exception(ValueError("boom"))
+        with pytest.raises(ValueError, match="boom"):
+            fut.result(timeout=5.0)
+        # Slot was released; this would deadlock otherwise.
+        fut2 = remote.submit(TensorDict({}))
+        client.futures[1].set_result(TensorDict({}))
+        assert fut2.result(timeout=5.0) is not None
+
+    def test_max_inflight_timeout_keeps_slot(self):
+        """A result() timeout must not free the slot of a running request."""
+
+        class _PullFuture:
+            """Pull-based future without add_done_callback support."""
+
+            def __init__(self):
+                self._event = threading.Event()
+                self._result = None
+
+            def done(self):
+                return self._event.is_set()
+
+            def result(self, timeout=None):
+                if not self._event.wait(timeout=timeout):
+                    raise TimeoutError("still running")
+                return self._result
+
+            def set_result(self, result):
+                self._result = result
+                self._event.set()
+
+        class _PullClient:
+            def __init__(self):
+                self.futures = []
+
+            def submit(self, td):
+                fut = _PullFuture()
+                self.futures.append(fut)
+                return fut
+
+        client = _PullClient()
+        remote = PolicyClientModule(client, max_inflight=1)
+        fut = remote.submit(TensorDict({}))
+        with pytest.raises(TimeoutError):
+            fut.result(timeout=0.05)
+        second_done = threading.Event()
+
+        def _second_submit():
+            remote.submit(TensorDict({}))
+            second_done.set()
+
+        t = threading.Thread(target=_second_submit, daemon=True)
+        t.start()
+        time.sleep(0.2)
+        # The request is still inflight: its slot must still be held.
+        assert not second_done.is_set()
+        client.futures[0].set_result(TensorDict({}))
+        assert fut.result(timeout=5.0) is not None
+        assert second_done.wait(timeout=5.0)
+        t.join(timeout=5.0)
 
 
 # =============================================================================
