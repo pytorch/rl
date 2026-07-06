@@ -10,11 +10,25 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from typing import Any
 
+import torch
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 
 from torchrl.modules.inference_server._transport import InferenceTransport
+
+_REMOTE_INTERACTION_TYPE_KEY = "_torchrl_inference_interaction_type"
+# Code stamped when the caller has no active interaction context; keeping the
+# key always present makes server batches homogeneous in key structure.
+_NO_INTERACTION_TYPE_CODE = -1
+_INTERACTION_TYPE_TO_CODE = {
+    "mode": 0,
+    "median": 1,
+    "mean": 2,
+    "random": 3,
+    "deterministic": 4,
+}
 
 
 class _ImmediateFuture:
@@ -136,6 +150,13 @@ class PolicyClientModule(TensorDictModuleBase):
             slot. Must be at least ``1``. ``None`` means unbounded.
 
     .. note::
+        The caller's active :func:`tensordict.nn.interaction_type` is
+        automatically attached to every transport request, and the server
+        executes the remote policy under that exploration context -- exactly
+        as a local policy would see it. In-process (plain callable) clients
+        need no propagation since the caller's context is already active.
+
+    .. note::
         Version tracking is an instance of the generic *service-stamped
         metadata* pattern: a service may stamp every response with metadata
         describing the state it was served from (here: the behavior-policy
@@ -246,6 +267,27 @@ class PolicyClientModule(TensorDictModuleBase):
         """
         release = self._acquire_inflight()
         submit = getattr(self.client, "submit", None)
+        if submit is not None:
+            # Cross-boundary request: carry the caller's exploration context
+            # so the server-side forward behaves like a local call. The key
+            # is always attached (with a sentinel when no context is active)
+            # so server batches stay homogeneous in key structure.
+            current_interaction_type = interaction_type()
+            code = (
+                _INTERACTION_TYPE_TO_CODE[current_interaction_type.value]
+                if current_interaction_type is not None
+                else _NO_INTERACTION_TYPE_CODE
+            )
+            tensordict = tensordict.clone(recurse=False)
+            tensordict.set(
+                _REMOTE_INTERACTION_TYPE_KEY,
+                torch.full(
+                    tensordict.batch_size,
+                    code,
+                    dtype=torch.int8,
+                    device=tensordict.device or torch.device("cpu"),
+                ),
+            )
         if submit is None:
             # The plain-callable path runs eagerly, so the request has
             # already completed here: free the slot immediately.

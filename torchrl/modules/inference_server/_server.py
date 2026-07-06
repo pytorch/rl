@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import multiprocessing as mp
 
 import queue
@@ -18,15 +19,28 @@ from typing import Literal
 import torch
 from tensordict import lazy_stack
 from tensordict.base import TensorDictBase
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
+from torchrl.modules.inference_server._client import (
+    _NO_INTERACTION_TYPE_CODE,
+    _REMOTE_INTERACTION_TYPE_KEY,
+)
 from torchrl.modules.inference_server._config import (
     InferenceDeviceConfig,
     InferenceServerConfig,
 )
 from torchrl.modules.inference_server._transport import InferenceTransport
 from torchrl.weight_update import SharedMemWeightSyncScheme, WeightSyncScheme
+
+_CODE_TO_INTERACTION_TYPE = {
+    0: InteractionType.MODE,
+    1: InteractionType.MEDIAN,
+    2: InteractionType.MEAN,
+    3: InteractionType.RANDOM,
+    4: InteractionType.DETERMINISTIC,
+}
 
 
 class InferenceServer:
@@ -408,6 +422,31 @@ class InferenceServer:
         )
         return result_batch.set(self.policy_version_key, version)
 
+    def _interaction_type_context(self, batch: TensorDictBase):
+        code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
+        if code is None:
+            return contextlib.nullcontext(), batch
+        if not isinstance(code, torch.Tensor):
+            interaction_code = int(code)
+        else:
+            flat_code = code.reshape(-1)
+            if flat_code.numel() == 0:
+                return contextlib.nullcontext(), batch.exclude(
+                    _REMOTE_INTERACTION_TYPE_KEY, inplace=False
+                )
+            interaction_code = int(flat_code[0].item())
+            if not flat_code.eq(interaction_code).all():
+                raise RuntimeError(
+                    "InferenceServer received a mixed interaction-type batch. "
+                    "Use homogeneous server requests or a smaller max_batch_size."
+                )
+        batch = batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False)
+        if interaction_code == _NO_INTERACTION_TYPE_CODE:
+            # Sentinel: the caller had no active interaction context.
+            return contextlib.nullcontext(), batch
+        interaction_type_value = _CODE_TO_INTERACTION_TYPE[interaction_code]
+        return set_interaction_type(interaction_type_value), batch
+
     @torch.no_grad()
     def _run(self) -> None:
         self._init_weight_sync()
@@ -462,10 +501,14 @@ class InferenceServer:
                         batch = batch.to(self.policy_device)
                     forward_start = time.monotonic()
                     with self._model_lock:
-                        result_batch = self.model(batch)
-                    if self.output_device is not None:
-                        result_batch = result_batch.to(self.output_device)
-                    result_batch = self._set_policy_version(result_batch)
+                        interaction_context, batch = self._interaction_type_context(
+                            batch
+                        )
+                        with interaction_context:
+                            result_batch = self.model(batch)
+                        if self.output_device is not None:
+                            result_batch = result_batch.to(self.output_device)
+                        result_batch = self._set_policy_version(result_batch)
                     forward_ms = (time.monotonic() - forward_start) * 1000.0
                     self._record_batch_stats(
                         batch_size=len(callbacks),
