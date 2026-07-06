@@ -16,7 +16,6 @@ from tensordict.nn import TensorDictModuleBase
 from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 
-from torchrl._utils import logger as torchrl_logger
 from torchrl.modules.inference_server._transport import InferenceTransport
 
 _REMOTE_INTERACTION_TYPE_KEY = "_torchrl_inference_interaction_type"
@@ -149,18 +148,6 @@ class PolicyClientModule(TensorDictModuleBase):
             freed when its request *completes* (including errors), not when
             ``result()`` is first called; a timed-out ``result()`` keeps the
             slot. Must be at least ``1``. ``None`` means unbounded.
-        target_policy_version (int or Callable[[], int], optional): expected
-            latest policy version used for bounded-staleness checks. A
-            callable (e.g. ``lambda: server.policy_version``) is re-evaluated
-            on every check, providing a live version source.
-        max_policy_lag (int, optional): maximum allowed
-            ``target_policy_version - returned_policy_version``. The lag is
-            computed against the *oldest* version element in the result.
-        policy_version_key (NestedKey or None, optional): key that contains
-            the behavior policy version returned by the server. Must match the
-            server's ``policy_version_key``; a mismatch triggers a one-time
-            warning when the staleness guard is enabled. ``None`` disables the
-            guard. Defaults to ``"policy_version"``.
 
     .. note::
         The caller's active :func:`tensordict.nn.interaction_type` is
@@ -173,9 +160,11 @@ class PolicyClientModule(TensorDictModuleBase):
         Version tracking is an instance of the generic *service-stamped
         metadata* pattern: a service may stamp every response with metadata
         describing the state it was served from (here: the behavior-policy
-        version), and clients may enforce freshness constraints on that
-        metadata (here: bounded staleness through ``max_policy_lag``). Other
-        services can reuse the same shape for their own response metadata.
+        version), and the data pipeline may enforce freshness constraints on
+        that metadata. Bounded-staleness enforcement lives in the replay
+        buffer through :class:`~torchrl.envs.transforms.PolicyAgeFilter`,
+        which silently drops too-old elements on extend or sample instead of
+        raising in the consumer.
 
     .. note::
         The server-side version counter is independent from the
@@ -216,9 +205,6 @@ class PolicyClientModule(TensorDictModuleBase):
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         max_inflight: int | None = None,
-        target_policy_version: int | Callable[[], int] | None = None,
-        max_policy_lag: int | None = None,
-        policy_version_key: NestedKey | None = "policy_version",
     ) -> None:
         super().__init__()
         if isinstance(client, InferenceTransport):
@@ -232,10 +218,6 @@ class PolicyClientModule(TensorDictModuleBase):
         self.in_keys = list(in_keys or [])
         self.out_keys = list(out_keys or [])
         self.max_inflight = max_inflight
-        self.target_policy_version = target_policy_version
-        self.max_policy_lag = max_policy_lag
-        self.policy_version_key = policy_version_key
-        self._warned_missing_version = False
         self._inflight_sem = (
             threading.BoundedSemaphore(max_inflight)
             if max_inflight is not None
@@ -262,43 +244,6 @@ class PolicyClientModule(TensorDictModuleBase):
         self._inflight_sem.acquire()
         return self._inflight_sem.release
 
-    def _check_policy_lag(self, tensordict: TensorDictBase) -> None:
-        if self.target_policy_version is None or self.max_policy_lag is None:
-            return
-        version = (
-            tensordict.get(self.policy_version_key, default=None)
-            if self.policy_version_key is not None
-            else None
-        )
-        if version is None:
-            # A user who configured the guard expects protection; a missing
-            # key (server annotations disabled, or client/server key
-            # mismatch) must not silently disable it.
-            if not self._warned_missing_version:
-                torchrl_logger.warning(
-                    f"PolicyClientModule: max_policy_lag is set but the "
-                    f"result carries no {self.policy_version_key!r} entry. "
-                    f"The staleness guard is inactive; check that the server "
-                    f"annotates versions and that policy_version_key matches "
-                    f"on both sides."
-                )
-                self._warned_missing_version = True
-            return
-        if isinstance(version, torch.Tensor):
-            # Bound the staleness of the worst-case (oldest) element.
-            version = int(version.min().item())
-        else:
-            version = int(version)
-        target = self.target_policy_version
-        if callable(target):
-            target = int(target())
-        lag = target - version
-        if lag > self.max_policy_lag:
-            raise RuntimeError(
-                f"Remote policy result is too stale: version={version}, "
-                f"target_policy_version={target}, "
-                f"max_policy_lag={self.max_policy_lag}."
-            )
 
     def submit(self, tensordict: TensorDictBase) -> Future | _ImmediateFuture:
         """Submit a TensorDict request and return a future-like object.
@@ -356,6 +301,4 @@ class PolicyClientModule(TensorDictModuleBase):
         return _InflightGuardedFuture(future, release)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        result = self.submit(tensordict).result()
-        self._check_policy_lag(result)
-        return result
+        return self.submit(tensordict).result()

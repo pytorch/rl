@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import torch
 from tensordict import NestedKey, TensorDictBase
+
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data.postprocs.postprocs import _multi_step_func
 from torchrl.envs.transforms.transforms import Transform
 
@@ -458,3 +460,144 @@ class NextStateReconstructor(Transform):
             )
             tensordict.set(next_k, next_view)
         return tensordict
+
+
+class PolicyAgeFilter(Transform):
+    """Filter out data produced by a behavior policy that is too old.
+
+    Services such as :class:`~torchrl.modules.inference_server.InferenceServer`
+    stamp every response with the behavior-policy version that produced it
+    (the *service-stamped metadata* pattern). This transform enforces a
+    bounded-staleness constraint on that metadata inside the data pipeline:
+    elements whose stamped version lags the live version by more than
+    ``max_policy_lag`` weight updates are dropped, instead of raising in the
+    consumer.
+
+    Attached to a :class:`~torchrl.data.ReplayBuffer`, the transform filters
+    on both paths:
+
+    - on :meth:`~torchrl.data.ReplayBuffer.extend` (inverse path), stale
+      elements never enter the buffer;
+    - on :meth:`~torchrl.data.ReplayBuffer.sample` (forward path), elements
+      that have become stale *since insertion* are dropped from the batch, so
+      the returned batch may be smaller than the requested batch size.
+
+    Attached to an environment, the transform is a no-op: data flowing
+    through an env pipeline is produced by the live policy and carries no
+    lag by construction.
+
+    Args:
+        current_version (int or Callable[[], int]): live source of the
+            current policy version, e.g. ``lambda: server.policy_version`` or
+            ``lambda: collector.policy_version``. A callable is re-evaluated
+            on every filtering pass; an ``int`` freezes the reference version.
+        max_policy_lag (int): maximum allowed
+            ``current_version - stamped_version``.
+
+    Keyword Args:
+        policy_version_key (NestedKey, optional): key carrying the stamped
+            behavior-policy version. Must match the stamping service's
+            ``policy_version_key``. Defaults to ``"policy_version"``.
+        strict (bool, optional): if ``True``, data without the version key
+            raises a ``KeyError``; otherwise it passes through unfiltered
+            with a one-time warning. Defaults to ``False``.
+
+    .. note::
+        Filtering produces data-dependent batch sizes, which is unfriendly to
+        ``torch.compile``; keep the filter outside compiled regions.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyStackStorage, ReplayBuffer
+        >>> from torchrl.envs.transforms import PolicyAgeFilter
+        >>> current_version = 3
+        >>> rb = ReplayBuffer(
+        ...     storage=LazyStackStorage(100),
+        ...     transform=PolicyAgeFilter(lambda: current_version, max_policy_lag=1),
+        ... )
+        >>> data = TensorDict(
+        ...     {"observation": torch.randn(4, 3), "policy_version": torch.tensor([0, 2, 2, 3])},
+        ...     batch_size=[4],
+        ... )
+        >>> indices = rb.extend(data)  # version 0 is filtered out on write
+        >>> len(rb)
+        3
+        >>> sample = rb.sample(3)  # remaining data is fresh enough
+        >>> sample.batch_size[0]
+        3
+    """
+
+    def __init__(
+        self,
+        current_version: int | Callable[[], int],
+        max_policy_lag: int,
+        *,
+        policy_version_key: NestedKey = "policy_version",
+        strict: bool = False,
+    ) -> None:
+        super().__init__(in_keys=[], out_keys=[])
+        if not callable(current_version):
+            current_version = int(current_version)
+        if max_policy_lag < 0:
+            raise ValueError(
+                f"max_policy_lag must be non-negative, got {max_policy_lag}."
+            )
+        self.current_version = current_version
+        self.max_policy_lag = int(max_policy_lag)
+        self.policy_version_key = policy_version_key
+        self.strict = bool(strict)
+        self._warned_missing_version = False
+
+    def _resolve_current_version(self) -> int:
+        current_version = self.current_version
+        if callable(current_version):
+            return int(current_version())
+        return current_version
+
+    def _filter(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if tensordict.batch_dims < 1 or tensordict.batch_size[0] == 0:
+            return tensordict
+        version = tensordict.get(self.policy_version_key, default=None)
+        if version is None:
+            if self.strict:
+                raise KeyError(
+                    f"PolicyAgeFilter: {self.policy_version_key!r} is not "
+                    "present in the data. Check that the producing service "
+                    "stamps versions and that policy_version_key matches, or "
+                    "pass strict=False to let unstamped data through."
+                )
+            if not self._warned_missing_version:
+                torchrl_logger.warning(
+                    f"PolicyAgeFilter: no {self.policy_version_key!r} entry "
+                    "found; data passes through unfiltered. Check that the "
+                    "producing service stamps versions and that "
+                    "policy_version_key matches on both sides."
+                )
+                self._warned_missing_version = True
+            return tensordict
+        batch_size = tensordict.batch_size[0]
+        # Bound the staleness of the worst-case (oldest) element of each row.
+        version = version.reshape(batch_size, -1).min(dim=-1).values
+        lag = self._resolve_current_version() - version
+        keep = lag <= self.max_policy_lag
+        if bool(keep.all()):
+            return tensordict
+        return tensordict[keep]
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Drop stale elements from a sampled batch (replay-buffer read path)."""
+        if self.parent is not None:
+            # Attached to an env: data is produced by the live policy.
+            return tensordict
+        return self._filter(tensordict)
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # Env-step path: nothing to filter (see class docstring).
+        return next_tensordict
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Drop stale elements before insertion (replay-buffer write path)."""
+        if self.parent is not None:
+            return tensordict
+        return self._filter(tensordict)
