@@ -952,7 +952,6 @@ def make_collector(
             in_keys=policy_in_keys,
             out_keys=policy_out_keys,
             max_inflight=cfg.collector.max_inflight_per_env,
-            propagate_interaction_type=True,
         )
         for client in rollout_clients
     ]
@@ -960,7 +959,6 @@ def make_collector(
         eval_client,
         in_keys=policy_in_keys,
         out_keys=policy_out_keys,
-        propagate_interaction_type=True,
     )
     collector = MultiCollector(
         env_factories,
