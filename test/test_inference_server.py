@@ -17,6 +17,11 @@ import torch.nn as nn
 from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModule
+from tensordict.nn.probabilistic import (
+    interaction_type,
+    InteractionType,
+    set_interaction_type,
+)
 
 from torchrl.modules.inference_server import (
     InferenceClient,
@@ -1098,6 +1103,27 @@ class TestWeightSyncIntegration:
             td = TensorDict({"observation": torch.randn(4)})
             result = client(td)
             assert "action" in result.keys()
+
+    def test_policy_client_can_propagate_interaction_type(self):
+        class _InteractionPolicy(nn.Module):
+            def forward(self, td: TensorDictBase) -> TensorDictBase:
+                value = 1 if interaction_type() is InteractionType.RANDOM else 0
+                return TensorDict(
+                    {"action": torch.full(td.batch_size, value)},
+                    batch_size=td.batch_size,
+                )
+
+        transport = ThreadingTransport()
+        policy = _InteractionPolicy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            client = PolicyClientModule(
+                transport,
+                out_keys=["action"],
+                propagate_interaction_type=True,
+            )
+            with set_interaction_type(InteractionType.RANDOM):
+                result = client(TensorDict({}, batch_size=[1]))
+            assert result["action"].item() == 1
 
 
 # ---------------------------------------------------------------------------

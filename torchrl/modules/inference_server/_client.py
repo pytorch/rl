@@ -13,10 +13,20 @@ from typing import Any
 import torch
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.modules.inference_server._transport import InferenceTransport
+
+_REMOTE_INTERACTION_TYPE_KEY = "_torchrl_inference_interaction_type"
+_INTERACTION_TYPE_TO_CODE = {
+    "mode": 0,
+    "median": 1,
+    "mean": 2,
+    "random": 3,
+    "deterministic": 4,
+}
 
 
 class _ImmediateFuture:
@@ -141,6 +151,10 @@ class PolicyClientModule(TensorDictModuleBase):
             server's ``policy_version_key``; a mismatch triggers a one-time
             warning when the staleness guard is enabled. ``None`` disables the
             guard. Defaults to ``"policy_version"``.
+        propagate_interaction_type (bool, optional): if ``True``, the active
+            :func:`tensordict.nn.interaction_type` is attached to each request
+            so the server can execute the remote policy under the caller's
+            exploration context. Defaults to ``False``.
 
     .. note::
         The server-side version counter is independent from the
@@ -184,6 +198,7 @@ class PolicyClientModule(TensorDictModuleBase):
         target_policy_version: int | Callable[[], int] | None = None,
         max_policy_lag: int | None = None,
         policy_version_key: NestedKey | None = "policy_version",
+        propagate_interaction_type: bool = False,
     ) -> None:
         super().__init__()
         if isinstance(client, InferenceTransport):
@@ -201,6 +216,7 @@ class PolicyClientModule(TensorDictModuleBase):
         self.max_policy_lag = max_policy_lag
         self.policy_version_key = policy_version_key
         self._warned_missing_version = False
+        self.propagate_interaction_type = bool(propagate_interaction_type)
         self._inflight_sem = (
             threading.BoundedSemaphore(max_inflight)
             if max_inflight is not None
@@ -266,6 +282,19 @@ class PolicyClientModule(TensorDictModuleBase):
             and errors are deferred to ``result()`` on a reduced future that
             only implements ``done()`` and ``result()``.
         """
+        if self.propagate_interaction_type:
+            current_interaction_type = interaction_type()
+            if current_interaction_type is not None:
+                tensordict = tensordict.clone(recurse=False)
+                tensordict.set(
+                    _REMOTE_INTERACTION_TYPE_KEY,
+                    torch.full(
+                        tensordict.batch_size,
+                        _INTERACTION_TYPE_TO_CODE[current_interaction_type.value],
+                        dtype=torch.int8,
+                        device=tensordict.device or torch.device("cpu"),
+                    ),
+                )
         release = self._acquire_inflight()
         submit = getattr(self.client, "submit", None)
         if submit is None:
