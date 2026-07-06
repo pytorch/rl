@@ -1057,7 +1057,7 @@ class TestAsyncBatchedCollector:
                 create_env_fn=[_counting_env_factory] * 2,
                 policy_factory=_make_counting_policy,
                 frames_per_batch=10,
-                server_backend="proces",
+                server_backend="not-a-backend",
             )
 
     def test_server_death_raises_instead_of_hanging(self):
