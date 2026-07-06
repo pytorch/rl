@@ -2301,6 +2301,90 @@ class TargetNetUpdaterHook(TrainerHookBase):
         trainer.register_op("post_steps", self)
 
 
+class ValueEstimatorHook(TrainerHookBase):
+    """A hook that computes value estimates over a collected batch.
+
+    Wraps a value estimator module such as :class:`~torchrl.objectives.value.GAE`
+    and applies it to the whole collected batch at the ``pre_epoch`` stage, so
+    that advantage and value-target entries are available when the loss module
+    consumes sub-batches during optimization.
+
+    Args:
+        value_estimator (Callable[[TensorDictBase], TensorDictBase]): the value
+            estimator to apply to the collected batch, e.g. an instance of
+            :class:`~torchrl.objectives.value.GAE`.
+
+    Examples:
+        >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=critic, average_gae=True)
+        >>> value_estimator_hook = ValueEstimatorHook(gae)
+        >>> value_estimator_hook.register(trainer)
+    """
+
+    def __init__(
+        self, value_estimator: Callable[[TensorDictBase], TensorDictBase]
+    ) -> None:
+        self.value_estimator = value_estimator
+
+    def __call__(self, batch: TensorDictBase) -> TensorDictBase:
+        return self.value_estimator(batch)
+
+    def state_dict(self) -> dict[str, Any]:
+        if hasattr(self.value_estimator, "state_dict"):
+            return {"value_estimator": self.value_estimator.state_dict()}
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        if "value_estimator" in state_dict and hasattr(
+            self.value_estimator, "load_state_dict"
+        ):
+            self.value_estimator.load_state_dict(state_dict["value_estimator"])
+
+    def register(self, trainer: Trainer, name: str = "value_estimator"):
+        trainer.register_op("pre_epoch", self)
+        trainer.register_module(name, self)
+
+
+class LRSchedulerHook(TrainerHookBase):
+    """A hook that steps a learning-rate scheduler during training.
+
+    Args:
+        scheduler (torch.optim.lr_scheduler.LRScheduler): the scheduler to step.
+        interval (str, optional): ``"batch"`` to step the scheduler once per
+            collected batch, or ``"optim"`` to step it after every optimization
+            step. Defaults to ``"batch"``.
+
+    Examples:
+        >>> scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100)
+        >>> lr_scheduler_hook = LRSchedulerHook(scheduler)
+        >>> lr_scheduler_hook.register(trainer)
+    """
+
+    def __init__(
+        self,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        interval: str = "batch",
+    ) -> None:
+        if interval not in ("batch", "optim"):
+            raise ValueError(f"interval must be 'batch' or 'optim', got {interval}")
+        self.scheduler = scheduler
+        self.interval = interval
+
+    def __call__(self, batch: TensorDictBase | None = None) -> TensorDictBase | None:
+        self.scheduler.step()
+        return batch
+
+    def state_dict(self) -> dict[str, Any]:
+        return {"scheduler": self.scheduler.state_dict()}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.scheduler.load_state_dict(state_dict["scheduler"])
+
+    def register(self, trainer: Trainer, name: str = "lr_scheduler"):
+        dest = "post_optim" if self.interval == "optim" else "post_steps"
+        trainer.register_op(dest, self)
+        trainer.register_module(name, self)
+
+
 class UTDRHook(TrainerHookBase):
     """Hook for logging Update-to-Data (UTD) ratio during async collection.
 
