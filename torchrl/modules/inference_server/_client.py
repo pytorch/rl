@@ -250,7 +250,6 @@ class PolicyClientModule(TensorDictModuleBase):
         self._inflight_sem.acquire()
         return self._inflight_sem.release
 
-
     def submit(self, tensordict: TensorDictBase) -> Future | _ImmediateFuture:
         """Submit a TensorDict request and return a future-like object.
 

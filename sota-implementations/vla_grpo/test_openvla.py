@@ -43,10 +43,7 @@ _has_deps = all(
 )
 
 if _has_deps:
-    from openvla import (
-        GripperPostProcessTransform,
-        OpenVLAOFTWrapper,
-    )
+    from openvla import GripperPostProcessTransform, OpenVLAOFTWrapper
     from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
 
 CHUNK, ACT_DIM, N_BINS = 8, 7, 256
@@ -689,8 +686,6 @@ class TestReplayBufferFactory:
 
 
 class TestTokenizerAndTransforms:
-
-
     def test_chunk_transform_without_tokenizer_consumes_vla_chunk(self):
         cfg = SimpleNamespace(env=SimpleNamespace(max_outer_steps=1))
 
