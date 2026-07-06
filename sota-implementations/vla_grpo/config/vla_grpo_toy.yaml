@@ -11,7 +11,6 @@ env:
   success_tol: 0.35 # sized so a random policy succeeds sometimes (cold-start signal)
   max_outer_steps: 6 # episode truncation, in chunk decisions
   render_size: 64 # side length of the from_pixels eval-video frame
-  num_envs: 1 # async-env workers; ToyVLAEnv grouped rollouts are per worker
   seed: 0
 
 tokenizer:
@@ -36,23 +35,6 @@ collector:
   max_same_policy_collect_attempts: 2
   min_replay_decisions: null # null/0 = collect one target group wave
   total_iters: 200
-  # Execution-mode switches for throughput ablations:
-  # - false/false: regular synchronous TorchRL Collector.
-  # - true/false: async env slots with one request per policy forward.
-  # - true/true: async env slots plus auto-batched policy inference.
-  # - false/true: sync env stepping through the policy server path.
-  async_env: false
-  async_policy: false
-  env_backend: threading # AsyncBatchedCollector env backend: threading | multiprocessing
-  policy_backend: threading # inference transport: threading | multiprocessing | ray | monarch
-  server_backend: thread # process server needs a policy_factory and is not used here
-  server_max_batch_size: null # null = number of async envs when async_policy=true
-  server_min_batch_size: 1
-  server_timeout: 0.01
-  server_collect_stats: true
-  server_stats_window_size: 1024
-  max_inflight_per_env: 1
-  storing_device: null
 
 advantage:
   trajectory_return: sum # binary success return per trajectory

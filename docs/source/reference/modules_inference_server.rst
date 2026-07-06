@@ -71,6 +71,43 @@ threads in the same process:
 
     server.shutdown()
 
+Structured Configuration
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Batching and device placement can be grouped into two dataclasses instead of
+loose keyword arguments: :class:`InferenceServerConfig` collects the batching
+and instrumentation knobs (``max_batch_size``, ``min_batch_size``,
+``timeout``, ``collect_stats``, ``stats_window_size``), and
+:class:`InferenceDeviceConfig` describes device placement across the
+collection pipeline (``policy_device``, ``output_device``, ``env_device``,
+``storing_device``). Both :class:`InferenceServer` and
+:class:`~torchrl.collectors.AsyncBatchedCollector` accept them through the
+``server_config`` and ``device_config`` keyword arguments; a config object is
+mutually exclusive with the individual keyword arguments it replaces. Servers
+consume only the ``policy_device``/``output_device`` fields (``env_device``
+doubles as an ``output_device`` fallback), while ``env_device`` and
+``storing_device`` drive the collector-side transfers:
+
+.. code-block:: python
+
+    from torchrl.collectors import AsyncBatchedCollector
+    from torchrl.modules.inference_server import (
+        InferenceDeviceConfig,
+        InferenceServerConfig,
+    )
+
+    collector = AsyncBatchedCollector(
+        create_env_fn=[make_env] * 8,
+        policy=my_policy,
+        frames_per_batch=200,
+        server_config=InferenceServerConfig(max_batch_size=8, timeout=0.005),
+        device_config=InferenceDeviceConfig(
+            policy_device="cuda:0",
+            env_device="cpu",
+            storing_device="cpu",
+        ),
+    )
+
 Remote policy module
 ^^^^^^^^^^^^^^^^^^^^
 

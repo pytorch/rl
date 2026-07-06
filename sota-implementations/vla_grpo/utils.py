@@ -28,8 +28,8 @@ from functools import partial
 
 import torch
 
-from tensordict import lazy_stack, TensorDictBase
-from torchrl.collectors import AsyncBatchedCollector, Collector
+from tensordict import TensorDictBase
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.vla import (
@@ -50,12 +50,6 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.inference_server import (
-    InferenceServer,
-    InferenceServerConfig,
-    PolicyClientModule,
-    ThreadingTransport,
-)
 from torchrl.modules.vla import TinyVLA, VLAWrapperBase
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.llm import MCAdvantage, MCAdvantageSelector
@@ -65,13 +59,6 @@ from torchrl.record import VideoRecorder
 # disjoint offset block
 GROUP_ID_OFFSET = 10**6
 LOG_PROBS_KEY = ("vla_action", "log_probs")
-
-
-def _cfg_get(section, key: str, default=None):
-    get = getattr(section, "get", None)
-    if get is not None:
-        return get(key, default)
-    return getattr(section, key, default)
 
 
 def candidate_group_size(cfg) -> int:
@@ -258,146 +245,6 @@ def _make_libero_worker(
         group_id_offset=group_id_offset,
         group_id_mode="init_state" if parallel_group_repeats else "episode",
     )
-
-
-def _num_envs_from_cfg(cfg, *, eval_mode: bool = False) -> int:
-    if cfg.env.backend == "toy":
-        default = 1
-    else:
-        default = cfg.env.eval_num_envs if eval_mode else cfg.env.num_envs
-    key = "eval_num_envs" if eval_mode else "num_envs"
-    return int(_cfg_get(cfg.env, key, default))
-
-
-def _validate_libero_env_count(
-    cfg, num_envs: int, *, group_repeats=None, eval_mode: bool = False, override=False
-) -> None:
-    task_ids = list(cfg.env.task_ids)
-    parallel_group_repeats = (
-        not eval_mode
-        and group_repeats is not None
-        and bool(_cfg_get(cfg.env, "parallel_group_repeats", False))
-    )
-    task_coverage_envs = num_envs
-    if parallel_group_repeats:
-        group_repeats = int(group_repeats)
-        candidate_repeats = candidate_group_size(cfg)
-        if candidate_repeats % group_repeats:
-            raise ValueError(
-                "collector.candidate_group_size must be a multiple of "
-                "collector.group_size when env.parallel_group_repeats=true "
-                f"({candidate_repeats=} and {group_repeats=})."
-            )
-        if num_envs % group_repeats:
-            raise ValueError(
-                "env.num_envs must be a multiple of collector.group_size "
-                "when env.parallel_group_repeats=true so every parallel "
-                f"group has exactly {group_repeats} workers ({num_envs=})."
-            )
-        if _cfg_get(cfg.env, "train_init_state_mode", "random") == "random":
-            raise ValueError(
-                "env.parallel_group_repeats=true requires "
-                "env.train_init_state_mode='cycle' or 'fixed'. Random "
-                "init-state sampling is local to each worker, so workers "
-                "sharing a group id would not necessarily share the same "
-                "initial state."
-            )
-        task_coverage_envs = num_envs // group_repeats
-    if not override and task_coverage_envs < len(task_ids):
-        raise ValueError(
-            f"{'eval_num_envs' if eval_mode else 'num_envs'} ({num_envs}) "
-            f"must cover task_ids ({len(task_ids)} tasks): each worker is "
-            "bound to one task; fewer workers would silently drop tasks. "
-            "With env.parallel_group_repeats=true, task coverage is "
-            f"num_envs / collector.group_size ({task_coverage_envs})."
-        )
-    if not override and task_coverage_envs % len(task_ids):
-        warnings.warn(
-            f"effective task workers ({task_coverage_envs}) is not a "
-            f"multiple of the number of tasks ({len(task_ids)}): tasks "
-            "will be sampled unevenly."
-        )
-
-
-def _make_env_worker(
-    cfg,
-    tokenizer: ActionTokenizerBase,
-    worker_idx: int,
-    *,
-    group_repeats: int | None = None,
-    seed: int | None = None,
-    device: torch.device | None = None,
-    eval_mode: bool = False,
-    from_pixels: bool = False,
-) -> TransformedEnv:
-    worker_seed = None if seed is None else int(seed) + int(worker_idx)
-    if cfg.env.backend == "toy":
-        base = ToyVLAEnv(
-            action_dim=cfg.env.action_dim,
-            state_dim=cfg.env.state_dim,
-            image_shape=tuple(cfg.env.image_shape),
-            from_pixels=from_pixels,
-            render_size=_cfg_get(cfg.env, "render_size", 64),
-            success_steps=cfg.env.success_steps,
-            success_tol=cfg.env.success_tol,
-            group_repeats=group_repeats,
-            group_id_offset=worker_idx * GROUP_ID_OFFSET,
-            batch_size=[],
-            seed=worker_seed,
-            device=device,
-        )
-    elif cfg.env.backend == "libero":
-        base = _make_libero_worker(
-            cfg,
-            worker_idx,
-            group_repeats=group_repeats,
-            eval_mode=eval_mode,
-            from_pixels=from_pixels,
-        )
-        if worker_seed is not None:
-            base.set_seed(worker_seed)
-    else:
-        raise ValueError(f"Unknown env backend {cfg.env.backend!r}.")
-    return TransformedEnv(base, _chunk_transform(cfg, tokenizer))
-
-
-def make_async_env_factories(
-    cfg,
-    tokenizer: ActionTokenizerBase,
-    *,
-    group_repeats: int | None = None,
-    seed: int | None = None,
-    device: torch.device | None = None,
-    eval_mode: bool = False,
-    from_pixels: bool = False,
-    num_envs: int | None = None,
-) -> list[Callable[[], TransformedEnv]]:
-    """Build one transformed VLA env factory per async collection slot."""
-    override = num_envs is not None
-    if num_envs is None:
-        num_envs = _num_envs_from_cfg(cfg, eval_mode=eval_mode)
-    if cfg.env.backend == "libero":
-        _validate_libero_env_count(
-            cfg,
-            num_envs,
-            group_repeats=group_repeats,
-            eval_mode=eval_mode,
-            override=override,
-        )
-    return [
-        partial(
-            _make_env_worker,
-            cfg,
-            tokenizer,
-            worker_idx,
-            group_repeats=group_repeats,
-            seed=seed,
-            device=device,
-            eval_mode=eval_mode,
-            from_pixels=from_pixels,
-        )
-        for worker_idx in range(num_envs)
-    ]
 
 
 def make_env(
@@ -592,176 +439,30 @@ def make_optimizer(cfg, loss_module: ClipPPOLoss):
     return optim, scheduler
 
 
-class _ServerBackedCollector:
-    """Collector wrapper that owns a thread-backed inference server."""
-
-    def __init__(self, collector: Collector, server: InferenceServer) -> None:
-        self.collector = collector
-        self.server = server
-        self.requested_frames_per_batch = collector.requested_frames_per_batch
-
-    def __iter__(self):
-        return iter(self.collector)
-
-    def reset(self, *args, **kwargs) -> None:
-        self.collector.reset(*args, **kwargs)
-
-    def shutdown(self, *args, **kwargs) -> None:
-        try:
-            self.collector.shutdown(*args, **kwargs)
-        finally:
-            self.server.shutdown()
-
-    def server_stats(self, *, reset: bool = False) -> dict[str, float | int]:
-        return self.server.stats(reset=reset)
-
-    def __getattr__(self, name):
-        return getattr(self.collector, name)
-
-
-class _BatchedPolicyClientModule(PolicyClientModule):
-    """Split a synchronous batched env observation into server requests."""
-
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if tensordict.ndim == 0:
-            return super().forward(tensordict)
-        batch_size = tensordict.batch_size
-        flat_tensordict = tensordict.reshape(-1)
-        futures = [self.submit(td) for td in flat_tensordict.unbind(0)]
-        result = lazy_stack([future.result() for future in futures], 0)
-        result = result.reshape(batch_size)
-        self._check_policy_lag(result)
-        return result
-
-
-class _AsyncReplayCollector:
-    """AsyncBatchedCollector wrapper that writes complete trajectories to replay."""
-
-    yields_complete_trajectories = True
-    requested_frames_per_batch = 1
-
-    def __init__(
-        self,
-        *,
-        create_env_fn: list[Callable[[], EnvBase]],
-        policy: VLAWrapperBase,
-        replay_buffer: TensorDictReplayBuffer | None,
-        collector_kwargs: dict,
-    ) -> None:
-        self._create_env_fn = create_env_fn
-        self._policy = policy
-        self._replay_buffer = replay_buffer
-        self._collector_kwargs = collector_kwargs
-        self._collector = None
-        self._iterator = None
-        self._last_server_stats: dict[str, float | int] = {}
-        self.num_envs = len(create_env_fn)
-
-    def _ensure_collector(self):
-        if self._collector is None:
-            self._collector = AsyncBatchedCollector(
-                create_env_fn=self._create_env_fn,
-                policy=self._policy,
-                **self._collector_kwargs,
-            )
-            self._iterator = iter(self._collector)
-        return self._collector
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        self._ensure_collector()
-        traj = next(self._iterator)
-        if self._replay_buffer is not None:
-            self._replay_buffer.extend(traj)
-        return traj
-
-    def pause_collection(self) -> None:
-        if self._collector is None:
-            return
-        self._last_server_stats = self._collector.server_stats(reset=True)
-        self._collector.shutdown()
-        self._collector = None
-        self._iterator = None
-
-    def reset(self, *args, **kwargs) -> None:
-        self.pause_collection()
-
-    def shutdown(self, *args, **kwargs) -> None:
-        self.pause_collection()
-
-    def server_stats(self, *, reset: bool = False) -> dict[str, float | int]:
-        if self._collector is not None:
-            return self._collector.server_stats(reset=reset)
-        result = dict(self._last_server_stats)
-        if reset:
-            self._last_server_stats = {}
-        return result
-
-
-def _training_group_repeats(cfg) -> int:
-    env_get = getattr(
-        cfg.env,
-        "get",
-        lambda key, default=None: getattr(cfg.env, key, default),
-    )
-    return (
-        cfg.collector.group_size
-        if env_get("parallel_group_repeats", False)
-        else candidate_group_size(cfg)
-    )
-
-
-def _server_config_from_collector(cfg, *, num_envs: int) -> InferenceServerConfig:
-    collector_get = getattr(
-        cfg.collector,
-        "get",
-        lambda key, default=None: getattr(cfg.collector, key, default),
-    )
-    async_policy = bool(collector_get("async_policy", False))
-    if async_policy:
-        max_batch_size = int(collector_get("server_max_batch_size", None) or num_envs)
-        min_batch_size = int(collector_get("server_min_batch_size", 1))
-        timeout = float(collector_get("server_timeout", 0.01))
-    else:
-        max_batch_size = 1
-        min_batch_size = 1
-        timeout = 0.0
-    return InferenceServerConfig(
-        max_batch_size=max_batch_size,
-        min_batch_size=min_batch_size,
-        timeout=timeout,
-        collect_stats=bool(collector_get("server_collect_stats", True)),
-        stats_window_size=int(collector_get("server_stats_window_size", 1024)),
-    )
-
-
 def make_collector(
     cfg,
     env: EnvBase,
     policy: VLAWrapperBase,
     device: torch.device,
     *,
-    tokenizer: ActionTokenizerBase | None = None,
     replay_buffer: TensorDictReplayBuffer | None = None,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
 ) -> Collector:
-    """Build a VLA rollout collector.
+    """Endless synchronous collector assembling complete trajectories.
 
-    The default path is the synchronous TorchRL ``Collector`` used by the
-    original recipe. Set ``collector.async_env=true`` to use
-    ``AsyncBatchedCollector`` env slots; set ``collector.async_policy=true`` to
-    route policy calls through an inference server with configurable
-    auto-batching. The async-env path yields complete trajectories and writes
-    them to the replay buffer directly, so the training loop can use the same
-    replay/advantage machinery across execution modes.
+    With no replay buffer, each yielded batch holds exactly one iteration's
+    worth of complete, done-terminated trajectories, concatenated along time
+    (``trajs_per_batch`` with ``traj_format="cat"``: flat and unpadded,
+    episodes delimited by the done flags -- no padding frames for the
+    image-heavy VLA observations; episodes spanning internal collection
+    steps are reassembled by the collector, in-flight episodes are held
+    back).
 
-    With no replay buffer on the synchronous path, each yielded batch holds
-    complete, done-terminated trajectories, concatenated along time
-    (``trajs_per_batch`` with ``traj_format="cat"``). With a replay buffer,
-    TorchRL's collector writer path pushes complete trajectories to storage as
-    each internal rollout batch finishes.
+    With a replay buffer, TorchRL's collector writer path is used instead:
+    complete trajectories are pushed to the buffer as each internal rollout
+    batch finishes, and the iterator yields ``None``. This lets the replay
+    buffer transform keep incomplete GRPO groups across same-policy collection
+    polls until enough useful decisions have reached storage.
 
     The policy is held by reference (in-place optimizer updates apply
     immediately) and observations/actions are cast between the env's and the
@@ -770,17 +471,7 @@ def make_collector(
     via :func:`~torchrl.envs.utils.exploration_type` -- no policy mutation, so
     this works with any collector (including multi-process workers).
     """
-    collector_get = getattr(
-        cfg.collector,
-        "get",
-        lambda key, default=None: getattr(cfg.collector, key, default),
-    )
-    async_env = bool(collector_get("async_env", False))
-    async_policy = bool(collector_get("async_policy", False))
-    if async_env:
-        num_envs = _num_envs_from_cfg(cfg)
-    else:
-        num_envs = env.batch_size[0] if env.batch_size else 1
+    num_envs = env.batch_size[0] if env.batch_size else 1
     groups_per_iter = int(cfg.collector.groups_per_iter)
     group_size = int(cfg.collector.group_size)
     candidate_size = candidate_group_size(cfg)
@@ -857,79 +548,20 @@ def make_collector(
     frames_per_batch = (
         num_envs if replay_buffer is not None else (num_envs * cfg.env.max_outer_steps)
     )
-    server_config = _server_config_from_collector(cfg, num_envs=num_envs)
-    if async_env:
-        if tokenizer is None:
-            raise ValueError(
-                "tokenizer is required when collector.async_env=true so async "
-                "environment factories can decode action tokens."
-            )
-        create_env_fn = make_async_env_factories(
-            cfg,
-            tokenizer,
-            group_repeats=_training_group_repeats(cfg),
-            seed=cfg.env.seed,
-            device=env_device if cfg.env.backend == "toy" else None,
-        )
-        return _AsyncReplayCollector(
-            create_env_fn=create_env_fn,
-            policy=policy,
-            replay_buffer=replay_buffer,
-            collector_kwargs={
-                "frames_per_batch": 1,
-                "total_frames": -1,
-                "yield_completed_trajectories": True,
-                "env_backend": collector_get("env_backend", "threading"),
-                "policy_backend": collector_get("policy_backend", "threading"),
-                "server_backend": collector_get("server_backend", "thread"),
-                "server_config": server_config,
-                "policy_device": device,
-                "output_device": env_device,
-                "env_device": env_device,
-                "storing_device": collector_get("storing_device", None),
-                "max_inflight_per_env": collector_get("max_inflight_per_env", 1),
-                "verbose": bool(collector_get("verbose", False)),
-            },
-        )
-
-    collector_policy = policy
-    collector_policy_device = device
-    server = None
-    if async_policy:
-        transport = ThreadingTransport()
-        server = InferenceServer(
-            policy,
-            transport,
-            server_config=server_config,
-            policy_device=device,
-            output_device=env_device,
-        ).start()
-        collector_policy = _BatchedPolicyClientModule(
-            transport,
-            in_keys=getattr(policy, "in_keys", None),
-            out_keys=getattr(policy, "out_keys", None),
-            max_inflight=None,
-        )
-        collector_policy_device = env_device
-
-    collector = Collector(
+    return Collector(
         env,
-        collector_policy,
+        policy,
         frames_per_batch=frames_per_batch,
         total_frames=-1,
         trajs_per_batch=groups_per_iter * candidate_size,
         traj_format="cat",
         exploration_type=ExplorationType.RANDOM,
-        policy_device=collector_policy_device,
+        policy_device=device,
         env_device=env_device,
         reset_at_each_iter=False,
         replay_buffer=replay_buffer,
         post_collect_hook=post_collect_hook,
-        trust_policy=True if async_policy else None,
     )
-    if server is not None:
-        return _ServerBackedCollector(collector, server)
-    return collector
 
 
 def evaluate(env: TransformedEnv, policy: VLAWrapperBase, cfg) -> float:
