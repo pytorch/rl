@@ -177,15 +177,18 @@ class AsyncBatchedCollector(BaseCollector):
             used.
         output_device (torch.device or str, optional): device where action
             TensorDicts are moved before being sent back to env workers.
+            When ``None`` and ``env_device`` is set, ``env_device`` is used.
             Defaults to ``None``.
         env_device (torch.device or str, optional): device used by env workers
-            for action TensorDicts before stepping. Defaults to ``None``.
+            for action TensorDicts before stepping. Also acts as the fallback
+            for ``output_device``. Defaults to ``None``.
         storing_device (torch.device or str, optional): device used for
             collected transitions yielded by this collector. Defaults to
             ``None``.
         server_config (InferenceServerConfig, optional): structured server
-            batching and stats configuration. Mutually exclusive with
-            non-default batching keyword arguments.
+            batching and stats configuration. Mutually exclusive with the
+            ``max_batch_size``, ``min_batch_size``, and ``server_timeout``
+            keyword arguments.
         device_config (InferenceDeviceConfig, optional): structured device
             placement configuration. Mutually exclusive with ``device``,
             ``policy_device``, ``output_device``, ``env_device``, and
@@ -262,9 +265,9 @@ class AsyncBatchedCollector(BaseCollector):
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        server_timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        server_timeout: float | None = None,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
         backend: Literal[
@@ -292,20 +295,33 @@ class AsyncBatchedCollector(BaseCollector):
             raise TypeError("policy and policy_factory are mutually exclusive.")
         if policy is None and policy_factory is None:
             raise TypeError("One of policy or policy_factory must be provided.")
+        if server_backend not in ("thread", "process"):
+            raise ValueError(
+                f"server_backend={server_backend!r} is not supported. "
+                "Expected 'thread' or 'process'."
+            )
         if server_backend == "process" and policy_factory is None:
             raise TypeError(
                 "server_backend='process' requires policy_factory so the policy "
                 "can be constructed inside the server process."
             )
-        if server_config is not None:
-            if (max_batch_size, min_batch_size, server_timeout) != (64, 1, 0.01):
-                raise ValueError(
-                    "server_config is mutually exclusive with non-default "
-                    "batching keyword arguments."
-                )
-            max_batch_size = server_config.max_batch_size
-            min_batch_size = server_config.min_batch_size
-            server_timeout = server_config.timeout
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (max_batch_size, min_batch_size, server_timeout)
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, and server_timeout keyword arguments."
+            )
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if server_timeout is None:
+            server_timeout = _server_defaults.timeout
         if device_config is not None:
             if (
                 device is not None
@@ -494,7 +510,11 @@ class AsyncBatchedCollector(BaseCollector):
 
     @property
     def policy(self) -> Callable:
-        """The policy passed to the inference server."""
+        """The policy passed to the inference server.
+
+        With ``server_backend="process"`` the policy only exists inside the
+        server process, so this returns the ``policy_factory`` instead.
+        """
         if self._policy is not None:
             return self._policy
         return self._policy_factory
@@ -518,6 +538,36 @@ class AsyncBatchedCollector(BaseCollector):
                 "A collector worker thread raised an exception."
             ) from item
 
+    _LIVENESS_POLL_S = 1.0
+
+    def _next_result(self) -> TensorDictBase:
+        """Block for the next transition, watching server and worker liveness.
+
+        A dead inference server (e.g. an OOM-killed server process) would
+        otherwise leave every coordinator thread blocked on a response and
+        this method blocked on the queue, hanging the iterator forever with
+        no error.
+        """
+        rq = self._result_queue
+        while True:
+            try:
+                td = rq.get(timeout=self._LIVENESS_POLL_S)
+            except queue.Empty:
+                if not self._server.is_alive:
+                    raise RuntimeError(
+                        "The inference server died while the collector was "
+                        "waiting for transitions. Check the server process "
+                        "logs (e.g. OOM kills or exceptions in the policy)."
+                    ) from None
+                if self._workers and not any(w.is_alive() for w in self._workers):
+                    raise RuntimeError(
+                        "All collector worker threads exited while the "
+                        "collector was waiting for transitions."
+                    ) from None
+                continue
+            self._check_worker_result(td)
+            return td
+
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_frames")
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
@@ -527,8 +577,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         while collected < self.frames_per_batch:
             # Block for at least one transition
-            td = rq.get()
-            self._check_worker_result(td)
+            td = self._next_result()
             transitions.append(td)
             collected += td.numel()
             # Batch-drain any additional items already in the queue
@@ -549,11 +598,8 @@ class AsyncBatchedCollector(BaseCollector):
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_yield_trajs")
     def _rollout_yield_trajs(self) -> TensorDictBase:
         """Drain transitions until a complete trajectory is available."""
-        rq = self._result_queue
-
         while not self._trajectory_queue:
-            td = rq.get()
-            self._check_worker_result(td)
+            td = self._next_result()
             env_id = 0
             eid = td.get(_ENV_IDX_KEY, default=None)
             if eid is not None:

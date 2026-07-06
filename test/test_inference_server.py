@@ -188,6 +188,30 @@ class TestInferenceServerCore:
         assert len(calls) >= 1
         assert sum(calls) == 4  # all 4 items processed
 
+    def test_collate_error_resolves_futures_and_server_survives(self):
+        """A collate failure must reject the affected futures, not kill the loop."""
+
+        def fragile_collate(items):
+            if any("poison" in item.keys() for item in items):
+                raise ValueError("cannot collate poisoned batch")
+            return lazy_stack(items)
+
+        transport = _MockTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy, transport, max_batch_size=1, collate_fn=fragile_collate
+        ) as server:
+            bad = transport.submit(
+                TensorDict({"observation": torch.randn(4), "poison": torch.ones(1)})
+            )
+            with pytest.raises(ValueError, match="poisoned"):
+                bad.result(timeout=5.0)
+            # The serve loop must still be alive and processing requests
+            good = transport.submit(TensorDict({"observation": torch.randn(4)}))
+            result = good.result(timeout=5.0)
+            assert "action" in result.keys()
+            assert server.is_alive
+
     def test_max_batch_size_respected(self):
         """The collate_fn should never receive more than max_batch_size items."""
         max_bs = 4
@@ -272,11 +296,76 @@ class TestInferenceServerCore:
             server_config=server_config,
             device_config=device_config,
         ) as server:
+            # The config values must actually land on the server
+            assert server.max_batch_size == 2
+            assert server.timeout == 0.001
+            assert server.policy_device == torch.device("cpu")
+            assert server.output_device == torch.device("cpu")
             client = transport.client()
             result = client(TensorDict({"observation": torch.randn(4)}))
             stats = server.stats()
         assert result["action"].device.type == "cpu"
         assert stats["requests"] == 1
+
+    def test_server_config_exclusive_even_at_default_values(self):
+        """Passing an explicit kwarg equal to the default still raises."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            InferenceServer(
+                policy,
+                transport,
+                max_batch_size=64,
+                server_config=InferenceServerConfig(max_batch_size=8),
+            )
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            InferenceServer(
+                policy,
+                transport,
+                device="cpu",
+                device_config=InferenceDeviceConfig(policy_device="cpu"),
+            )
+
+    def test_device_config_env_device_fallback_and_storing_device_rejected(self):
+        config = InferenceDeviceConfig(env_device="cpu")
+        assert config.server_output_device() == torch.device("cpu")
+        config = InferenceDeviceConfig(env_device="cpu", output_device="meta")
+        assert config.server_output_device() == torch.device("meta")
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with pytest.raises(ValueError, match="storing_device is a collector-level"):
+            InferenceServer(
+                policy,
+                transport,
+                device_config=InferenceDeviceConfig(storing_device="cpu"),
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_device_config_cuda_roundtrip(self):
+        """device_config must actually drive the policy and output moves."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        seen_devices = []
+        inner_forward = policy.module.forward
+
+        def recording_forward(x):
+            seen_devices.append(x.device)
+            return inner_forward(x)
+
+        policy.module.forward = recording_forward
+        with InferenceServer(
+            policy,
+            transport,
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0", output_device="cpu"
+            ),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}, device="cpu"))
+        assert result["action"].device.type == "cpu"
+        assert all(device.type == "cuda" for device in seen_devices)
+        assert next(policy.parameters()).device.type == "cuda"
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -803,6 +892,11 @@ def _make_bad_process_policy():
     return _BadProcessPolicy()
 
 
+def _make_slow_policy():
+    time.sleep(30.0)
+    return _make_counting_policy()
+
+
 class TestProcessInferenceServer:
     def test_process_server_start_shutdown(self):
         ctx = mp.get_context("spawn")
@@ -837,6 +931,20 @@ class TestProcessInferenceServer:
                 client(TensorDict({"observation": torch.ones(1)}))
         finally:
             server.shutdown()
+
+    def test_startup_timeout(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_slow_policy,
+            transport=transport,
+            mp_context=ctx,
+            startup_timeout=0.5,
+        )
+        with pytest.raises(TimeoutError, match="did not report readiness"):
+            server.start()
+        assert not server.is_alive
 
 
 class TestAsyncBatchedCollector:
@@ -1026,6 +1134,38 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    def test_invalid_server_backend_raises(self):
+        with pytest.raises(ValueError, match="server_backend"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy_factory=_make_counting_policy,
+                frames_per_batch=10,
+                server_backend="proces",
+            )
+
+    def test_server_death_raises_instead_of_hanging(self):
+        """Killing the server process surfaces an error in the iterator."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            frames_per_batch=10,
+            total_frames=-1,
+            max_batch_size=2,
+            env_backend="threading",
+            server_backend="process",
+        )
+        try:
+            iterator = iter(collector)
+            next(iterator)
+            collector._server._process.kill()
+            with pytest.raises(RuntimeError, match="inference server died"):
+                # A couple of batches may still drain from already-queued
+                # transitions before the watchdog trips.
+                for _ in range(10):
+                    next(iterator)
+        finally:
+            collector.shutdown(timeout=0.5)
 
     def test_device_config_and_server_config(self):
         """Collector accepts structured device and server config objects."""
