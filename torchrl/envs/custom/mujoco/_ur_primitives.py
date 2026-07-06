@@ -21,7 +21,7 @@ how to specialize :class:`~torchrl.envs.transforms.MacroPrimitiveTransform`:
 from __future__ import annotations
 
 import inspect
-
+from collections.abc import Callable
 from enum import IntEnum
 from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 
@@ -218,7 +218,8 @@ def _gripper_code(gripper: GripperCommand) -> int:
 
 
 def _unsupported_solver_kwargs(
-    solver: CartesianSolver, kwargs: dict[str, Any]
+    solver: CartesianSolver | Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    kwargs: dict[str, Any],
 ) -> set[str]:
     """Return the keyword arguments in ``kwargs`` that ``solver`` cannot accept."""
     try:
@@ -336,7 +337,11 @@ class RobotMacroAction(MacroAction):
         """
         position = _as_batch(position, 3)
         if quaternion is None:
-            quaternion = _identity_quaternion_like(position)
+            quaternion = torch.zeros(
+                position.shape[:-1] + (4,),
+                dtype=position.dtype,
+                device=position.device,
+            )
         else:
             quaternion = _as_batch(quaternion, 4).to(
                 dtype=position.dtype, device=position.device
@@ -665,7 +670,9 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         macro_steps: int = 16,
         settle_steps: int = 0,
         action_dim: int = 7,
-        cartesian_solver: CartesianSolver | None = None,
+        cartesian_solver: CartesianSolver
+        | Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | None = None,
         open_gripper_ctrl: float = 0.0,
         close_gripper_ctrl: float = 255.0,
     ) -> None:
@@ -1035,24 +1042,30 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         orientation_mask: torch.Tensor | None = None,
         waypoints: int | None = None,
     ) -> torch.Tensor:
+        kwargs: dict[str, Any] = {}
+        if orientation_mask is not None:
+            kwargs["orientation_mask"] = orientation_mask
+        if waypoints is not None:
+            kwargs["waypoints"] = waypoints
+
         solver = self.cartesian_solver
         if solver is None:
             env = self._find_parent_env_with("_cartesian_pose_to_joint_target")
             if env is not None:
                 solver = env._cartesian_pose_to_joint_target
         if solver is None:
-            if waypoints is not None:
-                return (
-                    start.unsqueeze(-2)
-                    .expand(start.shape[:-1] + (waypoints, start.shape[-1]))
-                    .clone()
+            if kwargs:
+                features = {
+                    "orientation_mask": "RobotMacroAction.reach_pose(orientation_mask=...)",
+                    "waypoints": "RobotMacroAction.reach_pose(path='cartesian')",
+                }
+                requested = " and ".join(features[name] for name in sorted(kwargs))
+                raise TypeError(
+                    "No Cartesian solver is configured, but "
+                    f"{requested} requires one implementing the documented "
+                    "torchrl.envs.CartesianSolver contract."
                 )
             return start
-        kwargs: dict[str, Any] = {}
-        if orientation_mask is not None:
-            kwargs["orientation_mask"] = orientation_mask
-        if waypoints is not None:
-            kwargs["waypoints"] = waypoints
         if kwargs:
             unsupported = _unsupported_solver_kwargs(solver, kwargs)
             if unsupported:

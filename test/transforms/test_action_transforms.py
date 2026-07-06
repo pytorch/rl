@@ -1286,7 +1286,13 @@ class TestMacroPrimitiveTransform:
             orientation_mask=None,
             waypoints=None,
         ):
-            calls.append({"orientation_mask": orientation_mask, "waypoints": waypoints})
+            calls.append(
+                {
+                    "target_pose": target_pose,
+                    "orientation_mask": orientation_mask,
+                    "waypoints": waypoints,
+                }
+            )
             if waypoints is not None:
                 out = (
                     start_action.unsqueeze(-2)
@@ -1333,6 +1339,10 @@ class TestMacroPrimitiveTransform:
         torch.testing.assert_close(
             calls[0]["orientation_mask"], torch.tensor([[1.0, 1.0, 0.0]])
         )
+        torch.testing.assert_close(
+            calls[0]["target_pose"][..., 3:],
+            torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+        )
         assert calls[0]["waypoints"] is None
 
     def test_reach_pose_without_mask_passes_none(self):
@@ -1352,6 +1362,33 @@ class TestMacroPrimitiveTransform:
         )
         transform.inv(td)
         assert calls[0]["orientation_mask"] is None
+        torch.testing.assert_close(calls[0]["target_pose"][..., 3:], torch.zeros(1, 4))
+
+    @pytest.mark.parametrize(
+        ("reach_pose_kwargs", "match"),
+        [
+            ({"orientation_mask": (1.0, 1.0, 0.0)}, "orientation_mask"),
+            ({"path": "cartesian"}, "path='cartesian'"),
+        ],
+    )
+    def test_reach_pose_constraint_without_solver_raises(
+        self, reach_pose_kwargs, match
+    ):
+        transform = URScriptPrimitiveTransform(macro_steps=2)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    steps=2,
+                    **reach_pose_kwargs,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match=match):
+            transform.inv(td)
 
     def test_reach_pose_orientation_mask_legacy_solver_raises(self):
         transform = URScriptPrimitiveTransform(
