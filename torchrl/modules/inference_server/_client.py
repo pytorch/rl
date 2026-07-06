@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future
 
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
@@ -34,6 +35,13 @@ class PolicyClientModule(TensorDictModuleBase):
     :class:`~torchrl.modules.inference_server.InferenceServer`, and returns the
     TensorDict produced by the remote policy. It can be passed anywhere a
     TensorDict policy module is expected.
+
+    .. note::
+        Unlike a local :class:`~tensordict.nn.TensorDictModule`, the result
+        crosses a transport boundary, so :meth:`forward` returns a *new*
+        TensorDict rather than writing the ``out_keys`` into the input
+        TensorDict. Use the return value; do not rely on in-place updates of
+        the input.
 
     Args:
         client (Callable or InferenceTransport): actor-side inference client.
@@ -83,7 +91,7 @@ class PolicyClientModule(TensorDictModuleBase):
         self.in_keys = list(in_keys or [])
         self.out_keys = list(out_keys or [])
 
-    def submit(self, tensordict: TensorDictBase):
+    def submit(self, tensordict: TensorDictBase) -> Future | _ImmediateFuture:
         """Submit a TensorDict request and return a future-like object.
 
         Args:
@@ -92,13 +100,18 @@ class PolicyClientModule(TensorDictModuleBase):
 
         Returns:
             Future-like object whose ``result()`` method returns a TensorDict.
+            When the wrapped client exposes ``submit`` this is the transport's
+            :class:`~concurrent.futures.Future` and submission errors raise
+            synchronously; for a plain callable client the call runs eagerly
+            and errors are deferred to ``result()`` on a reduced future that
+            only implements ``done()`` and ``result()``.
         """
         submit = getattr(self.client, "submit", None)
         if submit is None:
             try:
                 result = self.client(tensordict)
                 return _ImmediateFuture(result)
-            except BaseException as exc:
+            except Exception as exc:
                 return _ImmediateFuture(exc)
         return submit(tensordict)
 
