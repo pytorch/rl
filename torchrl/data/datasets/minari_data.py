@@ -10,8 +10,8 @@ import os.path
 import shutil
 import tempfile
 from collections import defaultdict
-from collections.abc import Callable
-from contextlib import nullcontext
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
@@ -38,6 +38,20 @@ from torchrl.envs.utils import _classproperty
 
 _has_tqdm = importlib.util.find_spec("tqdm", None) is not None
 _has_minari = importlib.util.find_spec("minari", None) is not None
+
+
+@contextmanager
+def _minari_datasets_path(path: str | Path) -> Iterator[None]:
+    prev = os.environ.get("MINARI_DATASETS_PATH")
+    os.environ["MINARI_DATASETS_PATH"] = str(path)
+    try:
+        yield
+    finally:
+        if prev is None:
+            os.environ.pop("MINARI_DATASETS_PATH", None)
+        else:
+            os.environ["MINARI_DATASETS_PATH"] = prev
+
 
 _NAME_MATCH = KeyDependentDefaultDict(lambda key: key)
 _NAME_MATCH["observations"] = "observation"
@@ -295,17 +309,8 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
 
                 else:
                     # temporarily change the minari cache path
-                    prev_minari_datasets_path_save2 = os.environ.get(
-                        "MINARI_DATASETS_PATH"
-                    )
-                    os.environ["MINARI_DATASETS_PATH"] = tmpdir
-                    try:
+                    with _minari_datasets_path(tmpdir):
                         minari.download_dataset(dataset_id=self.dataset_id)
-                    finally:
-                        if prev_minari_datasets_path_save2 is not None:
-                            os.environ[
-                                "MINARI_DATASETS_PATH"
-                            ] = prev_minari_datasets_path_save2
 
                     parent_dir = Path(tmpdir) / self.dataset_id / "data"
 
@@ -469,7 +474,12 @@ class MinariExperienceReplay(BaseDatasetExperienceReplay):
                         from torchrl.collectors.utils import split_trajectories
 
                         td_data = split_trajectories(td_data).memmap_(self.data_path)
-                with open(self.metadata_path, "w") as metadata_file:
+                load_path = (
+                    prev_minari_datasets_path if self.load_from_local_minari else tmpdir
+                )
+                with open(
+                    self.metadata_path, "w"
+                ) as metadata_file, _minari_datasets_path(load_path):
                     dataset = minari.load_dataset(self.dataset_id)
                     self.metadata = asdict(dataset.spec)
                     self.metadata["observation_space"] = _spec_to_dict(

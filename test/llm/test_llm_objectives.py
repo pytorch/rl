@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import multiprocessing as mp
 
 import numpy as np
 import pytest
@@ -26,11 +27,13 @@ from torchrl.objectives.llm.grpo import (
     GRPOLossOutput,
     MCAdvantage,
     MCAdvantageSelector,
+    RayMCAdvantage,
 )
 from torchrl.objectives.llm.sft import SFTLoss
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
+_has_ray = importlib.util.find_spec("ray") is not None
 prompts = [
     "Lorem ipsum dolor sit amet,",
     "consectetur adipiscing elit,",
@@ -60,6 +63,14 @@ def _make_group_traj(group_id, rewards, group_key="group_id"):
         },
         batch_size=[n_steps],
     )
+
+
+def _mc_advantage_shared_worker(advantage, group_id, rewards, queue):
+    out = advantage.inv(_make_group_traj(group_id, rewards))
+    if out is None:
+        queue.put(None)
+    else:
+        queue.put(out["advantage"].squeeze(-1).tolist())
 
 
 class TestMCAdvantage:
@@ -347,6 +358,96 @@ class TestMCAdvantage:
         )
         assert sum(len(q) for q in adv_t.queues.values()) == 1
         assert adv_t.max_queued_trajectories_per_group == 1
+
+    def test_mc_advantage_share_memory(self):
+        adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+        assert not adv_t.is_shared
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        adv_t.share_memory_()
+        assert adv_t.is_shared
+        assert adv_t.queued_groups == 1
+        assert adv_t.queued_trajectories == 1
+        out = adv_t.inv(_make_group_traj(0, [1.0]))
+        assert out is not None
+        assert adv_t.queued_groups == 0
+        assert adv_t.completed_groups == 1
+        assert adv_t.written_groups == 1
+        adv_t.reset_stats()
+        assert adv_t.completed_groups == 0
+        assert adv_t.written_groups == 0
+        assert adv_t.inv(_make_group_traj(1, [0.0])) is None
+        assert adv_t.queued_groups == 1
+        adv_t.queues.clear()
+        assert adv_t.queued_groups == 0
+
+    def test_mc_advantage_share_memory_multiprocessing(self):
+        start_method = "fork" if "fork" in mp.get_all_start_methods() else "spawn"
+        ctx = mp.get_context(start_method)
+        adv_t = MCAdvantage(
+            grpo_size=2, prompt_key="group_id", trajectory_return="sum"
+        ).share_memory_()
+        queue = ctx.Queue()
+        processes = [
+            ctx.Process(
+                target=_mc_advantage_shared_worker,
+                args=(adv_t, 0, [0.0], queue),
+            ),
+            ctx.Process(
+                target=_mc_advantage_shared_worker,
+                args=(adv_t, 0, [1.0], queue),
+            ),
+        ]
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(timeout=20)
+        for process in processes:
+            assert process.exitcode == 0
+        results = [queue.get(timeout=5) for _ in processes]
+        assert sum(result is None for result in results) == 1
+        advantage = next(result for result in results if result is not None)
+        torch.testing.assert_close(
+            torch.tensor(advantage).abs(),
+            torch.full((2,), 2.0**-0.5),
+        )
+        assert adv_t.queued_groups == 0
+        assert adv_t.completed_groups == 1
+        assert adv_t.written_groups == 1
+        assert adv_t.completed_trajectories == 2
+
+    @pytest.mark.skipif(not _has_ray, reason="ray library required")
+    def test_ray_mc_advantage(self):
+        ray = pytest.importorskip("ray")
+        was_initialized = ray.is_initialized()
+        adv_t = RayMCAdvantage(
+            grpo_size=2,
+            prompt_key="group_id",
+            trajectory_return="sum",
+            ray_init_config={
+                "ignore_reinit_error": True,
+                "include_dashboard": False,
+                "num_cpus": 1,
+            },
+            remote_config={"num_cpus": 0},
+        )
+        try:
+            assert adv_t.is_shared
+            assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+            out = adv_t.inv(_make_group_traj(0, [1.0]))
+            assert out is not None
+            assert adv_t.queued_groups == 0
+            assert adv_t.completed_groups == 1
+            assert adv_t.written_groups == 1
+            adv_t.reset_stats()
+            assert adv_t.completed_groups == 0
+            assert adv_t.inv(_make_group_traj(1, [0.0])) is None
+            assert adv_t.queued_groups == 1
+            adv_t.queues.clear()
+            assert adv_t.queued_groups == 0
+        finally:
+            adv_t.close()
+            if not was_initialized:
+                ray.shutdown()
 
     def test_mc_advantage_validation(self):
         with pytest.raises(ValueError, match="trajectory_return must be one of"):

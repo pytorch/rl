@@ -31,6 +31,7 @@ from tensordict import NonTensorStack, TensorDict
 from tensordict.nn import InteractionType
 from torch import nn
 from torchrl.data.vla import ACTION_TOKENS_KEY
+from torchrl.objectives import ClipPPOLoss
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -789,8 +790,6 @@ class TestOpenVLAOFTWrapper:
 
     @pytest.mark.parametrize("ratio_level", ["sequence", "token"])
     def test_clip_ppo_loss_integration(self, ratio_level):
-        from torchrl.objectives import ClipPPOLoss
-
         torch.manual_seed(0)
         policy = OpenVLAOFTWrapper(
             _TinyOFT(),
@@ -799,21 +798,6 @@ class TestOpenVLAOFTWrapper:
             default_interaction_type=InteractionType.RANDOM,
             log_probs_mode=ratio_level,
         )
-        obs = _make_obs()
-        with torch.no_grad():
-            rollout = policy(obs.clone())
-        data = obs.clone()
-        data[ACTION_TOKENS_KEY] = rollout[ACTION_TOKENS_KEY]
-        data[LOG_PROBS_KEY] = rollout[LOG_PROBS_KEY].detach()
-        advantage = torch.tensor([[1.0], [-0.5]])
-        if ratio_level == "token":
-            # one ratio per token: the decision's advantage is broadcast over
-            # the token dims (as the training script does)
-            data["advantage"] = advantage.view(-1, 1, 1, 1).expand(
-                *rollout[ACTION_TOKENS_KEY].shape, 1
-            )
-        else:
-            data["advantage"] = advantage
         loss = ClipPPOLoss(
             policy,
             critic_network=None,
@@ -825,11 +809,36 @@ class TestOpenVLAOFTWrapper:
             sample_log_prob=LOG_PROBS_KEY,
             advantage="advantage",
         )
-        out = loss(data)
-        # identical weights: ratio == 1 everywhere, so the (negative) gain is
-        # exactly the negated mean advantage and nothing is clipped
-        torch.testing.assert_close(out["loss_objective"], -advantage.mean())
-        assert out["clip_fraction"].item() == 0.0
+        ess = []
+        for batch_size in (2, 1):
+            obs = _make_obs(batch=batch_size)
+            with torch.no_grad():
+                rollout = policy(obs.clone())
+            data = obs.clone()
+            data[ACTION_TOKENS_KEY] = rollout[ACTION_TOKENS_KEY]
+            data[LOG_PROBS_KEY] = rollout[LOG_PROBS_KEY].detach()
+            advantage = torch.linspace(1.0, -0.5, batch_size).unsqueeze(-1)
+            if ratio_level == "token":
+                # one ratio per token: the decision's advantage is broadcast over
+                # the token dims (as the training script does)
+                data["advantage"] = advantage.view(-1, 1, 1, 1).expand(
+                    *rollout[ACTION_TOKENS_KEY].shape, 1
+                )
+                expected_ess_shape = (CHUNK, ACT_DIM)
+            else:
+                data["advantage"] = advantage
+                expected_ess_shape = ()
+
+            out = loss(data)
+            # identical weights: ratio == 1 everywhere, so the (negative) gain is
+            # exactly the negated mean advantage and nothing is clipped
+            torch.testing.assert_close(out["loss_objective"], -advantage.mean())
+            assert out["clip_fraction"].item() == 0.0
+            assert out["ESS"].shape == expected_ess_shape
+            torch.testing.assert_close(out["ESS"], torch.ones_like(out["ESS"]))
+            ess.append(out["ESS"].detach().mean())
+
+        assert torch.stack(ess).shape == (2,)
 
 
 if __name__ == "__main__":

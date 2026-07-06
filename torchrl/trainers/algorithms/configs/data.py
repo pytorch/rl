@@ -57,6 +57,18 @@ class RandomSamplerConfig(SamplerConfig):
 
 
 @dataclass
+class ConsumingSamplerConfig(SamplerConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ConsumingSampler`.
+
+    Every kwarg accepted by ``ConsumingSampler.__init__`` is exposed as a field
+    here.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.ConsumingSampler"
+    max_sample_count: int = 1
+
+
+@dataclass
 class WriterEnsembleConfig(WriterConfig):
     """Configuration for ensemble writer that combines multiple writers."""
 
@@ -316,6 +328,7 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     dim_extend: int | None = None
     checkpointer: Any = None
     generator: Any = None
+    consume_after_n_samples: int | None = None
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None
@@ -345,6 +358,7 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     dim_extend: int | None = None
     checkpointer: Any = None
     generator: Any = None
+    consume_after_n_samples: int | None = None
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None

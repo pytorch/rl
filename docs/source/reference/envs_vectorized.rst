@@ -44,6 +44,17 @@ one can simply call:
         >>> print(a)
         9.81
 
+Batched environments can be indexed with integers, slices, integer numpy arrays
+or integer torch tensors. Indexing returns a live batched-env view over the
+selected workers. For example, ``env23 = env[2:]`` keeps talking to the same
+workers as ``env``; stepping or resetting ``env23`` updates those workers rather
+than a detached copy. Integer indexing preserves a singleton batch. The parent
+batched environment owns the workers: closing an indexed view only closes that
+view object, while closing the parent shuts down the shared workers and makes
+existing indexed views unusable. The view keeps its parent alive, so rebinding
+``env = env[:1]`` remains usable; close the final view when it is no longer
+needed.
+
 .. note::
 
   *A note on performance*: launching a :class:`~.ParallelEnv` can take quite some time
