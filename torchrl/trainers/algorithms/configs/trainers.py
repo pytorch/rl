@@ -17,6 +17,7 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
 from torchrl.trainers import TrainerHookBase
+from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
@@ -24,6 +25,7 @@ from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
 
@@ -584,6 +586,348 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
+
+
+@dataclass
+class A2CTrainerConfig(TrainerConfig):
+    """Configuration class for A2C (Advantage Actor-Critic) trainer.
+
+    This class defines the configuration parameters for creating an A2C trainer,
+    including both required and optional fields with sensible defaults.
+
+    Args:
+        collector: The data collector for gathering training data.
+        total_frames: Total number of frames to train for.
+        optim_steps_per_batch: Number of optimization steps per batch.
+        loss_module: The loss module for computing policy and value losses.
+        optimizer: The optimizer for training.
+        logger: Logger for tracking training metrics.
+        save_trainer_file: File path for saving trainer state.
+        replay_buffer: Replay buffer for storing data.
+        frame_skip: Frame skip value for the environment. Default: 1.
+        clip_grad_norm: Whether to clip gradient norms. Default: True.
+        clip_norm: Maximum gradient norm value.
+        progress_bar: Whether to show a progress bar. Default: True.
+        seed: Random seed for reproducibility.
+        save_trainer_interval: Interval for saving trainer state. Default: 10000.
+        log_interval: Interval for logging metrics. Default: 10000.
+        create_env_fn: Environment creation function.
+        actor_network: Actor network configuration.
+        critic_network: Critic network configuration.
+        num_epochs: Number of epochs per batch. Default: 1.
+        async_collection: Whether to use async collection. Default: False.
+        add_gae: Whether to add GAE computation. Default: True.
+        gae: Custom GAE module configuration.
+        weight_update_map: Mapping from collector destination paths to trainer source paths.
+            Required if collector has weight_sync_schemes configured.
+            Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
+        log_timings: Whether to automatically log timing information for all hooks.
+            If True, timing metrics will be logged to the logger (e.g., wandb, tensorboard)
+            with prefix "time/" (e.g., "time/hook/UpdateWeights"). Default: False.
+    """
+
+    collector: Any
+    total_frames: int
+    optim_steps_per_batch: int | None
+    loss_module: Any
+    optimizer: Any
+    logger: Any
+    save_trainer_file: Any
+    replay_buffer: Any
+    frame_skip: int = 1
+    clip_grad_norm: bool = True
+    clip_norm: float | None = None
+    progress_bar: bool = True
+    seed: int | None = None
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    create_env_fn: Any = None
+    actor_network: Any = None
+    critic_network: Any = None
+    num_epochs: int = 1
+    async_collection: bool = False
+    add_gae: bool = True
+    gae: Any = None
+    weight_update_map: dict[str, str] | None = None
+    log_timings: bool = False
+
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for A2C trainer configuration."""
+        super().__post_init__()
+
+
+def _make_a2c_trainer(*args, **kwargs) -> A2CTrainer:
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    frame_skip = kwargs.pop("frame_skip", 1)
+    optim_steps_per_batch = kwargs.pop("optim_steps_per_batch", 1)
+    loss_module = kwargs.pop("loss_module")
+    optimizer = kwargs.pop("optimizer")
+    logger = kwargs.pop("logger")
+    clip_grad_norm = kwargs.pop("clip_grad_norm", True)
+    clip_norm = kwargs.pop("clip_norm")
+    progress_bar = kwargs.pop("progress_bar", True)
+    replay_buffer = kwargs.pop("replay_buffer")
+    save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
+    log_interval = kwargs.pop("log_interval", 10000)
+    save_trainer_file = kwargs.pop("save_trainer_file")
+    seed = kwargs.pop("seed")
+    actor_network = kwargs.pop("actor_network")
+    critic_network = kwargs.pop("critic_network")
+    add_gae = kwargs.pop("add_gae", True)
+    gae = kwargs.pop("gae")
+    kwargs.pop("create_env_fn")
+    weight_update_map = kwargs.pop("weight_update_map", None)
+    log_timings = kwargs.pop("log_timings", False)
+    num_epochs = kwargs.pop("num_epochs", 1)
+    async_collection = kwargs.pop("async_collection", False)
+
+    if actor_network is not None:
+        actor_network = actor_network()
+    if critic_network is not None:
+        critic_network = critic_network()
+    else:
+        critic_network = loss_module.critic_network
+
+    if (
+        replay_buffer is not None
+        and hasattr(replay_buffer, "_transform")
+        and len(replay_buffer._transform) > 1
+        and hasattr(replay_buffer._transform[1], "module")
+        and hasattr(replay_buffer._transform[1].module, "value_network")
+    ):
+        replay_buffer._transform[1].module.value_network = critic_network
+
+    if not isinstance(collector, BaseCollector):
+        if not async_collection:
+            collector = collector()
+        else:
+            collector = collector(replay_buffer=replay_buffer)
+    elif async_collection and getattr(collector, "replay_buffer", None) is None:
+        raise RuntimeError(
+            "replay_buffer must be provided when async_collection is True"
+        )
+    if not isinstance(loss_module, LossModule):
+        loss_module = loss_module(
+            actor_network=actor_network, critic_network=critic_network
+        )
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        optimizer = optimizer(params=loss_module.parameters())
+
+    if not isinstance(collector, BaseCollector):
+        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
+    if not isinstance(loss_module, LossModule):
+        raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        raise ValueError(
+            f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
+    if not isinstance(logger, Logger) and logger is not None:
+        raise ValueError(f"logger must be a Logger, got {type(logger)}")
+    if not isinstance(gae, (GAE, TensorDictModuleBase)) and gae is not None:
+        gae = gae()
+
+    return A2CTrainer(
+        collector=collector,
+        total_frames=total_frames,
+        frame_skip=frame_skip,
+        optim_steps_per_batch=optim_steps_per_batch,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        logger=logger,
+        clip_grad_norm=clip_grad_norm,
+        clip_norm=clip_norm,
+        progress_bar=progress_bar,
+        seed=seed,
+        save_trainer_interval=save_trainer_interval,
+        log_interval=log_interval,
+        save_trainer_file=save_trainer_file,
+        replay_buffer=replay_buffer,
+        num_epochs=num_epochs,
+        async_collection=async_collection,
+        add_gae=add_gae,
+        gae=gae,
+        weight_update_map=weight_update_map,
+        log_timings=log_timings,
+    )
+
+
+@dataclass
+class ReinforceTrainerConfig(TrainerConfig):
+    """Configuration class for REINFORCE trainer.
+
+    This class defines the configuration parameters for creating a REINFORCE
+    trainer, including both required and optional fields with sensible defaults.
+
+    Args:
+        collector: The data collector for gathering training data.
+        total_frames: Total number of frames to train for.
+        optim_steps_per_batch: Number of optimization steps per batch.
+        loss_module: The loss module for computing policy and value losses.
+        optimizer: The optimizer for training.
+        logger: Logger for tracking training metrics.
+        save_trainer_file: File path for saving trainer state.
+        replay_buffer: Replay buffer for storing data.
+        frame_skip: Frame skip value for the environment. Default: 1.
+        clip_grad_norm: Whether to clip gradient norms. Default: True.
+        clip_norm: Maximum gradient norm value.
+        progress_bar: Whether to show a progress bar. Default: True.
+        seed: Random seed for reproducibility.
+        save_trainer_interval: Interval for saving trainer state. Default: 10000.
+        log_interval: Interval for logging metrics. Default: 10000.
+        create_env_fn: Environment creation function.
+        actor_network: Actor network configuration.
+        critic_network: Critic network configuration.
+        num_epochs: Number of epochs per batch. Default: 1.
+        async_collection: Whether to use async collection. Default: False.
+        add_gae: Whether to add GAE computation. Default: True.
+        gae: Custom GAE module configuration.
+        weight_update_map: Mapping from collector destination paths to trainer source paths.
+            Required if collector has weight_sync_schemes configured.
+            Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
+        log_timings: Whether to automatically log timing information for all hooks.
+            If True, timing metrics will be logged to the logger (e.g., wandb, tensorboard)
+            with prefix "time/" (e.g., "time/hook/UpdateWeights"). Default: False.
+    """
+
+    collector: Any
+    total_frames: int
+    optim_steps_per_batch: int | None
+    loss_module: Any
+    optimizer: Any
+    logger: Any
+    save_trainer_file: Any
+    replay_buffer: Any
+    frame_skip: int = 1
+    clip_grad_norm: bool = True
+    clip_norm: float | None = None
+    progress_bar: bool = True
+    seed: int | None = None
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    create_env_fn: Any = None
+    actor_network: Any = None
+    critic_network: Any = None
+    num_epochs: int = 1
+    async_collection: bool = False
+    add_gae: bool = True
+    gae: Any = None
+    weight_update_map: dict[str, str] | None = None
+    log_timings: bool = False
+
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.trainers._make_reinforce_trainer"
+    )
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for REINFORCE trainer configuration."""
+        super().__post_init__()
+
+
+def _make_reinforce_trainer(*args, **kwargs) -> ReinforceTrainer:
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    frame_skip = kwargs.pop("frame_skip", 1)
+    optim_steps_per_batch = kwargs.pop("optim_steps_per_batch", 1)
+    loss_module = kwargs.pop("loss_module")
+    optimizer = kwargs.pop("optimizer")
+    logger = kwargs.pop("logger")
+    clip_grad_norm = kwargs.pop("clip_grad_norm", True)
+    clip_norm = kwargs.pop("clip_norm")
+    progress_bar = kwargs.pop("progress_bar", True)
+    replay_buffer = kwargs.pop("replay_buffer")
+    save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
+    log_interval = kwargs.pop("log_interval", 10000)
+    save_trainer_file = kwargs.pop("save_trainer_file")
+    seed = kwargs.pop("seed")
+    actor_network = kwargs.pop("actor_network")
+    critic_network = kwargs.pop("critic_network")
+    add_gae = kwargs.pop("add_gae", True)
+    gae = kwargs.pop("gae")
+    kwargs.pop("create_env_fn")
+    weight_update_map = kwargs.pop("weight_update_map", None)
+    log_timings = kwargs.pop("log_timings", False)
+    num_epochs = kwargs.pop("num_epochs", 1)
+    async_collection = kwargs.pop("async_collection", False)
+
+    if actor_network is not None:
+        actor_network = actor_network()
+    if critic_network is not None:
+        critic_network = critic_network()
+    else:
+        critic_network = loss_module.critic_network
+
+    if (
+        replay_buffer is not None
+        and hasattr(replay_buffer, "_transform")
+        and len(replay_buffer._transform) > 1
+        and hasattr(replay_buffer._transform[1], "module")
+        and hasattr(replay_buffer._transform[1].module, "value_network")
+    ):
+        replay_buffer._transform[1].module.value_network = critic_network
+
+    if not isinstance(collector, BaseCollector):
+        if not async_collection:
+            collector = collector()
+        else:
+            collector = collector(replay_buffer=replay_buffer)
+    elif async_collection and getattr(collector, "replay_buffer", None) is None:
+        raise RuntimeError(
+            "replay_buffer must be provided when async_collection is True"
+        )
+    if not isinstance(loss_module, LossModule):
+        loss_module = loss_module(
+            actor_network=actor_network, critic_network=critic_network
+        )
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        optimizer = optimizer(params=loss_module.parameters())
+
+    if not isinstance(collector, BaseCollector):
+        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
+    if not isinstance(loss_module, LossModule):
+        raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        raise ValueError(
+            f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
+    if not isinstance(logger, Logger) and logger is not None:
+        raise ValueError(f"logger must be a Logger, got {type(logger)}")
+    if not isinstance(gae, (GAE, TensorDictModuleBase)) and gae is not None:
+        gae = gae()
+
+    return ReinforceTrainer(
+        collector=collector,
+        total_frames=total_frames,
+        frame_skip=frame_skip,
+        optim_steps_per_batch=optim_steps_per_batch,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        logger=logger,
+        clip_grad_norm=clip_grad_norm,
+        clip_norm=clip_norm,
+        progress_bar=progress_bar,
+        seed=seed,
+        save_trainer_interval=save_trainer_interval,
+        log_interval=log_interval,
+        save_trainer_file=save_trainer_file,
+        replay_buffer=replay_buffer,
+        num_epochs=num_epochs,
+        async_collection=async_collection,
+        add_gae=add_gae,
+        gae=gae,
+        weight_update_map=weight_update_map,
+        log_timings=log_timings,
+    )
 
 
 @dataclass

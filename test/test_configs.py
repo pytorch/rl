@@ -1390,6 +1390,72 @@ class TestLossConfigs:
         assert cfg.delay_actor is True
         assert cfg.delay_qvalue is True
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_a2c_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.objectives.a2c import A2CLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import A2CLossConfig
+
+        actor_network = TanhNormalModelConfig(
+            network=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        critic_network = TensorDictModuleConfig(
+            module=MLPConfig(in_features=10, out_features=1, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        cfg = A2CLossConfig(
+            actor_network=actor_network,
+            critic_network=critic_network,
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_a2c_loss"
+        )
+
+        loss = instantiate(cfg)
+        assert isinstance(loss, A2CLoss)
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_reinforce_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.objectives.reinforce import ReinforceLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import ReinforceLossConfig
+
+        actor_network = TanhNormalModelConfig(
+            network=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        critic_network = TensorDictModuleConfig(
+            module=MLPConfig(in_features=10, out_features=1, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        cfg = ReinforceLossConfig(
+            actor_network=actor_network,
+            critic_network=critic_network,
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_reinforce_loss"
+        )
+
+        loss = instantiate(cfg)
+        assert isinstance(loss, ReinforceLoss)
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
@@ -1570,6 +1636,66 @@ class TestTrainerConfigs:
         )
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_a2c_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import A2CTrainerConfig
+
+        cfg = A2CTrainerConfig(
+            collector=None,
+            total_frames=100,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            clip_grad_norm=True,
+            clip_norm=1.0,
+            progress_bar=True,
+            seed=1,
+            save_trainer_interval=10000,
+            log_interval=10000,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer"
+        )
+        assert cfg.total_frames == 100
+        assert cfg.frame_skip == 1
+        assert cfg.num_epochs == 1
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_reinforce_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import ReinforceTrainerConfig
+
+        cfg = ReinforceTrainerConfig(
+            collector=None,
+            total_frames=100,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            clip_grad_norm=True,
+            clip_norm=1.0,
+            progress_bar=True,
+            seed=1,
+            save_trainer_interval=10000,
+            log_interval=10000,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_reinforce_trainer"
+        )
+        assert cfg.total_frames == 100
+        assert cfg.frame_skip == 1
+        assert cfg.num_epochs == 1
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config_optional_fields(self):
@@ -2307,6 +2433,222 @@ trainer:
 
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_a2c_trainer_parsing_with_file(self, tmpdir):
+        """Test A2C trainer parsing with file config."""
+        import os
+
+        os.makedirs(tmpdir / "save", exist_ok=True)
+
+        yaml_config = f"""
+defaults:
+  - env@training_env: gym
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - collector@data_collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@storage: tensor
+  - sampler@sampler: without_replacement
+  - writer@writer: round_robin
+  - trainer@trainer: a2c
+  - optimizer@optimizer: adam
+  - loss@loss: a2c
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 4
+
+  value_network:
+    out_features: 1
+    in_features: 4
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${{networks.policy_network}}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${{networks.value_network}}
+
+training_env:
+  env_name: CartPole-v1
+
+storage:
+  max_size: 1000
+  device: cpu
+  ndim: 1
+
+replay_buffer:
+  storage: ${{storage}}
+  sampler: ${{sampler}}
+  writer: ${{writer}}
+
+loss:
+  actor_network: ${{models.policy_model}}
+  critic_network: ${{models.value_model}}
+
+data_collector:
+  create_env_fn: ${{training_env}}
+  policy: ${{models.policy_model}}
+  total_frames: 1000
+  frames_per_batch: 100
+
+optimizer:
+  lr: 0.001
+
+logger:
+  exp_name: test_exp
+
+trainer:
+  collector: ${{data_collector}}
+  optimizer: ${{optimizer}}
+  replay_buffer: ${{replay_buffer}}
+  loss_module: ${{loss}}
+  logger: ${{logger}}
+  total_frames: 1000
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
+  save_trainer_file: {tmpdir}/save/ckpt.pt
+  optim_steps_per_batch: 1
+"""
+
+        test_code = """
+    # Just verify we can instantiate the main components without running
+    loss = hydra.utils.instantiate(cfg.loss)
+    assert isinstance(loss, torchrl.objectives.A2CLoss)
+
+    collector = hydra.utils.instantiate(cfg.data_collector)
+    assert isinstance(collector, torchrl.collectors.Collector)
+
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.a2c.A2CTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_reinforce_trainer_parsing_with_file(self, tmpdir):
+        """Test REINFORCE trainer parsing with file config."""
+        import os
+
+        os.makedirs(tmpdir / "save", exist_ok=True)
+
+        yaml_config = f"""
+defaults:
+  - env@training_env: gym
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - collector@data_collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@storage: tensor
+  - sampler@sampler: without_replacement
+  - writer@writer: round_robin
+  - trainer@trainer: reinforce
+  - optimizer@optimizer: adam
+  - loss@loss: reinforce
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 4
+
+  value_network:
+    out_features: 1
+    in_features: 4
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${{networks.policy_network}}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${{networks.value_network}}
+
+training_env:
+  env_name: CartPole-v1
+
+storage:
+  max_size: 1000
+  device: cpu
+  ndim: 1
+
+replay_buffer:
+  storage: ${{storage}}
+  sampler: ${{sampler}}
+  writer: ${{writer}}
+
+loss:
+  actor_network: ${{models.policy_model}}
+  critic_network: ${{models.value_model}}
+
+data_collector:
+  create_env_fn: ${{training_env}}
+  policy: ${{models.policy_model}}
+  total_frames: 1000
+  frames_per_batch: 100
+
+optimizer:
+  lr: 0.001
+
+logger:
+  exp_name: test_exp
+
+trainer:
+  collector: ${{data_collector}}
+  optimizer: ${{optimizer}}
+  replay_buffer: ${{replay_buffer}}
+  loss_module: ${{loss}}
+  logger: ${{logger}}
+  total_frames: 1000
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
+  save_trainer_file: {tmpdir}/save/ckpt.pt
+  optim_steps_per_batch: 1
+"""
+
+        test_code = """
+    # Just verify we can instantiate the main components without running
+    loss = hydra.utils.instantiate(cfg.loss)
+    assert isinstance(loss, torchrl.objectives.ReinforceLoss)
+
+    collector = hydra.utils.instantiate(cfg.data_collector)
+    assert isinstance(collector, torchrl.collectors.Collector)
+
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.reinforce.ReinforceTrainer)
 """
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
