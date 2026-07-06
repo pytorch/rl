@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -80,9 +81,14 @@ class InferenceDeviceConfig:
 
 @dataclass
 class InferenceServerConfig:
-    """Server-side batching, timeout, and instrumentation settings.
+    """Server-side execution, batching, timeout, and instrumentation settings.
 
     Args:
+        backend (str, optional): execution backend for the policy server.
+            ``"thread"`` runs the serve loop in a background thread of the
+            constructing process; ``"process"`` runs a dedicated server
+            process (which requires a picklable ``policy_factory`` and a
+            multiprocessing-capable transport). Defaults to ``"thread"``.
         max_batch_size (int, optional): maximum number of requests per forward
             pass. Defaults to ``64``.
         min_batch_size (int, optional): minimum number of requests to
@@ -93,6 +99,11 @@ class InferenceServerConfig:
             throughput and latency stats. Defaults to ``True``.
         stats_window_size (int, optional): number of recent timing samples kept
             for percentile stats. Defaults to ``1024``.
+        max_inflight_per_env (int, optional): maximum unresolved remote-policy
+            requests each environment coordinator may have inflight (consumed
+            by :class:`~torchrl.collectors.AsyncBatchedCollector` when
+            building its clients); ``None`` disables the guard. Defaults to
+            ``1``.
 
     Examples:
         >>> import torch
@@ -118,8 +129,22 @@ class InferenceServerConfig:
         8
     """
 
+    backend: Literal["thread", "process"] = "thread"
     max_batch_size: int = 64
     min_batch_size: int = 1
     timeout: float = 0.01
     collect_stats: bool = True
     stats_window_size: int = 1024
+    max_inflight_per_env: int | None = 1
+
+    def __post_init__(self) -> None:
+        if self.backend not in ("thread", "process"):
+            raise ValueError(
+                f"backend={self.backend!r} is not supported. "
+                "Expected 'thread' or 'process'."
+            )
+        if self.max_inflight_per_env is not None and self.max_inflight_per_env < 1:
+            raise ValueError(
+                f"max_inflight_per_env must be at least 1 (got "
+                f"{self.max_inflight_per_env}); use None to disable the guard."
+            )
