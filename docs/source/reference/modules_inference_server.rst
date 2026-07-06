@@ -129,9 +129,11 @@ TensorDict policy but inference should be served by the policy server:
 The server writes ``policy_version`` by default so asynchronous collectors can
 track behavior-policy lag. This is the general *service-stamped metadata*
 pattern: any service may stamp its responses with metadata about the state it
-served them from, and clients may enforce freshness constraints on it (for the
-policy server: ``target_policy_version`` and ``max_policy_lag`` on
-:class:`PolicyClientModule`).
+served them from, and the data pipeline may enforce freshness constraints on
+it. Bounded staleness is enforced by the replay buffer through
+:class:`~torchrl.envs.transforms.PolicyAgeFilter`, which drops elements whose
+stamped version lags the live version by more than ``max_policy_lag`` --
+either at extension time or dynamically at sampling time.
 
 Weight Synchronisation
 ^^^^^^^^^^^^^^^^^^^^^^

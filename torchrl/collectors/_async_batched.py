@@ -189,11 +189,6 @@ class AsyncBatchedCollector(BaseCollector):
         policy_version_key (NestedKey or None, optional): TensorDict key used
             for behavior-policy version annotations. ``None`` disables
             annotations. Defaults to ``"policy_version"``.
-        max_policy_lag (int, optional): when set, every client checks that
-            returned actions are no more than this many weight updates behind
-            the server's live policy version and raises otherwise. Requires
-            ``policy_version_key`` to be set. Defaults to ``None`` (no
-            check).
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -283,7 +278,6 @@ class AsyncBatchedCollector(BaseCollector):
         device_config: InferenceDeviceConfig | None = None,
         policy_version: int = 0,
         policy_version_key: NestedKey | None = "policy_version",
-        max_policy_lag: int | None = None,
     ):
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
@@ -406,13 +400,7 @@ class AsyncBatchedCollector(BaseCollector):
                 policy_version=policy_version,
                 policy_version_key=policy_version_key,
             )
-        if max_policy_lag is not None and policy_version_key is None:
-            raise ValueError(
-                "max_policy_lag requires policy_version_key to be set so the "
-                "clients can read the version returned by the server."
-            )
         self._policy_version_key = policy_version_key
-        self._max_policy_lag = max_policy_lag
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -459,18 +447,8 @@ class AsyncBatchedCollector(BaseCollector):
         # Create clients before a process server starts so response queues are
         # inherited by the child process.
         if self._clients is None:
-            target_version = None
-            if self._max_policy_lag is not None:
-                # Live version source: both server flavors expose a
-                # policy_version property readable from this process.
-                target_version = self._live_policy_version
             self._clients = [
-                PolicyClientModule(
-                    self._transport.client(),
-                    policy_version_key=self._policy_version_key,
-                    target_policy_version=target_version,
-                    max_policy_lag=self._max_policy_lag,
-                )
+                PolicyClientModule(self._transport.client())
                 for _ in range(self._num_envs)
             ]
 
@@ -525,9 +503,6 @@ class AsyncBatchedCollector(BaseCollector):
         if stats is None:
             return {}
         return stats(reset=reset)
-
-    def _live_policy_version(self) -> int:
-        return self._server.policy_version
 
     @property
     def policy_version(self) -> int:
