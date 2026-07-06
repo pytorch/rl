@@ -308,6 +308,9 @@ class WandbLogger(Logger):
             step: Optional step value for all metrics.
             keys_sep: Separator used to flatten nested TensorDict keys into strings.
                 Defaults to "/". Only used for TensorDict inputs.
+            override_global_step: If ``True``, bypasses per-group step injection
+                and forwards ``step`` to wandb's global ``step`` argument.
+                Defaults to ``False``.
 
         Returns:
             The converted metrics dictionary (with tensors converted to Python types).

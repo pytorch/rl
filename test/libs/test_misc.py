@@ -85,8 +85,7 @@ class TestRoboHive:
 
 # List of OpenSpiel games to test
 # TODO: Some of the games in `OpenSpielWrapper.available_envs` raise errors for
-# a few different reasons, mostly because we do not support chance nodes yet. So
-# we cannot run tests on all of them yet.
+# a few different reasons, so we cannot run tests on all of them yet.
 _openspiel_games = [
     # ----------------
     # Sequential games
@@ -161,9 +160,7 @@ class TestOpenSpiel:
     @pytest.mark.parametrize("return_state", [False, True])
     @pytest.mark.parametrize("categorical_actions", [False, True])
     def test_wrapper(self, game_string, return_state, categorical_actions):
-        import pyspiel
-
-        base_env = pyspiel.load_game(game_string).new_initial_state()
+        base_env = OpenSpielWrapper.lib.load_game(game_string).new_initial_state()
         env_torchrl = OpenSpielWrapper(
             base_env, categorical_actions=categorical_actions, return_state=return_state
         )
@@ -201,12 +198,62 @@ class TestOpenSpiel:
             td = env.reset()
             assert (td == td_init).all()
 
-    def test_chance_not_implemented(self):
+    def test_chance_nodes_supported(self):
+        # Verify that games with chance nodes now load successfully
+        env = OpenSpielEnv("bridge")
+        assert not env._env.is_chance_node()
+        td = env.reset()
+        assert not env._env.is_chance_node()
+        assert td.shape == torch.Size([])
+
+    def test_chance_nodes_resolved_before_initial_step(self):
+        env = OpenSpielEnv("backgammon")
+        assert not env._env.is_chance_node()
+
+        td = env.rand_step()
+
+        assert not env._env.is_chance_node()
+        assert td["next", "done"].shape == torch.Size([1])
+
+    def test_chance_nodes_resolved_after_step(self):
+        env = OpenSpielEnv("backgammon")
+
+        env.reset()
+        td = env.step(env.full_action_spec.rand())
+
+        assert not env._env.is_chance_node()
+        assert td["next"].shape == torch.Size([])
+
+    def test_custom_chance_sampler(self):
+        samples = []
+
+        def chance_sampler(actions, probabilities):
+            samples.append((actions, probabilities))
+            return actions[0]
+
+        base_env = OpenSpielWrapper.lib.load_game("backgammon").new_initial_state()
+        env = OpenSpielWrapper(base_env, chance_sampler=chance_sampler)
+
+        assert samples
+        assert not env._env.is_chance_node()
+
+    def test_seeded_chance_sampler(self):
+        env0 = OpenSpielEnv("backgammon", return_state=True)
+        env0.set_seed(0)
+        td0 = env0.reset()
+
+        env1 = OpenSpielEnv("backgammon", return_state=True)
+        env1.set_seed(0)
+        td1 = env1.reset()
+
+        assert td0["state"] == td1["state"]
+
+    def test_chance_batch_size_not_supported(self):
         with pytest.raises(
-            NotImplementedError,
-            match="not yet supported",
+            ValueError,
+            match="OpenSpielWrapper only supports single-environment mode",
         ):
-            OpenSpielEnv("bridge")
+            OpenSpielEnv("backgammon", batch_size=torch.Size([4]))
 
 
 # NOTE: Each of the registered envs are around 180 MB, so only test a few.

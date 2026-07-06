@@ -1,0 +1,23 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - cloudpickle
+    - expecttest
+    - future
+    - hypothesis
+    - hydra-core
+    - psutil
+    - pybind11[global]
+    - pytest
+    - pytest-asyncio
+    - pytest-cov
+    - pytest-error-for-skips
+    - pytest-instafail
+    - pytest-json-report
+    - pytest-mock
+    - pytest-rerunfailures
+    - pyyaml
+    - scipy

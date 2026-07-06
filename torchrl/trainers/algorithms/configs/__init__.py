@@ -31,6 +31,7 @@ from torchrl.trainers.algorithms.configs.collectors import (
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.configs.data import (
+    ConsumingSamplerConfig,
     LazyMemmapStorageConfig,
     LazyStackStorageConfig,
     LazyTensorStorageConfig,
@@ -61,7 +62,9 @@ from torchrl.trainers.algorithms.configs.envs_libs import (
     IsaacGymEnvConfig,
     JumanjiEnvConfig,
     MeltingpotEnvConfig,
+    MJLabEnvConfig,
     MOGymEnvConfig,
+    MujocoPlaygroundEnvConfig,
     MultiThreadedEnvConfig,
     OpenMLEnvConfig,
     OpenSpielEnvConfig,
@@ -122,6 +125,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     DDPGTrainerConfig,
     DQNTrainerConfig,
     IQLTrainerConfig,
+    OfflineToOnlineTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
     TD3TrainerConfig,
@@ -273,6 +277,8 @@ __all__ = [
     "JumanjiEnvConfig",
     "MeltingpotEnvConfig",
     "MOGymEnvConfig",
+    "MJLabEnvConfig",
+    "MujocoPlaygroundEnvConfig",
     "MultiThreadedEnvConfig",
     "OpenMLEnvConfig",
     "OpenSpielEnvConfig",
@@ -373,6 +379,7 @@ __all__ = [
     "TensorDictReplayBufferConfig",
     "TensorStorageConfig",
     # Samplers
+    "ConsumingSamplerConfig",
     "PrioritizedSamplerConfig",
     "RandomSamplerConfig",
     "SamplerWithoutReplacementConfig",
@@ -395,6 +402,7 @@ __all__ = [
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
     "IQLTrainerConfig",
+    "OfflineToOnlineTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
     "TD3TrainerConfig",
@@ -467,6 +475,7 @@ def _register_configs():
     cs.store(group="env", name="jumanji", node=JumanjiEnvConfig)
     cs.store(group="env", name="meltingpot", node=MeltingpotEnvConfig)
     cs.store(group="env", name="mo_gym", node=MOGymEnvConfig)
+    cs.store(group="env", name="mjlab", node=MJLabEnvConfig)
     cs.store(group="env", name="multi_threaded", node=MultiThreadedEnvConfig)
     cs.store(group="env", name="openml", node=OpenMLEnvConfig)
     cs.store(group="env", name="openspiel", node=OpenSpielEnvConfig)
@@ -632,6 +641,7 @@ def _register_configs():
         group="replay_buffer", name="tensordict", node=TensorDictReplayBufferConfig
     )
     cs.store(group="sampler", name="random", node=RandomSamplerConfig)
+    cs.store(group="sampler", name="consuming", node=ConsumingSamplerConfig)
     cs.store(
         group="sampler",
         name="without_replacement",
@@ -669,6 +679,11 @@ def _register_configs():
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
+    cs.store(
+        group="trainer",
+        name="offline_to_online",
+        node=OfflineToOnlineTrainerConfig,
+    )
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)

@@ -14,6 +14,7 @@ from .checkpointers import (
     TensorStorageCheckpointer,
 )
 from .her import HERReplayBuffer, HindsightStrategy
+from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -24,6 +25,7 @@ from .replay_buffers import (
     TensorDictReplayBuffer,
 )
 from .samplers import (
+    ConsumingSampler,
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
@@ -74,6 +76,7 @@ __all__ = [
     "ReplayBufferEnsemble",
     "TensorDictPrioritizedReplayBuffer",
     "TensorDictReplayBuffer",
+    "ConsumingSampler",
     "PrioritizedSampler",
     "PrioritizedSliceSampler",
     "RandomSampler",
@@ -98,6 +101,8 @@ __all__ = [
     "TED2Flat",
     "TED2Nested",
     "ImmutableDatasetWriter",
+    "OfflineToOnlineReplayBuffer",
+    "prefill_replay_buffer",
     "RoundRobinWriter",
     "TensorDictMaxValueWriter",
     "TensorDictRoundRobinWriter",

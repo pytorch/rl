@@ -22,7 +22,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
 )
@@ -347,7 +346,7 @@ class REDQLoss_deprecated(LossModule):
             [],
         )
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction)
+            lambda name, value: self._reduce_loss(value, tensordict=tensordict)
             if name.startswith("loss_")
             else value,
             batch_size=[],
