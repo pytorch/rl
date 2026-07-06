@@ -309,9 +309,7 @@ class AsyncBatchedCollector(BaseCollector):
             server_timeout = _server_defaults.timeout
         if device_config is not None:
             if device is not None:
-                raise ValueError(
-                    "device_config is mutually exclusive with device."
-                )
+                raise ValueError("device_config is mutually exclusive with device.")
             policy_device = device_config.policy_device
             output_device = device_config.server_output_device()
             env_device = device_config.env_device
