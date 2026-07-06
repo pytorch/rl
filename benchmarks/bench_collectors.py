@@ -39,6 +39,10 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.modules import ConvNet, MLP
+from torchrl.modules.inference_server import (
+    InferenceDeviceConfig,
+    InferenceServerConfig,
+)
 
 OBS_SHAPE = (3, 84, 84)
 ACTION_DIM = 6
@@ -577,13 +581,17 @@ def main() -> None:
                                 policy=policy_factory(),
                                 frames_per_batch=args.frames_per_batch,
                                 total_frames=-1,
-                                max_batch_size=max_batch_size,
-                                min_batch_size=min_batch_size,
-                                server_timeout=timeout,
                                 env_backend="threading",
-                                server_backend="thread",
-                                policy_device=policy_device,
-                                output_device=output_device,
+                                server_config=InferenceServerConfig(
+                                    backend="thread",
+                                    max_batch_size=max_batch_size,
+                                    min_batch_size=min_batch_size,
+                                    timeout=timeout,
+                                ),
+                                device_config=InferenceDeviceConfig(
+                                    policy_device=policy_device,
+                                    output_device=output_device,
+                                ),
                             ),
                             env_name=args.env,
                             num_envs=num_envs,
@@ -614,13 +622,17 @@ def main() -> None:
                                 policy=policy_factory(),
                                 frames_per_batch=args.frames_per_batch,
                                 total_frames=-1,
-                                max_batch_size=max_batch_size,
-                                min_batch_size=min_batch_size,
-                                server_timeout=timeout,
                                 env_backend="multiprocessing",
-                                server_backend="thread",
-                                policy_device=policy_device,
-                                output_device=output_device,
+                                server_config=InferenceServerConfig(
+                                    backend="thread",
+                                    max_batch_size=max_batch_size,
+                                    min_batch_size=min_batch_size,
+                                    timeout=timeout,
+                                ),
+                                device_config=InferenceDeviceConfig(
+                                    policy_device=policy_device,
+                                    output_device=output_device,
+                                ),
                             ),
                             env_name=args.env,
                             num_envs=num_envs,
@@ -651,13 +663,17 @@ def main() -> None:
                                 policy_factory=policy_factory,
                                 frames_per_batch=args.frames_per_batch,
                                 total_frames=-1,
-                                max_batch_size=max_batch_size,
-                                min_batch_size=min_batch_size,
-                                server_timeout=timeout,
                                 env_backend="multiprocessing",
-                                server_backend="process",
-                                policy_device=policy_device,
-                                output_device=output_device,
+                                server_config=InferenceServerConfig(
+                                    backend="process",
+                                    max_batch_size=max_batch_size,
+                                    min_batch_size=min_batch_size,
+                                    timeout=timeout,
+                                ),
+                                device_config=InferenceDeviceConfig(
+                                    policy_device=policy_device,
+                                    output_device=output_device,
+                                ),
                             ),
                             env_name=args.env,
                             num_envs=num_envs,
