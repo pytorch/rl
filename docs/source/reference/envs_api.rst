@@ -312,6 +312,7 @@ TorchRL offers a series of custom built-in environments.
     LLMHashingEnv
     PendulumEnv
     TicTacToeEnv
+    ToyVLAEnv
 
 MuJoCo custom environments
 --------------------------
@@ -334,6 +335,12 @@ internal singular configurations of the gimbal Jacobian.
 :class:`~torchrl.envs.CubeBowlEnv` is a compact
 manipulation task for scripted MuJoCo macro-control examples. It composes a
 local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
+
+MuJoCo env batches can be indexed with integers, slices, integer NumPy arrays,
+and integer torch tensors. Indexing returns a detached snapshot, not a live
+view: stepping or resetting the snapshot does not mutate the parent env. Assign
+the snapshot back (for example, ``env[0] = env0``) to explicitly write its
+state into the parent batch. Boolean masks are not supported.
 
 .. autosummary::
     :toctree: generated/
@@ -358,6 +365,7 @@ Domain-specific
     model_based.dreamer.DreamerEnv
     model_based.dreamer.DreamerDecoder
     model_based.imagined.ImaginedEnv
+    model_based.world_model_env.WorldModelEnv
 
 Helpers
 -------

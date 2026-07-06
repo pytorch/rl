@@ -9,6 +9,7 @@ from .cql import CQLTrainer
 from .ddpg import DDPGTrainer
 from .dqn import DQNTrainer
 from .iql import IQLTrainer
+from .offline_to_online import OfflineToOnlineTrainer
 from .ppo import PPOTrainer
 from .sac import SACTrainer
 
@@ -17,6 +18,7 @@ __all__ = [
     "DDPGTrainer",
     "DQNTrainer",
     "IQLTrainer",
+    "OfflineToOnlineTrainer",
     "PPOTrainer",
     "SACTrainer",
 ]

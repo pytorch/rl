@@ -325,6 +325,7 @@ Environment Library Configurations
     JumanjiEnvConfig
     MeltingpotEnvConfig
     MOGymEnvConfig
+    MJLabEnvConfig
     MultiThreadedEnvConfig
     OpenMLEnvConfig
     OpenSpielEnvConfig
@@ -454,6 +455,7 @@ Replay Buffer and Storage Configurations
 
     ReplayBufferConfig
     TensorDictReplayBufferConfig
+    ConsumingSamplerConfig
     RandomSamplerConfig
     SamplerWithoutReplacementConfig
     PrioritizedSamplerConfig
@@ -480,6 +482,7 @@ Training and Optimization Configurations
     TrainerConfig
     PPOTrainerConfig
     SACTrainerConfig
+    OfflineToOnlineTrainerConfig
     DQNTrainerConfig
     DDPGTrainerConfig
     IQLTrainerConfig
@@ -599,6 +602,7 @@ TorchRL currently provides configuration-driven trainers for the following algor
 
 - **PPO** (on-policy): ``PPOTrainerConfig``, ``PPOLossConfig``
 - **SAC** (off-policy, continuous): ``SACTrainerConfig``, ``SACLossConfig``
+- **Offline-to-online SAC**: ``OfflineToOnlineTrainerConfig``, ``SACLossConfig``
 - **DQN** (off-policy, discrete): ``DQNTrainerConfig``, ``DQNLossConfig``
 - **DDPG** (off-policy, continuous): ``DDPGTrainerConfig``, ``DDPGLossConfig``
 - **IQL** (offline): ``IQLTrainerConfig``, ``IQLLossConfig``

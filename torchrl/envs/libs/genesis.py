@@ -159,6 +159,10 @@ class GenesisWrapper(EnvBase):
 
     git_url = "https://github.com/Genesis-Embodied-AI/Genesis"
     libname = "genesis"
+    # Genesis loops over ``self._frame_skip`` physics substeps in its own
+    # ``_step`` and sums the reward, so frame skipping is implemented natively
+    # and the ``EnvBase`` metaclass must not auto-append a ``FrameSkipTransform``.
+    _has_frame_skip: bool = True
 
     _lib = None
 

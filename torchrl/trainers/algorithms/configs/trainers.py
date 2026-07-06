@@ -22,6 +22,7 @@ from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
@@ -199,6 +200,144 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
         batch_size=batch_size,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
+        target_net_updater=target_net_updater,
+        async_collection=async_collection,
+        log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
+    )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
+
+
+@dataclass
+class OfflineToOnlineTrainerConfig(SACTrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.OfflineToOnlineTrainer`.
+
+    Every kwarg accepted by ``OfflineToOnlineTrainer.__init__`` is exposed as a
+    field here, with SAC network-construction helper fields inherited from
+    :class:`SACTrainerConfig`.
+    """
+
+    anneal_frames: int | None = None
+
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.trainers."
+        "_make_offline_to_online_trainer"
+    )
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for offline-to-online trainer configuration."""
+        super().__post_init__()
+
+
+def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    frame_skip = kwargs.pop("frame_skip", 1)
+    optim_steps_per_batch = kwargs.pop("optim_steps_per_batch", 1)
+    loss_module = kwargs.pop("loss_module")
+    optimizer = kwargs.pop("optimizer")
+    logger = kwargs.pop("logger")
+    clip_grad_norm = kwargs.pop("clip_grad_norm", True)
+    clip_norm = kwargs.pop("clip_norm")
+    progress_bar = kwargs.pop("progress_bar", True)
+    replay_buffer = kwargs.pop("replay_buffer")
+    save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
+    log_interval = kwargs.pop("log_interval", 10000)
+    save_trainer_file = kwargs.pop("save_trainer_file")
+    seed = kwargs.pop("seed")
+    actor_network = kwargs.pop("actor_network")
+    critic_network = kwargs.pop("critic_network")
+    kwargs.pop("create_env_fn")
+    target_net_updater = kwargs.pop("target_net_updater")
+    async_collection = kwargs.pop("async_collection", False)
+    if async_collection:
+        raise ValueError("OfflineToOnlineTrainer does not support async_collection.")
+    log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    batch_size = kwargs.pop("batch_size", None)
+    anneal_frames = kwargs.pop("anneal_frames", None)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
+
+    # Instantiate networks first
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
+        actor_network = actor_network()
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
+        critic_network = critic_network()
+
+    if not isinstance(collector, BaseCollector):
+        collector = collector()
+
+    if not isinstance(loss_module, LossModule):
+        # then it's a partial config
+        loss_module = loss_module(
+            actor_network=actor_network, critic_network=critic_network
+        )
+    if target_net_updater is not None and not isinstance(
+        target_net_updater, TargetNetUpdater
+    ):
+        # target_net_updater must be a partial taking the loss as input
+        target_net_updater = target_net_updater(loss_module)
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        # then it's a partial config
+        optimizer = optimizer(params=loss_module.parameters())
+
+    # Quick instance checks
+    if not isinstance(collector, BaseCollector):
+        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
+    if not isinstance(loss_module, LossModule):
+        raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        raise ValueError(
+            f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
+    if not isinstance(logger, Logger) and logger is not None:
+        raise ValueError(f"logger must be a Logger, got {type(logger)}")
+
+    trainer = OfflineToOnlineTrainer(
+        collector=collector,
+        total_frames=total_frames,
+        frame_skip=frame_skip,
+        optim_steps_per_batch=optim_steps_per_batch,
+        loss_module=loss_module,
+        replay_buffer=replay_buffer,
+        anneal_frames=anneal_frames,
+        batch_size=batch_size,
+        optimizer=optimizer,
+        logger=logger,
+        clip_grad_norm=clip_grad_norm,
+        clip_norm=clip_norm,
+        progress_bar=progress_bar,
+        seed=seed,
+        save_trainer_interval=save_trainer_interval,
+        log_interval=log_interval,
+        save_trainer_file=save_trainer_file,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
         log_actions=log_actions,
