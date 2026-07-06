@@ -84,7 +84,7 @@ class InferenceServerConfig:
     """Server-side execution, batching, timeout, and instrumentation settings.
 
     Args:
-        backend (str, optional): execution backend for the policy server.
+        service_backend (str, optional): execution backend for the policy server.
             ``"thread"`` runs the serve loop in a background thread of the
             constructing process; ``"process"`` runs a dedicated server
             process (which requires a picklable ``policy_factory`` and a
@@ -130,7 +130,7 @@ class InferenceServerConfig:
         8
     """
 
-    backend: Literal["thread", "process"] = "thread"
+    service_backend: Literal["thread", "process"] = "thread"
     max_batch_size: int = 64
     min_batch_size: int = 1
     timeout: float = 0.01
@@ -139,9 +139,9 @@ class InferenceServerConfig:
     max_inflight_per_env: int | None = None
 
     def __post_init__(self) -> None:
-        if self.backend not in ("thread", "process"):
+        if self.service_backend not in ("thread", "process"):
             raise ValueError(
-                f"backend={self.backend!r} is not supported. "
+                f"service_backend={self.service_backend!r} is not supported. "
                 "Expected 'thread' or 'process'."
             )
         if self.max_inflight_per_env is not None and self.max_inflight_per_env < 1:

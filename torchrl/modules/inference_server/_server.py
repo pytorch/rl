@@ -23,6 +23,7 @@ from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
+from torchrl._comm import CommandChannel, Mailbox
 from torchrl.modules.inference_server._client import (
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
@@ -438,6 +439,10 @@ class InferenceServer:
         """Whether the background worker thread is running."""
         return self._worker is not None and self._worker.is_alive()
 
+    def client(self) -> Any:
+        """Return a restricted inference client from the owned transport."""
+        return self.transport.client()
+
     # -- background loop ------------------------------------------------------
 
     def _init_weight_sync(self) -> None:
@@ -618,7 +623,8 @@ class InferenceServer:
         self.shutdown()
 
     def __del__(self) -> None:
-        if self._worker is not None and self._worker.is_alive():
+        worker = getattr(self, "_worker", None)
+        if worker is not None and worker.is_alive():
             self.shutdown(timeout=1.0)
 
 
@@ -628,8 +634,7 @@ def _process_server_entry(
     server_kwargs: dict,
     shutdown_event: MPEvent,
     ready_queue,
-    control_queue,
-    control_response_queue,
+    control_channel: CommandChannel,
     policy_version_value=None,
 ) -> None:
     """Run an :class:`InferenceServer` loop inside a child process."""
@@ -662,17 +667,11 @@ def _process_server_entry(
                 raise RuntimeError(
                     "InferenceServer serve loop died inside the server process."
                 )
-            try:
-                request = control_queue.get(timeout=0.05)
-            except queue.Empty:
+            request = control_channel.receive(timeout=0.05)
+            if request is None:
                 continue
-            # Control messages follow the generic command-channel shape --
-            # request: {"id", "verb", "payload"}; reply: {"id", "ok",
-            # "payload"} -- so this control plane can migrate onto a shared
-            # CommandChannel abstraction without a wire-format change.
-            request_id = request["id"]
-            verb = request["verb"]
-            payload_in = request["payload"]
+            verb = request.verb
+            payload_in = request.payload
             try:
                 if verb == "stats":
                     payload = server.stats(**payload_in)
@@ -703,19 +702,25 @@ def _process_server_entry(
                 else:
                     raise RuntimeError(f"Unknown process-server verb: {verb}")
             except Exception as exc:
-                control_response_queue.put(
-                    {"id": request_id, "ok": False, "payload": repr(exc)}
+                control_channel.reject(
+                    request,
+                    RuntimeError(
+                        f"ProcessInferenceServer command {verb!r} failed: {exc!r}"
+                    ),
                 )
             else:
-                control_response_queue.put(
-                    {"id": request_id, "ok": True, "payload": payload}
-                )
+                control_channel.resolve(request, payload)
     finally:
         # Join the serve loop without a deadline: its shutdown path drains
         # and rejects pending requests, which must not be skipped even when
         # a slow forward pass is in flight (clients would hang forever).
         # The parent enforces the hard deadline via process.join/terminate.
-        server.shutdown(timeout=None)
+        try:
+            server.shutdown(timeout=None)
+        finally:
+            control_channel.close(
+                RuntimeError("ProcessInferenceServer control channel closed.")
+            )
 
 
 class ProcessInferenceServer:
@@ -723,9 +728,9 @@ class ProcessInferenceServer:
 
     This server is intended for actor/env workers that communicate through a
     queue-based transport such as
-    :class:`~torchrl.modules.inference_server.MPTransport`. Clients must be
-    created from the transport before :meth:`start` so that the child process
-    inherits their response queues.
+    :class:`~torchrl.modules.inference_server.MPTransport`. The restricted
+    client returned by :meth:`client` is created before the server process is
+    spawned so its response queue is inherited safely.
 
     Args:
         policy_factory (Callable[[], nn.Module]): picklable factory that creates
@@ -776,13 +781,13 @@ class ProcessInferenceServer:
         ...     )
         >>> ctx = mp.get_context("spawn")
         >>> transport = MPTransport(ctx=ctx)
-        >>> client = transport.client()
         >>> server = ProcessInferenceServer(
         ...     policy_factory=make_policy,
         ...     transport=transport,
         ...     mp_context=ctx,
         ... )
         >>> server.start()
+        >>> client = server.client()
         >>> server.shutdown()
     """
 
@@ -859,6 +864,7 @@ class ProcessInferenceServer:
             output_device = device_config.server_output_device()
         self.policy_factory = policy_factory
         self.transport = transport
+        self._service_client = transport.client()
         self.startup_timeout = startup_timeout
         if isinstance(mp_context, str):
             self._ctx = mp.get_context(mp_context)
@@ -868,12 +874,13 @@ class ProcessInferenceServer:
             self._ctx = mp_context
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
-        self._control_queue = self._ctx.Queue()
-        self._control_response_queue = self._ctx.Queue()
-        self._next_control_request_id = 0
-        # Serializes control round trips across caller threads (see
-        # _request_control).
-        self._control_lock = threading.Lock()
+        control_request_queue = self._ctx.Queue()
+        control_mailbox = Mailbox(
+            control_request_queue,
+            self._ctx.Queue,
+        )
+        self._control_channel = CommandChannel(control_mailbox)
+        self._control_client = self._control_channel.client()
         self._process: mp.Process | None = None
         self._server_kwargs = {
             "max_batch_size": max_batch_size,
@@ -911,8 +918,7 @@ class ProcessInferenceServer:
                 "server_kwargs": self._server_kwargs,
                 "shutdown_event": self._shutdown_event,
                 "ready_queue": self._ready_queue,
-                "control_queue": self._control_queue,
-                "control_response_queue": self._control_response_queue,
+                "control_channel": self._control_channel,
                 "policy_version_value": self._policy_version_value,
             },
             daemon=True,
@@ -952,38 +958,12 @@ class ProcessInferenceServer:
                 "ProcessInferenceServer process is not alive "
                 f"(exitcode={self._process.exitcode})."
             )
-        # The response queue is shared, so the whole request/response cycle
-        # is serialized: without the lock, two threads calling stats()/
-        # health() concurrently could pop and discard each other's replies.
-        with self._control_lock:
-            request_id = self._next_control_request_id
-            self._next_control_request_id += 1
-            self._control_queue.put(
-                {"id": request_id, "verb": verb, "payload": payload or {}}
-            )
-            deadline = time.monotonic() + timeout
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError(
-                        f"Timed out waiting for ProcessInferenceServer {verb!r}."
-                    )
-                try:
-                    reply = self._control_response_queue.get(timeout=remaining)
-                except queue.Empty:
-                    raise TimeoutError(
-                        f"Timed out waiting for ProcessInferenceServer {verb!r}."
-                    ) from None
-                if reply["id"] != request_id:
-                    # Stale reply from an earlier timed-out request; calls are
-                    # serialized by the lock, so it can be safely discarded.
-                    continue
-                if not reply["ok"]:
-                    raise RuntimeError(
-                        f"ProcessInferenceServer {verb!r} failed: "
-                        f"{reply['payload']}"
-                    )
-                return reply["payload"]
+        try:
+            return self._control_client.call(verb, payload or {}, timeout=timeout)
+        except queue.Empty:
+            raise TimeoutError(
+                f"Timed out waiting for ProcessInferenceServer {verb!r}."
+            ) from None
 
     def shutdown(self, timeout: float | None = 5.0) -> None:
         """Signal the child process to stop and wait for it to exit."""
@@ -1006,6 +986,10 @@ class ProcessInferenceServer:
     def is_alive(self) -> bool:
         """Whether the child process is alive."""
         return self._process is not None and self._process.is_alive()
+
+    def client(self) -> Any:
+        """Return a restricted inference client from the owned transport."""
+        return self._service_client
 
     def stats(
         self, *, reset: bool = False, timeout: float = 5.0
@@ -1088,7 +1072,8 @@ class ProcessInferenceServer:
         self.shutdown()
 
     def __del__(self) -> None:
-        if self.is_alive:
+        process = getattr(self, "_process", None)
+        if process is not None and process.is_alive():
             self.shutdown(timeout=1.0)
 
 

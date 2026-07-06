@@ -1,9 +1,62 @@
-.. currentmodule:: torchrl
+.. currentmodule:: torchrl.services
 
 Service Registry
 ================
 
 .. _ref_services:
+
+Service owners and clients
+--------------------------
+
+:class:`Service` is the common owner-side lifecycle contract. Owners expose
+``start()``, ``shutdown(timeout)``, ``is_alive``, and ``client()``. A remote
+client is deliberately capability-restricted: it performs domain operations
+but cannot stop the process or actor that owns it. Direct services use an
+identity client to avoid proxy overhead.
+
+.. code-block:: python
+
+    from torchrl.record import CSVLogger
+    from torchrl.services import Service
+
+    logger = CSVLogger(
+        exp_name="evaluation",
+        log_dir="logs",
+        service_backend="process",
+    )
+    assert isinstance(logger, Service)
+    client = logger.client()
+    client.log_scalar("reward", 1.0, step=0)
+    logger.shutdown()
+
+The canonical :class:`ServiceBackend` vocabulary is ``direct``, ``thread``,
+``process``, ``ray``, ``monarch``, and ``distributed``. Stable APIs that
+already accepted ``threading`` or ``multiprocessing`` continue to accept those
+aliases.
+
+.. list-table:: Supported service backends
+   :header-rows: 1
+
+   * - Service
+     - Direct/thread
+     - Process
+     - Ray
+   * - Loggers
+     - ``direct``
+     - ``process``
+     - ``ray``
+   * - Replay buffers
+     - ``direct``
+     - --
+     - ``ray``
+   * - Inference servers
+     - ``thread``
+     - ``process``
+     - transport dependent
+
+The sections below describe discovery. Discovery does not transfer lifecycle
+ownership: registering a running :class:`Service` stores its restricted client,
+and ``reset()`` removes that entry without shutting down the external owner.
 
 TorchRL provides a service registry system for managing distributed services across workers in distributed applications. 
 This is particularly useful for sharing resources like tokenizers, replay buffers, or Python executor pools across 
@@ -509,6 +562,8 @@ Service Registry
     :template: rl_template.rst
 
     get_services
+    Service
+    ServiceBackend
     ServiceBase
     RayService
 

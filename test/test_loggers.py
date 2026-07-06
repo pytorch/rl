@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import multiprocessing as mp
 import os
 import os.path
 import pathlib
@@ -20,6 +21,7 @@ from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
+from torchrl.record.loggers.process import ProcessLogger
 from torchrl.record.loggers.ray import RayLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
@@ -40,6 +42,39 @@ _has_gym = (
     importlib.util.find_spec("gym", None) is not None
     or importlib.util.find_spec("gymnasium", None) is not None
 )
+
+
+class _ProcessTestLogger:
+    def __init__(self, log_dir):
+        self.exp_name = "process-test"
+        self.log_dir = str(log_dir)
+        with open(os.path.join(self.log_dir, "constructed"), "a") as file:
+            file.write("1\n")
+
+    def log_scalar(self, name, value, step=None, **kwargs):
+        del kwargs
+        with open(os.path.join(self.log_dir, "events"), "a") as file:
+            file.write(f"{name}:{value}:{step}\n")
+
+    def log_video(self, name, video, step=None, **kwargs):
+        torch.save(
+            {"name": name, "video": video, "step": step, "kwargs": kwargs},
+            os.path.join(self.log_dir, "video.pt"),
+        )
+
+    def log_fail(self):
+        raise RuntimeError("expected logger failure")
+
+    def flush(self):
+        return None
+
+    def __repr__(self):
+        return "_ProcessTestLogger()"
+
+
+def _log_process_scalars(client, name, count):
+    for step in range(count):
+        client.log_scalar(name, step, step=step)
 
 
 @pytest.fixture
@@ -146,6 +181,16 @@ class TestTensorboard:
 
 
 class TestCSVLogger:
+    def test_direct_service_client_is_identity(self, tmpdir):
+        logger = CSVLogger(log_dir=tmpdir, exp_name="direct")
+        assert logger.client() is logger
+        assert logger.start() is logger
+        assert logger.service_backend == "direct"
+        assert logger.is_alive
+        logger.shutdown()
+        assert not logger.is_alive
+        logger.shutdown()
+
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
     def test_log_scalar(self, steps, tmpdir):
         torch.manual_seed(0)
@@ -779,16 +824,12 @@ def test_ray_logger_log_metrics_forwards_override_global_step():
 
     class _FakeActor:
         def __init__(self):
-            self.log_metrics = _FakeRemoteMethod()
-
-    class _FakeRay:
-        @staticmethod
-        def get(value):
-            return value
+            self._execute = _FakeRemoteMethod()
 
     logger = RayLogger.__new__(RayLogger)
     logger._actor = _FakeActor()
-    logger._ray = _FakeRay()
+    logger._client_id = 3
+    logger._sequence = 0
 
     result = logger.log_metrics(
         {"loss": torch.tensor(0.5)},
@@ -797,16 +838,153 @@ def test_ray_logger_log_metrics_forwards_override_global_step():
     )
 
     assert result == {"loss": 0.5}
-    assert logger._actor.log_metrics.calls == [
+    assert logger._actor._execute.calls == [
         (
-            ({"loss": 0.5},),
-            {
-                "step": 12,
-                "keys_sep": "/",
-                "override_global_step": True,
-            },
+            (
+                3,
+                0,
+                "log_metrics",
+                ({"loss": 0.5},),
+                {
+                    "step": 12,
+                    "keys_sep": "/",
+                    "override_global_step": True,
+                },
+                False,
+            ),
+            {},
         )
     ]
+
+
+class TestProcessLogger:
+    def test_owner_clients_fifo_video_and_errors(self, tmp_path):
+        logger = ProcessLogger(_ProcessTestLogger, tmp_path)
+        try:
+            assert logger.is_alive
+            assert logger.service_backend == "process"
+            assert logger.exp_name == "process-test"
+            client = logger.client()
+            assert not hasattr(client, "start")
+            assert not hasattr(client, "shutdown")
+            assert not hasattr(client, "client")
+
+            parent_client = logger.client()
+            worker_client = logger.client()
+            ctx = mp.get_context("spawn")
+            worker = ctx.Process(
+                target=_log_process_scalars,
+                args=(worker_client, "worker", 5),
+            )
+            worker.start()
+            _log_process_scalars(parent_client, "parent", 5)
+            worker.join(timeout=20)
+            assert worker.exitcode == 0
+            logger.flush(timeout=20)
+
+            construction_lines = (tmp_path / "constructed").read_text().splitlines()
+            assert construction_lines == ["1"]
+            event_lines = (tmp_path / "events").read_text().splitlines()
+            for name in ("parent", "worker"):
+                assert [line for line in event_lines if line.startswith(name)] == [
+                    f"{name}:{step}:{step}" for step in range(5)
+                ]
+
+            video = torch.arange(2 * 3 * 4 * 5, dtype=torch.uint8).reshape(
+                1, 2, 3, 4, 5
+            )
+            client.log_video("eval/video", video, step=7, fps=8)
+            payload = torch.load(tmp_path / "video.pt", weights_only=True)
+            assert payload["name"] == "eval/video"
+            assert payload["step"] == 7
+            assert payload["kwargs"] == {"fps": 8}
+            torch.testing.assert_close(payload["video"], video)
+            assert payload["video"].dtype is torch.uint8
+
+            client.log_fail()
+            with pytest.raises(RuntimeError, match="expected logger failure"):
+                logger.flush(timeout=20)
+        finally:
+            logger.shutdown(timeout=20)
+        assert not logger.is_alive
+        logger.shutdown()
+
+    def test_csv_logger_service_backend(self, tmp_path):
+        logger = CSVLogger(
+            exp_name="process-csv",
+            log_dir=tmp_path,
+            service_backend="process",
+            service_backend_options={"max_queue_size": 4},
+        )
+        try:
+            assert isinstance(logger, ProcessLogger)
+            assert isinstance(logger, CSVLogger)
+            logger.log_scalar("loss", 1.0, step=0)
+            logger.flush(timeout=20)
+            assert (tmp_path / "process-csv" / "scalars" / "loss.csv").is_file()
+        finally:
+            logger.shutdown(timeout=20)
+
+
+def test_use_ray_service_warns_once_with_removal_version(monkeypatch):
+    sentinel = object()
+
+    def _service_factory(
+        service_backend,
+        *args,
+        service_backend_options=None,
+        **kwargs,
+    ):
+        del args, service_backend_options, kwargs
+        assert service_backend == "ray"
+        return sentinel
+
+    monkeypatch.setattr(CSVLogger, "_ServiceClass", staticmethod(_service_factory))
+    with pytest.warns(FutureWarning) as warnings:
+        result = CSVLogger(
+            exp_name="deprecated-ray",
+            log_dir=".",
+            use_ray_service=True,
+        )
+    assert result is sentinel
+    assert len(warnings) == 1
+    assert "removed in v0.16" in str(warnings[0].message)
+
+
+def test_video_recorder_uses_service_client_and_default_vector_grid():
+    class _CaptureClient:
+        def __init__(self):
+            self.payload = None
+
+        def log_video(self, **kwargs):
+            self.payload = kwargs
+
+    class _LoggerOwner:
+        def __init__(self):
+            self.log_client = _CaptureClient()
+
+        def client(self):
+            return self.log_client
+
+    owner = _LoggerOwner()
+    recorder = VideoRecorder(owner, tag="eval/video")
+    assert recorder.logger is owner.log_client
+    assert recorder.in_keys == ["pixels"]
+
+    # A recorder attached to an environment sees the vector batch at each
+    # step and records it as one synchronized grid frame.
+    recorder.__dict__["_parent"] = type("_VectorEnv", (), {"batch_size": (4,)})()
+    pixels = torch.zeros(4, 3, 8, 8, dtype=torch.uint8)
+    pixels[:, :, :, :] = torch.arange(4, dtype=torch.uint8).view(4, 1, 1, 1)
+    recorder._apply_transform(pixels)
+    assert len(recorder.obs) == 1
+    recorder.dump(step=12)
+
+    payload = owner.log_client.payload
+    assert payload["name"] == "eval/video"
+    assert payload["step"] == 12
+    assert payload["video"].shape[:3] == (1, 1, 3)
+    assert payload["video"].dtype is torch.uint8
 
 
 @pytest.mark.skipif(not _has_ray, reason="Ray not available")
@@ -836,6 +1014,7 @@ class TestRayLogger:
             )
             logger.log_scalar("loss", 0.5, step=0)
             logger.log_scalar("loss", 0.3, step=1)
+            logger.flush()
 
             scalars_dir = os.path.join(tmpdir, "test_scalar", "scalars")
             assert os.path.isdir(scalars_dir)
@@ -890,13 +1069,13 @@ class TestRayLogger:
             assert isinstance(r, str)
             assert "CSVLogger" in r
 
-    def test_getattr_fallback(self):
+    def test_non_logging_method_is_not_exposed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = CSVLogger(
                 exp_name="test_getattr", log_dir=tmpdir, use_ray_service=True
             )
-            # CSVLogger.print_log_dir() is a non-standard method
-            logger.print_log_dir()
+            with pytest.raises(AttributeError):
+                logger.client().print_log_dir()
 
     def test_private_attr_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:

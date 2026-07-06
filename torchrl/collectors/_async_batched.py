@@ -294,10 +294,10 @@ class AsyncBatchedCollector(BaseCollector):
         _server_defaults = (
             server_config if server_config is not None else InferenceServerConfig()
         )
-        server_backend = _server_defaults.backend
+        server_backend = _server_defaults.service_backend
         if server_backend == "process" and policy_factory is None:
             raise TypeError(
-                "InferenceServerConfig(backend='process') requires "
+                "InferenceServerConfig(service_backend='process') requires "
                 "policy_factory so the policy can be constructed inside the "
                 "server process."
             )
@@ -352,7 +352,7 @@ class AsyncBatchedCollector(BaseCollector):
         if server_backend == "process":
             if policy_backend not in (None, "multiprocessing"):
                 raise ValueError(
-                    "InferenceServerConfig(backend='process') requires "
+                    "InferenceServerConfig(service_backend='process') requires "
                     "policy_backend=None or 'multiprocessing'."
                 )
             effective_policy_backend = "multiprocessing"
@@ -492,7 +492,7 @@ class AsyncBatchedCollector(BaseCollector):
     def policy(self) -> Callable:
         """The policy passed to the inference server.
 
-        With ``InferenceServerConfig(backend="process")`` the policy only exists inside the
+        With ``InferenceServerConfig(service_backend="process")`` the policy only exists inside the
         server process, so this returns the ``policy_factory`` instead.
         """
         if self._policy is not None:

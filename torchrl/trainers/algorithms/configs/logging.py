@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
@@ -27,7 +27,7 @@ class LoggerConfig(ConfigBase):
 
 @dataclass
 class WandbLoggerConfig(LoggerConfig):
-    """A class to configure a Wandb logger.
+    """Hydra configuration for :class:`~torchrl.record.loggers.WandbLogger`.
 
     .. seealso::
         :class:`~torchrl.record.loggers.wandb.WandbLogger`
@@ -42,6 +42,8 @@ class WandbLoggerConfig(LoggerConfig):
     log_env_packages: bool = True
     log_dir: str | None = None
     wandb_kwargs: dict[str, Any] = field(default_factory=dict)
+    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.trainers.algorithms.configs.logging._make_wandb_logger"
 
@@ -59,6 +61,8 @@ def _make_wandb_logger(
     log_env_packages: bool = True,
     log_dir: str | None = None,
     wandb_kwargs: dict[str, Any] | None = None,
+    service_backend: Literal["direct", "process", "ray"] = "direct",
+    service_backend_options: dict[str, Any] | None = None,
 ) -> WandbLogger:
     wandb_kwargs = dict(wandb_kwargs or {})
     return WandbLogger(
@@ -70,13 +74,15 @@ def _make_wandb_logger(
         video_fps=video_fps,
         log_env_packages=log_env_packages,
         log_dir=log_dir,
+        service_backend=service_backend,
+        service_backend_options=service_backend_options,
         **wandb_kwargs,
     )
 
 
 @dataclass
 class TensorboardLoggerConfig(LoggerConfig):
-    """A class to configure a Tensorboard logger.
+    """Hydra configuration for :class:`~torchrl.record.loggers.TensorboardLogger`.
 
     .. seealso::
         :class:`~torchrl.record.loggers.tensorboard.TensorboardLogger`
@@ -84,6 +90,8 @@ class TensorboardLoggerConfig(LoggerConfig):
 
     exp_name: str
     log_dir: str = "tb_logs"
+    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.record.loggers.tensorboard.TensorboardLogger"
 
@@ -93,7 +101,7 @@ class TensorboardLoggerConfig(LoggerConfig):
 
 @dataclass
 class TrackioLoggerConfig(LoggerConfig):
-    """A class to configure a Trackio logger.
+    """Hydra configuration for :class:`~torchrl.record.loggers.TrackioLogger`.
 
     .. seealso::
         :class:`~torchrl.record.loggers.trackio.TrackioLogger`
@@ -103,6 +111,8 @@ class TrackioLoggerConfig(LoggerConfig):
     project: str
     video_fps: int = 32
     trackio_kwargs: dict[str, Any] = field(default_factory=dict)
+    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.trainers.algorithms.configs.logging._make_trackio_logger"
 
@@ -115,19 +125,23 @@ def _make_trackio_logger(
     project: str,
     video_fps: int = 32,
     trackio_kwargs: dict[str, Any] | None = None,
+    service_backend: Literal["direct", "process", "ray"] = "direct",
+    service_backend_options: dict[str, Any] | None = None,
 ) -> TrackioLogger:
     trackio_kwargs = dict(trackio_kwargs or {})
     return TrackioLogger(
         exp_name=exp_name,
         project=project,
         video_fps=video_fps,
+        service_backend=service_backend,
+        service_backend_options=service_backend_options,
         **trackio_kwargs,
     )
 
 
 @dataclass
 class CSVLoggerConfig(LoggerConfig):
-    """A class to configure a CSV logger.
+    """Hydra configuration for :class:`~torchrl.record.loggers.CSVLogger`.
 
     .. seealso::
         :class:`~torchrl.record.loggers.csv.CSVLogger`
@@ -137,6 +151,8 @@ class CSVLoggerConfig(LoggerConfig):
     log_dir: str | None = None
     video_format: str = "pt"
     video_fps: int = 30
+    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.record.loggers.csv.CSVLogger"
 

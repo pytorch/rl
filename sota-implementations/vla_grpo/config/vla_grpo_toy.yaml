@@ -92,6 +92,7 @@ train:
 
 logger:
   backend: wandb
+  service_backend: direct # direct | process | ray
   project_name: torchrl-sota-vla-grpo
   group_name: null
   exp_name: vla_grpo_toy
@@ -104,10 +105,7 @@ logger:
   eval_timeout_s: 300.0
   eval_device: null # null = rollout device; set e.g. cuda:7 for eval
   video_fps: 4 # frames per second of the logged video (one frame per decision)
-  # eval_backend=thread with a logger records video from a single env bound to
-  # the first task; only relevant for multi-task suites (the toy env has one
-  # task, so recording never narrows evaluation here).
-  record_video_single_task: false
+  # VideoRecorder logs the frames from the same rollout used for eval metrics.
 
 checkpoint:
   save_iter: 25 # save every N iterations (0 disables)

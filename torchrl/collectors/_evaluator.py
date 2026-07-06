@@ -202,7 +202,8 @@ class Evaluator:
         metrics_fn: Optional ``(TensorDictBase) -> dict[str, float]``
             called on every trajectory batch to extract custom metrics.
         dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`
-            transforms after each evaluation (thread backend only).
+            transforms after each evaluation. Process-backed collectors invoke
+            the transform in their worker and can use a service-backed logger.
             Default: ``True``.
         on_result: Optional ``(TensorDictBase) -> None`` invoked after each
             completed evaluation. The callback receives a flat tensordict
@@ -1247,19 +1248,30 @@ class _ThreadEvalBackend(_EvalBackend):
     def dump_video(self, step: int | None = None) -> None:
         """Dump accumulated video frames from VideoRecorder transforms.
 
-        Called on the caller thread so that logger writes are thread-safe.
+        Process-backed evaluator collectors dispatch ``Compose.dump`` to the
+        worker that owns the environment. Direct evaluators call it locally.
         """
+        if self._use_multi_collector and self._collector is not None:
+            self._collector.map_fn(
+                "env.transform.dump",
+                list_of_kwargs=[{"step": step}] * self._collector.num_workers,
+            )
+            return
         if self._env is None or not hasattr(self._env, "transform"):
             return
         transform = self._env.transform
+        dump = getattr(transform, "dump", None)
+        if callable(dump):
+            dump(step=step)
+            return
         try:
             transforms = iter(transform)
         except TypeError:
-            # Single transform, not Compose — wrap in a list
-            transforms = [transform]
-        for t in transforms:
-            if hasattr(t, "dump"):
-                t.dump(step=step)
+            return
+        for item in transforms:
+            dump = getattr(item, "dump", None)
+            if callable(dump):
+                dump(step=step)
 
 
 # ======================================================================
