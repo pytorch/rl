@@ -319,6 +319,13 @@ def main(cfg):  # noqa: F821
         "get",
         lambda key, default=None: getattr(cfg.env, key, default),
     )
+    collector_get = getattr(
+        cfg.collector,
+        "get",
+        lambda key, default=None: getattr(cfg.collector, key, default),
+    )
+    async_rollout_env = bool(collector_get("async_env", False))
+    async_rollout_policy = bool(collector_get("async_policy", False))
     train_group_repeats = (
         cfg.collector.group_size
         if env_get("parallel_group_repeats", False)
@@ -330,6 +337,7 @@ def main(cfg):  # noqa: F821
         group_repeats=train_group_repeats,
         seed=cfg.env.seed,
         device=device if cfg.env.backend == "toy" else None,
+        num_envs=1 if async_rollout_env else None,
     )
     eval_process = bool(cfg.logger.get("eval_process", False))
     eval_env = None
@@ -383,6 +391,7 @@ def main(cfg):  # noqa: F821
         train_env,
         rollout_policy,
         rollout_device,
+        tokenizer=tokenizer,
         replay_buffer=replay_buffer,
     )
     collector_iter = iter(collector)
@@ -406,16 +415,23 @@ def main(cfg):  # noqa: F821
         int(cfg.collector.get("max_same_policy_collect_attempts", 1)), 1
     )
     min_replay_decisions = int(cfg.collector.get("min_replay_decisions", 0) or 0)
-    num_envs = train_env.batch_size[0] if train_env.batch_size else 1
-    collector_frames_per_poll = max(
-        int(getattr(collector, "requested_frames_per_batch", num_envs)), 1
+    num_envs = int(getattr(collector, "num_envs", 0)) or (
+        train_env.batch_size[0] if train_env.batch_size else 1
     )
-    collect_polls_per_group_wave = max(
-        math.ceil(
-            episodes_per_iter * int(cfg.env.max_outer_steps) / collector_frames_per_poll
-        ),
-        1,
-    )
+    if getattr(collector, "yields_complete_trajectories", False):
+        collect_polls_per_group_wave = max(episodes_per_iter, 1)
+    else:
+        collector_frames_per_poll = max(
+            int(getattr(collector, "requested_frames_per_batch", num_envs)), 1
+        )
+        collect_polls_per_group_wave = max(
+            math.ceil(
+                episodes_per_iter
+                * int(cfg.env.max_outer_steps)
+                / collector_frames_per_poll
+            ),
+            1,
+        )
     max_collect_polls_per_iter = (
         collect_polls_per_group_wave * max_collect_batches_per_iter
     )
@@ -440,6 +456,7 @@ def main(cfg):  # noqa: F821
         # runs under exploration_type=RANDOM (set in make_collector); the policy
         # reads that context, so the script never mutates it.
         with timeit("collect") as collect_timer:
+            collector_server_stats = {}
             if not retry_same_policy:
                 advantage_transform.reset_stats()
                 same_policy_collect_polls = 0
@@ -496,6 +513,13 @@ def main(cfg):  # noqa: F821
                     break
             else:
                 safety_cap_hit = True
+
+            pause_collection = getattr(collector, "pause_collection", None)
+            if pause_collection is not None:
+                pause_collection()
+            server_stats = getattr(collector, "server_stats", None)
+            if server_stats is not None:
+                collector_server_stats = server_stats(reset=True)
 
             if min_replay_decisions > 0 and len(replay_buffer) < min_replay_decisions:
                 safety_cap_hit = True
@@ -566,7 +590,12 @@ def main(cfg):  # noqa: F821
                     if completed_trajectories
                     else 0.0
                 ),
+                "collector/async_env": float(async_rollout_env),
+                "collector/async_policy": float(async_rollout_policy),
             }
+            for key, value in collector_server_stats.items():
+                if isinstance(value, (float, int)):
+                    group_metrics[f"policy_server/{key}"] = value
         # PPO update over the decisions that survived dynamic sampling, with
         # gradient accumulation (micro-batches of mini_batch_size decisions)
         num_decisions = len(replay_buffer)
