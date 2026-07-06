@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -80,9 +81,14 @@ class InferenceDeviceConfig:
 
 @dataclass
 class InferenceServerConfig:
-    """Server-side batching, timeout, and instrumentation settings.
+    """Server-side execution, batching, timeout, and instrumentation settings.
 
     Args:
+        backend (str, optional): execution backend for the policy server.
+            ``"thread"`` runs the serve loop in a background thread of the
+            constructing process; ``"process"`` runs a dedicated server
+            process (which requires a picklable ``policy_factory`` and a
+            multiprocessing-capable transport). Defaults to ``"thread"``.
         max_batch_size (int, optional): maximum number of requests per forward
             pass. Defaults to ``64``.
         min_batch_size (int, optional): minimum number of requests to
@@ -118,8 +124,16 @@ class InferenceServerConfig:
         8
     """
 
+    backend: Literal["thread", "process"] = "thread"
     max_batch_size: int = 64
     min_batch_size: int = 1
     timeout: float = 0.01
     collect_stats: bool = True
     stats_window_size: int = 1024
+
+    def __post_init__(self) -> None:
+        if self.backend not in ("thread", "process"):
+            raise ValueError(
+                f"backend={self.backend!r} is not supported. "
+                "Expected 'thread' or 'process'."
+            )

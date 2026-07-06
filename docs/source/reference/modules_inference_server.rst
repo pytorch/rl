@@ -72,19 +72,22 @@ threads in the same process:
 Structured Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Batching and device placement can be grouped into two dataclasses instead of
-loose keyword arguments: :class:`InferenceServerConfig` collects the batching
-and instrumentation knobs (``max_batch_size``, ``min_batch_size``,
+Server execution, batching, and device placement are grouped into two
+dataclasses instead of loose keyword arguments: :class:`InferenceServerConfig`
+collects the execution ``backend`` (``"thread"`` or ``"process"``) and the
+batching/instrumentation knobs (``max_batch_size``, ``min_batch_size``,
 ``timeout``, ``collect_stats``, ``stats_window_size``), and
 :class:`InferenceDeviceConfig` describes device placement across the
 collection pipeline (``policy_device``, ``output_device``, ``env_device``,
 ``storing_device``). Both :class:`InferenceServer` and
 :class:`~torchrl.collectors.AsyncBatchedCollector` accept them through the
 ``server_config`` and ``device_config`` keyword arguments; a config object is
-mutually exclusive with the individual keyword arguments it replaces. Servers
-consume only the ``policy_device``/``output_device`` fields (``env_device``
-doubles as an ``output_device`` fallback), while ``env_device`` and
-``storing_device`` drive the collector-side transfers:
+mutually exclusive with the individual keyword arguments it replaces, and the
+config objects are the only way to set the per-role devices and the server
+backend on the collector. Servers consume only the
+``policy_device``/``output_device`` fields (``env_device`` doubles as an
+``output_device`` fallback), while ``env_device`` and ``storing_device``
+drive the collector-side transfers:
 
 .. code-block:: python
 
