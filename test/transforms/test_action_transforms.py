@@ -25,7 +25,7 @@ from _transforms_common import (
 )
 from packaging import version
 from tensordict import NonTensorData, TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase, WrapModule
+from tensordict.nn import TensorDictModuleBase, TensorDictSequential, WrapModule
 from torch import nn
 
 from torchrl.data import (
@@ -3036,6 +3036,34 @@ class TestActionTokenizerTransform(TransformBase):
         )
         assert td[ACTION_TOKENS_KEY].tolist() == [[0, 128, 255]]
 
+    def test_transform_decode_model(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok, mode="decode")
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        tokens = tok.encode(action)
+        td = t(TensorDict({ACTION_TOKENS_KEY: tokens.clone()}, batch_size=[1]))
+        torch.testing.assert_close(td["action"], tok.decode(tokens))
+        assert t.in_keys == [ACTION_TOKENS_KEY]
+        assert t.out_keys == ["action"]
+        inv = t.inv(TensorDict({"action": action.clone()}, batch_size=[1]))
+        torch.testing.assert_close(inv[ACTION_TOKENS_KEY], tok.encode(action))
+
+    def test_transform_decode_tensordict_sequential(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        tokens = tok.encode(action)
+        policy = TensorDictSequential(ActionTokenizerTransform(tok, mode="decode"))
+        td = policy(TensorDict({ACTION_TOKENS_KEY: tokens.clone()}, batch_size=[1]))
+        torch.testing.assert_close(td["action"], tok.decode(tokens))
+
+    def test_decode_mode_does_not_rewrite_env_action_spec(self):
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), ActionTokenizerTransform(tok, mode="decode")
+        )
+        assert "action" in env.full_action_spec.keys(True, True)
+        assert ACTION_TOKENS_KEY not in env.full_action_spec.keys(True, True)
+
     def test_transform_rb(self):
         tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
         rb = TensorDictReplayBuffer(
@@ -3127,6 +3155,11 @@ class TestActionTokenizerTransform(TransformBase):
     def test_requires_tokenizer(self):
         with pytest.raises(TypeError, match="ActionTokenizerBase"):
             ActionTokenizerTransform(object())
+
+    def test_invalid_mode(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        with pytest.raises(ValueError, match="mode"):
+            ActionTokenizerTransform(tok, mode="invalid")
 
 
 if __name__ == "__main__":

@@ -173,6 +173,30 @@ class TestInferenceServerCore:
                 assert "action" in r.keys()
                 assert r["action"].shape == (2,)
 
+    def test_batch_of_requests_with_mixed_root_device_metadata(self):
+        transport = _MockTransport()
+        policy = _make_policy()
+        cpu_item = TensorDict(
+            {"observation": torch.randn(4), "next": TensorDict({}, [])},
+            [],
+            device="cpu",
+        )
+        metadata_free_item = TensorDict(
+            {"observation": torch.randn(4), "next": TensorDict({}, [])},
+            [],
+        )
+        with InferenceServer(policy, transport, max_batch_size=2, min_batch_size=2):
+            futures = [
+                transport.submit(cpu_item),
+                transport.submit(metadata_free_item),
+            ]
+            results = [f.result(timeout=5.0) for f in futures]
+
+        assert len(results) == 2
+        for result in results:
+            assert "action" in result.keys()
+            assert result["action"].shape == (2,)
+
     def test_collate_fn_is_called(self):
         calls = []
 
@@ -387,6 +411,29 @@ class TestInferenceServerCore:
             client = transport.client()
             result = client(TensorDict({"observation": torch.randn(4)}))
         assert result["meta", "policy_version"].item() == 12
+
+    def test_update_model_increments_policy_version(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport) as server:
+            client = transport.client()
+            observation = torch.randn(4)
+            before = client(TensorDict({"observation": observation.clone()}))
+
+            def update(model):
+                with torch.no_grad():
+                    model.module.weight.zero_()
+                    model.module.bias.fill_(1.0)
+
+            server.update_model(update)
+            after = client(TensorDict({"observation": observation.clone()}))
+            stats = server.stats()
+
+        assert before["policy_version"].item() == 0
+        assert after["policy_version"].item() == 1
+        assert stats["policy_version"] == 1
+        assert stats["weight_updates"] == 1
+        torch.testing.assert_close(after["action"], torch.ones(2))
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -774,6 +821,22 @@ class TestMPTransport:
             result = client(td)
             assert "action" in result.keys()
             assert result["action"].shape == (2,)
+
+    @pytest.mark.slow
+    def test_single_request_with_manager_queues(self):
+        """Manager-backed MPTransport works from the parent process."""
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx, use_manager=True)
+        client = transport.client()
+        policy = _make_policy()
+        try:
+            with InferenceServer(policy, transport, max_batch_size=4):
+                td = TensorDict({"observation": torch.randn(4)})
+                result = client(td)
+                assert "action" in result.keys()
+                assert result["action"].shape == (2,)
+        finally:
+            transport.close()
 
     @pytest.mark.slow
     def test_cross_process_actors(self):

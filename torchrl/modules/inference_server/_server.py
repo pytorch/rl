@@ -14,7 +14,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from multiprocessing.synchronize import Event as MPEvent
 from statistics import mean
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from tensordict import lazy_stack
@@ -32,7 +32,11 @@ from torchrl.modules.inference_server._config import (
     InferenceServerConfig,
 )
 from torchrl.modules.inference_server._transport import InferenceTransport
-from torchrl.weight_update import SharedMemWeightSyncScheme, WeightSyncScheme
+from torchrl.weight_update import (
+    SharedMemWeightSyncScheme,
+    WeightStrategy,
+    WeightSyncScheme,
+)
 
 _CODE_TO_INTERACTION_TYPE = {
     0: InteractionType.MODE,
@@ -41,6 +45,48 @@ _CODE_TO_INTERACTION_TYPE = {
     3: InteractionType.RANDOM,
     4: InteractionType.DETERMINISTIC,
 }
+
+
+def _normalize_tensordict_device_metadata(data: TensorDictBase) -> TensorDictBase:
+    target_device = data.device
+    if target_device is not None:
+        target_device = torch.device(target_device)
+    for value in data.values(include_nested=True, leaves_only=True):
+        value_device = getattr(value, "device", None)
+        if value_device is None:
+            continue
+        value_device = torch.device(value_device)
+        if target_device is None:
+            target_device = value_device
+        elif value_device != target_device:
+            return data
+
+    if target_device is None:
+        return data
+
+    needs_normalization = data.device != target_device
+    if not needs_normalization:
+        for value in data.values(include_nested=True, leaves_only=False):
+            if isinstance(value, TensorDictBase) and value.device != target_device:
+                needs_normalization = True
+                break
+    if not needs_normalization:
+        return data
+
+    data = data.copy()
+    data.clear_device_()
+    return data.to(target_device)
+
+
+def _default_collate(items: list[TensorDictBase]) -> TensorDictBase:
+    return lazy_stack(
+        [
+            _normalize_tensordict_device_metadata(item)
+            if isinstance(item, TensorDictBase)
+            else item
+            for item in items
+        ]
+    )
 
 
 class InferenceServer:
@@ -203,7 +249,7 @@ class InferenceServer:
         self.max_batch_size = max_batch_size
         self.min_batch_size = min_batch_size
         self.timeout = timeout
-        self.collate_fn = collate_fn if collate_fn is not None else lazy_stack
+        self.collate_fn = collate_fn if collate_fn is not None else _default_collate
         policy_device = device if policy_device is None else policy_device
         self.policy_device = (
             torch.device(policy_device) if policy_device is not None else None
@@ -334,6 +380,30 @@ class InferenceServer:
         """
         self._mark_weight_update()
 
+    def update_model(
+        self,
+        update_fn: Callable[[nn.Module], Any],
+        *,
+        mark_weight_update: bool = True,
+    ) -> Any:
+        """Apply an in-place update to the served model under the model lock.
+
+        Args:
+            update_fn (Callable): function called with ``self.model`` while
+                inference is blocked by the server's model lock.
+            mark_weight_update (bool, optional): if ``True``, increment the
+                behavior-policy version and weight-update counter after
+                ``update_fn`` succeeds. Defaults to ``True``.
+
+        Returns:
+            The value returned by ``update_fn``.
+        """
+        with self._model_lock:
+            result = update_fn(self.model)
+            if mark_weight_update:
+                self._mark_weight_update()
+        return result
+
     # -- lifecycle ------------------------------------------------------------
 
     def start(self) -> InferenceServer:
@@ -402,10 +472,10 @@ class InferenceServer:
             return
         with self._model_lock:
             weights = ws.receive(timeout=0.0)
-        if weights is not None and getattr(ws, "context", None) is not self:
-            # When the server is the scheme context, receive() already
-            # cascaded into update_policy_weights_; do not count twice.
-            self._mark_weight_update()
+            if weights is not None and getattr(ws, "context", None) is not self:
+                # When the server is the scheme context, receive() already
+                # cascaded into update_policy_weights_; do not count twice.
+                self._mark_weight_update()
 
     def _set_policy_version(self, result_batch: TensorDictBase) -> TensorDictBase:
         """Annotate inference outputs with the behavior policy version."""
@@ -611,6 +681,22 @@ def _process_server_entry(
                         "alive": server.is_alive,
                         "policy_version": server.policy_version,
                     }
+                elif verb == "update_model_weights":
+                    weights = payload_in["weights"]
+                    mark_weight_update = payload_in.get("mark_weight_update", True)
+                    with server._model_lock:
+                        if hasattr(server.model, "load_policy_weights"):
+                            server.model.load_policy_weights(weights)
+                        else:
+                            WeightStrategy(extract_as="tensordict").apply_weights(
+                                server.model,
+                                weights.to(server.policy_device)
+                                if server.policy_device is not None
+                                else weights,
+                            )
+                        if mark_weight_update:
+                            server._mark_weight_update()
+                    payload = {"accepted": True}
                 elif verb == "shutdown":
                     shutdown_event.set()
                     payload = {"accepted": True}
@@ -849,7 +935,7 @@ class ProcessInferenceServer:
 
     def _request_control(
         self,
-        verb: Literal["stats", "health", "shutdown"],
+        verb: Literal["stats", "health", "update_model_weights", "shutdown"],
         payload: dict | None = None,
         timeout: float = 5.0,
     ):
@@ -938,6 +1024,31 @@ class ProcessInferenceServer:
                 answer. Defaults to ``5.0``.
         """
         return self._request_control("stats", {"reset": reset}, timeout=timeout)
+
+    def update_model_weights(
+        self,
+        weights: TensorDictBase,
+        *,
+        mark_weight_update: bool = True,
+        timeout: float = 300.0,
+    ) -> dict[str, bool]:
+        """Apply TensorDict weights to the model hosted by the child process.
+
+        This is a blocking control-plane round trip; large models can take a
+        while to transfer and apply, hence the generous default timeout.
+
+        Args:
+            weights (TensorDictBase): weights to apply to the child's model.
+            mark_weight_update (bool, optional): whether to bump the child's
+                behavior-policy version. Defaults to ``True``.
+            timeout (float, optional): seconds to wait for the child to apply
+                the weights. Defaults to ``300.0``.
+        """
+        return self._request_control(
+            "update_model_weights",
+            {"weights": weights, "mark_weight_update": mark_weight_update},
+            timeout=timeout,
+        )
 
     def health(self, *, timeout: float = 5.0) -> dict[str, int | bool | None]:
         """Return a lightweight child-process health snapshot.

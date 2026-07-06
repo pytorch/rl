@@ -95,6 +95,10 @@ class ToyVLAEnv(EnvBase):
             advantages require (n rollouts per initial state, e.g. grouped by
             :class:`~torchrl.objectives.llm.MCAdvantage`). Defaults to
             ``None`` (a fresh target every episode, no ``group_id`` entry).
+        group_id_offset (int, optional): offset added to grouped rollout ids.
+            This lets several single ToyVLAEnv instances collect grouped
+            rollouts in parallel without mixing unrelated initial states in the
+            downstream group-advantage transform. Defaults to ``0``.
         batch_size (torch.Size, optional): number of vectorized copies.
             Defaults to ``torch.Size([])`` (a single environment).
         device (torch.device, optional): device of the specs.
@@ -150,6 +154,7 @@ class ToyVLAEnv(EnvBase):
         success_steps: int | None = None,
         success_tol: float = 0.25,
         group_repeats: int | None = None,
+        group_id_offset: int = 0,
         batch_size: torch.Size | None = None,
         device: torch.device | None = None,
         seed: int | None = None,
@@ -195,6 +200,7 @@ class ToyVLAEnv(EnvBase):
         self.success_steps = int(success_steps) if success_steps is not None else None
         self.success_tol = float(success_tol)
         self.group_repeats = int(group_repeats) if group_repeats is not None else None
+        self.group_id_offset = int(group_id_offset)
         if self.group_repeats is not None and self.batch_size.numel() > 1:
             raise ValueError(
                 "group_repeats only supports a single environment "
@@ -368,7 +374,8 @@ class ToyVLAEnv(EnvBase):
                 if self._episode_count % self.group_repeats == 0:
                     self._target = self._sample_target()
                 self._group_id = torch.full_like(
-                    self._group_id, self._episode_count // self.group_repeats
+                    self._group_id,
+                    self.group_id_offset + self._episode_count // self.group_repeats,
                 )
                 self._episode_count += 1
             else:
