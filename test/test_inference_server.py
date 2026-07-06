@@ -1254,7 +1254,7 @@ class TestAsyncBatchedCollector:
 
     def test_invalid_server_backend_raises(self):
         with pytest.raises(ValueError, match="backend"):
-            InferenceServerConfig(backend="proces")
+            InferenceServerConfig(backend="not-a-backend")
 
     def test_server_death_raises_instead_of_hanging(self):
         """Killing the server process surfaces an error in the iterator."""
