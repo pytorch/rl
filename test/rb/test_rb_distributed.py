@@ -26,6 +26,7 @@ from torchrl.data.replay_buffers.samplers import (
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3
@@ -145,6 +146,20 @@ def _sample_from_buffer(buffer, batch_size):
     )
 
 
+def _make_mcadvantage_traj(group_id, rewards):
+    n_steps = len(rewards)
+    return TensorDict(
+        {
+            "group_id": torch.full((n_steps,), group_id),
+            ("next", "reward"): torch.tensor(rewards).reshape(n_steps, 1),
+            ("next", "done"): torch.tensor([False] * (n_steps - 1) + [True]).reshape(
+                n_steps, 1
+            ),
+        },
+        batch_size=[n_steps],
+    )
+
+
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
 class TestRayRB:
     @pytest.fixture(autouse=True, scope="module")
@@ -219,6 +234,30 @@ class TestRayRB:
         try:
             remote_worker = ray.remote(Worker).remote(rb)
             ray.get(remote_worker.run.remote())
+        finally:
+            rb.close()
+
+    def test_ray_rb_mcadvantage_transform_factory(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 10),
+            transform_factory=partial(
+                MCAdvantage,
+                grpo_size=2,
+                prompt_key="group_id",
+                trajectory_return="sum",
+            ),
+            ray_init_config={"num_cpus": 1},
+            remote_config={"num_cpus": 0},
+            batch_size=2,
+        )
+        try:
+            rb.extend(_make_mcadvantage_traj(0, [0.0]))
+            assert len(rb) == 0
+            rb.extend(_make_mcadvantage_traj(0, [1.0]))
+            assert len(rb) == 2
+            sample = rb.sample()
+            assert sample.shape == (2,)
+            assert "advantage" in sample.keys()
         finally:
             rb.close()
 
