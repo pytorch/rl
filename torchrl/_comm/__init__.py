@@ -16,6 +16,7 @@ from torchrl._comm.mailbox import (
     MailboxFuture,
     MailboxPeerClosedError,
     MailboxTransportError,
+    watch_process_liveness,
 )
 from torchrl._comm.rendezvous import (
     MappingRendezvous,
@@ -42,4 +43,5 @@ __all__ = [
     "SharedBlock",
     "TCPStoreRendezvous",
     "normalize_service_backend",
+    "watch_process_liveness",
 ]

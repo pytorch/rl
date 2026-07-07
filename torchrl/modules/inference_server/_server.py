@@ -23,7 +23,7 @@ from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
-from torchrl._comm import CommandChannel, Mailbox
+from torchrl._comm import CommandChannel, Mailbox, watch_process_liveness
 from torchrl.modules.inference_server._client import (
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
@@ -864,7 +864,6 @@ class ProcessInferenceServer:
             output_device = device_config.server_output_device()
         self.policy_factory = policy_factory
         self.transport = transport
-        self._service_client = transport.client()
         self.startup_timeout = startup_timeout
         if isinstance(mp_context, str):
             self._ctx = mp.get_context(mp_context)
@@ -872,6 +871,20 @@ class ProcessInferenceServer:
             self._ctx = mp.get_context("spawn")
         else:
             self._ctx = mp_context
+        # Server-liveness flag consulted by blocking client waits. Reuse the
+        # transport's flag when it has one (MPTransport creates it eagerly so
+        # clients created before this server also see it); otherwise create
+        # one and attach it. A monitor thread clears it when the server
+        # process exits so blocked clients raise MailboxPeerClosedError
+        # instead of hanging forever.
+        peer_alive = getattr(transport, "_peer_alive", None)
+        if peer_alive is None:
+            peer_alive = self._ctx.Event()
+            peer_alive.set()
+            transport._set_peer_alive(peer_alive)
+        self._peer_alive = peer_alive
+        self._process_monitor: threading.Thread | None = None
+        self._service_client = transport.client()
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
         control_request_queue = self._ctx.Queue()
@@ -909,7 +922,16 @@ class ProcessInferenceServer:
         """Start the child process and wait until the policy is initialized."""
         if self.is_alive:
             raise RuntimeError("Server is already running.")
+        previous_monitor = self._process_monitor
+        if previous_monitor is not None:
+            previous_monitor.join(timeout=self.startup_timeout)
+            if previous_monitor.is_alive():
+                raise RuntimeError(
+                    "The previous ProcessInferenceServer monitor did not stop."
+                )
+            self._process_monitor = None
         self._shutdown_event.clear()
+        self._peer_alive.set()
         self._process = self._ctx.Process(
             target=_process_server_entry,
             kwargs={
@@ -925,6 +947,13 @@ class ProcessInferenceServer:
             name="ProcessInferenceServer",
         )
         self._process.start()
+        self._process_monitor = threading.Thread(
+            target=watch_process_liveness,
+            args=(self._process.sentinel, self._peer_alive),
+            daemon=True,
+            name="ProcessInferenceServerMonitor",
+        )
+        self._process_monitor.start()
         try:
             ok, payload = self._ready_queue.get(timeout=self.startup_timeout)
         except queue.Empty:
@@ -980,6 +1009,11 @@ class ProcessInferenceServer:
         if process.is_alive():
             process.terminate()
             process.join(timeout=timeout)
+        monitor = self._process_monitor
+        if monitor is not None:
+            monitor.join(timeout=timeout)
+            if not monitor.is_alive():
+                self._process_monitor = None
         self._process = None
 
     @property

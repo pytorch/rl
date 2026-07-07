@@ -13,6 +13,7 @@ from typing import Literal
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDictBase
 
+from torchrl._comm import MailboxTransportError
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
@@ -519,12 +520,13 @@ class AsyncBatchedCollector(BaseCollector):
         """Re-raise exceptions propagated from coordinator threads.
 
         Worker threads may observe a dying server before the liveness
-        watchdog does (their transport read errors out first); attribute the
-        failure to the server in that case so the caller gets a
+        watchdog does (their transport read errors out first, or the
+        ``is_alive`` flag briefly stays ``True`` after a kill); attribute the
+        failure to the server in both cases so the caller gets a
         deterministic error regardless of which path wins the race.
         """
         if isinstance(item, BaseException):
-            if not self._server.is_alive:
+            if isinstance(item, MailboxTransportError) or not self._server.is_alive:
                 raise RuntimeError(
                     "The inference server died while the collector was "
                     "waiting for transitions. Check the server process "

@@ -8,6 +8,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from multiprocessing.connection import wait as _wait_for_connection
 from typing import Any
 
 _MISSING = object()
@@ -20,6 +21,23 @@ class MailboxTransportError(RuntimeError):
 
 class MailboxPeerClosedError(MailboxTransportError):
     """Raised when a mailbox peer exits before replying to a request."""
+
+
+def watch_process_liveness(process_sentinel, alive_event) -> None:
+    """Clear ``alive_event`` when the process behind ``process_sentinel`` exits.
+
+    Run this in a daemon thread on the owner side of a process-backed service
+    so that mailbox clients created with ``peer_alive=alive_event`` stop
+    waiting (and raise :class:`MailboxPeerClosedError`) instead of blocking
+    forever when the service process dies without replying.
+    """
+    try:
+        _wait_for_connection([process_sentinel])
+    finally:
+        try:
+            alive_event.clear()
+        except Exception:
+            pass
 
 
 class MailboxFuture:

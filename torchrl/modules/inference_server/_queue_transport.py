@@ -46,6 +46,7 @@ class QueueBasedTransport(InferenceTransport):
 
     def __init__(self):
         self._mailbox: Mailbox | None = None
+        self._peer_alive = None
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
@@ -57,6 +58,12 @@ class QueueBasedTransport(InferenceTransport):
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
 
+    def _set_peer_alive(self, alive_event) -> None:
+        """Attach the server-liveness flag propagated to new clients."""
+        self._peer_alive = alive_event
+        if self._mailbox is not None:
+            self._mailbox.peer_alive = alive_event
+
     def _ensure_mailbox(self) -> Mailbox:
         mailbox = self._mailbox
         if mailbox is None:
@@ -64,6 +71,7 @@ class QueueBasedTransport(InferenceTransport):
                 self._request_queue,
                 self._make_response_queue,
                 response_queues=self._response_queues,
+                peer_alive=self._peer_alive,
             )
             self._mailbox = mailbox
         return mailbox

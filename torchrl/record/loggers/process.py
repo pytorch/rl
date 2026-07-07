@@ -7,11 +7,10 @@ from __future__ import annotations
 import multiprocessing as mp
 import queue
 import threading
-from multiprocessing.connection import wait as wait_for_connection
 
 from typing import Any, TYPE_CHECKING, TypeVar
 
-from torchrl._comm import Mailbox
+from torchrl._comm import Mailbox, watch_process_liveness
 from torchrl.record.loggers._service import (
     _flush_logger,
     _LoggerClient,
@@ -29,17 +28,6 @@ if TYPE_CHECKING:
 
 def _unused_response_queue():
     raise RuntimeError("The logger service cannot create caller response queues.")
-
-
-def _watch_logger_process(process_sentinel, alive_event) -> None:
-    """Clear the shared liveness flag when the logger process exits."""
-    try:
-        wait_for_connection([process_sentinel])
-    finally:
-        try:
-            alive_event.clear()
-        except Exception:
-            pass
 
 
 def _logger_process_entry(
@@ -253,7 +241,7 @@ class ProcessLogger(_ProcessLoggerClient):
         )
         self._process.start()
         self._process_monitor = threading.Thread(
-            target=_watch_logger_process,
+            target=watch_process_liveness,
             args=(self._process.sentinel, self._service_alive),
             daemon=True,
             name="ProcessLoggerMonitor",

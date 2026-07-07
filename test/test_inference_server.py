@@ -1453,6 +1453,31 @@ class TestProcessInferenceServer:
             server.start()
         assert not server.is_alive
 
+    def test_killed_server_unblocks_waiting_clients(self):
+        """A killed server process makes blocked clients raise promptly.
+
+        Clients created before the server object exist must also observe the
+        liveness flag (MPTransport bakes it into every client), otherwise an
+        untimed wait would block forever on a reply that never comes.
+        """
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            mp_context=ctx,
+        )
+        server.start()
+        try:
+            result = client(TensorDict({"observation": torch.ones(1)}))
+            assert "action" in result.keys()
+            server._process.kill()
+            with pytest.raises(MailboxPeerClosedError, match="peer closed"):
+                client(TensorDict({"observation": torch.ones(1)}))
+        finally:
+            server.shutdown(timeout=1.0)
+
     def test_control_plane_thread_safe(self):
         """Concurrent stats()/health() callers must not steal replies."""
         ctx = mp.get_context("spawn")
@@ -1732,12 +1757,18 @@ class TestAsyncBatchedCollector:
         try:
             iterator = iter(collector)
             next(iterator)
+            workers = list(collector._workers)
             collector._server._process.kill()
             with pytest.raises(RuntimeError, match="inference server died"):
                 # A couple of batches may still drain from already-queued
                 # transitions before the watchdog trips.
                 for _ in range(10):
                     next(iterator)
+            # Worker threads blocked on inference must observe the cleared
+            # liveness flag and exit instead of leaking into later tests.
+            for w in workers:
+                w.join(timeout=10.0)
+            assert not any(w.is_alive() for w in workers)
         finally:
             collector.shutdown(timeout=0.5)
 
