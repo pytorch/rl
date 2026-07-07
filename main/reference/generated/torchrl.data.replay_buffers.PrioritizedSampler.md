@@ -114,6 +114,19 @@ process of updating the priorities:
 tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
 ```
 
+*property*alpha
+
+The priority exponent.
+
+Note
+
+Changing `alpha` on a sampler that already holds priorities
+(e.g. when annealing it with a
+`ParameterScheduler`)
+does not re-transform the `(p + eps) ** alpha` values already
+written to the sum/min trees: old and new exponents mix until every
+entry's priority is updated again.
+
 update_priority(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *priority: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *storage: [TensorStorage](torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#PrioritizedSampler.update_priority)
 
 Updates the priority of the data pointed by the index.
