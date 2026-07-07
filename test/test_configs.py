@@ -1414,14 +1414,19 @@ class TestLossConfigs:
         cfg = A2CLossConfig(
             actor_network=actor_network,
             critic_network=critic_network,
+            gamma=0.98,
+            advantage_key=["custom", "advantage"],
         )
         assert (
             cfg._target_
             == "torchrl.trainers.algorithms.configs.objectives._make_a2c_loss"
         )
 
+        # gamma and advantage_key must be routed through make_value_estimator /
+        # set_keys, not the constructor (which rejects them)
         loss = instantiate(cfg)
         assert isinstance(loss, A2CLoss)
+        assert loss.tensor_keys.advantage == ("custom", "advantage")
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_reinforce_loss_config(self):
@@ -1447,14 +1452,19 @@ class TestLossConfigs:
         cfg = ReinforceLossConfig(
             actor_network=actor_network,
             critic_network=critic_network,
+            gamma=0.98,
+            advantage_key=["custom", "advantage"],
         )
         assert (
             cfg._target_
             == "torchrl.trainers.algorithms.configs.objectives._make_reinforce_loss"
         )
 
+        # gamma and advantage_key must be routed through make_value_estimator /
+        # set_keys, not the constructor (which rejects them)
         loss = instantiate(cfg)
         assert isinstance(loss, ReinforceLoss)
+        assert loss.tensor_keys.advantage == ("custom", "advantage")
 
 
 @pytest.mark.skipif(
@@ -2440,8 +2450,6 @@ trainer:
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_a2c_trainer_parsing_with_file(self, tmpdir):
         """Test A2C trainer parsing with file config."""
-        import os
-
         os.makedirs(tmpdir / "save", exist_ok=True)
 
         yaml_config = f"""
@@ -2548,8 +2556,6 @@ trainer:
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_reinforce_trainer_parsing_with_file(self, tmpdir):
         """Test REINFORCE trainer parsing with file config."""
-        import os
-
         os.makedirs(tmpdir / "save", exist_ok=True)
 
         yaml_config = f"""

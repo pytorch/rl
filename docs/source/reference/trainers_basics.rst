@@ -24,6 +24,7 @@ Algorithm-specific trainers
     :toctree: generated/
     :template: rl_template.rst
 
+    OnPolicyTrainer
     A2CTrainer
     PPOTrainer
     ReinforceTrainer

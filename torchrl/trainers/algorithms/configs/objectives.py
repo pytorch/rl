@@ -198,7 +198,13 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
 
 @dataclass
 class A2CLossConfig(LossConfig):
-    """A class to configure an A2C loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.A2CLoss`.
+
+    Every kwarg accepted by ``A2CLoss.__init__`` is exposed as a field here.
+    ``gamma``, ``advantage_key`` and ``value_target_key`` are handled by the
+    factory (via ``make_value_estimator`` and ``set_keys``) rather than being
+    forwarded to the constructor, which rejects them.
+    """
 
     actor_network: Any = None
     critic_network: Any = None
@@ -209,8 +215,8 @@ class A2CLossConfig(LossConfig):
     loss_critic_type: str = "smooth_l1"
     gamma: float | None = None
     separate_losses: bool = False
-    advantage_key: str | None = None
-    value_target_key: str | None = None
+    advantage_key: Any = None
+    value_target_key: Any = None
     functional: bool = True
     actor: Any = None
     critic: Any = None
@@ -223,7 +229,13 @@ class A2CLossConfig(LossConfig):
         super().__post_init__()
 
 
-def _make_a2c_loss(*args, **kwargs) -> A2CLoss:
+def _make_onpolicy_loss(loss_cls, *args, **kwargs):
+    # gamma / advantage_key / value_target_key are rejected by the loss
+    # constructors: route them through make_value_estimator / set_keys instead.
+    gamma = kwargs.pop("gamma", None)
+    advantage_key = _normalize_hydra_key(kwargs.pop("advantage_key", None))
+    value_target_key = _normalize_hydra_key(kwargs.pop("value_target_key", None))
+
     actor_network = kwargs.get("actor_network")
     critic_network = kwargs.get("critic_network")
 
@@ -232,20 +244,40 @@ def _make_a2c_loss(*args, **kwargs) -> A2CLoss:
     if critic_network is not None and hasattr(critic_network, "_target_"):
         kwargs["critic_network"] = critic_network()
 
-    return A2CLoss(*args, **kwargs)
+    loss = loss_cls(*args, **kwargs)
+    if gamma is not None:
+        loss.make_value_estimator(gamma=gamma)
+    keys = {}
+    if advantage_key is not None:
+        keys["advantage"] = advantage_key
+    if value_target_key is not None:
+        keys["value_target"] = value_target_key
+    if keys:
+        loss.set_keys(**keys)
+    return loss
+
+
+def _make_a2c_loss(*args, **kwargs) -> A2CLoss:
+    return _make_onpolicy_loss(A2CLoss, *args, **kwargs)
 
 
 @dataclass
 class ReinforceLossConfig(LossConfig):
-    """A class to configure a REINFORCE loss."""
+    """Hydra configuration for :class:`~torchrl.objectives.ReinforceLoss`.
+
+    Every kwarg accepted by ``ReinforceLoss.__init__`` is exposed as a field
+    here. ``gamma``, ``advantage_key`` and ``value_target_key`` are handled by
+    the factory (via ``make_value_estimator`` and ``set_keys``) rather than
+    being forwarded to the constructor, which rejects them.
+    """
 
     actor_network: Any = None
     critic_network: Any = None
     delay_value: bool = False
     loss_critic_type: str = "smooth_l1"
     gamma: float | None = None
-    advantage_key: str | None = None
-    value_target_key: str | None = None
+    advantage_key: Any = None
+    value_target_key: Any = None
     separate_losses: bool = False
     functional: bool = True
     actor: Any = None
@@ -262,15 +294,7 @@ class ReinforceLossConfig(LossConfig):
 
 
 def _make_reinforce_loss(*args, **kwargs) -> ReinforceLoss:
-    actor_network = kwargs.get("actor_network")
-    critic_network = kwargs.get("critic_network")
-
-    if actor_network is not None and hasattr(actor_network, "_target_"):
-        kwargs["actor_network"] = actor_network()
-    if critic_network is not None and hasattr(critic_network, "_target_"):
-        kwargs["critic_network"] = critic_network()
-
-    return ReinforceLoss(*args, **kwargs)
+    return _make_onpolicy_loss(ReinforceLoss, *args, **kwargs)
 
 
 @dataclass

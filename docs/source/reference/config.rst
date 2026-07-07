@@ -480,6 +480,7 @@ Training and Optimization Configurations
     :template: rl_template_class.rst
 
     TrainerConfig
+    OnPolicyTrainerConfig
     A2CTrainerConfig
     PPOTrainerConfig
     ReinforceTrainerConfig

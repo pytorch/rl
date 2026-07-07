@@ -11,6 +11,7 @@ from .ddpg import DDPGTrainer
 from .dqn import DQNTrainer
 from .iql import IQLTrainer
 from .offline_to_online import OfflineToOnlineTrainer
+from .on_policy import OnPolicyTrainer
 from .ppo import PPOTrainer
 from .reinforce import ReinforceTrainer
 from .sac import SACTrainer
@@ -23,6 +24,7 @@ __all__ = [
     "DQNTrainer",
     "IQLTrainer",
     "OfflineToOnlineTrainer",
+    "OnPolicyTrainer",
     "PPOTrainer",
     "ReinforceTrainer",
     "SACTrainer",
