@@ -77,6 +77,16 @@ class _ProcessTestLogger:
         return "_ProcessTestLogger()"
 
 
+class _SlowRestartProcessTestLogger(_ProcessTestLogger):
+    def __init__(self, log_dir):
+        restart_marker = pathlib.Path(log_dir) / "restart-marker"
+        if restart_marker.exists():
+            sleep(0.3)
+        else:
+            restart_marker.touch()
+        super().__init__(log_dir)
+
+
 def _log_process_scalars(client, name, count):
     for step in range(count):
         client.log_scalar(name, step, step=step)
@@ -1013,6 +1023,27 @@ class TestProcessLogger:
                 logger.flush()
         finally:
             logger.shutdown(timeout=2)
+
+    def test_restart_waits_for_readiness_and_replaces_the_monitor(self, tmp_path):
+        logger = ProcessLogger(_SlowRestartProcessTestLogger, tmp_path)
+        process = logger._process
+        previous_monitor = logger._process_monitor
+        process.terminate()
+        process.join(timeout=10)
+        try:
+            logger.start()
+            assert not previous_monitor.is_alive()
+            assert logger.is_alive
+            assert logger._service_alive.is_set()
+            logger.log_scalar("after-restart", 1.0, step=1)
+
+            construction_lines = (tmp_path / "constructed").read_text().splitlines()
+            assert construction_lines == ["1", "1"]
+            assert (tmp_path / "events").read_text().splitlines() == [
+                "after-restart:1.0:1"
+            ]
+        finally:
+            logger.shutdown(timeout=20)
 
     def test_shutdown_preserves_the_first_error(self, tmp_path, monkeypatch):
         logger = ProcessLogger(_ProcessTestLogger, tmp_path)

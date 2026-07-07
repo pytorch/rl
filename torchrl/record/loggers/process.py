@@ -201,22 +201,11 @@ class ProcessLogger(_ProcessLoggerClient):
         self._process_monitor: threading.Thread | None = None
         self._closed = False
         self.start()
-        try:
-            ok, payload = self._ready_queue.get(timeout=startup_timeout)
-        except queue.Empty:
-            self.shutdown(timeout=1.0)
-            raise TimeoutError(
-                f"ProcessLogger did not start within {startup_timeout} seconds."
-            ) from None
-        if not ok:
-            self.shutdown(timeout=1.0)
-            raise RuntimeError(f"ProcessLogger failed to start: {payload}")
-        self._metadata = payload
         owner_client = self._make_client()
         super().__init__(
             owner_client._mailbox_client,
-            exp_name=payload["exp_name"],
-            log_dir=payload["log_dir"],
+            exp_name=self._metadata["exp_name"],
+            log_dir=self._metadata["log_dir"],
         )
 
     def _make_client(self) -> _ProcessLoggerClient:
@@ -233,6 +222,21 @@ class ProcessLogger(_ProcessLoggerClient):
             raise RuntimeError("A closed ProcessLogger cannot be restarted.")
         if self.is_alive:
             return self
+
+        previous_process = self._process
+        previous_monitor = self._process_monitor
+        if previous_process is not None:
+            previous_process.join(timeout=self._startup_timeout)
+            if previous_monitor is not None:
+                previous_monitor.join(timeout=self._startup_timeout)
+                if previous_monitor.is_alive():
+                    raise RuntimeError(
+                        "The previous ProcessLogger monitor did not stop."
+                    )
+            previous_process.close()
+            self._process = None
+            self._process_monitor = None
+
         self._service_alive.clear()
         self._process = self._ctx.Process(
             target=_logger_process_entry,
@@ -255,7 +259,37 @@ class ProcessLogger(_ProcessLoggerClient):
             name="ProcessLoggerMonitor",
         )
         self._process_monitor.start()
+
+        try:
+            ok, payload = self._ready_queue.get(timeout=self._startup_timeout)
+        except queue.Empty:
+            self._abort_start()
+            raise TimeoutError(
+                f"ProcessLogger did not start within {self._startup_timeout} seconds."
+            ) from None
+        if not ok:
+            self._abort_start()
+            raise RuntimeError(f"ProcessLogger failed to start: {payload}")
+
+        self._metadata = payload
+        if hasattr(self, "_exp_name"):
+            self._exp_name = payload["exp_name"]
+            self._log_dir = payload["log_dir"]
         return self
+
+    def _abort_start(self) -> None:
+        process = self._process
+        if process is not None:
+            try:
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=1.0)
+            except Exception:
+                pass
+        try:
+            self.shutdown(timeout=1.0)
+        except Exception:
+            pass
 
     @property
     def is_alive(self) -> bool:

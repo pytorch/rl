@@ -132,10 +132,24 @@ class MailboxClient:
                             "Failed to query the mailbox peer's liveness."
                         ) from err
                     if not peer_is_alive:
-                        raise MailboxPeerClosedError(
-                            f"Mailbox peer closed before replying to request "
-                            f"{request_id}."
-                        ) from None
+                        while True:
+                            try:
+                                response_id, result = self._response_queue.get(
+                                    block=False
+                                )
+                            except queue.Empty:
+                                raise MailboxPeerClosedError(
+                                    "Mailbox peer closed before replying to "
+                                    f"request {request_id}."
+                                ) from None
+                            except Exception as err:
+                                raise MailboxTransportError(
+                                    "Mailbox transport failed while draining the "
+                                    f"final reply for request {request_id}."
+                                ) from err
+                            if response_id == request_id:
+                                return result
+                            self._buffered[response_id] = result
                 if remaining is not None and remaining <= 0:
                     raise queue.Empty(
                         f"Timeout waiting for result of request {request_id}."

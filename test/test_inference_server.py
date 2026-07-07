@@ -158,6 +158,33 @@ def test_mailbox_peer_exit_and_transport_errors_are_distinct_from_timeouts():
     assert isinstance(exc_info.value.__cause__, EOFError)
 
 
+def test_mailbox_reads_a_final_reply_before_reporting_peer_exit():
+    peer_alive = threading.Event()
+    peer_alive.set()
+
+    class _ReplyBeforeExitQueue:
+        def __init__(self):
+            self.item = None
+
+        def get(self, block=True, timeout=None):
+            del timeout
+            if block:
+                self.item = (0, "final reply")
+                peer_alive.clear()
+                raise queue.Empty
+            if self.item is None:
+                raise queue.Empty
+            item = self.item
+            self.item = None
+            return item
+
+    response_queue = _ReplyBeforeExitQueue()
+    mailbox = Mailbox(queue.Queue(), lambda: response_queue, peer_alive=peer_alive)
+    pending = mailbox.client().submit("pending")
+
+    assert pending.result() == "final reply"
+
+
 def test_mailbox_drops_stale_callbacks_without_disrupting_valid_clients():
     mailbox = Mailbox(queue.Queue(), queue.Queue)
     assert not mailbox.resolve((123, 0), "stale")

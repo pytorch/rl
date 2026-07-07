@@ -1,9 +1,9 @@
 .. currentmodule:: torchrl.services
 
+.. _ref_services_workflow:
+
 Combining TorchRL Services
 ==========================
-
-.. _ref_services_workflow:
 
 Training applications commonly need several independently deployed services:
 actors request policy inference, write transitions to a replay buffer, and
