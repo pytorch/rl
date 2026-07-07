@@ -51,6 +51,96 @@ def as_remote(cls, remote_config=None):
 ReplayBuffer.as_remote = as_remote
 
 
+class _RayReplayBufferClient:
+    """Picklable Ray replay-buffer client without lifecycle capabilities."""
+
+    def __init__(self, actor, *, has_gpu: bool) -> None:
+        self._actor = actor
+        self.has_gpu = has_gpu
+
+    @property
+    def _replay_lock(self):
+        return contextlib.nullcontext()
+
+    @property
+    def batch_size(self):
+        return ray.get(self._actor._getattr.remote("_batch_size"))
+
+    @property
+    def write_count(self):
+        return ray.get(self._actor._getattr.remote("write_count"))
+
+    @property
+    def dim_extend(self):
+        return ray.get(self._actor._getattr.remote("dim_extend"))
+
+    @dim_extend.setter
+    def dim_extend(self, value):
+        ray.get(self._actor._setattr.remote("dim_extend", value))
+
+    def sample(self, *args, **kwargs):
+        return ray.get(self._actor.sample.remote(*args, **kwargs))
+
+    def extend(self, *args, **kwargs):
+        if not self.has_gpu:
+            args = tuple(_to_cpu(arg) for arg in args)
+            kwargs = {key: _to_cpu(value) for key, value in kwargs.items()}
+        return ray.get(self._actor.extend.remote(*args, **kwargs))
+
+    def add(self, *args, **kwargs):
+        if not self.has_gpu:
+            args = tuple(_to_cpu(arg) for arg in args)
+            kwargs = {key: _to_cpu(value) for key, value in kwargs.items()}
+        return ray.get(self._actor.add.remote(*args, **kwargs))
+
+    def update_priority(self, *args, **kwargs):
+        if not self.has_gpu:
+            args = tuple(_to_cpu(arg) for arg in args)
+            kwargs = {key: _to_cpu(value) for key, value in kwargs.items()}
+        return ray.get(self._actor.update_priority.remote(*args, **kwargs))
+
+    def __len__(self):
+        return ray.get(self._actor.__len__.remote())
+
+    def __getitem__(self, index):
+        if not self.has_gpu:
+            index = _to_cpu(index)
+        return ray.get(self._actor.__getitem__.remote(index))
+
+    def __setitem__(self, index, value) -> None:
+        if not self.has_gpu:
+            index = _to_cpu(index)
+            value = _to_cpu(value)
+        ray.get(self._actor.__setitem__.remote(index, value))
+
+    def next(self):
+        return ray.get(self._actor.next.remote())
+
+    def __iter__(self) -> Iterator[Any]:
+        while True:
+            data = self.next()
+            if data is None:
+                return
+            yield data
+
+    def __getattr__(self, name: str):
+        if name.startswith("_") or name in {"client", "close", "shutdown", "start"}:
+            raise AttributeError(
+                f"{type(self).__name__} has no lifecycle capability {name!r}."
+            )
+
+        def remote_call(*args, **kwargs):
+            return ray.get(getattr(self._actor, name).remote(*args, **kwargs))
+
+        return remote_call
+
+
+def _to_cpu(value: Any) -> Any:
+    if hasattr(value, "to"):
+        return value.to("cpu")
+    return value
+
+
 class RayReplayBuffer(ReplayBuffer):
     """A Ray implementation of the Replay Buffer that can be extended and sampled remotely.
 
@@ -124,7 +214,7 @@ class RayReplayBuffer(ReplayBuffer):
     def __init__(
         self,
         *args,
-        replay_buffer_cls: type[ReplayBuffer] | None = ReplayBuffer,
+        replay_buffer_cls: type[ReplayBuffer] = ReplayBuffer,
         ray_init_config: dict[str, Any] | None = None,
         remote_config: dict[str, Any] | None = None,
         delayed_init: bool = False,
@@ -141,6 +231,7 @@ class RayReplayBuffer(ReplayBuffer):
                 ray_init_config = DEFAULT_RAY_INIT_CONFIG
             ray.init(**ray_init_config)
 
+        self._service_cls = replay_buffer_cls
         remote_cls = replay_buffer_cls.as_remote(remote_config).remote
         # We can detect if the buffer has a GPU allocated, if not
         #  we'll make sure that the data is sent to CPU when needed.
@@ -150,13 +241,41 @@ class RayReplayBuffer(ReplayBuffer):
             self.has_gpu = False
         self._rb = remote_cls(*args, delayed_init=delayed_init, **kwargs)
         self._delayed_init = False
+        self._client = _RayReplayBufferClient(self._rb, has_gpu=self.has_gpu)
 
-    def close(self):
+    def start(self) -> RayReplayBuffer:
+        """Return this already-started Ray replay-buffer owner."""
+        if not self.is_alive:
+            raise RuntimeError("A closed RayReplayBuffer cannot be restarted.")
+        return self
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether the owned Ray replay-buffer actor is available."""
+        return hasattr(self, "_rb")
+
+    @property
+    def service_backend(self) -> str:
+        """The canonical deployment backend for this replay buffer."""
+        return "ray"
+
+    def client(self) -> _RayReplayBufferClient:
+        """Return a picklable client without actor shutdown rights."""
+        if not self.is_alive:
+            raise RuntimeError("RayReplayBuffer is closed.")
+        return _RayReplayBufferClient(self._rb, has_gpu=self.has_gpu)
+
+    def shutdown(self, timeout: float | None = None) -> None:
+        """Terminate the owned Ray actor."""
+        del timeout
+        self.close()
+
+    def close(self) -> None:
         """Terminates the Ray actor associated with this replay buffer."""
         if hasattr(self, "_rb"):
             try:
                 torchrl_logger.info("Killing Ray actor.")
-                ray.kill(self._rb)  # Forcefully terminate the actor
+                ray.kill(self._rb, no_restart=True)  # Forcefully terminate the actor
                 torchrl_logger.info("Ray actor killed.")
             except (ValueError, RuntimeError) as e:
                 # Actor may already be dead if ray.shutdown() was called
@@ -176,25 +295,19 @@ class RayReplayBuffer(ReplayBuffer):
 
     @property
     def batch_size(self):
-        return ray.get(self._rb._getattr.remote("_batch_size"))
+        return self._client.batch_size
 
     def sample(self, *args, **kwargs):
-        pending_task = self._rb.sample.remote(*args, **kwargs)
-        return ray.get(pending_task)
+        return self._client.sample(*args, **kwargs)
 
     def extend(self, *args, **kwargs):
-        if not self.has_gpu:
-            # Move the data to GPU
-            args = [arg.to("cpu") for arg in args if hasattr(arg, "to")]
-            kwargs = {k: v.to("cpu") for k, v in kwargs.items() if hasattr(v, "to")}
-        pending_task = self._rb.extend.remote(*args, **kwargs)
-        return ray.get(pending_task)
+        return self._client.extend(*args, **kwargs)
 
     def add(self, *args, **kwargs):
-        return ray.get(self._rb.add.remote(*args, **kwargs))
+        return self._client.add(*args, **kwargs)
 
     def update_priority(self, *args, **kwargs):
-        return ray.get(self._rb.update_priority.remote(*args, **kwargs))
+        return self._client.update_priority(*args, **kwargs)
 
     def append_transform(self, *args, **kwargs):
         return ray.get(self._rb.append_transform.remote(*args, **kwargs))
@@ -215,10 +328,10 @@ class RayReplayBuffer(ReplayBuffer):
         return ray.get(self._rb.empty.remote(empty_write_count=empty_write_count))
 
     def __getitem__(self, index):
-        return ray.get(self._rb.__getitem__.remote(index))
+        return self._client[index]
 
     def next(self):
-        return ray.get(self._rb.next.remote())
+        return self._client.next()
 
     def __iter__(self) -> Iterator[Any]:
         """Returns an iterator that yields None as the collector writes directly to the replay buffer."""
@@ -271,22 +384,22 @@ class RayReplayBuffer(ReplayBuffer):
         return ray.get(self._rb.state_dict.remote())
 
     def __len__(self):
-        return ray.get(self._rb.__len__.remote())
+        return len(self._client)
 
     @property
     def write_count(self):
-        return ray.get(self._rb._getattr.remote("write_count"))
+        return self._client.write_count
 
     @property
     def dim_extend(self):
-        return ray.get(self._rb._getattr.remote("dim_extend"))
+        return self._client.dim_extend
 
     @dim_extend.setter
     def dim_extend(self, value):
-        return ray.get(self._rb._setattr.remote("dim_extend", value))
+        self._client.dim_extend = value
 
     def __setitem__(self, index, value) -> None:
-        return ray.get(self._rb.__setitem__.remote(index, value))
+        self._client[index] = value
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return ray.get(self._rb.load_state_dict.remote(state_dict))

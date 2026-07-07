@@ -7,14 +7,17 @@ from __future__ import annotations
 
 import importlib.util
 import io
+from collections.abc import Sequence
 from typing import Literal
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
 from torchrl._utils import implement_for
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+_has_tensorflow = importlib.util.find_spec("tensorflow") is not None
 _has_torchvision = importlib.util.find_spec("torchvision") is not None
 
 __all__ = ["OpenVLAImagePreprocessor"]
@@ -54,20 +57,24 @@ def _torchvision_jpeg_roundtrip(  # noqa: F811
 class OpenVLAImagePreprocessor:
     """OpenVLA-style image resize, JPEG round-trip and optional center crop.
 
-    The operation order mirrors the OpenVLA-OFT evaluation path: resize to a
-    square image, JPEG encode/decode at the requested quality, optionally apply
-    a 0.9-area center crop, and resize back. The default ``"torchvision"``
-    backend keeps data as tensors and uses ``torchvision.io`` JPEG codecs;
-    ``"pil"`` is the reference/debugging backend.
+    The ``"tensorflow"`` backend mirrors the OpenVLA-OFT evaluation path:
+    JPEG encode/decode at the requested quality, resize with Lanczos3,
+    optionally apply a 0.9-area center crop, and resize back. The default
+    ``"torchvision"`` backend keeps data as tensors and uses
+    ``torchvision.io`` JPEG codecs; ``"pil"`` is a lightweight debugging
+    backend.
 
     Args:
         size (int): Square output size. Defaults to ``224``.
         jpeg_quality (int): JPEG quality. Defaults to ``95``.
         center_crop (bool): Whether to apply the OpenVLA 0.9-area center crop.
             Defaults to ``False``.
-        backend (str): ``"torchvision"`` or ``"pil"``. Defaults to
-            ``"torchvision"``.
+        backend (str): ``"torchvision"``, ``"pil"`` or ``"tensorflow"``.
+            Defaults to ``"torchvision"``.
         mean (torch.Tensor | sequence, optional): Per-channel normalization mean.
+            A two-dimensional sequence applies multiple normalizations to the
+            same image and concatenates the results along the channel axis,
+            as required by fused OpenVLA vision backbones.
         std (torch.Tensor | sequence, optional): Per-channel normalization std.
 
     .. note::
@@ -90,9 +97,9 @@ class OpenVLAImagePreprocessor:
         size: int = 224,
         jpeg_quality: int = 95,
         center_crop: bool = False,
-        backend: Literal["torchvision", "pil"] = "torchvision",
-        mean: torch.Tensor | list[float] | tuple[float, ...] | None = None,
-        std: torch.Tensor | list[float] | tuple[float, ...] | None = None,
+        backend: Literal["torchvision", "pil", "tensorflow"] = "torchvision",
+        mean: torch.Tensor | Sequence[float] | Sequence[Sequence[float]] | None = None,
+        std: torch.Tensor | Sequence[float] | Sequence[Sequence[float]] | None = None,
     ) -> None:
         if size < 1:
             raise ValueError(f"size must be >= 1, got {size}.")
@@ -100,9 +107,10 @@ class OpenVLAImagePreprocessor:
             raise ValueError(
                 f"jpeg_quality must be between 1 and 100, got {jpeg_quality}."
             )
-        if backend not in ("torchvision", "pil"):
+        if backend not in ("torchvision", "pil", "tensorflow"):
             raise ValueError(
-                f"backend must be 'torchvision' or 'pil', got {backend!r}."
+                "backend must be 'torchvision', 'pil' or 'tensorflow', "
+                f"got {backend!r}."
             )
         if backend == "torchvision" and not _has_torchvision:
             raise ImportError(
@@ -111,6 +119,10 @@ class OpenVLAImagePreprocessor:
             )
         if backend == "pil" and not _has_pil:
             raise ImportError("OpenVLAImagePreprocessor backend='pil' requires Pillow.")
+        if backend == "tensorflow" and not _has_tensorflow:
+            raise ImportError(
+                "OpenVLAImagePreprocessor backend='tensorflow' requires TensorFlow."
+            )
         if (mean is None) != (std is None):
             raise ValueError("mean and std must be provided together.")
         self.size = int(size)
@@ -119,6 +131,17 @@ class OpenVLAImagePreprocessor:
         self.backend = backend
         self.mean = None if mean is None else torch.as_tensor(mean, dtype=torch.float32)
         self.std = None if std is None else torch.as_tensor(std, dtype=torch.float32)
+        if self.mean is not None:
+            if self.mean.shape != self.std.shape:
+                raise ValueError(
+                    "mean and std must have matching shapes, got "
+                    f"{tuple(self.mean.shape)} and {tuple(self.std.shape)}."
+                )
+            if self.mean.ndim not in (1, 2) or self.mean.shape[-1] != 3:
+                raise ValueError(
+                    "mean and std must have shape [3] or [N, 3], got "
+                    f"{tuple(self.mean.shape)}."
+                )
 
     def __call__(self, images: torch.Tensor) -> torch.Tensor:
         """Preprocess one image ``[C, H, W]`` or a batch ``[..., C, H, W]``."""
@@ -136,19 +159,27 @@ class OpenVLAImagePreprocessor:
         flat = self._to_uint8(flat)
         if self.backend == "torchvision":
             processed = self._torchvision(flat)
+        elif self.backend == "tensorflow":
+            processed = self._tensorflow(flat)
         else:
             processed = self._pil(flat)
         processed = processed.reshape(*original_shape, *processed.shape[-3:])
         if self.mean is not None:
             processed = processed.to(torch.float32).div_(255.0)
+            means = self.mean.reshape(-1, self.mean.shape[-1]).to(
+                device=processed.device, dtype=processed.dtype
+            )
+            stds = self.std.reshape(-1, self.std.shape[-1]).to(
+                device=processed.device, dtype=processed.dtype
+            )
             view_shape = *((1,) * (processed.ndim - 3)), -1, 1, 1
-            mean = self.mean.to(device=processed.device, dtype=processed.dtype).view(
-                view_shape
+            processed = torch.cat(
+                [
+                    processed.sub(mean.view(view_shape)).div(std.view(view_shape))
+                    for mean, std in zip(means, stds, strict=True)
+                ],
+                dim=-3,
             )
-            std = self.std.to(device=processed.device, dtype=processed.dtype).view(
-                view_shape
-            )
-            processed = processed.sub_(mean).div_(std)
         return processed
 
     @staticmethod
@@ -195,8 +226,57 @@ class OpenVLAImagePreprocessor:
         decoded = self._resize(decoded)
         return decoded
 
+    def _tensorflow(self, images: torch.Tensor) -> torch.Tensor:
+        import tensorflow as tf
+
+        out = []
+        resize_size = (self.size, self.size)
+        for image in images.cpu():
+            array = image.permute(1, 2, 0).numpy().astype("uint8")
+            if array.shape[-1] == 1:
+                array = np.repeat(array, 3, axis=-1)
+            tf_image = tf.convert_to_tensor(array)
+            tf_image = tf.image.encode_jpeg(tf_image, quality=self.jpeg_quality)
+            tf_image = tf.io.decode_image(
+                tf_image, expand_animations=False, dtype=tf.uint8
+            )
+            tf_image = tf.image.resize(
+                tf_image, resize_size, method="lanczos3", antialias=True
+            )
+            tf_image = tf.cast(tf.clip_by_value(tf.round(tf_image), 0, 255), tf.uint8)
+            if self.center_crop:
+                expanded = tf.expand_dims(
+                    tf.image.convert_image_dtype(tf_image, tf.float32), axis=0
+                )
+                crop_size = tf.reshape(
+                    tf.clip_by_value(tf.sqrt(tf.constant(_CROP_AREA_SCALE)), 0, 1),
+                    shape=(1,),
+                )
+                offsets = (1 - crop_size) / 2
+                boxes = tf.stack(
+                    [
+                        offsets,
+                        offsets,
+                        offsets + crop_size,
+                        offsets + crop_size,
+                    ],
+                    axis=1,
+                )
+                tf_image = tf.image.crop_and_resize(
+                    expanded, boxes, tf.range(1), resize_size
+                )[0]
+                tf_image = tf.clip_by_value(tf_image, 0, 1)
+                tf_image = tf.image.convert_image_dtype(
+                    tf_image, tf.uint8, saturate=True
+                )
+            out.append(
+                torch.from_numpy(
+                    np.asarray(tf_image.numpy(), dtype="uint8").copy()
+                ).permute(2, 0, 1)
+            )
+        return torch.stack(out, 0).to(images.device)
+
     def _pil(self, images: torch.Tensor) -> torch.Tensor:
-        import numpy as np
         from PIL import Image
 
         out = []
