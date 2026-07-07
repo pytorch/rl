@@ -1170,9 +1170,7 @@ class TestSamplers:
             rb.update_priority(idx, 21 - data)
             if data <= 10 or not max_priority_within_buffer:
                 # The max is (or remains, historically) the first value
-                assert float(rb.sampler._max_priority[0]) == pytest.approx(
-                    21, rel=1e-4
-                )
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
                 assert rb.sampler._max_priority[1] == 0
             else:
                 # the max is the current max: the oldest item still in the buffer
