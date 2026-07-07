@@ -870,6 +870,18 @@ class TestSharedStorageInit:
         assert expected.issubset(values)
         assert len(storage) >= 8
 
+    def test_shared_init_reconciles_non_cpu_device(self):
+        """Shared init installs a CPU memmap backing; a non-cpu storage device
+        must be reconciled (else samplers build indices on the wrong device)."""
+        storage = LazyTensorStorage(max_size=8, device="meta", shared_init=True)
+        rb = ReplayBuffer(storage=storage, batch_size=2)
+        data = TensorDict({"x": torch.arange(4, dtype=torch.float32)}, batch_size=(4,))
+        with pytest.warns(UserWarning, match="cannot be honored"):
+            rb.extend(data)
+        assert torch.device(storage.device).type == "cpu"
+        sample = rb.sample(2)
+        assert sample["x"].device.type == "cpu"
+
     def prioritized_collector_worker(self, rb, worker_id, queue):
         data = TensorDict(
             {

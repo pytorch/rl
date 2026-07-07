@@ -9,17 +9,30 @@ from typing import Any
 
 import torch
 from tensordict import TensorDictBase
+from torchrl._comm import TCPStoreRendezvous
 from torchrl._utils import logger as torchrl_logger
 
 from torchrl.weight_update.utils import _resolve_model
 
 from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
     TransportBackend,
     WeightStrategy,
     WeightSyncScheme,
 )
 
 
+def _encode_stateless_model(value: bool) -> bytes:
+    return b"1" if value else b"0"
+
+
+def _decode_stateless_model(value: bytes) -> bool:
+    if value not in (b"0", b"1"):
+        raise RuntimeError(f"Invalid STATELESS_MODEL value: {value}")
+    return value == b"1"
+
+
+@register_weight_sync_backend("distributed")
 class DistributedWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization for torch.distributed.
 
@@ -464,10 +477,18 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
 
         # Check if we have weights to send
         if weights is None and getattr(self, "model", None) is None:
-            self._store.set("STATELESS_MODEL", b"1")
+            TCPStoreRendezvous(
+                self._store,
+                encode=_encode_stateless_model,
+                decode=_decode_stateless_model,
+            ).publish("STATELESS_MODEL", True)
             return
 
-        self._store.set("STATELESS_MODEL", b"0")
+        TCPStoreRendezvous(
+            self._store,
+            encode=_encode_stateless_model,
+            decode=_decode_stateless_model,
+        ).publish("STATELESS_MODEL", False)
         # Prepare weights from model
         weights = self._get_weights_buffer_from_model(self.model)
         if weights is None or weights.is_empty():
@@ -507,10 +528,12 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             )
             return
 
-        stateless_model = self.receiver_transport._store.get("STATELESS_MODEL")
-        if stateless_model not in (b"0", b"1"):
-            raise RuntimeError(f"Invalid STATELESS_MODEL value: {stateless_model}")
-        if stateless_model != b"1":
+        stateless_model = TCPStoreRendezvous(
+            self.receiver_transport._store,
+            encode=_encode_stateless_model,
+            decode=_decode_stateless_model,
+        ).read("STATELESS_MODEL")
+        if not stateless_model:
             # Receive initial weights (blocking, no TCPStore coordination)
             weights = self._receiver_transport.receive_initial_weights()
             if weights is not None and self.model is not None:

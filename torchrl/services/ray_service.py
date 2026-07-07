@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from torchrl._utils import logger
-from torchrl.services.base import ServiceBase
+from torchrl.services.base import Service, ServiceBase
 
 RAY_ERR = None
 try:
@@ -28,15 +28,15 @@ class _ServiceRegistryActor:
     """
 
     def __init__(self):
-        self._services: set[str] = set()
+        self._services: dict[str, dict[str, Any]] = {}
 
-    def add(self, name: str) -> None:
+    def add(self, name: str, kind: str = "actor", client: Any = None) -> None:
         """Add a service to the registry."""
-        self._services.add(name)
+        self._services[name] = {"kind": kind, "client": client}
 
     def remove(self, name: str) -> None:
         """Remove a service from the registry."""
-        self._services.discard(name)
+        self._services.pop(name, None)
 
     def list(self) -> list[str]:
         """List all registered services."""
@@ -49,6 +49,10 @@ class _ServiceRegistryActor:
     def contains(self, name: str) -> bool:
         """Check if a service is registered."""
         return name in self._services
+
+    def get_record(self, name: str) -> dict[str, Any]:
+        """Return the registry record for ``name``."""
+        return self._services[name]
 
 
 class RayService(ServiceBase):
@@ -110,6 +114,7 @@ class RayService(ServiceBase):
             ) from RAY_ERR
 
         self._namespace = namespace
+        self._owned_services: dict[str, Service] = {}
         self._ensure_ray_initialized(ray_init_config)
         self._registry_actor = self._get_or_create_registry_actor()
 
@@ -164,22 +169,27 @@ class RayService(ServiceBase):
             )
             return registry
 
-    def register(self, name: str, service_factory: type, *args, **kwargs) -> Any:
+    def register(
+        self, name: str, service_factory: type | Service, *args, **kwargs
+    ) -> Any:
         """Register a service and create a named Ray actor.
 
-        This method creates a Ray actor with a globally unique name. The actor
-        becomes immediately visible to all workers in the cluster.
+        A class/factory creates a Ray actor with a globally unique name. A
+        running :class:`Service` owner instead registers its restricted client
+        without transferring lifecycle ownership to the registry.
 
         Args:
             name: Service identifier. Must be unique within the namespace.
-            service_factory: Class to instantiate as a Ray actor.
+            service_factory: Class to instantiate as a Ray actor, or a running
+                service owner.
             *args: Positional arguments for the service constructor.
             **kwargs: Both Ray actor options (num_cpus, num_gpus, memory, etc.)
                 and service constructor arguments. Ray will filter out the actor
                 options it recognizes.
 
         Returns:
-            The Ray actor handle.
+            The Ray actor handle for a class registration, or the restricted
+            client for a service-owner registration.
 
         Raises:
             ValueError: If a service with this name already exists.
@@ -210,14 +220,32 @@ class RayService(ServiceBase):
             ...     max_restarts=3,
             ... )
         """
-        full_name = self._make_service_name(name)
-
         # Check if service already exists in our registry
         if ray.get(self._registry_actor.contains.remote(name)):
             raise ValueError(
                 f"Service '{name}' already exists in namespace '{self._namespace}'. "
                 f"Use a different name or retrieve the existing service with get()."
             )
+
+        if not isinstance(service_factory, type) and isinstance(
+            service_factory, Service
+        ):
+            if args or kwargs:
+                raise TypeError(
+                    "Constructor arguments cannot be provided when registering "
+                    "an existing Service owner."
+                )
+            if not service_factory.is_alive:
+                raise RuntimeError(
+                    f"Service {name!r} must be started before registration."
+                )
+            client = service_factory.client()
+            ray.get(self._registry_actor.add.remote(name, "service", client))
+            self._owned_services[name] = service_factory
+            logger.info(f"Registered client for owned service '{name}'.")
+            return client
+
+        full_name = self._make_service_name(name)
 
         # Create the Ray remote class
         # First, make it a remote class
@@ -253,7 +281,7 @@ class RayService(ServiceBase):
         remote_actor = remote_cls.options(**options).remote(*args, **kwargs)
 
         # Add to registry
-        ray.get(self._registry_actor.add.remote(name))
+        ray.get(self._registry_actor.add.remote(name, "actor", None))
 
         logger.info(
             f"Registered service '{name}' as Ray actor '{full_name}' "
@@ -290,6 +318,10 @@ class RayService(ServiceBase):
                 f"Available services: {self.list()}"
             )
 
+        record = ray.get(self._registry_actor.get_record.remote(name))
+        if record["kind"] == "service":
+            return record["client"]
+
         full_name = self._make_service_name(name)
 
         try:
@@ -306,6 +338,24 @@ class RayService(ServiceBase):
                 f"Service '{name}' actor not found (removed from registry). "
                 f"Available services: {self.list()}"
             ) from e
+
+    def get_client(self, name: str) -> Any:
+        """Return a capability-restricted client for an owned service.
+
+        Legacy class/factory registrations continue to expose raw Ray actors
+        through :meth:`get` and are intentionally rejected here.
+        """
+        if not ray.get(self._registry_actor.contains.remote(name)):
+            raise KeyError(
+                f"Service '{name}' not found in namespace '{self._namespace}'."
+            )
+        record = ray.get(self._registry_actor.get_record.remote(name))
+        if record["kind"] != "service":
+            raise TypeError(
+                f"Service '{name}' is a legacy raw actor registration. "
+                "Use get() or register a Service owner."
+            )
+        return record["client"]
 
     def __contains__(self, name: str) -> bool:
         """Check if a service is registered.
@@ -344,11 +394,12 @@ class RayService(ServiceBase):
         return ray.get(self._registry_actor.list.remote())
 
     def reset(self) -> None:
-        """Reset the service registry by terminating all actors.
+        """Reset discovery and terminate registry-owned legacy actors.
 
         This method:
-        1. Terminates all service actors in the current namespace
-        2. Clears the registry actor's internal state
+        1. Terminates class/factory actors created by this registry
+        2. Removes externally-owned service clients without shutting owners down
+        3. Clears the registry actor's internal state
 
         After calling reset(), all services will be removed and their actors
         will be killed. Any ongoing work will be interrupted.
@@ -369,6 +420,11 @@ class RayService(ServiceBase):
         service_names = self.list()
 
         for name in service_names:
+            record = ray.get(self._registry_actor.get_record.remote(name))
+            if record["kind"] == "service":
+                # Discovery never owns or shuts down externally-owned services.
+                self._owned_services.pop(name, None)
+                continue
             full_name = self._make_service_name(name)
             try:
                 actor = ray.get_actor(full_name, namespace=self._namespace)
