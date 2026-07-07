@@ -27,6 +27,7 @@ from .custom.mujoco._satellite_primitives import (
     SatelliteMacroAction,
 )
 from .custom.mujoco._ur_primitives import (
+    CartesianSolver,
     RobotMacroAction,
     RobotMacroActionMode,
     URScriptPrimitive,
@@ -206,6 +207,7 @@ __all__ = [
     "BraxEnv",
     "BraxWrapper",
     "BurnInTransform",
+    "CartesianSolver",
     "CatFrames",
     "CatTensors",
     "CenterCrop",

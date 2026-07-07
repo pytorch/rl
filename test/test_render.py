@@ -12,6 +12,8 @@ import socket
 import numpy as np
 import pytest
 import torch
+import torchrl.render as render_module
+import torchrl.render.artifacts as artifacts_module
 import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
@@ -306,10 +308,14 @@ class TestRenderRollouts:
         assert torch.equal(
             result.trajectories[0].get("action"), torch.full((2, 1), 0.5)
         )
+        assert "next" in result.trajectories[0].keys()
+        assert "count" in result.trajectories[0].keys()
+        assert "pixels" not in result.trajectories[0].keys(True)
+        assert ("next", "pixels") not in result.trajectories[0].keys(True)
 
 
 class TestRenderArtifacts:
-    def test_render_policy_writes_jsonl(self, tmp_path):
+    def test_render_policy_writes_jsonl(self, tmp_path, monkeypatch):
         ckpt = tmp_path / "policy.pt"
         torch.save({}, ckpt)
         out = tmp_path / "events.jsonl"
@@ -323,12 +329,25 @@ class TestRenderArtifacts:
             auto_load_policy=False,
             overwrite=True,
         )
+        hash_calls = 0
+        original_checkpoint_hash = checkpoint_hash
+
+        def counted_checkpoint_hash(path):
+            nonlocal hash_calls
+            hash_calls += 1
+            return original_checkpoint_hash(path)
+
+        monkeypatch.setattr(render_module, "checkpoint_hash", counted_checkpoint_hash)
+        monkeypatch.setattr(
+            artifacts_module, "checkpoint_hash", counted_checkpoint_hash
+        )
         result = render_policy(config)
         assert result.artifact_path == out
         lines = out.read_text(encoding="utf-8").splitlines()
         assert json.loads(lines[0])["type"] == "metadata"
         metadata = json.loads(out.with_suffix(".jsonl.metadata.json").read_text())
         assert metadata["checkpoint"]["sha256"] == checkpoint_hash(ckpt)
+        assert hash_calls == 1
 
     def test_write_npz_and_notebook_artifacts(self, tmp_path):
         ckpt = tmp_path / "policy.pt"
@@ -368,6 +387,12 @@ class TestRenderArtifacts:
         exec("".join(notebook["cells"][2]["source"]), namespace)
         assert namespace["render_config"]["artifact_dir"] is None
         assert (tmp_path / "report" / "metadata.json").exists()
+        saved_rollout = torch.load(
+            tmp_path / "report" / "rollouts" / "traj_000.pt",
+            weights_only=False,
+        )
+        assert "pixels" not in saved_rollout.keys(True)
+        assert ("next", "pixels") not in saved_rollout.keys(True)
 
     @pytest.mark.skipif(
         not _has_pil, reason="Pillow is required for PNG frame artifacts"
@@ -583,6 +608,41 @@ class TestMujocoWasm:
             play_mujoco_wasm_trajectory([[0.0]], fps=0)
         with pytest.raises(ValueError, match="same length"):
             play_mujoco_wasm_trajectory([[0.0], [0.0, 1.0]])
+
+    def test_send_mujoco_wasm_qpos(self, monkeypatch):
+        calls = []
+        acknowledgement = {"ok": True}
+
+        def send(payload, **kwargs):
+            calls.append((payload, kwargs))
+            return acknowledgement
+
+        monkeypatch.setattr(mujoco_wasm_module, "_send_viewer_message", send)
+        result = mujoco_wasm_module.send_mujoco_wasm_qpos(
+            [1.0, 2.0],
+            viewer_origin="http://127.0.0.1:5178/",
+            degrees=True,
+            pause=False,
+            wait=True,
+            timeout=3.0,
+        )
+        assert result is acknowledgement
+        assert calls == [
+            (
+                {
+                    "type": "torchrl:mujoco_wasm:setQpos",
+                    "qpos": [1.0, 2.0],
+                    "degrees": True,
+                    "pause": False,
+                },
+                {
+                    "viewer_origin": "http://127.0.0.1:5178",
+                    "wait": True,
+                    "wait_for": "torchrl:mujoco_wasm:qposApplied",
+                    "timeout": 3.0,
+                },
+            )
+        ]
 
     def test_extract_qpos_trajectory(self):
         rollout = TensorDict({"qpos": torch.arange(6).reshape(2, 3)}, batch_size=[2])
