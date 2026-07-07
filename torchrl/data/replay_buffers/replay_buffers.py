@@ -26,7 +26,7 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 from functools import partial, wraps
-from typing import TYPE_CHECKING, TypeVar
+from typing import Literal, TYPE_CHECKING, TypeVar
 
 from tensordict import (
     is_tensor_collection,
@@ -51,7 +51,11 @@ except ImportError:
         return tree_flat
 
 
-from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
+from torchrl._utils import (
+    _RayServiceMetaClass,
+    accept_remote_rref_udf_invocation,
+    rl_warnings,
+)
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -117,8 +121,10 @@ def _maybe_delay_init(func):
     return wrapper
 
 
-class ReplayBuffer:
+class ReplayBuffer(metaclass=_RayServiceMetaClass):
     """A generic, composable replay buffer class.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.ReplayBufferConfig`.
 
     Keyword Args:
         storage (Storage, Callable[[], Storage], optional): the storage to be used.
@@ -214,6 +220,10 @@ class ReplayBuffer:
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        service_backend (str): deployment backend, either ``"direct"`` or
+            ``"ray"``. Defaults to ``"direct"``.
+        service_backend_options (dict, optional): Ray initialization options.
+            Accepted keys are ``ray_init_config`` and ``remote_config``.
 
     Examples:
         >>> import torch
@@ -284,6 +294,36 @@ class ReplayBuffer:
 
     """
 
+    @classmethod
+    def _ServiceClass(
+        cls,
+        service_backend,
+        *args,
+        service_backend_options=None,
+        **kwargs,
+    ):
+        if service_backend != "ray":
+            raise ValueError(
+                "ReplayBuffer supports service_backend='direct' or 'ray', "
+                f"not {service_backend!r}."
+            )
+        from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
+
+        options = dict(service_backend_options or {})
+        ray_init_config = options.pop("ray_init_config", None)
+        remote_config = options.pop("remote_config", None)
+        if options:
+            raise TypeError(
+                f"Unexpected Ray replay-buffer service options: {sorted(options)}"
+            )
+        return RayReplayBuffer(
+            *args,
+            replay_buffer_cls=cls,
+            ray_init_config=ray_init_config,
+            remote_config=remote_config,
+            **kwargs,
+        )
+
     def __init__(
         self,
         *,
@@ -306,7 +346,10 @@ class ReplayBuffer:
         shared: bool = False,
         compilable: bool | None = None,
         delayed_init: bool | None = None,
+        service_backend: Literal["direct", "ray"] = "direct",
+        service_backend_options: dict[str, Any] | None = None,
     ) -> None:
+        del service_backend, service_backend_options
         if consume_after_n_samples is not None:
             if isinstance(consume_after_n_samples, bool) or not isinstance(
                 consume_after_n_samples, INT_CLASSES
@@ -318,6 +361,7 @@ class ReplayBuffer:
 
         self._delayed_init = delayed_init
         self._initialized = False
+        self._service_shutdown = False
 
         # Store init parameters for potential delayed initialization
         self._init_storage = storage
@@ -469,6 +513,31 @@ class ReplayBuffer:
     def initialized(self) -> bool:
         """Whether the replay buffer has been initialized."""
         return self._initialized
+
+    def start(self) -> Self:
+        """Return this already-started direct replay buffer."""
+        if self._service_shutdown:
+            raise RuntimeError("A shut down replay buffer cannot be restarted.")
+        return self
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether this direct replay buffer remains available."""
+        return not self._service_shutdown
+
+    @property
+    def service_backend(self) -> str:
+        """The canonical deployment backend for this replay buffer."""
+        return "direct"
+
+    def client(self) -> Self:
+        """Return ``self`` for the zero-overhead direct backend."""
+        return self
+
+    def shutdown(self, timeout: float | None = None) -> None:
+        """Mark this direct replay-buffer owner as shut down."""
+        del timeout
+        self._service_shutdown = True
 
     def _initialize_prioritized_sampler(self) -> None:
         """Initialize priority trees for existing data when using PrioritizedSampler.
@@ -1840,6 +1909,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 class TensorDictReplayBuffer(ReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.TensorDictReplayBufferConfig`.
 
     Keyword Args:
         storage (Storage, Callable[[], Storage], optional): the storage to be used.

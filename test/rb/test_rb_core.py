@@ -50,6 +50,17 @@ class _UnshareableWriteStateTransform(Transform):
         return tensordict
 
 
+def test_replay_buffer_direct_service_client_is_identity():
+    replay_buffer = ReplayBuffer(storage=ListStorage(4), service_backend="direct")
+    assert replay_buffer.client() is replay_buffer
+    assert replay_buffer.start() is replay_buffer
+    assert replay_buffer.service_backend == "direct"
+    assert replay_buffer.is_alive
+    replay_buffer.shutdown()
+    assert not replay_buffer.is_alive
+    replay_buffer.shutdown()
+
+
 def test_replay_buffer_read_write_all_in_order():
     rb = TensorDictReplayBuffer(storage=LazyTensorStorage(6))
     rb_slice = TensorDictReplayBuffer(storage=LazyTensorStorage(6))

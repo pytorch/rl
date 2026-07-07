@@ -97,22 +97,29 @@ def make_env(
             )
         if batch_mode == "parallel":
             make_scalar_env = functools.partial(
-                _make_transformed_mujoco_playground_env,
+                _make_mujoco_playground_env,
                 env_name=env_name,
                 device=device,
                 config_overrides=config_overrides,
+                num_envs=1,
+            )
+            if num_envs == 1:
+                env = make_scalar_env()
+            else:
+                env = ParallelEnv(
+                    num_envs,
+                    make_scalar_env,
+                    device=device,
+                    serial_for_single=True,
+                )
+            return _add_ppo_transforms(
+                env,
+                env_name=env_name,
+                device=device,
                 normalize_observation=normalize_observation,
                 vecnorm_stats=vecnorm_stats,
                 max_episode_steps=max_episode_steps,
                 qpos_key=qpos_key,
-            )
-            if num_envs == 1:
-                return make_scalar_env()
-            return ParallelEnv(
-                num_envs,
-                make_scalar_env,
-                device=device,
-                serial_for_single=True,
             )
         elif batch_mode == "vmap":
             env = _make_mujoco_playground_env(
@@ -212,33 +219,6 @@ def get_vecnorm_state(env) -> dict[str, torch.Tensor] | None:
     return None
 
 
-def _make_transformed_mujoco_playground_env(
-    *,
-    env_name: str,
-    device,
-    config_overrides: dict[str, Any] | None,
-    normalize_observation: bool,
-    vecnorm_stats: dict[str, torch.Tensor] | None,
-    max_episode_steps: int | None,
-    qpos_key: NestedKey | None,
-):
-    env = _make_mujoco_playground_env(
-        env_name=env_name,
-        device=device,
-        config_overrides=config_overrides,
-        num_envs=1,
-    )
-    return _add_ppo_transforms(
-        env,
-        env_name=env_name,
-        device=device,
-        normalize_observation=normalize_observation,
-        vecnorm_stats=vecnorm_stats,
-        max_episode_steps=max_episode_steps,
-        qpos_key=qpos_key,
-    )
-
-
 def _make_mujoco_playground_env(
     *,
     env_name: str,
@@ -315,6 +295,9 @@ def make_render_env(spec: Any):
         "qpos" if backend == "gym" and env_name in _MUJOCO_QPOS_DIMS else None
     )
     qpos_key = spec.env_kwargs.get("qpos_key", default_qpos_key)
+    max_episode_steps = spec.env_kwargs.get(
+        "max_episode_steps", checkpoint.get("max_episode_steps")
+    )
     return make_env(
         env_name,
         device=spec.device,
@@ -325,6 +308,7 @@ def make_render_env(spec: Any):
         batch_mode=batch_mode,
         normalize_observation=normalize_observation,
         vecnorm_stats=vecnorm_stats,
+        max_episode_steps=max_episode_steps,
         qpos_key=qpos_key,
     )
 
@@ -442,15 +426,24 @@ def make_ppo_models(
 def make_render_policy(spec: Any):
     """Builds the PPO policy module for ``rlrender`` checkpoint loading."""
     checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
-    env_name = checkpoint.get(
+    env_name = spec.policy_kwargs.get(
         "env_name",
-        spec.policy_kwargs.get("env_name", "InvertedPendulum-v4"),
+        checkpoint.get("env_name", "InvertedPendulum-v4"),
     )
-    backend = checkpoint.get("env_backend", spec.policy_kwargs.get("backend", "gym"))
-    config_overrides = checkpoint.get("env_config_overrides")
+    backend = spec.policy_kwargs.get("backend", checkpoint.get("env_backend", "gym"))
+    config_overrides = spec.policy_kwargs.get(
+        "config_overrides", checkpoint.get("env_config_overrides")
+    )
     num_envs = int(spec.policy_kwargs.get("num_envs", 1))
     batch_mode = spec.policy_kwargs.get("batch_mode", "parallel")
-    normalize_observation = bool(checkpoint.get("normalize_observation", False))
+    normalize_observation = bool(
+        spec.policy_kwargs.get(
+            "normalize_observation", checkpoint.get("normalize_observation", False)
+        )
+    )
+    max_episode_steps = spec.policy_kwargs.get(
+        "max_episode_steps", checkpoint.get("max_episode_steps")
+    )
     actor, _ = make_ppo_models(
         env_name,
         device=spec.device,
@@ -459,6 +452,7 @@ def make_render_policy(spec: Any):
         num_envs=num_envs,
         batch_mode=batch_mode,
         normalize_observation=normalize_observation,
+        max_episode_steps=max_episode_steps,
     )
     return actor
 
@@ -475,7 +469,12 @@ class _MujocoQposTransform(Transform):
         self.qpos_dim = qpos_dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        return observation[..., : self.qpos_dim].clone()
+        data = self.parent.base_env._env.unwrapped.data
+        return torch.as_tensor(
+            data.qpos.copy(),
+            dtype=observation.dtype,
+            device=observation.device,
+        )
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase

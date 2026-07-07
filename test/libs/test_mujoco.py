@@ -50,6 +50,9 @@ from torchrl.envs.custom.mujoco._math import (
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
 
+if _has_mujoco:
+    import mujoco
+
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
     _AVAILABLE_BACKENDS.append("mujoco-torch")
@@ -1535,6 +1538,120 @@ class TestMujoco:
 
         out = env.step(td)
         assert torch.isfinite(out.get(("next", "reward"))).all()
+
+    @staticmethod
+    def _cube_bowl_pinch_fk(env, qpos6):
+        model = env._backend._m
+        data = mujoco.MjData(model)
+        data.qpos[:] = env._backend._d.qpos.copy()
+        q = data.qpos.copy()
+        q[list(env._robot_qpos_indices)] = np.asarray(qpos6, dtype=np.float64)
+        data.qpos[:] = q
+        mujoco.mj_forward(model, data)
+        return (
+            data.site_xpos[env._pinch_site_id].copy(),
+            data.site_xmat[env._pinch_site_id].reshape(3, 3).copy(),
+        )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_partial_orientation_ik(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        td = env.reset()
+        start_action = torch.zeros(1, 7, dtype=env.dtype)
+        start_action[0, :6] = td["robot_qpos"][0]
+        pinch_quat = env._pinch_quat()
+        target_pos = env._pinch_pos() + torch.tensor(
+            [[0.10, 0.0, -0.05]], dtype=env.dtype
+        )
+        pose = CubeBowlEnv.pose_at(target_pos, pinch_quat)
+
+        out = env._cartesian_pose_to_joint_target(
+            pose,
+            start_action,
+            iterations=200,
+            orientation_mask=(1.0, 1.0, 0.0),
+        )
+        assert out.shape == torch.Size([1, 7])
+        pos, rot = self._cube_bowl_pinch_fk(env, out[0, :6].cpu().numpy())
+        assert np.linalg.norm(pos - target_pos[0].cpu().numpy()) < 1e-3
+        target_mat = np.zeros(9)
+        mujoco.mju_quat2Mat(target_mat, pinch_quat[0].double().cpu().numpy())
+        target_mat = target_mat.reshape(3, 3)
+        # the constrained axes hold: solved tool z-axis parallel to the target
+        # tool z-axis even though the spin about world z is left free
+        assert float(rot[:, 2] @ target_mat[:, 2]) > 1.0 - 1e-4
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_cartesian_waypoint_ik(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        td = env.reset()
+        start_action = torch.zeros(1, 7, dtype=env.dtype)
+        start_action[0, :6] = td["robot_qpos"][0]
+        pinch_quat = env._pinch_quat()
+        target_pos = env._pinch_pos() + torch.tensor(
+            [[0.10, 0.0, -0.05]], dtype=env.dtype
+        )
+        pose = CubeBowlEnv.pose_at(target_pos, pinch_quat)
+        waypoints = 8
+
+        seq = env._cartesian_pose_to_joint_target(
+            pose,
+            start_action,
+            iterations=100,
+            orientation_mask=(1.0, 1.0, 0.0),
+            waypoints=waypoints,
+        )
+        assert seq.shape == torch.Size([1, waypoints, 7])
+
+        start_pos, _ = self._cube_bowl_pinch_fk(env, start_action[0, :6].cpu().numpy())
+        line = target_pos[0].cpu().numpy() - start_pos
+        line_dir = line / np.linalg.norm(line)
+
+        def max_lateral_deviation(joint_rows):
+            deviation = 0.0
+            for qpos6 in joint_rows:
+                pos, _ = self._cube_bowl_pinch_fk(env, qpos6)
+                offset = pos - start_pos
+                lateral = offset - (offset @ line_dir) * line_dir
+                deviation = max(deviation, float(np.linalg.norm(lateral)))
+            return deviation
+
+        cartesian_deviation = max_lateral_deviation(seq[0, :, :6].cpu().numpy())
+        # joint-space interpolation between the same endpoints drifts off the
+        # straight-line path; the per-waypoint solve must not
+        endpoint = env._cartesian_pose_to_joint_target(
+            pose,
+            start_action,
+            iterations=200,
+            orientation_mask=(1.0, 1.0, 0.0),
+        )
+        alphas = np.linspace(1.0 / waypoints, 1.0, waypoints)[:, None]
+        joint_rows = (1.0 - alphas) * start_action[0, :6].cpu().numpy()[
+            None
+        ] + alphas * endpoint[0, :6].cpu().numpy()[None]
+        joint_deviation = max_lateral_deviation(joint_rows)
+        assert cartesian_deviation < 5e-4
+        assert cartesian_deviation < joint_deviation
+
+        # end-to-end through the transform: reach_pose(path="cartesian")
+        transform = env.make_urscript_transform(
+            macro_steps=waypoints, execute=False, ik_kwargs={"iterations": 100}
+        )
+        macro_td = td.clone()
+        macro_td["action"] = RobotMacroAction.reach_pose(
+            position=target_pos,
+            quaternion=pinch_quat,
+            orientation_mask=(1.0, 1.0, 0.0),
+            path="cartesian",
+            steps=waypoints,
+        )
+        expanded = transform.inv(macro_td)["action"]
+        assert expanded.shape == torch.Size([1, waypoints, 7])
+        torch.testing.assert_close(
+            expanded[..., :6].double(), seq[..., :6].double(), atol=1e-6, rtol=0
+        )
+        env.close()
 
     def test_xml_path_kwarg_overrides_class_attr(self, tmp_path):
         """Custom ``xml_path=`` overrides the class-level :attr:`XML_PATH`."""

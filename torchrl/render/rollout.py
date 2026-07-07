@@ -13,12 +13,13 @@ from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
-from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.render.backends import (
     EnvRenderBackend,
     NullRenderBackend,
     TensorDictPixelsBackend,
 )
+from torchrl.render.backends.pixels import _exclude_pixel_keys
 from torchrl.render.config import FrameBundle, RenderConfig, RenderResult
 
 __all__ = ["collect_render_rollouts"]
@@ -63,6 +64,8 @@ def collect_render_rollouts(
             exploration=exploration,
             trajectory_index=traj_index,
         )
+        if not config.save_tensordicts:
+            trajectory = _exclude_pixel_keys(trajectory, config)
         trajectories.append(trajectory)
         all_frames.append(trajectory_frames)
         if not trajectory_frames:
@@ -110,7 +113,7 @@ def _collect_env_base_trajectory(
     # rollout() never invokes the callback on the final step, so the terminal
     # state is captured from the last step's "next" entry here.
     capture(rollout[..., -1])
-    return _trajectory_from_rollout(rollout, config), frames
+    return rollout, frames
 
 
 def _collect_duck_typed_trajectory(
@@ -208,20 +211,6 @@ def _capture_frame(
     return None
 
 
-def _trajectory_from_rollout(
-    rollout: TensorDictBase, config: RenderConfig
-) -> TensorDictBase:
-    trajectory = rollout.get("next").clone()
-    try:
-        action = rollout.get(config.action_key)
-    except Exception:
-        return trajectory
-    trajectory.set(
-        config.action_key, action.clone() if torch.is_tensor(action) else action
-    )
-    return trajectory
-
-
 def _reset_env(env: Any) -> TensorDictBase:
     reset = getattr(env, "reset", None)
     if not callable(reset):
@@ -264,10 +253,7 @@ def _trajectory_step(
 
 
 def _step_mdp(tensordict: TensorDictBase) -> TensorDictBase:
-    next_td = tensordict.get("next", None)
-    if isinstance(next_td, TensorDictBase):
-        return next_td.clone()
-    return tensordict.clone()
+    return step_mdp(tensordict, exclude_reward=False, exclude_done=False)
 
 
 def _is_done(tensordict: TensorDictBase, config: RenderConfig, env: Any) -> bool:
