@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import warnings
 
 import numpy as np
 import pytest
@@ -510,6 +511,60 @@ def test_prb_within_buffer_max_priority_stays_raw():
     sampler.mark_update(torch.tensor([2]))
     expected = (50.0 + sampler._eps) ** alpha
     assert float(sampler._sum_tree[2]) == pytest.approx(expected, rel=1e-3)
+
+
+@pytest.mark.parametrize("max_priority_within_buffer", [False, True])
+def test_prb_alpha_zero_keeps_raw_max(max_priority_within_buffer):
+    """With ``alpha == 0`` every tree entry is ``(p + eps) ** 0 == 1``, so the
+    within-buffer recompute cannot recover raw priorities from the tree. It must
+    keep the previously tracked raw max rather than store the transformed value
+    (1.0) into ``_max_priority``."""
+    sampler = PrioritizedSampler(
+        max_capacity=5,
+        alpha=0.0,
+        beta=0.9,
+        max_priority_within_buffer=max_priority_within_buffer,
+    )
+    sampler.update_priority(torch.tensor([0, 1]), torch.tensor([100.0, 10.0]))
+    # updating the tracked max index triggers the within-buffer recompute
+    sampler.update_priority(torch.tensor([0]), torch.tensor([50.0]))
+    assert float(sampler._max_priority[0]) == pytest.approx(100.0)
+    assert float(sampler.default_priority) == pytest.approx(100.0)
+
+
+def test_prb_alpha_setter_validates_and_warns():
+    """In ``max_priority_within_buffer`` mode the max-priority recomputation
+    inverts sum-tree values with the current ``alpha``, so changing ``alpha``
+    once priorities have been written must warn (once per sampler); the setter
+    must also reject negative values like ``__init__`` does. Without
+    ``max_priority_within_buffer`` the setter stays silent so that alpha
+    annealing (e.g. via ``LinearScheduler``) is warning-free."""
+    sampler = PrioritizedSampler(
+        max_capacity=5, alpha=0.7, beta=0.9, max_priority_within_buffer=True
+    )
+    # empty sampler: changing alpha is safe and must not warn
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sampler.alpha = 0.6
+    sampler.update_priority(torch.tensor([0]), torch.tensor([100.0]))
+    # setting the same value is a no-op and must not warn
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sampler.alpha = 0.6
+    with pytest.warns(UserWarning, match="does not re-transform"):
+        sampler.alpha = 0.5
+    # the warning is emitted once per sampler
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sampler.alpha = 0.4
+    with pytest.raises(ValueError, match="alpha must be greater or equal"):
+        sampler.alpha = -1.0
+    # without max_priority_within_buffer, annealing alpha is warning-free
+    sampler = PrioritizedSampler(max_capacity=5, alpha=0.7, beta=0.9)
+    sampler.update_priority(torch.tensor([0]), torch.tensor([100.0]))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sampler.alpha = 0.5
 
 
 if __name__ == "__main__":
