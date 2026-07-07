@@ -6,6 +6,7 @@
 from .common import Logger
 
 from .csv import CSVLogger
+from .llm import PostTrainingLogger
 from .mlflow import MLFlowLogger
 from .monitoring import Every, LoggerMonitor
 from .process import ProcessLogger
@@ -20,6 +21,7 @@ __all__ = [
     "LoggerMonitor",
     "Every",
     "ProcessLogger",
+    "PostTrainingLogger",
     "RayLogger",
     "CSVLogger",
     "MLFlowLogger",
