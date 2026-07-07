@@ -5,8 +5,8 @@
 """Run the multi-service training example in one process.
 
 The inference server runs in a background thread. Logger and replay-buffer
-clients are direct identity clients, while actor threads execute the same loop
-used by the process and Ray examples.
+clients are direct identity clients. The TensorDict training loop is identical
+to the process and Ray examples.
 
 Run from the repository root:
 
@@ -22,8 +22,7 @@ from multi_service_utils import run_training
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--num-actors", type=int, default=4)
-    parser.add_argument("--steps-per-actor", type=int, default=8)
+    parser.add_argument("--steps", type=int, default=32)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument(
         "--log-dir", default="/tmp/torchrl-service-example/single-process"
@@ -31,8 +30,7 @@ def main() -> None:
     args = parser.parse_args()
     run_training(
         service_backend="direct",
-        num_actors=args.num_actors,
-        steps_per_actor=args.steps_per_actor,
+        steps=args.steps,
         batch_size=args.batch_size,
         log_dir=args.log_dir,
     )

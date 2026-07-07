@@ -2,24 +2,24 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Shared dummy training loop for the service deployment examples."""
+"""Backend-neutral training loop shared by the service examples."""
 
 from __future__ import annotations
 
 import importlib.util
 import multiprocessing as mp
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
 from torch import nn
 
 from torchrl.data import ListStorage, ReplayBuffer, TensorDictReplayBuffer
+from torchrl.envs import GymEnv
 from torchrl.modules.inference_server import (
     InferenceServer,
     MPTransport,
@@ -38,13 +38,29 @@ ExampleServiceBackend = Literal["direct", "process", "ray"]
 
 
 def make_policy() -> TensorDictModule:
-    """Create the deterministic policy owned by the inference service."""
+    """Create the policy owned by the inference service."""
     torch.manual_seed(0)
     return TensorDictModule(
-        nn.Linear(4, 2),
+        nn.Sequential(nn.Linear(3, 1), nn.Tanh()),
         in_keys=["observation"],
         out_keys=["action"],
     )
+
+
+class _RewardPredictionLoss(nn.Module):
+    """Small trainable loss used to demonstrate TensorDict backpropagation."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reward_predictor = nn.Linear(3, 1)
+
+    def forward(self, sample: TensorDictBase) -> TensorDict:
+        prediction = self.reward_predictor(sample["observation"])
+        error = prediction - sample["next", "reward"]
+        return TensorDict(
+            {"loss": error.square().mean()},
+            batch_size=[],
+        )
 
 
 def _make_logger(service_backend: ExampleServiceBackend, log_dir: str | Path):
@@ -67,9 +83,7 @@ def _make_replay_buffer(
     capacity: int,
     batch_size: int,
 ) -> ReplayBuffer:
-    # Replay buffers currently support direct and Ray owners. The process
-    # profile keeps its replay buffer in the driver, where actor threads share
-    # its identity client.
+    # Replay buffers currently support direct and Ray service backends.
     replay_backend = "ray" if service_backend == "ray" else "direct"
     options = {"remote_config": {"num_cpus": 1}} if replay_backend == "ray" else None
     return TensorDictReplayBuffer(
@@ -80,165 +94,97 @@ def _make_replay_buffer(
     )
 
 
-def _make_inference_server(
-    service_backend: ExampleServiceBackend,
-    *,
-    num_actors: int,
-):
+def _make_inference_server(service_backend: ExampleServiceBackend):
     if service_backend == "process":
         context = mp.get_context("spawn")
         transport = MPTransport(ctx=context)
         server = ProcessInferenceServer(
             policy_factory=make_policy,
             transport=transport,
-            max_batch_size=num_actors,
             mp_context=context,
         )
     else:
         transport = RayTransport() if service_backend == "ray" else ThreadingTransport()
-        server = InferenceServer(
-            make_policy(),
-            transport,
-            max_batch_size=num_actors,
-        )
+        server = InferenceServer(make_policy(), transport)
     return server, transport
-
-
-def run_actor(
-    actor_id: int,
-    steps: int,
-    policy: PolicyClientModule,
-    replay_buffer: Any,
-    logger: Any,
-) -> float:
-    """Collect synthetic transitions using service clients only."""
-    generator = torch.Generator().manual_seed(actor_id)
-    total_reward = 0.0
-    for step in range(steps):
-        observation = torch.randn(4, generator=generator)
-        result = policy(TensorDict({"observation": observation}, batch_size=[]))
-        action = result["action"]
-        reward = -action.square().mean()
-        transition = TensorDict(
-            {
-                "observation": observation,
-                "action": action,
-                "reward": reward,
-                "next": TensorDict(
-                    {"observation": observation + action.mean()}, batch_size=[]
-                ),
-            },
-            batch_size=[],
-        )
-        replay_buffer.add(transition)
-        reward_value = float(reward)
-        logger.log_scalar(f"actor/{actor_id}/reward", reward_value, step=step)
-        total_reward += reward_value
-    return total_reward
-
-
-def _make_actor_inputs(
-    *,
-    num_actors: int,
-    steps_per_actor: int,
-    inference_server,
-    replay_buffer,
-    logger,
-):
-    return [
-        (
-            actor_id,
-            steps_per_actor,
-            PolicyClientModule(
-                inference_server,
-                in_keys=["observation"],
-                out_keys=["action", "policy_version"],
-            ),
-            replay_buffer.client(),
-            logger.client(),
-        )
-        for actor_id in range(num_actors)
-    ]
-
-
-def _run_actors(service_backend: ExampleServiceBackend, actor_inputs) -> list[float]:
-    if service_backend == "ray":
-        remote_actor = ray.remote(num_cpus=1)(run_actor)
-        return ray.get([remote_actor.remote(*items) for items in actor_inputs])
-    with ThreadPoolExecutor(max_workers=len(actor_inputs)) as executor:
-        futures = [executor.submit(run_actor, *items) for items in actor_inputs]
-        return [future.result() for future in futures]
 
 
 def run_training(
     *,
     service_backend: ExampleServiceBackend,
-    num_actors: int = 4,
-    steps_per_actor: int = 8,
+    steps: int = 32,
     batch_size: int = 8,
     log_dir: str | Path = "/tmp/torchrl-service-example",
 ) -> dict[str, float | int]:
-    """Run the same training loop with a direct, process, or Ray profile."""
+    """Run one ordinary TensorDict loop against the selected services."""
     if service_backend == "ray" and not _has_ray:
         raise ImportError("The Ray example requires `pip install ray`.")
-    if num_actors < 1 or steps_per_actor < 1 or batch_size < 1:
-        raise ValueError("Actor, step, and batch counts must all be positive.")
-    capacity = num_actors * steps_per_actor
-    if batch_size > capacity:
-        raise ValueError("batch_size cannot exceed the number of collected samples.")
+    if steps < 1 or batch_size < 1:
+        raise ValueError("steps and batch_size must both be positive.")
 
     with ExitStack() as owners:
         if service_backend == "ray" and not ray.is_initialized():
-            ray.init(
-                num_cpus=num_actors + 3,
-                ignore_reinit_error=True,
-                log_to_driver=False,
-            )
+            ray.init(num_cpus=4, ignore_reinit_error=True, log_to_driver=False)
             owners.callback(ray.shutdown)
 
-        logger = _make_logger(service_backend, log_dir)
-        owners.callback(logger.shutdown)
-        replay_buffer = _make_replay_buffer(
+        logger_owner = _make_logger(service_backend, log_dir)
+        owners.callback(logger_owner.shutdown)
+        replay_owner = _make_replay_buffer(
             service_backend,
-            capacity=capacity,
+            capacity=max(steps, batch_size),
             batch_size=batch_size,
         )
-        owners.callback(replay_buffer.shutdown)
-        inference_server, transport = _make_inference_server(
-            service_backend,
-            num_actors=num_actors,
-        )
+        owners.callback(replay_owner.shutdown)
+        inference_owner, transport = _make_inference_server(service_backend)
         close_transport = getattr(transport, "close", None)
         if callable(close_transport):
             owners.callback(close_transport)
-        owners.callback(inference_server.shutdown)
-        inference_server.start()
+        owners.callback(inference_owner.shutdown)
+        inference_owner.start()
 
-        actor_inputs = _make_actor_inputs(
-            num_actors=num_actors,
-            steps_per_actor=steps_per_actor,
-            inference_server=inference_server,
-            replay_buffer=replay_buffer,
-            logger=logger,
+        env = GymEnv("Pendulum-v1")
+        env.set_seed(0)
+        owners.callback(env.close)
+
+        policy = PolicyClientModule(
+            inference_owner,
+            in_keys=["observation"],
+            out_keys=["action", "policy_version"],
         )
-        actor_returns = _run_actors(service_backend, actor_inputs)
+        replay_buffer = replay_owner.client()
+        logger = logger_owner.client()
+        loss_fn = _RewardPredictionLoss()
+        optimizer = torch.optim.Adam(loss_fn.parameters(), lr=3e-3)
 
-        sample = replay_buffer.sample()
-        server_stats = inference_server.stats()
+        td = env.reset()
+        # The selected service backend does not appear in the training loop.
+        for step in range(steps):
+            td = policy(td)
+            step_td = env.step(td)
+            replay_buffer.add(step_td)
+            td = env.step_mdp(step_td)
+
+            sample = replay_buffer.sample()
+            optimizer.zero_grad()
+            loss = loss_fn(sample)
+            loss.sum(reduce=True).backward()
+            optimizer.step()
+
+            logger.log_scalar("train/loss", float(loss["loss"].detach()), step=step)
+            logger.log_scalar(
+                "train/reward", float(step_td["next", "reward"]), step=step
+            )
+            if bool(step_td["next", "done"].any()):
+                td = env.reset()
+
+        logger_owner.flush()
         metrics = {
             "replay_size": len(replay_buffer),
-            "sample_reward": float(sample["reward"].mean()),
-            "mean_actor_return": sum(actor_returns) / len(actor_returns),
-            "mean_batch_size": float(server_stats["avg_batch_size"]),
+            "loss": float(loss["loss"].detach()),
+            "reward": float(step_td["next", "reward"]),
         }
-        logger.log_metrics(
-            {f"train/{key}": value for key, value in metrics.items()},
-            step=capacity,
-        )
-        logger.flush()
         print(
-            f"{service_backend}: sampled {sample.batch_size} from "
-            f"{metrics['replay_size']} transitions; inference mean batch "
-            f"size={metrics['mean_batch_size']:.2f}"
+            f"{service_backend}: trained for {steps} steps with "
+            f"{metrics['replay_size']} replay entries"
         )
         return metrics

@@ -10,9 +10,9 @@ actors request policy inference, write transitions to a replay buffer, and
 report metrics to a logger. TorchRL gives these components the same ownership
 shape without imposing a single communication protocol on all of them.
 
-The examples run one dummy actor/replay/trainer loop under three deployment
-profiles. Each entry point is intentionally short and delegates the shared
-TensorDict training logic to ``multi_service_utils.py``:
+The examples run one ordinary environment/replay/training loop under three
+deployment profiles. Each entry point is intentionally short and delegates
+the same TensorDict training logic to ``multi_service_utils.py``:
 
 .. list-table:: Example profiles
    :header-rows: 1
@@ -21,22 +21,22 @@ TensorDict training logic to ``multi_service_utils.py``:
      - Inference
      - Logger
      - Replay buffer
-     - Actors
+     - Training loop
    * - ``multi_service_single_process.py``
      - background thread
      - direct
      - direct
-     - threads
+     - driver
    * - ``multi_service_multiprocess.py``
      - spawned process
      - spawned process
      - direct
-     - threads
+     - driver
    * - ``multi_service_ray.py``
      - Ray transport to a driver-owned server
      - Ray actor
      - Ray actor
-     - Ray tasks
+     - driver
 
 The runnable sources are:
 
@@ -49,12 +49,14 @@ The runnable sources are:
 - `shared training helper
   <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_utils.py>`_.
 
-The first two use core dependencies. The third requires ``pip install ray``.
+All three require Gymnasium; the third additionally requires Ray.
 
 .. code-block:: bash
 
+    pip install gymnasium
     python examples/services/multi_service_single_process.py
     python examples/services/multi_service_multiprocess.py
+    pip install ray
     python examples/services/multi_service_ray.py
 
 Create owners in the driver
@@ -78,46 +80,61 @@ a process service backend. The direct client's identity semantics mean that
 ``replay_buffer.client() is replay_buffer``; no proxy is added to that hot
 path. The Ray profile uses restricted Ray clients for both logging and replay.
 
-Distribute clients, not owners
-------------------------------
+Use clients in the loop, not owners
+-----------------------------------
 
-Call :meth:`Service.client` once for each independent producer. Remote clients
-are small and picklable and expose only their domain operations. In particular,
-a worker holding the Ray-profile replay-buffer and logger clients below cannot
-stop their owners:
+Remote clients expose the same domain operations as their direct counterparts,
+without lifecycle methods. The helper extracts them once before entering the
+loop; :class:`~torchrl.modules.inference_server.PolicyClientModule` performs
+the same extraction automatically for the inference owner:
 
 .. code-block:: python
 
     from torchrl.modules.inference_server import PolicyClientModule
 
-    actor_policy = PolicyClientModule(
-        inference_server.client(),
+    policy = PolicyClientModule(
+        inference_owner,
         in_keys=["observation"],
         out_keys=["action", "policy_version"],
     )
-    actor_replay_buffer = replay_buffer.client()
-    actor_logger = logger.client()
+    replay_buffer = replay_owner.client()
+    logger = logger_owner.client()
 
-    assert not hasattr(actor_replay_buffer, "shutdown")
-    assert not hasattr(actor_logger, "shutdown")
+A direct service uses identity semantics: its client is the owner because no
+process boundary needs capability restriction or proxying. Process and Ray
+profiles return lightweight clients that transparently cross their respective
+boundaries.
 
-The inference and logger clients used by this example carry their own reply
-routing, so each actor receives a separately created client rather than a
-copied client already in use by another actor. A direct service instead uses
-identity semantics: its client is the owner because no process boundary needs
-capability restriction or proxying.
+Keep the training loop backend-neutral
+--------------------------------------
 
-Keep the actor loop backend-neutral
------------------------------------
-
-The worker does not need to know where any service runs:
+The core loop does not need to know where any service runs. Policy inference,
+replay writes and samples, and logging retain their normal TorchRL interfaces:
 
 .. code-block:: python
 
-    result = actor_policy(observation_td)
-    transition.set("action", result["action"])
-    actor_replay_buffer.add(transition)
-    actor_logger.log_scalar("actor/reward", reward, step=step)
+    td = env.reset()
+    for step in range(steps):
+        td = policy(td)
+        step_td = env.step(td)
+        replay_buffer.add(step_td)
+        td = env.step_mdp(step_td)
+
+        sample = replay_buffer.sample()
+        optimizer.zero_grad()
+        loss = loss_fn(sample)
+        loss.sum(reduce=True).backward()
+        optimizer.step()
+
+        logger.log_scalar(
+            "train/loss", float(loss["loss"].detach()), step=step
+        )
+
+``loss_fn`` returns a TensorDict of loss terms, as TorchRL objective modules
+do. ``reduce=True`` reduces all of those terms to one scalar tensor before
+backpropagation. Nothing in this loop branches on ``service_backend``; the
+owners created before the loop determine which calls are local and which cross
+a process or Ray boundary.
 
 Remote logger methods have the same completion semantics as direct logger
 methods: when ``log_scalar`` returns, the concrete logger method has run, and
@@ -144,7 +161,7 @@ recorded:
         owners.callback(replay_buffer.shutdown)
         inference_server = make_inference_server()
         owners.callback(inference_server.shutdown)
-        run_actor_loop()
+        run_training_loop()
 
 Shutdown is idempotent. Explicit teardown also releases process queues, feeder
 threads, and Ray actors deterministically instead of relying on garbage
