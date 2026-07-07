@@ -13,9 +13,11 @@ import torch
 from tensordict import TensorDict
 from tensordict.base import TensorDictBase
 
+from torchrl._comm import RayRendezvous
 from torchrl._utils import logger as torchrl_logger
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
     TransportBackend,
     WeightStrategy,
     WeightSyncScheme,
@@ -344,12 +346,11 @@ class RayTransport:
                 continue
             break
 
-        master_addr = self.ray.get(remote_connection_info.get.remote("master_addr"))
-        master_port = self.ray.get(remote_connection_info.get.remote("master_port"))
-        world_size = self.ray.get(remote_connection_info.get.remote("world_size"))
-        stateful_model = self.ray.get(
-            remote_connection_info.get.remote("stateful_model")
-        )
+        rendezvous = RayRendezvous(remote_connection_info)
+        master_addr = rendezvous.read("master_addr")
+        master_port = rendezvous.read("master_port")
+        world_size = rendezvous.read("world_size")
+        stateful_model = rendezvous.read("stateful_model")
         self._stateful_model = stateful_model
 
         # Set environment variables for torch.distributed
@@ -370,6 +371,7 @@ class RayTransport:
         return None
 
 
+@register_weight_sync_backend("ray")
 class RayWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization for Ray distributed computing.
 

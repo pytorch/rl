@@ -21,6 +21,8 @@ _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 class TrackioLogger(Logger):
     """Wrapper for the trackio logger.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.TrackioLoggerConfig`.
+
     Args:
         exp_name (str): The name of the experiment.
         project (str): The name of the project.

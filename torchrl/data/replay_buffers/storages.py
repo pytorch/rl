@@ -1540,6 +1540,7 @@ class LazyTensorStorage(TensorStorage):
         )
         temp_memmap_storage._init_standard(data)
         self._storage = temp_memmap_storage._storage
+        self._reconcile_shared_init_device()
         return
 
     def _wait_for_init(self) -> None:
@@ -1547,8 +1548,22 @@ class LazyTensorStorage(TensorStorage):
         self._init_event.wait()
         storage = TensorDict.load_memmap(self._init_directory)
         self._storage = storage
+        self._reconcile_shared_init_device()
         self.initialized = True
         return
+
+    def _reconcile_shared_init_device(self) -> None:
+        # Shared init swaps the backing for a CPU memory-mapped tensordict;
+        # a stale non-cpu self.device would make samplers build indices on
+        # the wrong device (RuntimeError at the first sample).
+        device = self.device
+        if device not in (None, "auto") and torch.device(device).type != "cpu":
+            warnings.warn(
+                f"LazyTensorStorage(shared_init=True) stores data in a CPU "
+                f"memory-mapped tensordict; the requested storage device "
+                f"({device}) cannot be honored and is reset to 'cpu'."
+            )
+        self.device = torch.device("cpu")
 
     # Read blocks
     def get(self, indices: slice) -> TensorDictBase | torch.Tensor | Any:
