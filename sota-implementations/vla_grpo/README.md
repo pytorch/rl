@@ -230,6 +230,11 @@ optimization:
 - `throughput/train_decisions_per_s`
 - `throughput/optim_steps_per_s`
 
+LIBERO uses ``logger.service_backend=process`` so evaluator workers receive a
+lightweight logger client. Evaluation video is one synchronized grid recorded
+from the same ``env.eval_num_envs`` parallel rollouts used for reward and
+success metrics; it does not launch an extra rollout or select a single task.
+
 The collector path is fixed: a TorchRL `MultiCollector` launches rollout
 workers, each worker owns a sync `ParallelEnv(envs_per_collector)`, and all
 workers plus the evaluator share one process policy server.
@@ -384,12 +389,9 @@ per-trajectory token/action/success agreement.
   shares the same policy server as rollout and uses `env.eval_render_gpu_ids`
   for EGL rendering; when the latter is left null, eval reuses
   `env.render_gpu_ids`. The LIBERO default uses `process` to isolate simulator
-  work; use `thread` only when local VideoRecorder dumping is required. Note
-  the caveat: with a logger, the thread backend swaps the eval env for a
-  single-env video recorder bound to the first task, so on a multi-task suite
-  `eval/success_rate` covers one task instead of the whole suite (and
-  `env.eval_num_envs` is ignored). This requires the explicit opt-in
-  `logger.record_video_single_task=true`.
+  work. ``Evaluator`` dispatches ``env.transform.dump(step=...)`` through the
+  collector RPC path, so ``VideoRecorder`` works for both thread and process
+  evaluation without a separate recorder environment.
 - Minimal CUDA containers often lack the NVIDIA EGL/GLVND userspace stack.
   Before debugging TorchRL, verify that `libEGL_nvidia`, `libnvidia-eglcore`,
   `libGLX_nvidia`, and `/usr/share/glvnd/egl_vendor.d/10_nvidia.json` are

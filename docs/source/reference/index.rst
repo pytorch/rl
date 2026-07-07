@@ -12,6 +12,7 @@ API Reference
     modules
     objectives
     services
+    services_workflow
     trainers
     utils
     vla

@@ -62,7 +62,7 @@ threads in the same process:
     transport = ThreadingTransport()
     server = InferenceServer(policy, transport, max_batch_size=32)
     server.start()
-    client = transport.client()
+    client = server.client()
 
     # actor threads call client(td) -- batched automatically
     with concurrent.futures.ThreadPoolExecutor(16) as pool:
@@ -75,7 +75,7 @@ Structured Configuration
 
 Server execution, batching, and device placement are grouped into two
 dataclasses instead of loose keyword arguments: :class:`InferenceServerConfig`
-collects the execution ``backend`` (``"thread"`` or ``"process"``) and the
+collects the execution ``service_backend`` (``"thread"`` or ``"process"``) and the
 batching/instrumentation knobs (``max_batch_size``, ``min_batch_size``,
 ``timeout``, ``collect_stats``, ``stats_window_size``), and
 :class:`InferenceDeviceConfig` describes device placement across the
@@ -119,10 +119,14 @@ TensorDict policy but inference should be served by the policy server:
 .. code-block:: python
 
     remote_policy = PolicyClientModule(
-        transport,
+        server,
         in_keys=["observation"],
         out_keys=["action", "policy_version"],
     )
+
+``PolicyClientModule`` accepts a server owner, transport, or existing callable
+client. Owners and transports are automatically reduced to their restricted
+client before the module is sent to a worker.
 
     data = remote_policy(data)
 

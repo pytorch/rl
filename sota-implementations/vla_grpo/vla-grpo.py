@@ -137,12 +137,10 @@ def main(cfg):  # noqa: F821
                     evaluator.trigger_eval(weights=None, step=iteration)
                 else:
                     eval_metrics = evaluator.evaluate(weights=None, step=iteration)
-                    log_metrics(logger, eval_metrics, iteration)
             if cfg.logger.eval_async:
                 ready_eval = evaluator.poll(timeout=0)
                 if ready_eval is not None:
                     eval_metrics = ready_eval
-                    log_metrics(logger, eval_metrics, iteration)
 
             timings = timeit.todict(prefix="time")
             timeit.erase()
@@ -205,10 +203,20 @@ def main(cfg):  # noqa: F821
         )
     finally:
         pbar.close()
-        evaluator.shutdown()
-        collector.shutdown()
-        policy_server.shutdown()
-        policy_server.transport.close()
+        try:
+            evaluator.shutdown()
+        finally:
+            try:
+                collector.shutdown()
+            finally:
+                try:
+                    policy_server.shutdown()
+                finally:
+                    try:
+                        policy_server.transport.close()
+                    finally:
+                        if logger is not None:
+                            logger.shutdown()
 
 
 if __name__ == "__main__":

@@ -583,7 +583,7 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="threading",
                                 server_config=InferenceServerConfig(
-                                    backend="thread",
+                                    service_backend="thread",
                                     max_batch_size=max_batch_size,
                                     min_batch_size=min_batch_size,
                                     timeout=timeout,
@@ -624,7 +624,7 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 server_config=InferenceServerConfig(
-                                    backend="thread",
+                                    service_backend="thread",
                                     max_batch_size=max_batch_size,
                                     min_batch_size=min_batch_size,
                                     timeout=timeout,
@@ -665,7 +665,7 @@ def main() -> None:
                                 total_frames=-1,
                                 env_backend="multiprocessing",
                                 server_config=InferenceServerConfig(
-                                    backend="process",
+                                    service_backend="process",
                                     max_batch_size=max_batch_size,
                                     min_batch_size=min_batch_size,
                                     timeout=timeout,
