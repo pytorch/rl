@@ -1406,6 +1406,27 @@ class TestLRSchedulerHook:
         assert any(getattr(op, "__wrapped__", None) is hook for op, _ in ops)
         assert trainer._modules["lr_scheduler"] is hook
 
+    def test_no_step_without_optimization(self):
+        # once registered, the hook must not decay the learning rate while no
+        # optimization step has run (e.g. during init_random_frames warmup)
+        trainer = mocking_trainer()
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+        hook.register(trainer)
+
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 1.0
+
+        trainer._optim_count += 1
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+
+        # no new optimization step: the scheduler must not advance
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+
 
 class TestValueEstimatorHook:
     class _RecordingEstimator:
@@ -1424,6 +1445,14 @@ class TestValueEstimatorHook:
         out = hook(batch)
         assert estimator.calls == 1
         assert "advantage" in out.keys()
+
+    def test_none_batch_passthrough(self):
+        # async collection hands the pre_epoch stage a None batch: the hook
+        # must pass it through without calling the estimator
+        estimator = self._RecordingEstimator()
+        hook = ValueEstimatorHook(estimator)
+        assert hook(None) is None
+        assert estimator.calls == 0
 
     def test_state_dict_plain_callable(self):
         hook = ValueEstimatorHook(self._RecordingEstimator())

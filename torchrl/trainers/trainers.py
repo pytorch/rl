@@ -12,6 +12,7 @@ import math
 import pathlib
 import time
 import warnings
+import weakref
 from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Sequence
 from copy import deepcopy
@@ -2309,6 +2310,11 @@ class ValueEstimatorHook(TrainerHookBase):
     that advantage and value-target entries are available when the loss module
     consumes sub-batches during optimization.
 
+    In async-collection mode the training loop has no batch to hand to the
+    ``pre_epoch`` stage (``batch`` is ``None``); the hook then passes the batch
+    through untouched, and value estimates are expected to be computed
+    elsewhere (e.g. by a replay-buffer transform).
+
     Args:
         value_estimator (Callable[[TensorDictBase], TensorDictBase]): the value
             estimator to apply to the collected batch, e.g. an instance of
@@ -2325,7 +2331,9 @@ class ValueEstimatorHook(TrainerHookBase):
     ) -> None:
         self.value_estimator = value_estimator
 
-    def __call__(self, batch: TensorDictBase) -> TensorDictBase:
+    def __call__(self, batch: TensorDictBase | None) -> TensorDictBase | None:
+        if batch is None:
+            return batch
         return self.value_estimator(batch)
 
     def state_dict(self) -> dict[str, Any]:
@@ -2349,9 +2357,16 @@ class LRSchedulerHook(TrainerHookBase):
 
     Args:
         scheduler (torch.optim.lr_scheduler.LRScheduler): the scheduler to step.
-        interval (str, optional): ``"batch"`` to step the scheduler once per
-            collected batch, or ``"optim"`` to step it after every optimization
-            step. Defaults to ``"batch"``.
+        interval (Literal["batch", "optim"], optional): ``"batch"`` to step the
+            scheduler once per collected batch, or ``"optim"`` to step it after
+            every optimization step. With ``"optim"``, the number of scheduler
+            steps per collected batch scales with ``num_epochs`` and the number
+            of sub-batches per batch. Defaults to ``"batch"``.
+
+    Once registered with a trainer, the hook only steps the scheduler when at
+    least one optimization step has run since its last call, so the learning
+    rate is not decayed during warmup phases (e.g. while
+    ``collector.init_random_frames`` has not been reached).
 
     Examples:
         >>> scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100)
@@ -2362,24 +2377,39 @@ class LRSchedulerHook(TrainerHookBase):
     def __init__(
         self,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
-        interval: str = "batch",
+        interval: Literal["batch", "optim"] = "batch",
     ) -> None:
         if interval not in ("batch", "optim"):
             raise ValueError(f"interval must be 'batch' or 'optim', got {interval}")
         self.scheduler = scheduler
         self.interval = interval
+        self._trainer_ref: weakref.ReferenceType[Trainer] | None = None
+        self._last_optim_count: int = 0
 
     def __call__(self, batch: TensorDictBase | None = None) -> TensorDictBase | None:
+        trainer = self._trainer_ref() if self._trainer_ref is not None else None
+        if trainer is not None:
+            optim_count = trainer._optim_count
+            if optim_count == self._last_optim_count:
+                # no optimization step has run since the last call (e.g. during
+                # the init_random_frames warmup): keep the learning rate as is
+                return batch
+            self._last_optim_count = optim_count
         self.scheduler.step()
         return batch
 
     def state_dict(self) -> dict[str, Any]:
-        return {"scheduler": self.scheduler.state_dict()}
+        return {
+            "scheduler": self.scheduler.state_dict(),
+            "last_optim_count": self._last_optim_count,
+        }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.scheduler.load_state_dict(state_dict["scheduler"])
+        self._last_optim_count = state_dict.get("last_optim_count", 0)
 
     def register(self, trainer: Trainer, name: str = "lr_scheduler"):
+        self._trainer_ref = weakref.ref(trainer)
         dest = "post_optim" if self.interval == "optim" else "post_steps"
         trainer.register_op(dest, self)
         trainer.register_module(name, self)
