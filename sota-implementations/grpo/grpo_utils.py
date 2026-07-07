@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import functools
 
-import time
 import warnings
 from typing import Any, Literal
 
@@ -20,6 +19,7 @@ from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import SGLangWrapper, TransformersWrapper, vLLMWrapper
+from torchrl.record.loggers.llm import PostTrainingLogger
 from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -919,91 +919,55 @@ def log_training_metrics(
 ):
     """Log training metrics to wandb.
 
+    Delegates standard metrics to :class:`~torchrl.record.loggers.PostTrainingLogger`
+    and appends GRPO-recipe-specific metrics directly.
+
     Args:
-        wandb_logger: The wandb logger instance
-        replay_buffer: The replay buffer containing collected data
-        batch: The current training batch
-        loss: The computed loss object
-        grad_norm: The gradient norm value
-        global_step: Current global training step
-        data_read_count: Total data read count
-        collector: The collector instance
-        start_time: Training start time
-        gradient_accumulation_steps: Number of gradient accumulation steps
-        history_str: Optional history string for logging
+        wandb_logger: The wandb logger instance.
+        replay_buffer: The replay buffer containing collected data.
+        batch: The current training batch.
+        loss: The computed loss object.
+        grad_norm: The gradient norm value.
+        global_step: Current global training step.
+        data_read_count: Total data read count.
+        collector: The collector instance.
+        start_time: Training start time (``time.time()`` at loop start).
+        gradient_accumulation_steps: Number of gradient accumulation steps.
+        history_str: Optional history string for logging.
+        use_kl_to_ref: Whether KL-to-reference metrics are available.
     """
+    pt_logger = PostTrainingLogger(logger=wandb_logger, start_time=start_time)
+
+    pt_logger.log_training_step(
+        loss=loss,
+        step=global_step,
+        grad_norm=grad_norm,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+    )
+    pt_logger.log_collection_step(
+        batch=batch,
+        replay_buffer=replay_buffer,
+        collector=collector,
+        step=global_step,
+    )
+
+    # GRPO-specific extras: step_count and kl_penalty live in the buffer
+    # but are not part of the standard PostTrainingLogger interface.
     with torch.no_grad():
-        rb_content = replay_buffer[:]
-        step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
-        batch_policy_version = batch["next", "policy_version"].view(-1).min()
-        batch_policy_age = collector.policy_version - batch_policy_version
+        extra_metrics = {"buffer/data_read_count": data_read_count}
+        try:
+            rb_content = replay_buffer[:]
+            step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
+            extra_metrics["buffer/step_count_mean"] = float(step_count)
+            if use_kl_to_ref:
+                extra_metrics["buffer/kl_penalty_to_ref_mean"] = float(
+                    torch.cat(
+                        rb_content.get(("next", "kl_penalty"), as_list=True)
+                    ).mean()
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        wandb_logger.log_metrics(extra_metrics, step=global_step)
 
-        # Buffer-level staleness stats
-        buffer_policy_versions = (
-            rb_content.get(("next", "policy_version")).view(-1).float()
-        )
-        current_version = collector.policy_version
-        buffer_staleness = current_version - buffer_policy_versions
-        buffer_staleness_mean = float(buffer_staleness.mean())
-        buffer_staleness_max = float(buffer_staleness.max())
-
-        elapsed = time.time() - start_time
-        optim_steps = global_step // gradient_accumulation_steps
-
-        metrics = {
-            # --- training/ : loss components and optimizer state ---
-            "training/loss_objective": float(loss.loss_objective),
-            "training/clip_fraction": float(loss.clip_fraction),
-            "training/ESS": float(loss.ESS),
-            "training/entropy_loss": float(loss.loss_entropy.mean()),
-            "training/kl_approx_to_inference": float(loss.kl_approx),
-            "training/kl_to_inference": float(loss.kl_to_inference.mean()),
-            "training/loss_kl_to_inference": float(loss.loss_kl_to_inference.mean()),
-            "training/grad_norm": float(grad_norm)
-            if global_step % gradient_accumulation_steps == 0
-            else 0.0,
-            "training/gradient_steps": global_step,
-            "training/optim_steps": optim_steps,
-            # --- inference/ : collection and policy version state ---
-            "inference/policy_version": collector.policy_version,
-            "inference/batch_policy_version": batch_policy_version,
-            "inference/batch_policy_age": batch_policy_age,
-            "inference/staleness_mean": buffer_staleness_mean,
-            "inference/staleness_max": buffer_staleness_max,
-            # --- buffer/ : replay buffer statistics ---
-            "buffer/write_count": int(replay_buffer.write_count),
-            "buffer/reward_mean": float(
-                torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
-            ),
-            "buffer/seq_length_mean": float(
-                torch.tensor(
-                    [
-                        t.numel()
-                        for t in rb_content.get(("tokens", "response"), as_list=True)
-                    ],
-                    dtype=torch.float,
-                ).mean()
-            ),
-            "buffer/step_count_mean": float(step_count),
-            "buffer/data_read_count": data_read_count,
-            # --- throughput/ : training speed metrics ---
-            "throughput/gradient_steps_per_second": float(global_step / elapsed),
-            "throughput/optim_steps_per_second": float(optim_steps / elapsed),
-            "throughput/gradient_steps_per_write": float(
-                global_step / replay_buffer.write_count
-            ),
-            "throughput/optim_steps_per_write": float(
-                optim_steps / replay_buffer.write_count
-            ),
-        }
-        if use_kl_to_ref:
-            metrics["training/kl_to_ref"] = float(loss.kl_to_ref.mean())
-            metrics["training/loss_kl_to_ref"] = float(loss.loss_kl_to_ref.mean())
-            metrics["buffer/kl_penalty_to_ref_mean"] = float(
-                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
-            )
-
-        wandb_logger.log_metrics(metrics, step=global_step)
-
-        if history_str is not None:
-            wandb_logger.log_str("history", history_str, step=global_step)
+    if history_str is not None:
+        wandb_logger.log_str("history", history_str, step=global_step)

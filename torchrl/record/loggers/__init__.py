@@ -6,6 +6,7 @@
 from .common import Logger
 
 from .csv import CSVLogger
+from .llm import PostTrainingLogger
 from .mlflow import MLFlowLogger
 from .ray import RayLogger
 from .tensorboard import TensorboardLogger
@@ -15,6 +16,7 @@ from .wandb import WandbLogger
 
 __all__ = [
     "Logger",
+    "PostTrainingLogger",
     "RayLogger",
     "CSVLogger",
     "MLFlowLogger",

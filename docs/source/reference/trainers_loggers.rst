@@ -32,3 +32,14 @@ Recording utils
     VideoRecorder
     TensorDictRecorder
     PixelRenderTransform
+
+Post-Training Loggers
+---------------------
+
+.. currentmodule:: torchrl.record.loggers
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    PostTrainingLogger

@@ -551,3 +551,16 @@ SFT
     :template: rl_template.rst
 
     TopKRewardSelector
+
+Loggers
+-------
+
+Standardized logging utilities for LLM post-training loops.
+
+.. currentmodule:: torchrl.record.loggers
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    PostTrainingLogger

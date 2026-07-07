@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Any, Literal
 
 import torch
@@ -19,6 +20,7 @@ from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
+from torchrl.record.loggers.llm import PostTrainingLogger
 from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -651,30 +653,75 @@ def log_training_metrics(
 ):
     """Log training metrics to wandb.
 
-    Args:
-        wandb_logger: The wandb logger instance
-        replay_buffer: The replay buffer containing collected data
-        batch: The current training batch
-        loss: The computed loss object
-        grad_norm: The gradient norm value
-        global_step: Current global training step
-        data_read_count: Total data read count
-        collector: The collector instance
-        start_time: Training start time
-        gradient_accumulation_steps: Number of gradient accumulation steps
-        history_str: Optional history string for logging
-    """
-    with torch.no_grad():
-        rb_content = replay_buffer[:]
-        batch_policy_version = batch["next", "policy_version"].view(-1).min()
-        batch_policy_age = collector.policy_version - batch_policy_version
+    Delegates standard metrics to :class:`~torchrl.record.loggers.PostTrainingLogger`.
 
-        metrics = {
-            "reward from buffer": float(
+    .. deprecated::
+        The legacy flat metric keys (``"reward from buffer"``,
+        ``"loss_sft, from loss"``, etc.) are deprecated and will be removed
+        in v0.15.0.  The new ``namespace/metric`` keys are already being
+        emitted in parallel — update any dashboards to use those.
+
+    Args:
+        wandb_logger: The wandb logger instance.
+        replay_buffer: The replay buffer containing collected data.
+        batch: The current training batch.
+        loss: The computed loss object.
+        grad_norm: The gradient norm value.
+        global_step: Current global training step.
+        data_read_count: Total data read count.
+        collector: The collector instance.
+        start_time: Training start time (``time.time()`` at loop start).
+        gradient_accumulation_steps: Number of gradient accumulation steps.
+        history_str: Optional history string for logging.
+    """
+    pt_logger = PostTrainingLogger(logger=wandb_logger, start_time=start_time)
+
+    pt_logger.log_training_step(
+        loss=loss,
+        step=global_step,
+        grad_norm=grad_norm,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+    )
+    pt_logger.log_collection_step(
+        batch=batch,
+        replay_buffer=replay_buffer,
+        collector=collector,
+        step=global_step,
+    )
+
+    # Legacy flat keys emitted in parallel until v0.15.0 (see CLAUDE.md §12).
+    # Each key here maps to the new namespace/metric equivalent listed in the
+    # deprecation warning string below.
+    _LEGACY_KEY_MAP = {
+        "reward from buffer": "buffer/reward_mean",
+        "loss_sft, from loss": "training/loss_sft",
+        "loss_kl_to_ref, from loss": "training/loss_kl_to_ref",
+        "kl_to_ref, from loss": "training/kl_to_ref",
+        "grad_norm": "training/grad_norm",
+        "write_count, from buffer": "buffer/write_count",
+        "gradient_step_throughput (gradient step per write)": "throughput/gradient_steps_per_write",
+        "optim_step_throughput (optim step per write)": "throughput/optim_steps_per_write",
+        "data_read_count (total)": "buffer/data_read_count",
+        "current_policy_version (collector)": "inference/policy_version",
+        "throughput (steps per second)": "throughput/gradient_steps_per_second",
+    }
+    for old_key, new_key in _LEGACY_KEY_MAP.items():
+        warnings.warn(
+            f'EI metric key "{old_key}" is deprecated and will be removed in v0.15.0. '
+            f'Use "{new_key}" instead.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    with torch.no_grad():
+        optim_steps = global_step // gradient_accumulation_steps
+        legacy_metrics: dict[str, Any] = {}
+        try:
+            rb_content = replay_buffer[:]
+            legacy_metrics["reward from buffer"] = float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
-            ),
-            "reward from batch": float(batch["next", "reward"].mean()),
-            "seq_length from buffer": float(
+            )
+            legacy_metrics["seq_length from buffer"] = float(
                 torch.tensor(
                     [
                         t.numel()
@@ -682,38 +729,44 @@ def log_training_metrics(
                     ],
                     dtype=torch.float,
                 ).mean()
-            ),
-            "loss_sft, from loss": float(loss.loss_sft),
-            "loss_kl_to_ref, from loss": float(loss.loss_kl_to_ref),
-            "kl_to_ref, from loss": float(loss.kl_to_ref),
-            "grad_norm": float(grad_norm)
-            if global_step % gradient_accumulation_steps == 0
-            else 0.0,
-            "write_count, from buffer": int(replay_buffer.write_count),
-            # how many gradient steps per write
-            "gradient_step_throughput (gradient step per write)": float(
-                global_step / replay_buffer.write_count
-            ),
-            # how many optim steps per write
-            "optim_step_throughput (optim step per write)": float(
-                (global_step // gradient_accumulation_steps) / replay_buffer.write_count
-            ),
-            "data_read_count (total)": data_read_count,
-            "current_policy_version (collector)": collector.policy_version,
-            # FIXME: Assume batch is a single trajectory
-            # FIXME: The addition of the transform after the env instantiation + _shuttle creation
-            #  is messed up - we need the next data
-            "batch_policy_version (sampled batch)": batch_policy_version,
-            "batch_policy_age (sampled batch)": batch_policy_age,
-            "throughput (steps per second)": float(
-                global_step / (time.time() - start_time)
-            ),
-        }
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        legacy_metrics["reward from batch"] = float(batch["next", "reward"].mean())
+        legacy_metrics["loss_sft, from loss"] = float(loss.loss_sft)
+        kl_to_ref = getattr(loss, "loss_kl_to_ref", None)
+        if kl_to_ref is not None:
+            legacy_metrics["loss_kl_to_ref, from loss"] = float(kl_to_ref)
+        kl_val = getattr(loss, "kl_to_ref", None)
+        if kl_val is not None:
+            legacy_metrics["kl_to_ref, from loss"] = float(kl_val)
+        legacy_metrics["grad_norm"] = (
+            float(grad_norm) if global_step % gradient_accumulation_steps == 0 else 0.0
+        )
+        legacy_metrics["write_count, from buffer"] = int(replay_buffer.write_count)
+        if replay_buffer.write_count > 0:
+            legacy_metrics[
+                "gradient_step_throughput (gradient step per write)"
+            ] = float(global_step / replay_buffer.write_count)
+            legacy_metrics["optim_step_throughput (optim step per write)"] = float(
+                optim_steps / replay_buffer.write_count
+            )
+        legacy_metrics["data_read_count (total)"] = data_read_count
+        legacy_metrics["current_policy_version (collector)"] = collector.policy_version
+        batch_policy_version = batch["next", "policy_version"].view(-1).min()
+        legacy_metrics["batch_policy_version (sampled batch)"] = batch_policy_version
+        legacy_metrics["batch_policy_age (sampled batch)"] = (
+            collector.policy_version - batch_policy_version
+        )
+        elapsed = time.time() - start_time
+        if elapsed > 0:
+            legacy_metrics["throughput (steps per second)"] = float(
+                global_step / elapsed
+            )
+        wandb_logger.log_metrics(legacy_metrics, step=global_step)
 
-        wandb_logger.log_metrics(metrics, step=global_step)
-
-        if history_str is not None:
-            wandb_logger.log_str("history", history_str, step=global_step)
+    if history_str is not None:
+        wandb_logger.log_str("history", history_str, step=global_step)
 
 
 class RemoteDataLogger:
