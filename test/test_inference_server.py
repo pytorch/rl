@@ -1759,6 +1759,9 @@ class TestAsyncBatchedCollector:
             next(iterator)
             workers = list(collector._workers)
             collector._server._process.kill()
+            # Worker errors after a kill are mailbox transport failures,
+            # which _check_worker_result attributes to the dead server
+            # deterministically (no is_alive race).
             with pytest.raises(RuntimeError, match="inference server died"):
                 # A couple of batches may still drain from already-queued
                 # transitions before the watchdog trips.
