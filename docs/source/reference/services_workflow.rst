@@ -3,7 +3,7 @@
 .. _ref_services_workflow:
 
 Designing Training Applications with Services
-==============================================
+=============================================
 
 Distributed reinforcement learning combines components with very different
 resource and communication requirements. Actors need low-latency policy

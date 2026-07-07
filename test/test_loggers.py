@@ -17,9 +17,8 @@ from time import sleep
 import pytest
 import torch
 from tensordict import MemoryMappedTensor
-
-from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl._comm import MailboxPeerClosedError
+from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger

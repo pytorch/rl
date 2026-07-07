@@ -6,11 +6,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 
 from torchrl.record.loggers.trackio import TrackioLogger
 from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.trainers.algorithms.configs.common import ConfigBase
+
+if TYPE_CHECKING:
+    _LoggerServiceBackend = Literal["direct", "process", "ray"]
+else:
+    # OmegaConf structured configs resolve this alias at runtime and do not
+    # support Literal on all TorchRL-supported versions.
+    _LoggerServiceBackend = str
 
 
 @dataclass
@@ -42,7 +49,7 @@ class WandbLoggerConfig(LoggerConfig):
     log_env_packages: bool = True
     log_dir: str | None = None
     wandb_kwargs: dict[str, Any] = field(default_factory=dict)
-    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend: _LoggerServiceBackend = "direct"
     service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.trainers.algorithms.configs.logging._make_wandb_logger"
@@ -90,7 +97,7 @@ class TensorboardLoggerConfig(LoggerConfig):
 
     exp_name: str
     log_dir: str = "tb_logs"
-    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend: _LoggerServiceBackend = "direct"
     service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.record.loggers.tensorboard.TensorboardLogger"
@@ -111,7 +118,7 @@ class TrackioLoggerConfig(LoggerConfig):
     project: str
     video_fps: int = 32
     trackio_kwargs: dict[str, Any] = field(default_factory=dict)
-    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend: _LoggerServiceBackend = "direct"
     service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.trainers.algorithms.configs.logging._make_trackio_logger"
@@ -151,7 +158,7 @@ class CSVLoggerConfig(LoggerConfig):
     log_dir: str | None = None
     video_format: str = "pt"
     video_fps: int = 30
-    service_backend: Literal["direct", "process", "ray"] = "direct"
+    service_backend: _LoggerServiceBackend = "direct"
     service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     _target_: str = "torchrl.record.loggers.csv.CSVLogger"

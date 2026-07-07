@@ -160,7 +160,7 @@ logger:
   eval_async: false # submit eval and log result later
   eval_busy_policy: skip # skip | error | queue
   eval_timeout_s: 1800.0
-  eval_device: null # null = rollout device; set e.g. cuda:7 for eval
+  eval_device: cpu # eval env/client device; inference stays on the policy-server device
   video_fps: 8 # frames per second of the logged video (one frame per decision)
   # VideoRecorder logs a synchronized grid from these same scalar-eval envs.
 

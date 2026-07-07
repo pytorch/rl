@@ -68,6 +68,7 @@ Typical usage -- **Ray backend**::
     result = evaluator.poll()
     evaluator.shutdown()
 """
+
 from __future__ import annotations
 
 import abc
@@ -81,10 +82,8 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -1253,7 +1252,7 @@ class _ThreadEvalBackend(_EvalBackend):
         """
         if self._use_multi_collector and self._collector is not None:
             self._collector.map_fn(
-                "env.transform.dump",
+                "_dump_env_transform",
                 list_of_kwargs=[{"step": step}] * self._collector.num_workers,
             )
             return
@@ -1310,9 +1309,9 @@ class _RayEvalBackend(_EvalBackend):
             env_maker=env_maker,
             policy_maker=policy_factory,
             num_gpus=num_gpus,
-            reward_keys=reward_keys
-            if isinstance(reward_keys, tuple)
-            else (reward_keys,),
+            reward_keys=(
+                reward_keys if isinstance(reward_keys, tuple) else (reward_keys,)
+            ),
             **ray_kwargs,
         )
         self._max_steps = max_steps
