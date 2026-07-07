@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">TensorboardLogger</a></li>
@@ -2352,8 +2364,9 @@ document.write(`
 <h1>TensorboardLogger<a class="headerlink" href="#tensorboardlogger" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.record.loggers.tensorboard.TensorboardLogger">
-<span class="sig-prename descclassname"><span class="pre">torchrl.record.loggers.tensorboard.</span></span><span class="sig-name descname"><span class="pre">TensorboardLogger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ray_service</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/record/loggers/tensorboard.html#TensorboardLogger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.record.loggers.tensorboard.TensorboardLogger" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.record.loggers.tensorboard.</span></span><span class="sig-name descname"><span class="pre">TensorboardLogger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ray_service</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend_options</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/record/loggers/tensorboard.html#TensorboardLogger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.record.loggers.tensorboard.TensorboardLogger" title="Link to this definition">#</a></dt>
 <dd><p>Wrapper for the Tensoarboard logger.</p>
+<p>See also <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorboardLoggerConfig</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2736,7 +2749,7 @@ document.write(`
        "headline": "TensorboardLogger",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html",
-       "articleBody": "TensorboardLogger# torchrl.record.loggers.tensorboard.TensorboardLogger(*args, use_ray_service=False, **kwargs)[source]# Wrapper for the Tensoarboard logger. Parameters: exp_name (str) \u2013 The name of the experiment. log_dir (str) \u2013 the tensorboard log_dir. Defaults to td_logs.",
+       "articleBody": "TensorboardLogger# torchrl.record.loggers.tensorboard.TensorboardLogger(*args, use_ray_service=False, service_backend=None, service_backend_options=None, **kwargs)[source]# Wrapper for the Tensoarboard logger. See also TensorboardLoggerConfig. Parameters: exp_name (str) \u2013 The name of the experiment. log_dir (str) \u2013 the tensorboard log_dir. Defaults to td_logs.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1,5 +1,46 @@
 # Service Registry
 
+## Service owners and clients
+
+For an end-to-end inference, replay-buffer, and logger example, see
+[Designing Training Applications with Services](services_workflow.html#ref-services-workflow).
+
+[`Service`](generated/torchrl.services.Service.html#torchrl.services.Service) is the common owner-side lifecycle contract. Owners expose
+`start()`, `shutdown(timeout)`, `is_alive`, and `client()`. A remote
+client is deliberately capability-restricted: it performs domain operations
+but cannot stop the process or actor that owns it. Direct services use an
+identity client to avoid proxy overhead.
+
+```
+from torchrl.record import CSVLogger
+from torchrl.services import Service
+
+logger = CSVLogger(
+ exp_name="evaluation",
+ log_dir="logs",
+ service_backend="process",
+)
+assert isinstance(logger, Service)
+client = logger.client()
+client.log_scalar("reward", 1.0, step=0)
+logger.shutdown()
+```
+
+The canonical [`ServiceBackend`](generated/torchrl.services.ServiceBackend.html#torchrl.services.ServiceBackend) vocabulary is `direct`, `thread`,
+`process`, `ray`, `monarch`, and `distributed`. Stable APIs that
+already accepted `threading` or `multiprocessing` continue to accept those
+aliases.
+
+| Service | Direct/thread | Process | Ray |
+| --- | --- | --- | --- |
+| Loggers | `direct` | `process` | `ray` |
+| Replay buffers | `direct` | - | `ray` |
+| Inference servers | `thread` | `process` | transport dependent |
+
+The sections below describe discovery. Discovery does not transfer lifecycle
+ownership: registering a running [`Service`](generated/torchrl.services.Service.html#torchrl.services.Service) stores its restricted client,
+and `reset()` removes that entry without shutting down the external owner.
+
 TorchRL provides a service registry system for managing distributed services across workers in distributed applications.
 This is particularly useful for sharing resources like tokenizers, replay buffers, or Python executor pools across
 multiple environments or collectors.
@@ -475,6 +516,8 @@ result = ray.get(my_service.process.remote("Hello"))
 
 | [`get_services`](generated/torchrl.services.get_services.html#torchrl.services.get_services)([backend]) | Get a distributed service registry. |
 | --- | --- |
+| [`Service`](generated/torchrl.services.Service.html#torchrl.services.Service)(*args, **kwargs) | Owner-side contract for a long-lived TorchRL service. |
+| [`ServiceBackend`](generated/torchrl.services.ServiceBackend.html#torchrl.services.ServiceBackend) | alias of `Literal`['direct', 'thread', 'process', 'ray', 'monarch', 'distributed'] |
 | [`ServiceBase`](generated/torchrl.services.ServiceBase.html#torchrl.services.ServiceBase)() | Base class for distributed service registries. |
 | [`RayService`](generated/torchrl.services.RayService.html#torchrl.services.RayService)([ray_init_config, namespace]) | Ray-based distributed service registry. |
 
@@ -533,6 +576,9 @@ API for maximum portability.
 
 For complete examples, see:
 
+- `examples/services/multi_service_single_process.py` - Direct services
+- `examples/services/multi_service_multiprocess.py` - Process services
+- `examples/services/multi_service_ray.py` - Ray services
 - `examples/services/distributed_services.py` - Basic service registry usage
 - `examples/llm/python_executor_service.py` - Python executor service examples
 - `test/test_services.py` - Comprehensive test suite

@@ -1,8 +1,10 @@
 # TrackioLogger
 
-torchrl.record.loggers.trackio.TrackioLogger(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/trackio.html#TrackioLogger)
+torchrl.record.loggers.trackio.TrackioLogger(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/trackio.html#TrackioLogger)
 
 Wrapper for the trackio logger.
+
+See also `TrackioLoggerConfig`.
 
 Parameters:
 

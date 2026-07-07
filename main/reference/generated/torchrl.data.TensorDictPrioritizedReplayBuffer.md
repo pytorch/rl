@@ -1,6 +1,6 @@
 # TensorDictPrioritizedReplayBuffer
 
-*class*torchrl.data.TensorDictPrioritizedReplayBuffer(***, *alpha: float*, *beta: float*, *priority_key: NestedKey = 'td_error'*, *eps: float = 1e-08*, *storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage) | None = None*, *sampler_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *sync: bool = True*, *collate_fn: Callable | None = None*, *pin_memory: bool = False*, *prefetch: int | None = None*, *transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform) | None = None*, *reduction: str = 'max'*, *batch_size: int | None = None*, *dim_extend: int | None = None*, *generator: [Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | None = None*, *shared: bool = False*, *compilable: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#TensorDictPrioritizedReplayBuffer)
+*class*torchrl.data.TensorDictPrioritizedReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#TensorDictPrioritizedReplayBuffer)
 
 TensorDict-specific wrapper around the [`PrioritizedReplayBuffer`](torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer) class.
 
@@ -242,6 +242,10 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
+client() → T
+
+Return `self` for the zero-overhead direct backend.
+
 dump(**args*, ***kwargs*)
 
 Alias for `dumps()`.
@@ -330,6 +334,10 @@ Keyword Arguments:
 
 **invert** (*bool**,**optional*) - if `True`, the transform will be inverted (forward calls will be called
 during writing and inverse calls during reading). Defaults to `False`.
+
+*property*is_alive*: bool*
+
+Whether this direct replay buffer remains available.
 
 load(**args*, ***kwargs*)
 
@@ -421,6 +429,10 @@ save(**args*, ***kwargs*)
 
 Alias for `dumps()`.
 
+*property*service_backend*: str*
+
+The canonical deployment backend for this replay buffer.
+
 set_(*key*, *value*)
 
 Sets the value of a key across the entire replay buffer in-place.
@@ -465,6 +477,14 @@ value. Otherwise it is reset to a default value.
 set_writer(*writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*)
 
 Sets a new writer in the replay buffer and returns the previous writer.
+
+shutdown(*timeout: float | None = None*) → None
+
+Mark this direct replay-buffer owner as shut down.
+
+start() → T
+
+Return this already-started direct replay buffer.
 
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 

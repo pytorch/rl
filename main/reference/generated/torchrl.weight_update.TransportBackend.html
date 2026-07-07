@@ -51,7 +51,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="MPTransport" href="torchrl.weight_update.MPTransport.html" />
+    <link rel="next" title="InitialSyncTransport" href="torchrl.weight_update.InitialSyncTransport.html" />
     <link rel="prev" title="Weight Synchronization" href="../collectors_weightsync.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2353,7 +2365,7 @@ document.write(`
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.weight_update.TransportBackend">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.weight_update.</span></span><span class="sig-name descname"><span class="pre">TransportBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#TransportBackend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.TransportBackend" title="Link to this definition">#</a></dt>
-<dd><p>Abstract interface for different communication mechanisms.</p>
+<dd><p>Core data-plane interface for weight communication mechanisms.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.weight_update.TransportBackend.receive_weights">
 <span class="sig-name descname"><span class="pre">receive_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">WeightStrategy</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#TransportBackend.receive_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.TransportBackend.receive_weights" title="Link to this definition">#</a></dt>
@@ -2379,37 +2391,6 @@ support timeout and will raise ValueError if specified.</p></li>
 <dt class="sig sig-object py" id="torchrl.weight_update.TransportBackend.send_weights">
 <span class="sig-name descname"><span class="pre">send_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#TransportBackend.send_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.TransportBackend.send_weights" title="Link to this definition">#</a></dt>
 <dd><p>Send weights to the receiver.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.TransportBackend.setup_connection_and_weights_on_receiver">
-<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_receiver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">worker_idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy" title="torchrl.weight_update.weight_sync_schemes.WeightStrategy"><span class="pre">WeightStrategy</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#TransportBackend.setup_connection_and_weights_on_receiver"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.TransportBackend.setup_connection_and_weights_on_receiver" title="Link to this definition">#</a></dt>
-<dd><p>Synchronize weights on worker side before collection starts.</p>
-<p>This is called once in each worker after initialization to receive
-the initial weights. This is a no-op (weights are received via
-receive_weights).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>worker_idx</strong> – The worker index.</p></li>
-<li><p><strong>weights</strong> – Pre-allocated weight buffer to receive into.</p></li>
-<li><p><strong>model</strong> – The model to apply weights to.</p></li>
-<li><p><strong>strategy</strong> – Strategy for applying weights to the model.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The received weights (for SharedMemTransport) or None.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrl.weight_update.TransportBackend.setup_connection_and_weights_on_sender">
-<span class="sig-name descname"><span class="pre">setup_connection_and_weights_on_sender</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/weight_update/weight_sync_schemes.html#TransportBackend.setup_connection_and_weights_on_sender"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.weight_update.TransportBackend.setup_connection_and_weights_on_sender" title="Link to this definition">#</a></dt>
-<dd><p>Synchronize weights on sender side before collection starts.</p>
-<p>This is called once after workers are initialized to send the initial
-weights. This can be a no-op (weights are sent via
-send_weights).</p>
 </dd></dl>
 
 </dd></dl>
@@ -2468,11 +2449,11 @@ send_weights).</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.weight_update.MPTransport.html"
+       href="torchrl.weight_update.InitialSyncTransport.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">MPTransport</p>
+        <p class="prev-next-title">InitialSyncTransport</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2507,11 +2488,11 @@ send_weights).</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.weight_update.MPTransport.html"
+       href="torchrl.weight_update.InitialSyncTransport.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">MPTransport</p>
+        <p class="prev-next-title">InitialSyncTransport</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2536,8 +2517,6 @@ send_weights).</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.weight_update.TransportBackend"><code class="docutils literal notranslate"><span class="pre">TransportBackend</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.weight_update.TransportBackend.receive_weights"><code class="docutils literal notranslate"><span class="pre">TransportBackend.receive_weights()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.weight_update.TransportBackend.send_weights"><code class="docutils literal notranslate"><span class="pre">TransportBackend.send_weights()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.weight_update.TransportBackend.setup_connection_and_weights_on_receiver"><code class="docutils literal notranslate"><span class="pre">TransportBackend.setup_connection_and_weights_on_receiver()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.weight_update.TransportBackend.setup_connection_and_weights_on_sender"><code class="docutils literal notranslate"><span class="pre">TransportBackend.setup_connection_and_weights_on_sender()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -2792,7 +2771,7 @@ send_weights).</p>
        "headline": "TransportBackend",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.weight_update.TransportBackend.html",
-       "articleBody": "TransportBackend# class torchrl.weight_update.TransportBackend(*args, **kwargs)[source]# Abstract interface for different communication mechanisms. receive_weights(timeout: float | None = None, *, weights: Any = None, model: Any = None, strategy: WeightStrategy | None = None) \u2192 Any | None[source]# Receive weights from the sender and apply them to the model. Parameters: timeout \u2013 Maximum time to wait for weights (seconds). None means no timeout (blocking). Some transports may not support timeout and will raise ValueError if specified. weights \u2013 Pre-allocated weight buffer to receive into. model \u2013 The model to apply weights to. strategy \u2013 Strategy for applying weights to the model. Returns: The received/applied weights, or None if timeout/no weights available. send_weights(weights: Any) \u2192 None[source]# Send weights to the receiver. setup_connection_and_weights_on_receiver(*, worker_idx: int, weights: Any = None, model: Any = None, strategy: WeightStrategy | None = None) \u2192 Any[source]# Synchronize weights on worker side before collection starts. This is called once in each worker after initialization to receive the initial weights. This is a no-op (weights are received via receive_weights). Parameters: worker_idx \u2013 The worker index. weights \u2013 Pre-allocated weight buffer to receive into. model \u2013 The model to apply weights to. strategy \u2013 Strategy for applying weights to the model. Returns: The received weights (for SharedMemTransport) or None. setup_connection_and_weights_on_sender() \u2192 None[source]# Synchronize weights on sender side before collection starts. This is called once after workers are initialized to send the initial weights. This can be a no-op (weights are sent via send_weights).",
+       "articleBody": "TransportBackend# class torchrl.weight_update.TransportBackend(*args, **kwargs)[source]# Core data-plane interface for weight communication mechanisms. receive_weights(timeout: float | None = None, *, weights: Any = None, model: Any = None, strategy: WeightStrategy | None = None) \u2192 Any | None[source]# Receive weights from the sender and apply them to the model. Parameters: timeout \u2013 Maximum time to wait for weights (seconds). None means no timeout (blocking). Some transports may not support timeout and will raise ValueError if specified. weights \u2013 Pre-allocated weight buffer to receive into. model \u2013 The model to apply weights to. strategy \u2013 Strategy for applying weights to the model. Returns: The received/applied weights, or None if timeout/no weights available. send_weights(weights: Any) \u2192 None[source]# Send weights to the receiver.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

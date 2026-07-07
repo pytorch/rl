@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2352,7 +2364,7 @@ document.write(`
 <h1>get_logger<a class="headerlink" href="#get-logger" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.record.loggers.get_logger">
-<span class="sig-prename descclassname"><span class="pre">torchrl.record.loggers.</span></span><span class="sig-name descname"><span class="pre">get_logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logger_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Logger</span></span></span><a class="reference internal" href="../../_modules/torchrl/record/loggers/utils.html#get_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.record.loggers.get_logger" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.record.loggers.</span></span><span class="sig-name descname"><span class="pre">get_logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logger_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'tensorboard'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'csv'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'wandb'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'mlflow'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'trackio'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">''</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'direct'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'process'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'ray'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'direct'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ray_service</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ray_actor_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Logger</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/record/loggers/utils.html#get_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.record.loggers.get_logger" title="Link to this definition">#</a></dt>
 <dd><p>Get a logger instance of the provided <cite>logger_type</cite>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2361,9 +2373,12 @@ document.write(`
 If empty, <code class="docutils literal notranslate"><span class="pre">None</span></code> is returned.</p></li>
 <li><p><strong>logger_name</strong> (<em>str</em>) – Name to be used as a log_dir</p></li>
 <li><p><strong>experiment_name</strong> (<em>str</em>) – Name of the experiment</p></li>
-<li><p><strong>kwargs</strong> (<em>dict</em><em>[</em><em>str</em><em>]</em>) – might contain either <cite>wandb_kwargs</cite>, <cite>mlflow_kwargs</cite> or <cite>trackio_kwargs</cite>.
-Additionally supports <code class="docutils literal notranslate"><span class="pre">use_ray_service</span></code> (bool) and <code class="docutils literal notranslate"><span class="pre">ray_actor_options</span></code> (dict)
-to run the logger as a Ray actor.</p></li>
+<li><p><strong>service_backend</strong> – One of <code class="docutils literal notranslate"><span class="pre">&quot;direct&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;process&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;ray&quot;</span></code>.</p></li>
+<li><p><strong>service_backend_options</strong> – Process or Ray initialization options.</p></li>
+<li><p><strong>use_ray_service</strong> – Deprecated compatibility flag for the Ray backend.</p></li>
+<li><p><strong>ray_actor_options</strong> – Deprecated spelling for Ray actor options.</p></li>
+<li><p><strong>**kwargs</strong> – May contain <code class="docutils literal notranslate"><span class="pre">wandb_kwargs</span></code>, <code class="docutils literal notranslate"><span class="pre">mlflow_kwargs</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">trackio_kwargs</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2741,7 +2756,7 @@ to run the logger as a Ray actor.</p></li>
        "headline": "get_logger",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.record.loggers.get_logger.html",
-       "articleBody": "get_logger# torchrl.record.loggers.get_logger(logger_type: str, logger_name: str, experiment_name: str, **kwargs) \u2192 Logger[source]# Get a logger instance of the provided logger_type. Parameters: logger_type (str) \u2013 One of tensorboard / csv / wandb / mlflow / trackio. If empty, None is returned. logger_name (str) \u2013 Name to be used as a log_dir experiment_name (str) \u2013 Name of the experiment kwargs (dict[str]) \u2013 might contain either wandb_kwargs, mlflow_kwargs or trackio_kwargs. Additionally supports use_ray_service (bool) and ray_actor_options (dict) to run the logger as a Ray actor.",
+       "articleBody": "get_logger# torchrl.record.loggers.get_logger(logger_type: Literal[\u0027tensorboard\u0027, \u0027csv\u0027, \u0027wandb\u0027, \u0027mlflow\u0027, \u0027trackio\u0027, \u0027\u0027] | None, logger_name: str, experiment_name: str, *, service_backend: Literal[\u0027direct\u0027, \u0027process\u0027, \u0027ray\u0027] = \u0027direct\u0027, service_backend_options: dict[str, Any] | None = None, use_ray_service: bool = False, ray_actor_options: dict[str, Any] | None = None, **kwargs) \u2192 Logger | None[source]# Get a logger instance of the provided logger_type. Parameters: logger_type (str) \u2013 One of tensorboard / csv / wandb / mlflow / trackio. If empty, None is returned. logger_name (str) \u2013 Name to be used as a log_dir experiment_name (str) \u2013 Name of the experiment service_backend \u2013 One of \"direct\", \"process\", or \"ray\". service_backend_options \u2013 Process or Ray initialization options. use_ray_service \u2013 Deprecated compatibility flag for the Ray backend. ray_actor_options \u2013 Deprecated spelling for Ray actor options. **kwargs \u2013 May contain wandb_kwargs, mlflow_kwargs, or trackio_kwargs.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

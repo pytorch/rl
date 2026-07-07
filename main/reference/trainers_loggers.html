@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="trainers.html">torchrl.trainers package</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Loggers</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2340,27 +2352,54 @@ document.write(`
   <section id="loggers">
 <span id="ref-loggers"></span><h1>Loggers<a class="headerlink" href="#loggers" title="Link to this heading">#</a></h1>
 <p>Logger classes for experiment tracking and visualization.</p>
+<p>Loggers support an owner/client deployment model. The direct backend returns
+the logger itself from <code class="docutils literal notranslate"><span class="pre">client()</span></code>. Process and Ray backends return a
+picklable client that only exposes logging operations; lifecycle calls remain
+on the owner. Remote calls preserve direct-logger semantics: they return after
+the concrete logger method has run, propagate service-side errors immediately,
+and preserve custom <code class="docutils literal notranslate"><span class="pre">log_*</span></code> return values. Bounded transport queues provide
+backpressure when several clients log concurrently.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.record</span> <span class="kn">import</span> <span class="n">CSVLogger</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">CSVLogger</span><span class="p">(</span>
+    <span class="n">exp_name</span><span class="o">=</span><span class="s2">&quot;run&quot;</span><span class="p">,</span>
+    <span class="n">log_dir</span><span class="o">=</span><span class="s2">&quot;logs&quot;</span><span class="p">,</span>
+    <span class="n">service_backend</span><span class="o">=</span><span class="s2">&quot;process&quot;</span><span class="p">,</span>
+    <span class="n">service_backend_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;max_queue_size&quot;</span><span class="p">:</span> <span class="mi">256</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">worker_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">client</span><span class="p">()</span>
+<span class="n">worker_logger</span><span class="o">.</span><span class="n">log_scalar</span><span class="p">(</span><span class="s2">&quot;loss&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>  <span class="c1"># Flush buffers owned by the concrete logging SDK.</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger" title="torchrl.record.loggers.Logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Logger</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger" title="torchrl.record.loggers.Logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Logger</span></code></a>(*args[, use_ray_service, ...])</p></td>
 <td><p>A template for loggers.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html#torchrl.record.loggers.csv.CSVLogger" title="torchrl.record.loggers.csv.CSVLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">csv.CSVLogger</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.ProcessLogger.html#torchrl.record.loggers.ProcessLogger" title="torchrl.record.loggers.ProcessLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProcessLogger</span></code></a>(logger_cls, *args[, ...])</p></td>
+<td><p>Driver-owned logger service running in a dedicated process.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.RayLogger.html#torchrl.record.loggers.RayLogger" title="torchrl.record.loggers.RayLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RayLogger</span></code></a>(logger_cls, *args[, ...])</p></td>
+<td><p>Driver-owned Ray logger service with restricted worker clients.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html#torchrl.record.loggers.csv.CSVLogger" title="torchrl.record.loggers.csv.CSVLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">csv.CSVLogger</span></code></a>(*args[, use_ray_service, ...])</p></td>
 <td><p>A minimal-dependency CSV logger.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html#torchrl.record.loggers.mlflow.MLFlowLogger" title="torchrl.record.loggers.mlflow.MLFlowLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mlflow.MLFlowLogger</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html#torchrl.record.loggers.mlflow.MLFlowLogger" title="torchrl.record.loggers.mlflow.MLFlowLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mlflow.MLFlowLogger</span></code></a>(*args[, ...])</p></td>
 <td><p>Wrapper for the mlflow logger.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html#torchrl.record.loggers.tensorboard.TensorboardLogger" title="torchrl.record.loggers.tensorboard.TensorboardLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tensorboard.TensorboardLogger</span></code></a>(*args[, ...])</p></td>
 <td><p>Wrapper for the Tensoarboard logger.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.trackio.TrackioLogger.html#torchrl.record.loggers.trackio.TrackioLogger" title="torchrl.record.loggers.trackio.TrackioLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trackio.TrackioLogger</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.trackio.TrackioLogger.html#torchrl.record.loggers.trackio.TrackioLogger" title="torchrl.record.loggers.trackio.TrackioLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trackio.TrackioLogger</span></code></a>(*args[, ...])</p></td>
 <td><p>Wrapper for the trackio logger.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger" title="torchrl.record.loggers.wandb.WandbLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wandb.WandbLogger</span></code></a>(*args[, use_ray_service])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.wandb.WandbLogger.html#torchrl.record.loggers.wandb.WandbLogger" title="torchrl.record.loggers.wandb.WandbLogger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wandb.WandbLogger</span></code></a>(*args[, use_ray_service, ...])</p></td>
 <td><p>Wrapper for the wandb logger.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger" title="torchrl.record.loggers.get_logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_logger</span></code></a>(logger_type, logger_name, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger" title="torchrl.record.loggers.get_logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_logger</span></code></a>(logger_type, logger_name, ...[, ...])</p></td>
 <td><p>Get a logger instance of the provided <cite>logger_type</cite>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.generate_exp_name.html#torchrl.record.loggers.generate_exp_name" title="torchrl.record.loggers.generate_exp_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_exp_name</span></code></a>(model_name, experiment_name)</p></td>
@@ -2758,7 +2797,7 @@ document.write(`
        "headline": "Loggers",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/trainers_loggers.html",
-       "articleBody": "Loggers# Logger classes for experiment tracking and visualization. Logger(*args[, use_ray_service]) A template for loggers. csv.CSVLogger(*args[, use_ray_service]) A minimal-dependency CSV logger. mlflow.MLFlowLogger(*args[, use_ray_service]) Wrapper for the mlflow logger. tensorboard.TensorboardLogger(*args[, ...]) Wrapper for the Tensoarboard logger. trackio.TrackioLogger(*args[, use_ray_service]) Wrapper for the trackio logger. wandb.WandbLogger(*args[, use_ray_service]) Wrapper for the wandb logger. get_logger(logger_type, logger_name, ...) Get a logger instance of the provided logger_type. generate_exp_name(model_name, experiment_name) Generates an ID (str) for the described experiment using UUID and current date. Recording utils# VideoRecorder(logger, tag[, in_keys, skip, ...]) Video Recorder transform. TensorDictRecorder(out_file_base[, ...]) TensorDict recorder. PixelRenderTransform([out_keys, preproc, ...]) A transform to call render on the parent environment and register the pixel observation in the tensordict.",
+       "articleBody": "Loggers# Logger classes for experiment tracking and visualization. Loggers support an owner/client deployment model. The direct backend returns the logger itself from client(). Process and Ray backends return a picklable client that only exposes logging operations; lifecycle calls remain on the owner. Remote calls preserve direct-logger semantics: they return after the concrete logger method has run, propagate service-side errors immediately, and preserve custom log_* return values. Bounded transport queues provide backpressure when several clients log concurrently. from torchrl.record import CSVLogger logger = CSVLogger( exp_name=\"run\", log_dir=\"logs\", service_backend=\"process\", service_backend_options={\"max_queue_size\": 256}, ) worker_logger = logger.client() worker_logger.log_scalar(\"loss\", 1.0, step=0) logger.flush() # Flush buffers owned by the concrete logging SDK. logger.shutdown() Logger(*args[, use_ray_service, ...]) A template for loggers. ProcessLogger(logger_cls, *args[, ...]) Driver-owned logger service running in a dedicated process. RayLogger(logger_cls, *args[, ...]) Driver-owned Ray logger service with restricted worker clients. csv.CSVLogger(*args[, use_ray_service, ...]) A minimal-dependency CSV logger. mlflow.MLFlowLogger(*args[, ...]) Wrapper for the mlflow logger. tensorboard.TensorboardLogger(*args[, ...]) Wrapper for the Tensoarboard logger. trackio.TrackioLogger(*args[, ...]) Wrapper for the trackio logger. wandb.WandbLogger(*args[, use_ray_service, ...]) Wrapper for the wandb logger. get_logger(logger_type, logger_name, ...[, ...]) Get a logger instance of the provided logger_type. generate_exp_name(model_name, experiment_name) Generates an ID (str) for the described experiment using UUID and current date. Recording utils# VideoRecorder(logger, tag[, in_keys, skip, ...]) Video Recorder transform. TensorDictRecorder(out_file_base[, ...]) TensorDict recorder. PixelRenderTransform([out_keys, preproc, ...]) A transform to call render on the parent environment and register the pixel observation in the tensordict.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

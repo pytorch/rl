@@ -6,9 +6,9 @@ Dedicated-process wrapper around [`InferenceServer`](torchrl.modules.inference_s
 
 This server is intended for actor/env workers that communicate through a
 queue-based transport such as
-[`MPTransport`](torchrl.modules.inference_server.MPTransport.html#torchrl.modules.inference_server.MPTransport). Clients must be
-created from the transport before `start()` so that the child process
-inherits their response queues.
+[`MPTransport`](torchrl.modules.inference_server.MPTransport.html#torchrl.modules.inference_server.MPTransport). The restricted
+client returned by `client()` is created before the server process is
+spawned so its response queue is inherited safely.
 
 Parameters:
 
@@ -63,15 +63,19 @@ Examples
 ... )
 >>> ctx = mp.get_context("spawn")
 >>> transport = MPTransport(ctx=ctx)
->>> client = transport.client()
 >>> server = ProcessInferenceServer(
 ... policy_factory=make_policy,
 ... transport=transport,
 ... mp_context=ctx,
 ... )
 >>> server.start()
+>>> client = server.client()
 >>> server.shutdown()
 ```
+
+client() → Any[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.client)
+
+Return a restricted inference client from the owned transport.
 
 health(***, *timeout: float = 5.0*) → dict[str, int | bool | None][[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.health)
 

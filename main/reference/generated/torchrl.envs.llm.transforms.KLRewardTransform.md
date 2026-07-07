@@ -1,6 +1,6 @@
 # KLRewardTransform
 
-*class*torchrl.envs.llm.transforms.KLRewardTransform(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform)
+*class*torchrl.envs.llm.transforms.KLRewardTransform(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#KLRewardTransform)
 
 A legacy transform for computing KL divergence-based rewards.
 

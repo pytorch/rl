@@ -1,8 +1,10 @@
 # ReplayBuffer
 
-*class*torchrl.data.ReplayBuffer(***, *storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage) | Callable[[], [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)] | None = None*, *sampler: [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler) | Callable[[], [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler)] | None = None*, *writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer) | Callable[[], [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)] | None = None*, *collate_fn: Callable | None = None*, *pin_memory: bool = False*, *prefetch: int | None = None*, *transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform) | Callable | None = None*, *transform_factory: Callable[[], [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform) | Callable] | None = None*, *batch_size: int | None = None*, *dim_extend: int | None = None*, *checkpointer: [StorageCheckpointerBase](torchrl.data.replay_buffers.StorageCheckpointerBase.html#torchrl.data.replay_buffers.StorageCheckpointerBase) | Callable[[], [StorageCheckpointerBase](torchrl.data.replay_buffers.StorageCheckpointerBase.html#torchrl.data.replay_buffers.StorageCheckpointerBase)] | None = None*, *generator: [torch.Generator](https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator) | None = None*, *consume_after_n_samples: int | None = None*, *shared: bool = False*, *compilable: bool | None = None*, *delayed_init: bool | None = None*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer)
+*class*torchrl.data.ReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer)
 
 A generic, composable replay buffer class.
+
+See also `ReplayBufferConfig`.
 
 Keyword Arguments:
 
@@ -112,6 +114,10 @@ This is useful when the replay buffer needs to be pickled and sent to remote wor
 particularly when using transforms with modules that require gradients.
 If not specified, defaults to `True` when `transform_factory` is provided,
 and `False` otherwise.
+- **service_backend** (*str*) - deployment backend, either `"direct"` or
+`"ray"`. Defaults to `"direct"`.
+- **service_backend_options** (*dict**,**optional*) - Ray initialization options.
+Accepted keys are `ray_init_config` and `remote_config`.
 
 Examples
 
@@ -252,6 +258,10 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+client() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.client)
+
+Return `self` for the zero-overhead direct backend.
+
 dump(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.dump)
 
 Alias for `dumps()`.
@@ -357,6 +367,10 @@ Keyword Arguments:
 **invert** (*bool**,**optional*) - if `True`, the transform will be inverted (forward calls will be called
 during writing and inverse calls during reading). Defaults to `False`.
 
+*property*is_alive*: bool*
+
+Whether this direct replay buffer remains available.
+
 load(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.load)
 
 Alias for `loads()`.
@@ -442,6 +456,10 @@ save(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/r
 
 Alias for `dumps()`.
 
+*property*service_backend*: str*
+
+The canonical deployment backend for this replay buffer.
+
 set_(*key*, *value*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_)
 
 Sets the value of a key across the entire replay buffer in-place.
@@ -486,6 +504,14 @@ value. Otherwise it is reset to a default value.
 set_writer(*writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_writer)
 
 Sets a new writer in the replay buffer and returns the previous writer.
+
+shutdown(*timeout: float | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.shutdown)
+
+Mark this direct replay-buffer owner as shut down.
+
+start() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.start)
+
+Return this already-started direct replay buffer.
 
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 

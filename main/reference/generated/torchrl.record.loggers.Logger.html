@@ -51,7 +51,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="CSVLogger" href="torchrl.record.loggers.csv.CSVLogger.html" />
+    <link rel="next" title="ProcessLogger" href="torchrl.record.loggers.ProcessLogger.html" />
     <link rel="prev" title="Loggers" href="../trainers_loggers.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2352,17 +2364,21 @@ document.write(`
 <h1>Logger<a class="headerlink" href="#logger" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.record.loggers.Logger">
-<span class="sig-prename descclassname"><span class="pre">torchrl.record.loggers.</span></span><span class="sig-name descname"><span class="pre">Logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ray_service</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/record/loggers/common.html#Logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.record.loggers.Logger" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.record.loggers.</span></span><span class="sig-name descname"><span class="pre">Logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_ray_service</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend_options</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/record/loggers/common.html#Logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.record.loggers.Logger" title="Link to this definition">#</a></dt>
 <dd><p>A template for loggers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>service_backend</strong> (<em>str</em>) – Deployment backend. One of <code class="docutils literal notranslate"><span class="pre">&quot;direct&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;process&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;ray&quot;</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;direct&quot;</span></code>.</p></li>
+<li><p><strong>service_backend_options</strong> (<em>dict</em><em>, </em><em>optional</em>) – Backend options. Process
+services accept <code class="docutils literal notranslate"><span class="pre">context</span></code>/<code class="docutils literal notranslate"><span class="pre">mp_context</span></code>, <code class="docutils literal notranslate"><span class="pre">max_queue_size</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">startup_timeout</span></code>. Ray services accept <code class="docutils literal notranslate"><span class="pre">actor_options</span></code> and
+<code class="docutils literal notranslate"><span class="pre">ray_init_config</span></code>.</p></li>
 <li><p><strong>use_ray_service</strong> (<em>bool</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the logger runs as a Ray actor
-in a separate process. All method calls are delegated to the remote
-actor via <code class="docutils literal notranslate"><span class="pre">ray.get(actor.method.remote(...))</span></code>. CUDA tensors in
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">log_metrics()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">log_video()</span></code> are automatically moved
-to CPU before the remote call. Requires <code class="docutils literal notranslate"><span class="pre">ray</span></code> to be installed.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+in a separate process. Deprecated in favor of
+<code class="docutils literal notranslate"><span class="pre">service_backend=&quot;ray&quot;</span></code> and scheduled for removal in v0.16.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>ray_actor_options</strong> (<em>dict</em><em>, </em><em>optional</em>) – Options passed to <code class="docutils literal notranslate"><span class="pre">ray.remote()</span></code>
 when creating the Ray actor (e.g., <code class="docutils literal notranslate"><span class="pre">{&quot;num_cpus&quot;:</span> <span class="pre">1}</span></code>).
 Only used when <code class="docutils literal notranslate"><span class="pre">use_ray_service=True</span></code>.</p></li>
@@ -2425,11 +2441,11 @@ Only used when <code class="docutils literal notranslate"><span class="pre">use_
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.record.loggers.csv.CSVLogger.html"
+       href="torchrl.record.loggers.ProcessLogger.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">CSVLogger</p>
+        <p class="prev-next-title">ProcessLogger</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2464,11 +2480,11 @@ Only used when <code class="docutils literal notranslate"><span class="pre">use_
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.record.loggers.csv.CSVLogger.html"
+       href="torchrl.record.loggers.ProcessLogger.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">CSVLogger</p>
+        <p class="prev-next-title">ProcessLogger</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2743,7 +2759,7 @@ Only used when <code class="docutils literal notranslate"><span class="pre">use_
        "headline": "Logger",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.record.loggers.Logger.html",
-       "articleBody": "Logger# torchrl.record.loggers.Logger(*args, use_ray_service=False, **kwargs)[source]# A template for loggers. Keyword Arguments: use_ray_service (bool) \u2013 If True, the logger runs as a Ray actor in a separate process. All method calls are delegated to the remote actor via ray.get(actor.method.remote(...)). CUDA tensors in log_metrics() and log_video() are automatically moved to CPU before the remote call. Requires ray to be installed. Default: False. ray_actor_options (dict, optional) \u2013 Options passed to ray.remote() when creating the Ray actor (e.g., {\"num_cpus\": 1}). Only used when use_ray_service=True.",
+       "articleBody": "Logger# torchrl.record.loggers.Logger(*args, use_ray_service=False, service_backend=None, service_backend_options=None, **kwargs)[source]# A template for loggers. Keyword Arguments: service_backend (str) \u2013 Deployment backend. One of \"direct\", \"process\", or \"ray\". Defaults to \"direct\". service_backend_options (dict, optional) \u2013 Backend options. Process services accept context/mp_context, max_queue_size, and startup_timeout. Ray services accept actor_options and ray_init_config. use_ray_service (bool) \u2013 If True, the logger runs as a Ray actor in a separate process. Deprecated in favor of service_backend=\"ray\" and scheduled for removal in v0.16. Defaults to False. ray_actor_options (dict, optional) \u2013 Options passed to ray.remote() when creating the Ray actor (e.g., {\"num_cpus\": 1}). Only used when use_ray_service=True.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

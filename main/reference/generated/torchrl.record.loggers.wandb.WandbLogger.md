@@ -1,8 +1,10 @@
 # WandbLogger
 
-torchrl.record.loggers.wandb.WandbLogger(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/wandb.html#WandbLogger)
+torchrl.record.loggers.wandb.WandbLogger(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/wandb.html#WandbLogger)
 
 Wrapper for the wandb logger.
+
+See also `WandbLoggerConfig`.
 
 The keyword arguments are mainly based on the `wandb.init()` kwargs.
 See the doc [here](https://docs.wandb.ai/ref/python/init).

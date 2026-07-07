@@ -19,7 +19,7 @@ Keyword Arguments:
 **max_queue_size** (*int*) - maximum size of the request queue.
 Default: `1000`.
 
-client() → _QueueInferenceClient[[source]](../../_modules/torchrl/modules/inference_server/_monarch.html#MonarchTransport.client)
+client() → MailboxClient[[source]](../../_modules/torchrl/modules/inference_server/_monarch.html#MonarchTransport.client)
 
 Create an actor-side client with a dedicated response queue.
 

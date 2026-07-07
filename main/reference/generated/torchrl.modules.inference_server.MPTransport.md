@@ -28,7 +28,7 @@ Example
 >>> p.start() # queue inherited
 ```
 
-client() → _QueueInferenceClient[[source]](../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport.client)
+client() → MailboxClient[[source]](../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport.client)
 
 Create an actor-side client with a dedicated response queue.
 

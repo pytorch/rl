@@ -395,9 +395,9 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 
 ### Replay Buffer and Storage Configurations
 
-| [`ReplayBufferConfig`](generated/torchrl.trainers.algorithms.configs.data.ReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.ReplayBufferConfig)([_partial_, _target_, ...]) | Hydra configuration for `ReplayBuffer`. |
+| [`ReplayBufferConfig`](generated/torchrl.trainers.algorithms.configs.data.ReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.ReplayBufferConfig)(_partial_, _target_, ...) | Hydra configuration for `ReplayBuffer`. |
 | --- | --- |
-| [`TensorDictReplayBufferConfig`](generated/torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig)([_partial_, ...]) | Hydra configuration for `TensorDictReplayBuffer`. |
+| [`TensorDictReplayBufferConfig`](generated/torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig.html#torchrl.trainers.algorithms.configs.data.TensorDictReplayBufferConfig)(_partial_, ...) | Hydra configuration for `TensorDictReplayBuffer`. |
 | [`ConsumingSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.ConsumingSamplerConfig.html#torchrl.trainers.algorithms.configs.data.ConsumingSamplerConfig)([_target_, ...]) | Hydra configuration for [`ConsumingSampler`](generated/torchrl.data.replay_buffers.ConsumingSampler.html#torchrl.data.replay_buffers.ConsumingSampler). |
 | [`RandomSamplerConfig`](generated/torchrl.trainers.algorithms.configs.data.RandomSamplerConfig.html#torchrl.trainers.algorithms.configs.data.RandomSamplerConfig)([_target_]) | Configuration for random sampling from replay buffer. |
 | [`SamplerWithoutReplacementConfig`](generated/torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig.html#torchrl.trainers.algorithms.configs.data.SamplerWithoutReplacementConfig)([_target_, ...]) | Configuration for sampling without replacement. |
@@ -471,10 +471,10 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 
 | [`LoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.LoggerConfig.html#torchrl.trainers.algorithms.configs.logging.LoggerConfig)() | A class to configure a logger. |
 | --- | --- |
-| [`WandbLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig)(exp_name, offline, ...) | A class to configure a Wandb logger. |
-| [`TensorboardLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig)(exp_name[, log_dir, ...]) | A class to configure a Tensorboard logger. |
-| [`TrackioLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig)(exp_name, project, ...) | A class to configure a Trackio logger. |
-| [`CSVLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig)(exp_name[, log_dir, ...]) | A class to configure a CSV logger. |
+| [`WandbLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig)(exp_name, offline, ...) | Hydra configuration for `WandbLogger`. |
+| [`TensorboardLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig)(exp_name, log_dir, ...) | Hydra configuration for `TensorboardLogger`. |
+| [`TrackioLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig)(exp_name, project, ...) | Hydra configuration for `TrackioLogger`. |
+| [`CSVLoggerConfig`](generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig)(exp_name, log_dir, ...) | Hydra configuration for `CSVLogger`. |
 
 ## Creating Custom Configurations
 

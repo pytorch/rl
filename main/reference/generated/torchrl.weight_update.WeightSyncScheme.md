@@ -55,6 +55,21 @@ Note
 
 This is used internally by init_on_sender/init_on_receiver.
 
+*classmethod*from_backend(*backend: Literal['none', 'direct', 'shared', 'thread', 'process', 'multiprocessing', 'distributed', 'rpc', 'ray']*, ***kwargs*) → WeightSyncScheme[[source]](../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSyncScheme.from_backend)
+
+Construct a weight-sync scheme from its deployment backend.
+
+Parameters:
+
+- **backend** - One of `none`, `shared`, `process`, `distributed`,
+`rpc`, or `ray`. `direct`, `thread`, and
+`multiprocessing` are accepted aliases.
+- ****kwargs** - Arguments forwarded to the concrete scheme constructor.
+
+Returns:
+
+The selected concrete scheme.
+
 init_on_receiver(*model_id: str*, *context: Any*, ***kwargs*) → None[[source]](../../_modules/torchrl/weight_update/weight_sync_schemes.html#WeightSyncScheme.init_on_receiver)
 
 init_on_receiver(*model_id: str*, *context: None = None*, ***, *worker_idx: int = ...*, *model: Any | None = None*, ***kwargs*) → None

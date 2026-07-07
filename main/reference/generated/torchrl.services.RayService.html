@@ -51,7 +51,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="torchrl.trainers package" href="../trainers.html" />
+    <link rel="next" title="Designing Training Applications with Services" href="../services_workflow.html" />
     <link rel="prev" title="ServiceBase" href="torchrl.services.ServiceBase.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../services.html">Service Registry</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2417,6 +2429,14 @@ by any worker in the cluster.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.services.RayService.get_client">
+<span class="sig-name descname"><span class="pre">get_client</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/services/ray_service.html#RayService.get_client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.RayService.get_client" title="Link to this definition">#</a></dt>
+<dd><p>Return a capability-restricted client for an owned service.</p>
+<p>Legacy class/factory registrations continue to expose raw Ray actors
+through <a class="reference internal" href="#torchrl.services.RayService.get" title="torchrl.services.RayService.get"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get()</span></code></a> and are intentionally rejected here.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.services.RayService.list">
 <span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/services/ray_service.html#RayService.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.RayService.list" title="Link to this definition">#</a></dt>
 <dd><p>List all registered service names.</p>
@@ -2439,15 +2459,17 @@ services registered by any worker.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.services.RayService.register">
-<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_factory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">type</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/services/ray_service.html#RayService.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.RayService.register" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_factory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">type</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="torchrl.services.Service.html#torchrl.services.Service" title="torchrl.services.base.Service"><span class="pre">Service</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/services/ray_service.html#RayService.register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.RayService.register" title="Link to this definition">#</a></dt>
 <dd><p>Register a service and create a named Ray actor.</p>
-<p>This method creates a Ray actor with a globally unique name. The actor
-becomes immediately visible to all workers in the cluster.</p>
+<p>A class/factory creates a Ray actor with a globally unique name. A
+running <a class="reference internal" href="torchrl.services.Service.html#torchrl.services.Service" title="torchrl.services.Service"><code class="xref py py-class docutils literal notranslate"><span class="pre">Service</span></code></a> owner instead registers its restricted client
+without transferring lifecycle ownership to the registry.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> – Service identifier. Must be unique within the namespace.</p></li>
-<li><p><strong>service_factory</strong> – Class to instantiate as a Ray actor.</p></li>
+<li><p><strong>service_factory</strong> – Class to instantiate as a Ray actor, or a running
+service owner.</p></li>
 <li><p><strong>*args</strong> – Positional arguments for the service constructor.</p></li>
 <li><p><strong>**kwargs</strong> – Both Ray actor options (num_cpus, num_gpus, memory, etc.)
 and service constructor arguments. Ray will filter out the actor
@@ -2455,7 +2477,8 @@ options it recognizes.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The Ray actor handle.</p>
+<dd class="field-even"><p>The Ray actor handle for a class registration, or the restricted
+client for a service-owner registration.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>ValueError</strong> – If a service with this name already exists.</p>
@@ -2540,10 +2563,11 @@ equivalent to <cite>register()</cite> but more readable for complex configuratio
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.services.RayService.reset">
 <span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/services/ray_service.html#RayService.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.RayService.reset" title="Link to this definition">#</a></dt>
-<dd><p>Reset the service registry by terminating all actors.</p>
+<dd><p>Reset discovery and terminate registry-owned legacy actors.</p>
 <p>This method:
-1. Terminates all service actors in the current namespace
-2. Clears the registry actor’s internal state</p>
+1. Terminates class/factory actors created by this registry
+2. Removes externally-owned service clients without shutting owners down
+3. Clears the registry actor’s internal state</p>
 <p>After calling reset(), all services will be removed and their actors
 will be killed. Any ongoing work will be interrupted.</p>
 <div class="admonition warning">
@@ -2625,11 +2649,11 @@ namespace. Use with caution.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../trainers.html"
+       href="../services_workflow.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">torchrl.trainers package</p>
+        <p class="prev-next-title">Designing Training Applications with Services</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2664,11 +2688,11 @@ namespace. Use with caution.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../trainers.html"
+       href="../services_workflow.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">torchrl.trainers package</p>
+        <p class="prev-next-title">Designing Training Applications with Services</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2692,6 +2716,7 @@ namespace. Use with caution.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.RayService"><code class="docutils literal notranslate"><span class="pre">RayService</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.RayService.get"><code class="docutils literal notranslate"><span class="pre">RayService.get()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.RayService.get_client"><code class="docutils literal notranslate"><span class="pre">RayService.get_client()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.RayService.list"><code class="docutils literal notranslate"><span class="pre">RayService.list()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.RayService.register"><code class="docutils literal notranslate"><span class="pre">RayService.register()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.RayService.register_with_options"><code class="docutils literal notranslate"><span class="pre">RayService.register_with_options()</span></code></a></li>
@@ -2951,7 +2976,7 @@ namespace. Use with caution.</p>
        "headline": "RayService",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.services.RayService.html",
-       "articleBody": "RayService# class torchrl.services.RayService(ray_init_config: dict | None = None, namespace: str = \u0027torchrl_services\u0027)[source]# Ray-based distributed service registry. This class uses Ray\u2019s named actors feature to provide truly distributed service discovery. When a service is registered by any worker, it becomes immediately accessible to all other workers in the Ray cluster. Services are registered as Ray actors with globally unique names. This ensures that: 1. Services persist independently of the registering worker 2. All workers see the same services instantly 3. No custom synchronization is needed Parameters: ray_init_config (dict, optional) \u2013 Configuration for ray.init(). Only used if Ray is not already initialized. Common options: - address (str): Ray cluster address, or \u201cauto\u201d to auto-detect - num_cpus (int): Number of CPUs to use - num_gpus (int): Number of GPUs to use namespace (str, optional) \u2013 Ray namespace for service isolation. Services in different namespaces are isolated from each other. Defaults to \u201ctorchrl_services\u201d. Examples \u003e\u003e\u003e # Basic usage \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e services.register(\"tokenizer\", TokenizerClass, num_cpus=1) \u003e\u003e\u003e tokenizer = services[\"tokenizer\"] \u003e\u003e\u003e \u003e\u003e\u003e # With Ray options for dynamic configuration \u003e\u003e\u003e actor = services.register( ... \"model\", ... ModelClass, ... num_cpus=2, ... num_gpus=1, ... memory=10 * 1024**3, ... max_concurrency=4 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # Check and retrieve \u003e\u003e\u003e if \"tokenizer\" in services: ... tok = services[\"tokenizer\"] \u003e\u003e\u003e \u003e\u003e\u003e # List all services \u003e\u003e\u003e print(services.list()) [\u0027tokenizer\u0027, \u0027model\u0027] get(name: str) \u2192 Any[source]# Get a service by name. Retrieves a service actor by name. The service can have been registered by any worker in the cluster. Parameters: name \u2013 Service identifier. Returns: The Ray actor handle. Raises: KeyError \u2013 If the service is not found. Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e tokenizer = services.get(\"tokenizer\") \u003e\u003e\u003e # Use the actor \u003e\u003e\u003e result = ray.get(tokenizer.encode.remote(\"Hello world\")) list() \u2192 list[str][source]# List all registered service names. Returns a list of all services in the current namespace. This includes services registered by any worker. Returns: List of service names (without namespace prefix). Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e services.register(\"tokenizer\", TokenizerClass) \u003e\u003e\u003e services.register(\"buffer\", ReplayBuffer) \u003e\u003e\u003e print(services.list()) [\u0027buffer\u0027, \u0027tokenizer\u0027] register(name: str, service_factory: type, *args, **kwargs) \u2192 Any[source]# Register a service and create a named Ray actor. This method creates a Ray actor with a globally unique name. The actor becomes immediately visible to all workers in the cluster. Parameters: name \u2013 Service identifier. Must be unique within the namespace. service_factory \u2013 Class to instantiate as a Ray actor. *args \u2013 Positional arguments for the service constructor. **kwargs \u2013 Both Ray actor options (num_cpus, num_gpus, memory, etc.) and service constructor arguments. Ray will filter out the actor options it recognizes. Returns: The Ray actor handle. Raises: ValueError \u2013 If a service with this name already exists. Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e \u003e\u003e\u003e # Basic registration \u003e\u003e\u003e tokenizer = services.register(\"tokenizer\", TokenizerClass) \u003e\u003e\u003e \u003e\u003e\u003e # With Ray resource specification \u003e\u003e\u003e buffer = services.register( ... \"buffer\", ... ReplayBuffer, ... num_cpus=2, ... num_gpus=0, ... size=1000000 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # With advanced Ray options \u003e\u003e\u003e model = services.register( ... \"model\", ... ModelClass, ... num_cpus=4, ... num_gpus=1, ... memory=20 * 1024**3, ... max_concurrency=10, ... max_restarts=3, ... ) register_with_options(name: str, service_factory: type, actor_options: dict[str, Any], **constructor_kwargs) \u2192 Any[source]# Register a service with explicit separation of Ray options and constructor args. This is a convenience method that makes it explicit which arguments are for Ray actor configuration vs. the service constructor. It\u2019s functionally equivalent to register() but more readable for complex configurations. Parameters: name \u2013 Service identifier. service_factory \u2013 Class to instantiate as a Ray actor. actor_options \u2013 Dictionary of Ray actor options (num_cpus, num_gpus, etc.). **constructor_kwargs \u2013 Arguments to pass to the service constructor. Returns: The Ray actor handle. Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e \u003e\u003e\u003e # Explicit separation of concerns \u003e\u003e\u003e model = services.register_with_options( ... \"model\", ... ModelClass, ... actor_options={ ... \"num_cpus\": 4, ... \"num_gpus\": 1, ... \"memory\": 20 * 1024**3, ... \"max_concurrency\": 10 ... }, ... model_path=\"/path/to/checkpoint\", ... batch_size=32 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # Equivalent to: \u003e\u003e\u003e # services.register( \u003e\u003e\u003e # \"model\", ModelClass, \u003e\u003e\u003e # num_cpus=4, num_gpus=1, memory=20*1024**3, max_concurrency=10, \u003e\u003e\u003e # model_path=\"/path/to/checkpoint\", batch_size=32 \u003e\u003e\u003e # ) reset() \u2192 None[source]# Reset the service registry by terminating all actors. This method: 1. Terminates all service actors in the current namespace 2. Clears the registry actor\u2019s internal state After calling reset(), all services will be removed and their actors will be killed. Any ongoing work will be interrupted. Warning This is a destructive operation that affects all workers in the namespace. Use with caution. Examples \u003e\u003e\u003e services = RayService(namespace=\"experiment\") \u003e\u003e\u003e services.register(\"tokenizer\", TokenizerClass) \u003e\u003e\u003e print(services.list()) [\u0027tokenizer\u0027] \u003e\u003e\u003e services.reset() \u003e\u003e\u003e print(services.list()) [] shutdown(raise_on_error: bool = True) \u2192 None[source]# Shutdown the RayService by shutting down the Ray cluster.",
+       "articleBody": "RayService# class torchrl.services.RayService(ray_init_config: dict | None = None, namespace: str = \u0027torchrl_services\u0027)[source]# Ray-based distributed service registry. This class uses Ray\u2019s named actors feature to provide truly distributed service discovery. When a service is registered by any worker, it becomes immediately accessible to all other workers in the Ray cluster. Services are registered as Ray actors with globally unique names. This ensures that: 1. Services persist independently of the registering worker 2. All workers see the same services instantly 3. No custom synchronization is needed Parameters: ray_init_config (dict, optional) \u2013 Configuration for ray.init(). Only used if Ray is not already initialized. Common options: - address (str): Ray cluster address, or \u201cauto\u201d to auto-detect - num_cpus (int): Number of CPUs to use - num_gpus (int): Number of GPUs to use namespace (str, optional) \u2013 Ray namespace for service isolation. Services in different namespaces are isolated from each other. Defaults to \u201ctorchrl_services\u201d. Examples \u003e\u003e\u003e # Basic usage \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e services.register(\"tokenizer\", TokenizerClass, num_cpus=1) \u003e\u003e\u003e tokenizer = services[\"tokenizer\"] \u003e\u003e\u003e \u003e\u003e\u003e # With Ray options for dynamic configuration \u003e\u003e\u003e actor = services.register( ... \"model\", ... ModelClass, ... num_cpus=2, ... num_gpus=1, ... memory=10 * 1024**3, ... max_concurrency=4 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # Check and retrieve \u003e\u003e\u003e if \"tokenizer\" in services: ... tok = services[\"tokenizer\"] \u003e\u003e\u003e \u003e\u003e\u003e # List all services \u003e\u003e\u003e print(services.list()) [\u0027tokenizer\u0027, \u0027model\u0027] get(name: str) \u2192 Any[source]# Get a service by name. Retrieves a service actor by name. The service can have been registered by any worker in the cluster. Parameters: name \u2013 Service identifier. Returns: The Ray actor handle. Raises: KeyError \u2013 If the service is not found. Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e tokenizer = services.get(\"tokenizer\") \u003e\u003e\u003e # Use the actor \u003e\u003e\u003e result = ray.get(tokenizer.encode.remote(\"Hello world\")) get_client(name: str) \u2192 Any[source]# Return a capability-restricted client for an owned service. Legacy class/factory registrations continue to expose raw Ray actors through get() and are intentionally rejected here. list() \u2192 list[str][source]# List all registered service names. Returns a list of all services in the current namespace. This includes services registered by any worker. Returns: List of service names (without namespace prefix). Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e services.register(\"tokenizer\", TokenizerClass) \u003e\u003e\u003e services.register(\"buffer\", ReplayBuffer) \u003e\u003e\u003e print(services.list()) [\u0027buffer\u0027, \u0027tokenizer\u0027] register(name: str, service_factory: type | Service, *args, **kwargs) \u2192 Any[source]# Register a service and create a named Ray actor. A class/factory creates a Ray actor with a globally unique name. A running Service owner instead registers its restricted client without transferring lifecycle ownership to the registry. Parameters: name \u2013 Service identifier. Must be unique within the namespace. service_factory \u2013 Class to instantiate as a Ray actor, or a running service owner. *args \u2013 Positional arguments for the service constructor. **kwargs \u2013 Both Ray actor options (num_cpus, num_gpus, memory, etc.) and service constructor arguments. Ray will filter out the actor options it recognizes. Returns: The Ray actor handle for a class registration, or the restricted client for a service-owner registration. Raises: ValueError \u2013 If a service with this name already exists. Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e \u003e\u003e\u003e # Basic registration \u003e\u003e\u003e tokenizer = services.register(\"tokenizer\", TokenizerClass) \u003e\u003e\u003e \u003e\u003e\u003e # With Ray resource specification \u003e\u003e\u003e buffer = services.register( ... \"buffer\", ... ReplayBuffer, ... num_cpus=2, ... num_gpus=0, ... size=1000000 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # With advanced Ray options \u003e\u003e\u003e model = services.register( ... \"model\", ... ModelClass, ... num_cpus=4, ... num_gpus=1, ... memory=20 * 1024**3, ... max_concurrency=10, ... max_restarts=3, ... ) register_with_options(name: str, service_factory: type, actor_options: dict[str, Any], **constructor_kwargs) \u2192 Any[source]# Register a service with explicit separation of Ray options and constructor args. This is a convenience method that makes it explicit which arguments are for Ray actor configuration vs. the service constructor. It\u2019s functionally equivalent to register() but more readable for complex configurations. Parameters: name \u2013 Service identifier. service_factory \u2013 Class to instantiate as a Ray actor. actor_options \u2013 Dictionary of Ray actor options (num_cpus, num_gpus, etc.). **constructor_kwargs \u2013 Arguments to pass to the service constructor. Returns: The Ray actor handle. Examples \u003e\u003e\u003e services = RayService() \u003e\u003e\u003e \u003e\u003e\u003e # Explicit separation of concerns \u003e\u003e\u003e model = services.register_with_options( ... \"model\", ... ModelClass, ... actor_options={ ... \"num_cpus\": 4, ... \"num_gpus\": 1, ... \"memory\": 20 * 1024**3, ... \"max_concurrency\": 10 ... }, ... model_path=\"/path/to/checkpoint\", ... batch_size=32 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # Equivalent to: \u003e\u003e\u003e # services.register( \u003e\u003e\u003e # \"model\", ModelClass, \u003e\u003e\u003e # num_cpus=4, num_gpus=1, memory=20*1024**3, max_concurrency=10, \u003e\u003e\u003e # model_path=\"/path/to/checkpoint\", batch_size=32 \u003e\u003e\u003e # ) reset() \u2192 None[source]# Reset discovery and terminate registry-owned legacy actors. This method: 1. Terminates class/factory actors created by this registry 2. Removes externally-owned service clients without shutting owners down 3. Clears the registry actor\u2019s internal state After calling reset(), all services will be removed and their actors will be killed. Any ongoing work will be interrupted. Warning This is a destructive operation that affects all workers in the namespace. Use with caution. Examples \u003e\u003e\u003e services = RayService(namespace=\"experiment\") \u003e\u003e\u003e services.register(\"tokenizer\", TokenizerClass) \u003e\u003e\u003e print(services.list()) [\u0027tokenizer\u0027] \u003e\u003e\u003e services.reset() \u003e\u003e\u003e print(services.list()) [] shutdown(raise_on_error: bool = True) \u2192 None[source]# Shutdown the RayService by shutting down the Ray cluster.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -52,7 +52,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="RayService" href="torchrl.services.RayService.html" />
-    <link rel="prev" title="get_services" href="torchrl.services.get_services.html" />
+    <link rel="prev" title="ServiceBackend" href="torchrl.services.ServiceBackend.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../services.html">Service Registry</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2373,6 +2385,23 @@ by another worker, this method will find it in the distributed registry.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.services.ServiceBase.get_client">
+<span class="sig-name descname"><span class="pre">get_client</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/services/base.html#ServiceBase.get_client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.ServiceBase.get_client" title="Link to this definition">#</a></dt>
+<dd><p>Get the restricted client for a registered <a class="reference internal" href="torchrl.services.Service.html#torchrl.services.Service" title="torchrl.services.Service"><code class="xref py py-class docutils literal notranslate"><span class="pre">Service</span></code></a>.</p>
+<p>This method is additive so existing custom registry backends remain
+instantiable. Backends that support owner/client discovery override it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>name</strong> – Service identifier.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>NotImplementedError</strong> – If this registry backend does not support
+    service-client discovery.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.services.ServiceBase.list">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">list</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/torchrl/services/base.html#ServiceBase.list"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.ServiceBase.list" title="Link to this definition">#</a></dt>
 <dd><p>List all registered service names.</p>
@@ -2415,9 +2444,9 @@ service constructor. Actor configuration options are backend-specific
 <dt class="sig sig-object py" id="torchrl.services.ServiceBase.reset">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/services/base.html#ServiceBase.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.services.ServiceBase.reset" title="Link to this definition">#</a></dt>
 <dd><p>Reset the service registry.</p>
-<p>This removes all registered services and cleans up associated resources.
-After calling reset(), the registry will be empty and all service actors
-will be terminated.</p>
+<p>This removes all registered services and cleans up registry-owned
+resources. Externally-owned <a class="reference internal" href="torchrl.services.Service.html#torchrl.services.Service" title="torchrl.services.Service"><code class="xref py py-class docutils literal notranslate"><span class="pre">Service</span></code></a> instances are removed from
+discovery but are never shut down by the registry.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>This is a destructive operation. All services will be terminated and
@@ -2472,12 +2501,12 @@ any ongoing work will be interrupted.</p>
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.services.get_services.html"
+       href="torchrl.services.ServiceBackend.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">get_services</p>
+        <p class="prev-next-title">ServiceBackend</p>
       </div>
     </a>
     <a class="right-next"
@@ -2511,12 +2540,12 @@ any ongoing work will be interrupted.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.services.get_services.html"
+       href="torchrl.services.ServiceBackend.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">get_services</p>
+        <p class="prev-next-title">ServiceBackend</p>
       </div>
     </a>
     <a class="right-next"
@@ -2548,6 +2577,7 @@ any ongoing work will be interrupted.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.ServiceBase"><code class="docutils literal notranslate"><span class="pre">ServiceBase</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.ServiceBase.get"><code class="docutils literal notranslate"><span class="pre">ServiceBase.get()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.ServiceBase.get_client"><code class="docutils literal notranslate"><span class="pre">ServiceBase.get_client()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.ServiceBase.list"><code class="docutils literal notranslate"><span class="pre">ServiceBase.list()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.ServiceBase.register"><code class="docutils literal notranslate"><span class="pre">ServiceBase.register()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.services.ServiceBase.reset"><code class="docutils literal notranslate"><span class="pre">ServiceBase.reset()</span></code></a></li>
@@ -2805,7 +2835,7 @@ any ongoing work will be interrupted.</p>
        "headline": "ServiceBase",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.services.ServiceBase.html",
-       "articleBody": "ServiceBase# class torchrl.services.ServiceBase[source]# Base class for distributed service registries. A service registry manages distributed actors/services that can be accessed across multiple workers. Common use cases include: Tokenizers shared across inference workers Replay buffers for distributed training Model registries for centralized model storage Metrics aggregators The registry provides a dict-like interface for registering and accessing services by name. abstract get(name: str) \u2192 Any[source]# Get a service by name. Retrieves a previously registered service. If the service was registered by another worker, this method will find it in the distributed registry. Parameters: name \u2013 Service identifier. Returns: The remote actor handle for the service. Raises: KeyError \u2013 If the service is not found. abstract list() \u2192 list[str][source]# List all registered service names. Returns: List of service names currently registered in the cluster. abstract register(name: str, service_factory: type, *args, **kwargs) \u2192 Any[source]# Register a service factory and create the service actor. This method registers a service with the given name and immediately creates the corresponding actor. The service becomes globally visible to all workers in the cluster. Parameters: name \u2013 Unique identifier for the service. This name is used to retrieve the service later. service_factory \u2013 Class to instantiate as a remote actor. *args \u2013 Positional arguments to pass to the service constructor. **kwargs \u2013 Keyword arguments for both actor configuration and service constructor. Actor configuration options are backend-specific (e.g., num_cpus, num_gpus for Ray). Returns: The remote actor handle. Raises: ValueError \u2013 If a service with this name already exists. abstract reset() \u2192 None[source]# Reset the service registry. This removes all registered services and cleans up associated resources. After calling reset(), the registry will be empty and all service actors will be terminated. Warning This is a destructive operation. All services will be terminated and any ongoing work will be interrupted.",
+       "articleBody": "ServiceBase# class torchrl.services.ServiceBase[source]# Base class for distributed service registries. A service registry manages distributed actors/services that can be accessed across multiple workers. Common use cases include: Tokenizers shared across inference workers Replay buffers for distributed training Model registries for centralized model storage Metrics aggregators The registry provides a dict-like interface for registering and accessing services by name. abstract get(name: str) \u2192 Any[source]# Get a service by name. Retrieves a previously registered service. If the service was registered by another worker, this method will find it in the distributed registry. Parameters: name \u2013 Service identifier. Returns: The remote actor handle for the service. Raises: KeyError \u2013 If the service is not found. get_client(name: str) \u2192 Any[source]# Get the restricted client for a registered Service. This method is additive so existing custom registry backends remain instantiable. Backends that support owner/client discovery override it. Parameters: name \u2013 Service identifier. Raises: NotImplementedError \u2013 If this registry backend does not support service-client discovery. abstract list() \u2192 list[str][source]# List all registered service names. Returns: List of service names currently registered in the cluster. abstract register(name: str, service_factory: type, *args, **kwargs) \u2192 Any[source]# Register a service factory and create the service actor. This method registers a service with the given name and immediately creates the corresponding actor. The service becomes globally visible to all workers in the cluster. Parameters: name \u2013 Unique identifier for the service. This name is used to retrieve the service later. service_factory \u2013 Class to instantiate as a remote actor. *args \u2013 Positional arguments to pass to the service constructor. **kwargs \u2013 Keyword arguments for both actor configuration and service constructor. Actor configuration options are backend-specific (e.g., num_cpus, num_gpus for Ray). Returns: The remote actor handle. Raises: ValueError \u2013 If a service with this name already exists. abstract reset() \u2192 None[source]# Reset the service registry. This removes all registered services and cleans up registry-owned resources. Externally-owned Service instances are removed from discovery but are never shut down by the registry. Warning This is a destructive operation. All services will be terminated and any ongoing work will be interrupted.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -337,7 +337,7 @@ Context manager that pauses the collector if it is running free.
 
 The policy passed to the inference server.
 
-With `InferenceServerConfig(backend="process")` the policy only exists inside the
+With `InferenceServerConfig(service_backend="process")` the policy only exists inside the
 server process, so this returns the `policy_factory` instead.
 
 *property*policy_version*: int*

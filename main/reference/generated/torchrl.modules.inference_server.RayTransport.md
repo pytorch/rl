@@ -26,7 +26,7 @@ Example
 >>> # pass *client* to a Ray actor for remote inference requests
 ```
 
-client() → _QueueInferenceClient[[source]](../../_modules/torchrl/modules/inference_server/_ray.html#RayTransport.client)
+client() → MailboxClient[[source]](../../_modules/torchrl/modules/inference_server/_ray.html#RayTransport.client)
 
 Create an actor-side client with a dedicated Ray response queue.
 

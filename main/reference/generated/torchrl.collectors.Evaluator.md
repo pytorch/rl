@@ -110,7 +110,8 @@ Default: `ExplorationType.DETERMINISTIC`.
 - **metrics_fn** - Optional `(TensorDictBase) -> dict[str, float]`
 called on every trajectory batch to extract custom metrics.
 - **dump_video** (*bool*) - Call `dump()` on `VideoRecorder`
-transforms after each evaluation (thread backend only).
+transforms after each evaluation. Process-backed collectors invoke
+the transform in their worker and can use a service-backed logger.
 Default: `True`.
 - **on_result** - Optional `(TensorDictBase) -> None` invoked after each
 completed evaluation. The callback receives a flat tensordict

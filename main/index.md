@@ -163,6 +163,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Documentation Sections](reference/objectives.html#documentation-sections)
 - [Service Registry](reference/services.html)
 
+- [Service owners and clients](reference/services.html#service-owners-and-clients)
 - [Overview](reference/services.html#overview)
 - [Basic Usage](reference/services.html#basic-usage)
 - [Python Executor Service](reference/services.html#python-executor-service)
@@ -171,6 +172,18 @@ and navigate to the previous ones whenever you want to learn more!
 - [Best Practices](reference/services.html#best-practices)
 - [Examples](reference/services.html#examples)
 - [See Also](reference/services.html#see-also)
+- [Designing Training Applications with Services](reference/services_workflow.html)
+
+- [Owners and clients](reference/services_workflow.html#owners-and-clients)
+- [Placement does not define communication](reference/services_workflow.html#placement-does-not-define-communication)
+- [Preserving domain APIs](reference/services_workflow.html#preserving-domain-apis)
+- [Completion and failure semantics](reference/services_workflow.html#completion-and-failure-semantics)
+- [Lifecycle belongs to the owner](reference/services_workflow.html#lifecycle-belongs-to-the-owner)
+- [Integrations accept owners when they can](reference/services_workflow.html#integrations-accept-owners-when-they-can)
+- [Environments are execution resources, not shared services](reference/services_workflow.html#environments-are-execution-resources-not-shared-services)
+- [Discovery is optional](reference/services_workflow.html#discovery-is-optional)
+- [Design compromises](reference/services_workflow.html#design-compromises)
+- [Runnable examples](reference/services_workflow.html#runnable-examples)
 - [torchrl.trainers package](reference/trainers.html)
 
 - [Key Features](reference/trainers.html#key-features)

@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2380,7 +2392,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.inference_server.MPTransport.client">
-<span class="sig-name descname"><span class="pre">client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_QueueInferenceClient</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport.client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MPTransport.client" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">MailboxClient</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport.client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MPTransport.client" title="Link to this definition">#</a></dt>
 <dd><p>Create an actor-side client with a dedicated response queue.</p>
 <p>Must be called in the parent process <strong>before</strong> spawning children.
 In particular, a manager-backed transport (<code class="docutils literal notranslate"><span class="pre">use_manager=True</span></code>)
@@ -2784,7 +2796,7 @@ does not close the transport on <code class="docutils literal notranslate"><span
        "headline": "MPTransport",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.modules.inference_server.MPTransport.html",
-       "articleBody": "MPTransport# class torchrl.modules.inference_server.MPTransport(ctx: BaseContext | None = None, *, use_manager: bool = False)[source]# Cross-process transport using multiprocessing queues. Response routing uses per-actor queues (one per client() call) so that no mp.Queue object is ever serialised through another queue. Clients must be created with client() before spawning child processes. Parameters: ctx \u2013 a multiprocessing context (e.g. mp.get_context(\"spawn\")). Defaults to mp.get_context(\"spawn\"). use_manager (bool, optional) \u2013 if True, back the request and response queues with a multiprocessing manager. This is useful when clients are forwarded through another spawned process. Defaults to False. Example \u003e\u003e\u003e import multiprocessing as mp \u003e\u003e\u003e transport = MPTransport() \u003e\u003e\u003e client = transport.client() # creates response queue \u003e\u003e\u003e p = mp.Process(target=actor_fn, args=(client,)) \u003e\u003e\u003e p.start() # queue inherited client() \u2192 _QueueInferenceClient[source]# Create an actor-side client with a dedicated response queue. Must be called in the parent process before spawning children. In particular, a manager-backed transport (use_manager=True) loses its manager handle when pickled, so calling this on an unpickled copy raises a RuntimeError. Returns: A _QueueInferenceClient that can be passed to a child process as an argument to multiprocessing.Process. close() \u2192 None[source]# Release transport resources. Shuts down the multiprocessing manager backing the request/response queues when the transport was built with use_manager=True (a no-op otherwise). The process that owns the transport must call this once the server and all clients are done with it: ProcessInferenceServer does not close the transport on shutdown().",
+       "articleBody": "MPTransport# class torchrl.modules.inference_server.MPTransport(ctx: BaseContext | None = None, *, use_manager: bool = False)[source]# Cross-process transport using multiprocessing queues. Response routing uses per-actor queues (one per client() call) so that no mp.Queue object is ever serialised through another queue. Clients must be created with client() before spawning child processes. Parameters: ctx \u2013 a multiprocessing context (e.g. mp.get_context(\"spawn\")). Defaults to mp.get_context(\"spawn\"). use_manager (bool, optional) \u2013 if True, back the request and response queues with a multiprocessing manager. This is useful when clients are forwarded through another spawned process. Defaults to False. Example \u003e\u003e\u003e import multiprocessing as mp \u003e\u003e\u003e transport = MPTransport() \u003e\u003e\u003e client = transport.client() # creates response queue \u003e\u003e\u003e p = mp.Process(target=actor_fn, args=(client,)) \u003e\u003e\u003e p.start() # queue inherited client() \u2192 MailboxClient[source]# Create an actor-side client with a dedicated response queue. Must be called in the parent process before spawning children. In particular, a manager-backed transport (use_manager=True) loses its manager handle when pickled, so calling this on an unpickled copy raises a RuntimeError. Returns: A _QueueInferenceClient that can be passed to a child process as an argument to multiprocessing.Process. close() \u2192 None[source]# Release transport resources. Shuts down the multiprocessing manager backing the request/response queues when the transport was built with use_manager=True (a no-op otherwise). The process that owns the transport must call this once the server and all clients are done with it: ProcessInferenceServer does not close the transport on shutdown().",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

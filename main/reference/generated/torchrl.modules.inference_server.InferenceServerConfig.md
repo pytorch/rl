@@ -1,12 +1,12 @@
 # InferenceServerConfig
 
-*class*torchrl.modules.inference_server.InferenceServerConfig(*backend: Literal['thread', 'process'] = 'thread'*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
+*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process'] = 'thread'*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
 
 Server-side execution, batching, timeout, and instrumentation settings.
 
 Parameters:
 
-- **backend** (*str**,**optional*) - execution backend for the policy server.
+- **service_backend** (*str**,**optional*) - execution backend for the policy server.
 `"thread"` runs the serve loop in a background thread of the
 constructing process; `"process"` runs a dedicated server
 process (which requires a picklable `policy_factory` and a

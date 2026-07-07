@@ -1122,6 +1122,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1473,11 +1479,18 @@ document.write(`
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">from</span> <span class="nn">torchrl.record.loggers.trackio</span> <span class="kn">import</span> <span class="n">TrackioLogger</span>
 <span class="kn">from</span> <span class="nn">torchrl.record.loggers.wandb</span> <span class="kn">import</span> <span class="n">WandbLogger</span>
 <span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.configs.common</span> <span class="kn">import</span> <span class="n">ConfigBase</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="n">_LoggerServiceBackend</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;direct&quot;</span><span class="p">,</span> <span class="s2">&quot;process&quot;</span><span class="p">,</span> <span class="s2">&quot;ray&quot;</span><span class="p">]</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="c1"># OmegaConf structured configs resolve this alias at runtime and do not</span>
+    <span class="c1"># support Literal on all TorchRL-supported versions.</span>
+    <span class="n">_LoggerServiceBackend</span> <span class="o">=</span> <span class="nb">str</span>
 
 
 <div class="viewcode-block" id="LoggerConfig">
@@ -1499,7 +1512,7 @@ document.write(`
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.WandbLoggerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">WandbLoggerConfig</span><span class="p">(</span><span class="n">LoggerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a Wandb logger.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.record.loggers.WandbLogger`.</span>
 
 <span class="sd">    .. seealso::</span>
 <span class="sd">        :class:`~torchrl.record.loggers.wandb.WandbLogger`</span>
@@ -1514,6 +1527,8 @@ document.write(`
     <span class="n">log_env_packages</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">wandb_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">service_backend</span><span class="p">:</span> <span class="n">_LoggerServiceBackend</span> <span class="o">=</span> <span class="s2">&quot;direct&quot;</span>
+    <span class="n">service_backend_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.logging._make_wandb_logger&quot;</span>
 
@@ -1532,6 +1547,8 @@ document.write(`
     <span class="n">log_env_packages</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">wandb_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">service_backend</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;direct&quot;</span><span class="p">,</span> <span class="s2">&quot;process&quot;</span><span class="p">,</span> <span class="s2">&quot;ray&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;direct&quot;</span><span class="p">,</span>
+    <span class="n">service_backend_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WandbLogger</span><span class="p">:</span>
     <span class="n">wandb_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">wandb_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
     <span class="k">return</span> <span class="n">WandbLogger</span><span class="p">(</span>
@@ -1543,6 +1560,8 @@ document.write(`
         <span class="n">video_fps</span><span class="o">=</span><span class="n">video_fps</span><span class="p">,</span>
         <span class="n">log_env_packages</span><span class="o">=</span><span class="n">log_env_packages</span><span class="p">,</span>
         <span class="n">log_dir</span><span class="o">=</span><span class="n">log_dir</span><span class="p">,</span>
+        <span class="n">service_backend</span><span class="o">=</span><span class="n">service_backend</span><span class="p">,</span>
+        <span class="n">service_backend_options</span><span class="o">=</span><span class="n">service_backend_options</span><span class="p">,</span>
         <span class="o">**</span><span class="n">wandb_kwargs</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -1551,7 +1570,7 @@ document.write(`
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TensorboardLoggerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">TensorboardLoggerConfig</span><span class="p">(</span><span class="n">LoggerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a Tensorboard logger.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.record.loggers.TensorboardLogger`.</span>
 
 <span class="sd">    .. seealso::</span>
 <span class="sd">        :class:`~torchrl.record.loggers.tensorboard.TensorboardLogger`</span>
@@ -1559,6 +1578,8 @@ document.write(`
 
     <span class="n">exp_name</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tb_logs&quot;</span>
+    <span class="n">service_backend</span><span class="p">:</span> <span class="n">_LoggerServiceBackend</span> <span class="o">=</span> <span class="s2">&quot;direct&quot;</span>
+    <span class="n">service_backend_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.record.loggers.tensorboard.TensorboardLogger&quot;</span>
 
@@ -1571,7 +1592,7 @@ document.write(`
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.TrackioLoggerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">TrackioLoggerConfig</span><span class="p">(</span><span class="n">LoggerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a Trackio logger.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.record.loggers.TrackioLogger`.</span>
 
 <span class="sd">    .. seealso::</span>
 <span class="sd">        :class:`~torchrl.record.loggers.trackio.TrackioLogger`</span>
@@ -1581,6 +1602,8 @@ document.write(`
     <span class="n">project</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span>
     <span class="n">trackio_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">service_backend</span><span class="p">:</span> <span class="n">_LoggerServiceBackend</span> <span class="o">=</span> <span class="s2">&quot;direct&quot;</span>
+    <span class="n">service_backend_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.trainers.algorithms.configs.logging._make_trackio_logger&quot;</span>
 
@@ -1594,12 +1617,16 @@ document.write(`
     <span class="n">project</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span><span class="p">,</span>
     <span class="n">trackio_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">service_backend</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;direct&quot;</span><span class="p">,</span> <span class="s2">&quot;process&quot;</span><span class="p">,</span> <span class="s2">&quot;ray&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;direct&quot;</span><span class="p">,</span>
+    <span class="n">service_backend_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TrackioLogger</span><span class="p">:</span>
     <span class="n">trackio_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">trackio_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
     <span class="k">return</span> <span class="n">TrackioLogger</span><span class="p">(</span>
         <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
         <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
         <span class="n">video_fps</span><span class="o">=</span><span class="n">video_fps</span><span class="p">,</span>
+        <span class="n">service_backend</span><span class="o">=</span><span class="n">service_backend</span><span class="p">,</span>
+        <span class="n">service_backend_options</span><span class="o">=</span><span class="n">service_backend_options</span><span class="p">,</span>
         <span class="o">**</span><span class="n">trackio_kwargs</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -1608,7 +1635,7 @@ document.write(`
 <a class="viewcode-back" href="../../../../../reference/generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">CSVLoggerConfig</span><span class="p">(</span><span class="n">LoggerConfig</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class to configure a CSV logger.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hydra configuration for :class:`~torchrl.record.loggers.CSVLogger`.</span>
 
 <span class="sd">    .. seealso::</span>
 <span class="sd">        :class:`~torchrl.record.loggers.csv.CSVLogger`</span>
@@ -1618,6 +1645,8 @@ document.write(`
     <span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">video_format</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;pt&quot;</span>
     <span class="n">video_fps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span>
+    <span class="n">service_backend</span><span class="p">:</span> <span class="n">_LoggerServiceBackend</span> <span class="o">=</span> <span class="s2">&quot;direct&quot;</span>
+    <span class="n">service_backend_options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 
     <span class="n">_target_</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;torchrl.record.loggers.csv.CSVLogger&quot;</span>
 
@@ -1886,7 +1915,7 @@ document.write(`
        "headline": "torchrl.trainers.algorithms.configs.logging",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/trainers/algorithms/configs/logging.html",
-       "articleBody": "Source code for torchrl.trainers.algorithms.configs.logging # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from dataclasses import dataclass, field from typing import Any from torchrl.record.loggers.trackio import TrackioLogger from torchrl.record.loggers.wandb import WandbLogger from torchrl.trainers.algorithms.configs.common import ConfigBase [docs] @dataclass class LoggerConfig(ConfigBase): \"\"\"A class to configure a logger. Args: logger: The logger to use. \"\"\" def __post_init__(self) -\u003e None: pass [docs] @dataclass class WandbLoggerConfig(LoggerConfig): \"\"\"A class to configure a Wandb logger. .. seealso:: :class:`~torchrl.record.loggers.wandb.WandbLogger` \"\"\" exp_name: str offline: bool = False save_dir: str | None = None id: str | None = None project: str | None = None video_fps: int = 32 log_env_packages: bool = True log_dir: str | None = None wandb_kwargs: dict[str, Any] = field(default_factory=dict) _target_: str = \"torchrl.trainers.algorithms.configs.logging._make_wandb_logger\" def __post_init__(self) -\u003e None: pass def _make_wandb_logger( exp_name: str, offline: bool = False, save_dir: str | None = None, id: str | None = None, project: str | None = None, video_fps: int = 32, log_env_packages: bool = True, log_dir: str | None = None, wandb_kwargs: dict[str, Any] | None = None, ) -\u003e WandbLogger: wandb_kwargs = dict(wandb_kwargs or {}) return WandbLogger( exp_name=exp_name, offline=offline, save_dir=save_dir, id=id, project=project, video_fps=video_fps, log_env_packages=log_env_packages, log_dir=log_dir, **wandb_kwargs, ) [docs] @dataclass class TensorboardLoggerConfig(LoggerConfig): \"\"\"A class to configure a Tensorboard logger. .. seealso:: :class:`~torchrl.record.loggers.tensorboard.TensorboardLogger` \"\"\" exp_name: str log_dir: str = \"tb_logs\" _target_: str = \"torchrl.record.loggers.tensorboard.TensorboardLogger\" def __post_init__(self) -\u003e None: pass [docs] @dataclass class TrackioLoggerConfig(LoggerConfig): \"\"\"A class to configure a Trackio logger. .. seealso:: :class:`~torchrl.record.loggers.trackio.TrackioLogger` \"\"\" exp_name: str project: str video_fps: int = 32 trackio_kwargs: dict[str, Any] = field(default_factory=dict) _target_: str = \"torchrl.trainers.algorithms.configs.logging._make_trackio_logger\" def __post_init__(self) -\u003e None: pass def _make_trackio_logger( exp_name: str, project: str, video_fps: int = 32, trackio_kwargs: dict[str, Any] | None = None, ) -\u003e TrackioLogger: trackio_kwargs = dict(trackio_kwargs or {}) return TrackioLogger( exp_name=exp_name, project=project, video_fps=video_fps, **trackio_kwargs, ) [docs] @dataclass class CSVLoggerConfig(LoggerConfig): \"\"\"A class to configure a CSV logger. .. seealso:: :class:`~torchrl.record.loggers.csv.CSVLogger` \"\"\" exp_name: str log_dir: str | None = None video_format: str = \"pt\" video_fps: int = 30 _target_: str = \"torchrl.record.loggers.csv.CSVLogger\" def __post_init__(self) -\u003e None: pass",
+       "articleBody": "Source code for torchrl.trainers.algorithms.configs.logging # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from dataclasses import dataclass, field from typing import Any, Literal, TYPE_CHECKING from torchrl.record.loggers.trackio import TrackioLogger from torchrl.record.loggers.wandb import WandbLogger from torchrl.trainers.algorithms.configs.common import ConfigBase if TYPE_CHECKING: _LoggerServiceBackend = Literal[\"direct\", \"process\", \"ray\"] else: # OmegaConf structured configs resolve this alias at runtime and do not # support Literal on all TorchRL-supported versions. _LoggerServiceBackend = str [docs] @dataclass class LoggerConfig(ConfigBase): \"\"\"A class to configure a logger. Args: logger: The logger to use. \"\"\" def __post_init__(self) -\u003e None: pass [docs] @dataclass class WandbLoggerConfig(LoggerConfig): \"\"\"Hydra configuration for :class:`~torchrl.record.loggers.WandbLogger`. .. seealso:: :class:`~torchrl.record.loggers.wandb.WandbLogger` \"\"\" exp_name: str offline: bool = False save_dir: str | None = None id: str | None = None project: str | None = None video_fps: int = 32 log_env_packages: bool = True log_dir: str | None = None wandb_kwargs: dict[str, Any] = field(default_factory=dict) service_backend: _LoggerServiceBackend = \"direct\" service_backend_options: dict[str, Any] = field(default_factory=dict) _target_: str = \"torchrl.trainers.algorithms.configs.logging._make_wandb_logger\" def __post_init__(self) -\u003e None: pass def _make_wandb_logger( exp_name: str, offline: bool = False, save_dir: str | None = None, id: str | None = None, project: str | None = None, video_fps: int = 32, log_env_packages: bool = True, log_dir: str | None = None, wandb_kwargs: dict[str, Any] | None = None, service_backend: Literal[\"direct\", \"process\", \"ray\"] = \"direct\", service_backend_options: dict[str, Any] | None = None, ) -\u003e WandbLogger: wandb_kwargs = dict(wandb_kwargs or {}) return WandbLogger( exp_name=exp_name, offline=offline, save_dir=save_dir, id=id, project=project, video_fps=video_fps, log_env_packages=log_env_packages, log_dir=log_dir, service_backend=service_backend, service_backend_options=service_backend_options, **wandb_kwargs, ) [docs] @dataclass class TensorboardLoggerConfig(LoggerConfig): \"\"\"Hydra configuration for :class:`~torchrl.record.loggers.TensorboardLogger`. .. seealso:: :class:`~torchrl.record.loggers.tensorboard.TensorboardLogger` \"\"\" exp_name: str log_dir: str = \"tb_logs\" service_backend: _LoggerServiceBackend = \"direct\" service_backend_options: dict[str, Any] = field(default_factory=dict) _target_: str = \"torchrl.record.loggers.tensorboard.TensorboardLogger\" def __post_init__(self) -\u003e None: pass [docs] @dataclass class TrackioLoggerConfig(LoggerConfig): \"\"\"Hydra configuration for :class:`~torchrl.record.loggers.TrackioLogger`. .. seealso:: :class:`~torchrl.record.loggers.trackio.TrackioLogger` \"\"\" exp_name: str project: str video_fps: int = 32 trackio_kwargs: dict[str, Any] = field(default_factory=dict) service_backend: _LoggerServiceBackend = \"direct\" service_backend_options: dict[str, Any] = field(default_factory=dict) _target_: str = \"torchrl.trainers.algorithms.configs.logging._make_trackio_logger\" def __post_init__(self) -\u003e None: pass def _make_trackio_logger( exp_name: str, project: str, video_fps: int = 32, trackio_kwargs: dict[str, Any] | None = None, service_backend: Literal[\"direct\", \"process\", \"ray\"] = \"direct\", service_backend_options: dict[str, Any] | None = None, ) -\u003e TrackioLogger: trackio_kwargs = dict(trackio_kwargs or {}) return TrackioLogger( exp_name=exp_name, project=project, video_fps=video_fps, service_backend=service_backend, service_backend_options=service_backend_options, **trackio_kwargs, ) [docs] @dataclass class CSVLoggerConfig(LoggerConfig): \"\"\"Hydra configuration for :class:`~torchrl.record.loggers.CSVLogger`. .. seealso:: :class:`~torchrl.record.loggers.csv.CSVLogger` \"\"\" exp_name: str log_dir: str | None = None video_format: str = \"pt\" video_fps: int = 30 service_backend: _LoggerServiceBackend = \"direct\" service_backend_options: dict[str, Any] = field(default_factory=dict) _target_: str = \"torchrl.record.loggers.csv.CSVLogger\" def __post_init__(self) -\u003e None: pass",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

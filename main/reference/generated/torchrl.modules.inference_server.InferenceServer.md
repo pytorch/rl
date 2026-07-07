@@ -88,6 +88,10 @@ Example
 >>> server.shutdown()
 ```
 
+client() → Any[[source]](../../_modules/torchrl/modules/inference_server/_server.html#InferenceServer.client)
+
+Return a restricted inference client from the owned transport.
+
 *property*is_alive*: bool*
 
 Whether the background worker thread is running.

@@ -129,6 +129,21 @@ Returns:
 
 A VLLMCollectiveTransport instance (needs init_all_workers_group() to be called).
 
+*classmethod*from_backend(*backend: Literal['none', 'direct', 'shared', 'thread', 'process', 'multiprocessing', 'distributed', 'rpc', 'ray']*, ***kwargs*) → [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)
+
+Construct a weight-sync scheme from its deployment backend.
+
+Parameters:
+
+- **backend** - One of `none`, `shared`, `process`, `distributed`,
+`rpc`, or `ray`. `direct`, `thread`, and
+`multiprocessing` are accepted aliases.
+- ****kwargs** - Arguments forwarded to the concrete scheme constructor.
+
+Returns:
+
+The selected concrete scheme.
+
 init_on_receiver(***, *model_id: str*, *context: Any = None*, ***kwargs*) → None
 
 Initialize on worker process (receiver side).

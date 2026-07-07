@@ -1,6 +1,6 @@
 # RayReplayBuffer
 
-*class*torchrl.data.RayReplayBuffer(**args*, *replay_buffer_cls: type[~torchrl.data.replay_buffers.replay_buffers.ReplayBuffer] | None = <class 'torchrl.data.replay_buffers.replay_buffers.ReplayBuffer'>*, *ray_init_config: dict[str*, *~typing.Any] | None = None*, *remote_config: dict[str*, *~typing.Any] | None = None*, *delayed_init: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer)
+*class*torchrl.data.RayReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer)
 
 A Ray implementation of the Replay Buffer that can be extended and sampled remotely.
 
@@ -138,7 +138,11 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
-close()[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.close)
+client() → _RayReplayBufferClient[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.client)
+
+Return a picklable client without actor shutdown rights.
+
+close() → None[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.close)
 
 Terminates the Ray actor associated with this replay buffer.
 
@@ -247,6 +251,10 @@ Keyword Arguments:
 **invert** (*bool**,**optional*) - if `True`, the transform will be inverted (forward calls will be called
 during writing and inverse calls during reading). Defaults to `False`.
 
+*property*is_alive*: bool*
+
+Whether the owned Ray replay-buffer actor is available.
+
 load(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.load)
 
 Alias for `loads()`.
@@ -332,6 +340,10 @@ save(*path: str*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffe
 
 Alias for `dumps()`.
 
+*property*service_backend*: str*
+
+The canonical deployment backend for this replay buffer.
+
 set_(*key*, *value*)
 
 Sets the value of a key across the entire replay buffer in-place.
@@ -376,6 +388,14 @@ value. Otherwise it is reset to a default value.
 set_writer(*writer*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.set_writer)
 
 Sets a new writer in the replay buffer and returns the previous writer.
+
+shutdown(*timeout: float | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.shutdown)
+
+Terminate the owned Ray actor.
+
+start() → RayReplayBuffer[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.start)
+
+Return this already-started Ray replay-buffer owner.
 
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 

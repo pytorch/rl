@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2371,7 +2383,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">1000</span
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.inference_server.MonarchTransport.client">
-<span class="sig-name descname"><span class="pre">client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_QueueInferenceClient</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_monarch.html#MonarchTransport.client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MonarchTransport.client" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">MailboxClient</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_monarch.html#MonarchTransport.client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MonarchTransport.client" title="Link to this definition">#</a></dt>
 <dd><p>Create an actor-side client with a dedicated response queue.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2758,7 +2770,7 @@ actor.</p>
        "headline": "MonarchTransport",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.modules.inference_server.MonarchTransport.html",
-       "articleBody": "MonarchTransport# class torchrl.modules.inference_server.MonarchTransport(*, max_queue_size: int = 1000)[source]# Transport using Monarch for distributed inference on GPU clusters. Uses Monarch\u2019s actor model and RDMA-capable channels for efficient cross-node communication. Monarch is imported lazily at instantiation time; importing the class itself does not require Monarch. Note This transport requires monarch to be installed. It is designed for large-scale GPU clusters where Monarch is the preferred communication layer. Keyword Arguments: max_queue_size (int) \u2013 maximum size of the request queue. Default: 1000. client() \u2192 _QueueInferenceClient[source]# Create an actor-side client with a dedicated response queue. Returns: A _QueueInferenceClient that can be passed to a Monarch actor.",
+       "articleBody": "MonarchTransport# class torchrl.modules.inference_server.MonarchTransport(*, max_queue_size: int = 1000)[source]# Transport using Monarch for distributed inference on GPU clusters. Uses Monarch\u2019s actor model and RDMA-capable channels for efficient cross-node communication. Monarch is imported lazily at instantiation time; importing the class itself does not require Monarch. Note This transport requires monarch to be installed. It is designed for large-scale GPU clusters where Monarch is the preferred communication layer. Keyword Arguments: max_queue_size (int) \u2013 maximum size of the request queue. Default: 1000. client() \u2192 MailboxClient[source]# Create an actor-side client with a dedicated response queue. Returns: A _QueueInferenceClient that can be passed to a Monarch actor.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

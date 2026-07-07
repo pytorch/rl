@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.services
+
+
+ServiceBackend
+==============
+
+.. autoclass:: ServiceBackend
+    :members:
+    :inherited-members:

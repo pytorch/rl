@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2389,31 +2401,31 @@ are called as <code class="docutils literal notranslate"><span class="pre">facto
 </div>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay" title="torchrl.data.datasets.AtariDQNExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.AtariDQNExperienceReplay</span></code></a>(dataset_id)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay" title="torchrl.data.datasets.AtariDQNExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.AtariDQNExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Atari DQN Experience replay class.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay" title="torchrl.data.datasets.D4RLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.D4RLExperienceReplay</span></code></a>(dataset_id, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay" title="torchrl.data.datasets.D4RLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.D4RLExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>An Experience replay class for D4RL.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay" title="torchrl.data.datasets.GenDGRLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.GenDGRLExperienceReplay</span></code></a>(dataset_id)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay" title="torchrl.data.datasets.GenDGRLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.GenDGRLExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Gen-DGRL Experience Replay dataset.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay" title="torchrl.data.datasets.LeRobotExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.LeRobotExperienceReplay</span></code></a>(repo_id, *)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay" title="torchrl.data.datasets.LeRobotExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.LeRobotExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Experience replay over a <a class="reference external" href="https://github.com/huggingface/lerobot">LeRobot</a> dataset.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay" title="torchrl.data.datasets.MinariExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.MinariExperienceReplay</span></code></a>(dataset_id, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay" title="torchrl.data.datasets.MinariExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.MinariExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Minari Experience replay dataset.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay" title="torchrl.data.datasets.OpenMLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.OpenMLExperienceReplay</span></code></a>(name, batch_size)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay" title="torchrl.data.datasets.OpenMLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.OpenMLExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>An experience replay for OpenML data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay" title="torchrl.data.datasets.OpenXExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.OpenXExperienceReplay</span></code></a>(dataset_id[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay" title="torchrl.data.datasets.OpenXExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.OpenXExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Open X-Embodiment datasets experience replay.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.RobosetExperienceReplay.html#torchrl.data.datasets.RobosetExperienceReplay" title="torchrl.data.datasets.RobosetExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.RobosetExperienceReplay</span></code></a>(dataset_id, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.RobosetExperienceReplay.html#torchrl.data.datasets.RobosetExperienceReplay" title="torchrl.data.datasets.RobosetExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.RobosetExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>Roboset experience replay dataset.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay" title="torchrl.data.datasets.VD4RLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.VD4RLExperienceReplay</span></code></a>(dataset_id, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay" title="torchrl.data.datasets.VD4RLExperienceReplay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">datasets.VD4RLExperienceReplay</span></code></a>(*args[, ...])</p></td>
 <td><p>V-D4RL experience replay dataset.</p></td>
 </tr>
 </tbody>
@@ -2814,7 +2826,7 @@ are called as <code class="docutils literal notranslate"><span class="pre">facto
        "headline": "Datasets",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/data_datasets.html",
-       "articleBody": "Datasets# TorchRL provides dataset utilities for offline RL and data management. TorchRL Episode Data (TED) Format# The TED format is TorchRL\u2019s standard data layout for offline RL datasets. It structures trajectories as nested tensors where each element contains the full trajectory data, making it efficient for sequence-based sampling and training. Dataset loading registry# Many offline datasets can be constructed from a compact string identifier with load_dataset(). The identifier is split as \"\u003csource\u003e:\u003cdataset-id\u003e\". The source prefix selects a registered dataset factory and the remainder is forwarded as the first constructor argument, with any extra keyword arguments forwarded unchanged. TorchRL registers the built-in dataset families at import time, including \"atari\", \"atari_dqn\", \"d4rl\", \"gen_dgrl\", \"lerobot\", \"minari\", \"openml\", \"openx\", \"roboset\", and \"vd4rl\". For example: from torchrl.data.datasets import load_dataset dataset = load_dataset(\"d4rl:halfcheetah-medium-v2\", batch_size=256) minari_dataset = load_dataset( \"minari:mujoco/hopper/expert-v0\", batch_size=256, split_trajs=True, ) Projects can add their own sources with register_dataset(). A registered factory can be a callable or a lazy import string of the form \"module:attribute\". Factories are called as factory(dataset_id, **kwargs). from torchrl.data.datasets import load_dataset, register_dataset class MyDataset: def __init__(self, dataset_id, *, batch_size): self.dataset_id = dataset_id self.batch_size = batch_size register_dataset(\"my_backend\", MyDataset) dataset = load_dataset(\"my_backend:my-task-v0\", batch_size=128) register_dataset( \"my_lazy_backend\", \"my_package.datasets:MyDataset\", ) datasets.AtariDQNExperienceReplay(dataset_id) Atari DQN Experience replay class. datasets.D4RLExperienceReplay(dataset_id, ...) An Experience replay class for D4RL. datasets.GenDGRLExperienceReplay(dataset_id) Gen-DGRL Experience Replay dataset. datasets.LeRobotExperienceReplay(repo_id, *) Experience replay over a LeRobot dataset. datasets.MinariExperienceReplay(dataset_id, ...) Minari Experience replay dataset. datasets.OpenMLExperienceReplay(name, batch_size) An experience replay for OpenML data. datasets.OpenXExperienceReplay(dataset_id[, ...]) Open X-Embodiment datasets experience replay. datasets.RobosetExperienceReplay(dataset_id, ...) Roboset experience replay dataset. datasets.VD4RLExperienceReplay(dataset_id, ...) V-D4RL experience replay dataset. datasets.lerobot_columns_to_tensordict(...) Convert a LeRobot-style columnar dict into a canonical VLA TensorDict. datasets.load_dataset(dataset_id, **kwargs) Parse a dataset ID string and return the registered dataset object. datasets.register_dataset(prefix, dataset, *) Register a dataset factory for load_dataset().",
+       "articleBody": "Datasets# TorchRL provides dataset utilities for offline RL and data management. TorchRL Episode Data (TED) Format# The TED format is TorchRL\u2019s standard data layout for offline RL datasets. It structures trajectories as nested tensors where each element contains the full trajectory data, making it efficient for sequence-based sampling and training. Dataset loading registry# Many offline datasets can be constructed from a compact string identifier with load_dataset(). The identifier is split as \"\u003csource\u003e:\u003cdataset-id\u003e\". The source prefix selects a registered dataset factory and the remainder is forwarded as the first constructor argument, with any extra keyword arguments forwarded unchanged. TorchRL registers the built-in dataset families at import time, including \"atari\", \"atari_dqn\", \"d4rl\", \"gen_dgrl\", \"lerobot\", \"minari\", \"openml\", \"openx\", \"roboset\", and \"vd4rl\". For example: from torchrl.data.datasets import load_dataset dataset = load_dataset(\"d4rl:halfcheetah-medium-v2\", batch_size=256) minari_dataset = load_dataset( \"minari:mujoco/hopper/expert-v0\", batch_size=256, split_trajs=True, ) Projects can add their own sources with register_dataset(). A registered factory can be a callable or a lazy import string of the form \"module:attribute\". Factories are called as factory(dataset_id, **kwargs). from torchrl.data.datasets import load_dataset, register_dataset class MyDataset: def __init__(self, dataset_id, *, batch_size): self.dataset_id = dataset_id self.batch_size = batch_size register_dataset(\"my_backend\", MyDataset) dataset = load_dataset(\"my_backend:my-task-v0\", batch_size=128) register_dataset( \"my_lazy_backend\", \"my_package.datasets:MyDataset\", ) datasets.AtariDQNExperienceReplay(*args[, ...]) Atari DQN Experience replay class. datasets.D4RLExperienceReplay(*args[, ...]) An Experience replay class for D4RL. datasets.GenDGRLExperienceReplay(*args[, ...]) Gen-DGRL Experience Replay dataset. datasets.LeRobotExperienceReplay(*args[, ...]) Experience replay over a LeRobot dataset. datasets.MinariExperienceReplay(*args[, ...]) Minari Experience replay dataset. datasets.OpenMLExperienceReplay(*args[, ...]) An experience replay for OpenML data. datasets.OpenXExperienceReplay(*args[, ...]) Open X-Embodiment datasets experience replay. datasets.RobosetExperienceReplay(*args[, ...]) Roboset experience replay dataset. datasets.VD4RLExperienceReplay(*args[, ...]) V-D4RL experience replay dataset. datasets.lerobot_columns_to_tensordict(...) Convert a LeRobot-style columnar dict into a canonical VLA TensorDict. datasets.load_dataset(dataset_id, **kwargs) Parse a dataset ID string and return the registered dataset object. datasets.register_dataset(prefix, dataset, *) Register a dataset factory for load_dataset().",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

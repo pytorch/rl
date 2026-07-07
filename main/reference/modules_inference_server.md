@@ -8,7 +8,7 @@ batches them, runs a single model forward pass, and routes results back.
 
 | [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer)(model, transport, *[, ...]) | Auto-batching inference server. |
 | --- | --- |
-| [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)([backend, ...]) | Server-side execution, batching, timeout, and instrumentation settings. |
+| [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)([service_backend, ...]) | Server-side execution, batching, timeout, and instrumentation settings. |
 | [`InferenceDeviceConfig`](generated/torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)([policy_device, ...]) | Device placement for asynchronous policy-server collection. |
 | [`ProcessInferenceServer`](generated/torchrl.modules.inference_server.ProcessInferenceServer.html#torchrl.modules.inference_server.ProcessInferenceServer)(*, policy_factory, ...) | Dedicated-process wrapper around [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer). |
 | [`InferenceClient`](generated/torchrl.modules.inference_server.InferenceClient.html#torchrl.modules.inference_server.InferenceClient)(transport) | Actor-side handle for an [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer). |
@@ -47,7 +47,7 @@ policy = TensorDictModule(
 transport = ThreadingTransport()
 server = InferenceServer(policy, transport, max_batch_size=32)
 server.start()
-client = transport.client()
+client = server.client()
 
 # actor threads call client(td) -- batched automatically
 with concurrent.futures.ThreadPoolExecutor(16) as pool:
@@ -60,7 +60,7 @@ server.shutdown()
 
 Server execution, batching, and device placement are grouped into two
 dataclasses instead of loose keyword arguments: [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)
-collects the execution `backend` (`"thread"` or `"process"`) and the
+collects the execution `service_backend` (`"thread"` or `"process"`) and the
 batching/instrumentation knobs (`max_batch_size`, `min_batch_size`,
 `timeout`, `collect_stats`, `stats_window_size`), and
 [`InferenceDeviceConfig`](generated/torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) describes device placement across the
@@ -102,13 +102,17 @@ TensorDict policy but inference should be served by the policy server:
 
 ```
 remote_policy = PolicyClientModule(
- transport,
+ server,
  in_keys=["observation"],
  out_keys=["action", "policy_version"],
 )
-
-data = remote_policy(data)
 ```
+
+`PolicyClientModule` accepts a server owner, transport, or existing callable
+client. Owners and transports are automatically reduced to their restricted
+client before the module is sent to a worker.
+
+> data = remote_policy(data)
 
 The server writes `policy_version` by default so asynchronous collectors can
 track behavior-policy lag. This is the general *service-stamped metadata*

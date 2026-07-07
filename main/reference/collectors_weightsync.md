@@ -745,8 +745,9 @@ weights are received.
 
 ### Available Transports
 
-| [`TransportBackend`](generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend)(*args, **kwargs) | Abstract interface for different communication mechanisms. |
+| [`TransportBackend`](generated/torchrl.weight_update.TransportBackend.html#torchrl.weight_update.TransportBackend)(*args, **kwargs) | Core data-plane interface for weight communication mechanisms. |
 | --- | --- |
+| [`InitialSyncTransport`](generated/torchrl.weight_update.InitialSyncTransport.html#torchrl.weight_update.InitialSyncTransport)(*args, **kwargs) | Optional initial-connection capability for weight transports. |
 | [`MPTransport`](generated/torchrl.weight_update.MPTransport.html#torchrl.weight_update.MPTransport)(weight_queue[, ack_queue, timeout]) | Multiprocessing transport using queues. |
 | [`SharedMemTransport`](generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport)() | Shared memory transport for in-place weight updates. |
 | [`RayTransport`](generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport)(*[, remote_actor, worker_idx, ...]) | Ray transport for communicating with a single Ray actor. |
@@ -757,6 +758,18 @@ weights are received.
 
 Schemes orchestrate the weight synchronization lifecycle, managing initialization, connection setup,
 and ongoing weight transfers.
+
+Schemes can be selected from the common backend vocabulary while retaining all
+constructor options of the concrete scheme:
+
+```
+from torchrl.weight_update import WeightSyncScheme
+
+scheme = WeightSyncScheme.from_backend("shared", sync=False)
+```
+
+The mappings are `none`/`direct` (no synchronization), `shared`/`thread`,
+`process`/`multiprocessing`, `distributed`, `rpc`, and `ray`.
 
 | [`WeightSyncScheme`](generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)([strategy]) | Configuration for how to synchronize ONE model across workers. |
 | --- | --- |

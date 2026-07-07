@@ -1,6 +1,6 @@
 # RetrieveKL
 
-*class*torchrl.envs.llm.transforms.RetrieveKL(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveKL)
+*class*torchrl.envs.llm.transforms.RetrieveKL(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/kl.html#RetrieveKL)
 
 A transform to retrieve the KL divergence between two models' log-probabilities.
 

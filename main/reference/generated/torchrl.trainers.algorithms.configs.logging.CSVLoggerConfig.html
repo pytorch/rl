@@ -1127,6 +1127,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1381,6 +1387,7 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../collectors_weightsync.html">Weight Synchronization</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.TransportBackend.html">TransportBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.InitialSyncTransport.html">InitialSyncTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.MPTransport.html">MPTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.SharedMemTransport.html">SharedMemTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.weight_update.RayTransport.html">RayTransport</a></li>
@@ -1945,12 +1952,15 @@ document.write(`
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../services.html">Service Registry</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.get_services.html">get_services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.Service.html">Service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBackend.html">ServiceBackend</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.ServiceBase.html">ServiceBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.services.RayService.html">RayService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonExecutorService.html">PythonExecutorService</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.envs.llm.transforms.PythonInterpreter.html">PythonInterpreter</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1"><a class="reference internal" href="../services_workflow.html">Designing Training Applications with Services</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../trainers.html">torchrl.trainers package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
@@ -1978,6 +1988,8 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_loggers.html">Loggers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.Logger.html">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.ProcessLogger.html">ProcessLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.RayLogger.html">RayLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html">CSVLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.mlflow.MLFlowLogger.html">MLFlowLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.record.loggers.tensorboard.TensorboardLogger.html">TensorboardLogger</a></li>
@@ -2341,8 +2353,8 @@ document.write(`
 <h1>torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig<a class="headerlink" href="#torchrl-trainers-algorithms-configs-logging-csvloggerconfig" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.configs.logging.</span></span><span class="sig-name descname"><span class="pre">CSVLoggerConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'pt'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video_fps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_target_</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrl.record.loggers.csv.CSVLogger'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/configs/logging.html#CSVLoggerConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig" title="Link to this definition">#</a></dt>
-<dd><p>A class to configure a CSV logger.</p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.trainers.algorithms.configs.logging.</span></span><span class="sig-name descname"><span class="pre">CSVLoggerConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir:</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video_format:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'pt'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video_fps:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'direct'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">service_backend_options:</span> <span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Any]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_target_:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'torchrl.record.loggers.csv.CSVLogger'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/trainers/algorithms/configs/logging.html#CSVLoggerConfig"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig" title="Link to this definition">#</a></dt>
+<dd><p>Hydra configuration for <code class="xref py py-class docutils literal notranslate"><span class="pre">CSVLogger</span></code>.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p><a class="reference internal" href="torchrl.record.loggers.csv.CSVLogger.html#torchrl.record.loggers.csv.CSVLogger" title="torchrl.record.loggers.csv.CSVLogger"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSVLogger</span></code></a></p>
@@ -2721,7 +2733,7 @@ document.write(`
        "headline": "torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig.html",
-       "articleBody": "torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig# class torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig(exp_name: str, log_dir: str | None = None, video_format: str = \u0027pt\u0027, video_fps: int = 30, _target_: str = \u0027torchrl.record.loggers.csv.CSVLogger\u0027)[source]# A class to configure a CSV logger. See also CSVLogger",
+       "articleBody": "torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig# class torchrl.trainers.algorithms.configs.logging.CSVLoggerConfig(exp_name: str, log_dir: str | None = None, video_format: str = \u0027pt\u0027, video_fps: int = 30, service_backend: str = \u0027direct\u0027, service_backend_options: dict[str, ~typing.Any] = \u003cfactory\u003e, _target_: str = \u0027torchrl.record.loggers.csv.CSVLogger\u0027)[source]# Hydra configuration for CSVLogger. See also CSVLogger",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -1,8 +1,10 @@
 # CSVLogger
 
-torchrl.record.loggers.csv.CSVLogger(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/csv.html#CSVLogger)
+torchrl.record.loggers.csv.CSVLogger(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/csv.html#CSVLogger)
 
 A minimal-dependency CSV logger.
+
+See also `CSVLoggerConfig`.
 
 Parameters:
 

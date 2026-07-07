@@ -1,6 +1,6 @@
 # VideoRecorder
 
-torchrl.record.VideoRecorder(*logger: Logger*, *tag: str*, *in_keys: Sequence[NestedKey] | None = None*, *skip: int | None = None*, *center_crop: int | None = None*, *make_grid: bool | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *fps: int | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/record/recorder.html#VideoRecorder)
+torchrl.record.VideoRecorder(*logger: Logger | [Service](torchrl.services.Service.html#torchrl.services.Service) | None*, *tag: str | None*, *in_keys: Sequence[NestedKey] | None = None*, *skip: int | None = None*, *center_crop: int | None = None*, *make_grid: bool | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *fps: int | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/record/recorder.html#VideoRecorder)
 
 Video Recorder transform.
 
@@ -9,14 +9,15 @@ to a Logger object when needed.
 
 Parameters:
 
-- **logger** (*Logger*) - a Logger instance where the video
+- **logger** (*Logger**or*[*Service*](torchrl.services.Service.html#torchrl.services.Service)) - a logger or logger-service owner where the video
 should be written. To save the video under a memmap tensor or an mp4 file, use
 the `CSVLogger` class.
 - **tag** (*str*) - the video tag in the logger.
 - **in_keys** (*Sequence**of**NestedKey**,**optional*) - keys to be read to produce the video.
 Default is `"pixels"`.
 - **skip** (*int*) - frame interval in the output video.
-Default is `2` if the transform has a parent environment, and `1` if not.
+Defaults to `1` for vector environments and standalone use, and
+`2` for a single parent environment.
 - **center_crop** (*int**,**optional*) - value of square center crop.
 - **make_grid** (*bool**,**optional*) - if `True`, a grid is created assuming that a
 tensor of shape [B x W x H x 3] is provided, with B being the batch

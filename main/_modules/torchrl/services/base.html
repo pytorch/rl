@@ -1122,6 +1122,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../../reference/trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1481,7 +1487,60 @@ document.write(`
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Generic</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">TypeVar</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Self</span>
+
+<span class="n">ClientT</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;ClientT&quot;</span><span class="p">,</span> <span class="n">covariant</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Service">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.services.Service.html#torchrl.services.Service">[docs]</a>
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">Service</span><span class="p">(</span><span class="n">Protocol</span><span class="p">,</span> <span class="n">Generic</span><span class="p">[</span><span class="n">ClientT</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Owner-side contract for a long-lived TorchRL service.</span>
+
+<span class="sd">    A service owns lifecycle and heavy resources. :meth:`client` returns the</span>
+<span class="sd">    lightweight capability that may be passed to worker processes or actors;</span>
+<span class="sd">    that client intentionally has no ``start`` or ``shutdown`` methods.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.record.loggers import CSVLogger</span>
+<span class="sd">        &gt;&gt;&gt; logger = CSVLogger(exp_name=&quot;example&quot;, log_dir=&quot;/tmp&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; _ = logger.start()</span>
+<span class="sd">        &gt;&gt;&gt; logger.client() is logger</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; logger.shutdown()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="Service.start">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.services.Service.html#torchrl.services.Service.start">[docs]</a>
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start the owned service and return ``self``.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="Service.shutdown">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.services.Service.html#torchrl.services.Service.shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the owned service and release its resources.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="Service.client">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.services.Service.html#torchrl.services.Service.client">[docs]</a>
+    <span class="k">def</span> <span class="nf">client</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ClientT</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a cheap, picklable, capability-restricted client.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_alive</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the owned service is running.&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
 
 
 <div class="viewcode-block" id="ServiceBase">
@@ -1548,6 +1607,26 @@ document.write(`
 <span class="sd">        &quot;&quot;&quot;</span></div>
 
 
+<div class="viewcode-block" id="ServiceBase.get_client">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.services.ServiceBase.html#torchrl.services.ServiceBase.get_client">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the restricted client for a registered :class:`Service`.</span>
+
+<span class="sd">        This method is additive so existing custom registry backends remain</span>
+<span class="sd">        instantiable. Backends that support owner/client discovery override it.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name: Service identifier.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            NotImplementedError: If this registry backend does not support</span>
+<span class="sd">                service-client discovery.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not support service-client discovery.&quot;</span>
+        <span class="p">)</span></div>
+
+
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a service is registered.</span>
@@ -1576,9 +1655,9 @@ document.write(`
     <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the service registry.</span>
 
-<span class="sd">        This removes all registered services and cleans up associated resources.</span>
-<span class="sd">        After calling reset(), the registry will be empty and all service actors</span>
-<span class="sd">        will be terminated.</span>
+<span class="sd">        This removes all registered services and cleans up registry-owned</span>
+<span class="sd">        resources. Externally-owned :class:`Service` instances are removed from</span>
+<span class="sd">        discovery but are never shut down by the registry.</span>
 
 <span class="sd">        Warning:</span>
 <span class="sd">            This is a destructive operation. All services will be terminated and</span>
@@ -1860,7 +1939,7 @@ document.write(`
        "headline": "torchrl.services.base",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/services/base.html",
-       "articleBody": "Source code for torchrl.services.base # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from abc import ABC, abstractmethod from typing import Any [docs] class ServiceBase(ABC): \"\"\"Base class for distributed service registries. A service registry manages distributed actors/services that can be accessed across multiple workers. Common use cases include: - Tokenizers shared across inference workers - Replay buffers for distributed training - Model registries for centralized model storage - Metrics aggregators The registry provides a dict-like interface for registering and accessing services by name. \"\"\" [docs] @abstractmethod def register(self, name: str, service_factory: type, *args, **kwargs) -\u003e Any: \"\"\"Register a service factory and create the service actor. This method registers a service with the given name and immediately creates the corresponding actor. The service becomes globally visible to all workers in the cluster. Args: name: Unique identifier for the service. This name is used to retrieve the service later. service_factory: Class to instantiate as a remote actor. *args: Positional arguments to pass to the service constructor. **kwargs: Keyword arguments for both actor configuration and service constructor. Actor configuration options are backend-specific (e.g., num_cpus, num_gpus for Ray). Returns: The remote actor handle. Raises: ValueError: If a service with this name already exists. \"\"\" [docs] @abstractmethod def get(self, name: str) -\u003e Any: \"\"\"Get a service by name. Retrieves a previously registered service. If the service was registered by another worker, this method will find it in the distributed registry. Args: name: Service identifier. Returns: The remote actor handle for the service. Raises: KeyError: If the service is not found. \"\"\" @abstractmethod def __contains__(self, name: str) -\u003e bool: \"\"\"Check if a service is registered. Args: name: Service identifier. Returns: True if the service exists, False otherwise. \"\"\" [docs] @abstractmethod def list(self) -\u003e list[str]: \"\"\"List all registered service names. Returns: List of service names currently registered in the cluster. \"\"\" [docs] @abstractmethod def reset(self) -\u003e None: \"\"\"Reset the service registry. This removes all registered services and cleans up associated resources. After calling reset(), the registry will be empty and all service actors will be terminated. Warning: This is a destructive operation. All services will be terminated and any ongoing work will be interrupted. \"\"\" def __getitem__(self, name: str) -\u003e Any: \"\"\"Dict-like access: services[\"tokenizer\"].\"\"\" return self.get(name) def __setitem__(self, name: str, service_factory: type) -\u003e None: \"\"\"Dict-like registration: services[\"tokenizer\"] = TokenizerClass. Note: This only supports service_factory without additional arguments. For full control, use register() method instead. \"\"\" self.register(name, service_factory)",
+       "articleBody": "Source code for torchrl.services.base # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from abc import ABC, abstractmethod from typing import Any, Generic, Protocol, runtime_checkable, TYPE_CHECKING, TypeVar if TYPE_CHECKING: from typing import Self ClientT = TypeVar(\"ClientT\", covariant=True) [docs] @runtime_checkable class Service(Protocol, Generic[ClientT]): \"\"\"Owner-side contract for a long-lived TorchRL service. A service owns lifecycle and heavy resources. :meth:`client` returns the lightweight capability that may be passed to worker processes or actors; that client intentionally has no ``start`` or ``shutdown`` methods. Examples: \u003e\u003e\u003e from torchrl.record.loggers import CSVLogger \u003e\u003e\u003e logger = CSVLogger(exp_name=\"example\", log_dir=\"/tmp\") \u003e\u003e\u003e _ = logger.start() \u003e\u003e\u003e logger.client() is logger True \u003e\u003e\u003e logger.shutdown() \"\"\" [docs] def start(self) -\u003e Self: \"\"\"Start the owned service and return ``self``.\"\"\" ... [docs] def shutdown(self, timeout: float | None = None) -\u003e None: \"\"\"Stop the owned service and release its resources.\"\"\" ... [docs] def client(self) -\u003e ClientT: \"\"\"Return a cheap, picklable, capability-restricted client.\"\"\" ... @property def is_alive(self) -\u003e bool: \"\"\"Whether the owned service is running.\"\"\" ... [docs] class ServiceBase(ABC): \"\"\"Base class for distributed service registries. A service registry manages distributed actors/services that can be accessed across multiple workers. Common use cases include: - Tokenizers shared across inference workers - Replay buffers for distributed training - Model registries for centralized model storage - Metrics aggregators The registry provides a dict-like interface for registering and accessing services by name. \"\"\" [docs] @abstractmethod def register(self, name: str, service_factory: type, *args, **kwargs) -\u003e Any: \"\"\"Register a service factory and create the service actor. This method registers a service with the given name and immediately creates the corresponding actor. The service becomes globally visible to all workers in the cluster. Args: name: Unique identifier for the service. This name is used to retrieve the service later. service_factory: Class to instantiate as a remote actor. *args: Positional arguments to pass to the service constructor. **kwargs: Keyword arguments for both actor configuration and service constructor. Actor configuration options are backend-specific (e.g., num_cpus, num_gpus for Ray). Returns: The remote actor handle. Raises: ValueError: If a service with this name already exists. \"\"\" [docs] @abstractmethod def get(self, name: str) -\u003e Any: \"\"\"Get a service by name. Retrieves a previously registered service. If the service was registered by another worker, this method will find it in the distributed registry. Args: name: Service identifier. Returns: The remote actor handle for the service. Raises: KeyError: If the service is not found. \"\"\" [docs] def get_client(self, name: str) -\u003e Any: \"\"\"Get the restricted client for a registered :class:`Service`. This method is additive so existing custom registry backends remain instantiable. Backends that support owner/client discovery override it. Args: name: Service identifier. Raises: NotImplementedError: If this registry backend does not support service-client discovery. \"\"\" raise NotImplementedError( f\"{type(self).__name__} does not support service-client discovery.\" ) @abstractmethod def __contains__(self, name: str) -\u003e bool: \"\"\"Check if a service is registered. Args: name: Service identifier. Returns: True if the service exists, False otherwise. \"\"\" [docs] @abstractmethod def list(self) -\u003e list[str]: \"\"\"List all registered service names. Returns: List of service names currently registered in the cluster. \"\"\" [docs] @abstractmethod def reset(self) -\u003e None: \"\"\"Reset the service registry. This removes all registered services and cleans up registry-owned resources. Externally-owned :class:`Service` instances are removed from discovery but are never shut down by the registry. Warning: This is a destructive operation. All services will be terminated and any ongoing work will be interrupted. \"\"\" def __getitem__(self, name: str) -\u003e Any: \"\"\"Dict-like access: services[\"tokenizer\"].\"\"\" return self.get(name) def __setitem__(self, name: str, service_factory: type) -\u003e None: \"\"\"Dict-like registration: services[\"tokenizer\"] = TokenizerClass. Note: This only supports service_factory without additional arguments. For full control, use register() method instead. \"\"\" self.register(name, service_factory)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -54,16 +54,16 @@ register_dataset(
 )
 ```
 
-| [`datasets.AtariDQNExperienceReplay`](generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay)(dataset_id) | Atari DQN Experience replay class. |
+| [`datasets.AtariDQNExperienceReplay`](generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay)(*args[, ...]) | Atari DQN Experience replay class. |
 | --- | --- |
-| [`datasets.D4RLExperienceReplay`](generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay)(dataset_id, ...) | An Experience replay class for D4RL. |
-| [`datasets.GenDGRLExperienceReplay`](generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay)(dataset_id) | Gen-DGRL Experience Replay dataset. |
-| [`datasets.LeRobotExperienceReplay`](generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay)(repo_id, *) | Experience replay over a [LeRobot](https://github.com/huggingface/lerobot) dataset. |
-| [`datasets.MinariExperienceReplay`](generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay)(dataset_id, ...) | Minari Experience replay dataset. |
-| [`datasets.OpenMLExperienceReplay`](generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay)(name, batch_size) | An experience replay for OpenML data. |
-| [`datasets.OpenXExperienceReplay`](generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay)(dataset_id[, ...]) | Open X-Embodiment datasets experience replay. |
-| [`datasets.RobosetExperienceReplay`](generated/torchrl.data.datasets.RobosetExperienceReplay.html#torchrl.data.datasets.RobosetExperienceReplay)(dataset_id, ...) | Roboset experience replay dataset. |
-| [`datasets.VD4RLExperienceReplay`](generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay)(dataset_id, ...) | V-D4RL experience replay dataset. |
+| [`datasets.D4RLExperienceReplay`](generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay)(*args[, ...]) | An Experience replay class for D4RL. |
+| [`datasets.GenDGRLExperienceReplay`](generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay)(*args[, ...]) | Gen-DGRL Experience Replay dataset. |
+| [`datasets.LeRobotExperienceReplay`](generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay)(*args[, ...]) | Experience replay over a [LeRobot](https://github.com/huggingface/lerobot) dataset. |
+| [`datasets.MinariExperienceReplay`](generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay)(*args[, ...]) | Minari Experience replay dataset. |
+| [`datasets.OpenMLExperienceReplay`](generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay)(*args[, ...]) | An experience replay for OpenML data. |
+| [`datasets.OpenXExperienceReplay`](generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay)(*args[, ...]) | Open X-Embodiment datasets experience replay. |
+| [`datasets.RobosetExperienceReplay`](generated/torchrl.data.datasets.RobosetExperienceReplay.html#torchrl.data.datasets.RobosetExperienceReplay)(*args[, ...]) | Roboset experience replay dataset. |
+| [`datasets.VD4RLExperienceReplay`](generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay)(*args[, ...]) | V-D4RL experience replay dataset. |
 
 | [`datasets.lerobot_columns_to_tensordict`](generated/torchrl.data.datasets.lerobot_columns_to_tensordict.html#torchrl.data.datasets.lerobot_columns_to_tensordict)(...) | Convert a LeRobot-style columnar dict into a canonical VLA TensorDict. |
 | --- | --- |

@@ -5,15 +5,34 @@ widely used replay buffers:
 
 ## Core Replay Buffer Classes
 
-| [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)(*[, storage, sampler, writer, ...]) | A generic, composable replay buffer class. |
+Replay buffers use `service_backend="direct"` by default, where
+`buffer.client() is buffer`. `service_backend="ray"` constructs a
+[`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer) owner and `client()` returns the restricted,
+picklable handle intended for collector workers. Only the owner can shut down
+the actor.
+
+```
+from functools import partial
+from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+buffer = ReplayBuffer(
+ storage=partial(LazyTensorStorage, 1000),
+ service_backend="ray",
+ service_backend_options={"remote_config": {"num_cpus": 1}},
+)
+worker_buffer = buffer.client()
+buffer.shutdown()
+```
+
+| [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)(*args[, use_ray_service, ...]) | A generic, composable replay buffer class. |
 | --- | --- |
 | [`OfflineToOnlineReplayBuffer`](generated/torchrl.data.OfflineToOnlineReplayBuffer.html#torchrl.data.OfflineToOnlineReplayBuffer)(offline_dataset, *) | A replay buffer combining an immutable offline dataset with a growing online buffer. |
-| [`ReplayBufferEnsemble`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble)(*rbs[, storages, ...]) | An ensemble of replay buffers. |
-| [`PrioritizedReplayBuffer`](generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer)(*, alpha, beta[, ...]) | Prioritized replay buffer. |
-| [`TensorDictReplayBuffer`](generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer)(*[, priority_key]) | TensorDict-specific wrapper around the [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) class. |
-| [`TensorDictPrioritizedReplayBuffer`](generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer)(*, alpha, beta) | TensorDict-specific wrapper around the [`PrioritizedReplayBuffer`](generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer) class. |
-| [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer)(*args, replay_buffer_cls, ...) | A Ray implementation of the Replay Buffer that can be extended and sampled remotely. |
-| [`RemoteTensorDictReplayBuffer`](generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer)(*args, **kwargs) | A remote invocation friendly ReplayBuffer class. |
+| [`ReplayBufferEnsemble`](generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble)(*args[, ...]) | An ensemble of replay buffers. |
+| [`PrioritizedReplayBuffer`](generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer)(*args[, ...]) | Prioritized replay buffer. |
+| [`TensorDictReplayBuffer`](generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer)(*args[, ...]) | TensorDict-specific wrapper around the [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) class. |
+| [`TensorDictPrioritizedReplayBuffer`](generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer)(*args[, ...]) | TensorDict-specific wrapper around the [`PrioritizedReplayBuffer`](generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer) class. |
+| [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer)(*args[, use_ray_service, ...]) | A Ray implementation of the Replay Buffer that can be extended and sampled remotely. |
+| [`RemoteTensorDictReplayBuffer`](generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer)(*args[, ...]) | A remote invocation friendly ReplayBuffer class. |
 
 ## Offline-to-online helpers
 

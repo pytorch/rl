@@ -34,6 +34,22 @@ Raises:
 
 **KeyError** - If the service is not found.
 
+get_client(*name: str*) → Any[[source]](../../_modules/torchrl/services/base.html#ServiceBase.get_client)
+
+Get the restricted client for a registered [`Service`](torchrl.services.Service.html#torchrl.services.Service).
+
+This method is additive so existing custom registry backends remain
+instantiable. Backends that support owner/client discovery override it.
+
+Parameters:
+
+**name** - Service identifier.
+
+Raises:
+
+**NotImplementedError** - If this registry backend does not support
+ service-client discovery.
+
 *abstract*list() → list[str][[source]](../../_modules/torchrl/services/base.html#ServiceBase.list)
 
 List all registered service names.
@@ -72,9 +88,9 @@ Raises:
 
 Reset the service registry.
 
-This removes all registered services and cleans up associated resources.
-After calling reset(), the registry will be empty and all service actors
-will be terminated.
+This removes all registered services and cleans up registry-owned
+resources. Externally-owned [`Service`](torchrl.services.Service.html#torchrl.services.Service) instances are removed from
+discovery but are never shut down by the registry.
 
 Warning
 

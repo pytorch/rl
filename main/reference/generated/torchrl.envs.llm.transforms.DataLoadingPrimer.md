@@ -1,6 +1,6 @@
 # DataLoadingPrimer
 
-*class*torchrl.envs.llm.transforms.DataLoadingPrimer(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/dataloading.html#DataLoadingPrimer)
+*class*torchrl.envs.llm.transforms.DataLoadingPrimer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/envs/llm/transforms/dataloading.html#DataLoadingPrimer)
 
 A primer that loads data from a dataloader and converts it into a tensordict using `stack_method`.
 

@@ -1,6 +1,6 @@
 # ModuleTransform
 
-*class*torchrl.envs.transforms.ModuleTransform(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/envs/transforms/module.html#ModuleTransform)
+*class*torchrl.envs.transforms.ModuleTransform(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/envs/transforms/module.html#ModuleTransform)
 
 A transform that wraps a module.
 

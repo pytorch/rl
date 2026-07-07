@@ -80,6 +80,13 @@ Examples
 >>> result = ray.get(tokenizer.encode.remote("Hello world"))
 ```
 
+get_client(*name: str*) → Any[[source]](../../_modules/torchrl/services/ray_service.html#RayService.get_client)
+
+Return a capability-restricted client for an owned service.
+
+Legacy class/factory registrations continue to expose raw Ray actors
+through `get()` and are intentionally rejected here.
+
 list() → list[str][[source]](../../_modules/torchrl/services/ray_service.html#RayService.list)
 
 List all registered service names.
@@ -101,17 +108,19 @@ Examples
 ['buffer', 'tokenizer']
 ```
 
-register(*name: str*, *service_factory: type*, **args*, ***kwargs*) → Any[[source]](../../_modules/torchrl/services/ray_service.html#RayService.register)
+register(*name: str*, *service_factory: type | [Service](torchrl.services.Service.html#torchrl.services.Service)*, **args*, ***kwargs*) → Any[[source]](../../_modules/torchrl/services/ray_service.html#RayService.register)
 
 Register a service and create a named Ray actor.
 
-This method creates a Ray actor with a globally unique name. The actor
-becomes immediately visible to all workers in the cluster.
+A class/factory creates a Ray actor with a globally unique name. A
+running [`Service`](torchrl.services.Service.html#torchrl.services.Service) owner instead registers its restricted client
+without transferring lifecycle ownership to the registry.
 
 Parameters:
 
 - **name** - Service identifier. Must be unique within the namespace.
-- **service_factory** - Class to instantiate as a Ray actor.
+- **service_factory** - Class to instantiate as a Ray actor, or a running
+service owner.
 - ***args** - Positional arguments for the service constructor.
 - ****kwargs** - Both Ray actor options (num_cpus, num_gpus, memory, etc.)
 and service constructor arguments. Ray will filter out the actor
@@ -119,7 +128,8 @@ options it recognizes.
 
 Returns:
 
-The Ray actor handle.
+The Ray actor handle for a class registration, or the restricted
+client for a service-owner registration.
 
 Raises:
 
@@ -202,11 +212,12 @@ Examples
 
 reset() → None[[source]](../../_modules/torchrl/services/ray_service.html#RayService.reset)
 
-Reset the service registry by terminating all actors.
+Reset discovery and terminate registry-owned legacy actors.
 
 This method:
-1. Terminates all service actors in the current namespace
-2. Clears the registry actor's internal state
+1. Terminates class/factory actors created by this registry
+2. Removes externally-owned service clients without shutting owners down
+3. Clears the registry actor's internal state
 
 After calling reset(), all services will be removed and their actors
 will be killed. Any ongoing work will be interrupted.

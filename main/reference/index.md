@@ -101,6 +101,7 @@
 - [Other Loss Modules](objectives_other.html)
 - [Service Registry](services.html)
 
+- [Service owners and clients](services.html#service-owners-and-clients)
 - [Overview](services.html#overview)
 
 - [Key Features](services.html#key-features)
@@ -131,6 +132,18 @@
 - [Best Practices](services.html#best-practices)
 - [Examples](services.html#examples)
 - [See Also](services.html#see-also)
+- [Designing Training Applications with Services](services_workflow.html)
+
+- [Owners and clients](services_workflow.html#owners-and-clients)
+- [Placement does not define communication](services_workflow.html#placement-does-not-define-communication)
+- [Preserving domain APIs](services_workflow.html#preserving-domain-apis)
+- [Completion and failure semantics](services_workflow.html#completion-and-failure-semantics)
+- [Lifecycle belongs to the owner](services_workflow.html#lifecycle-belongs-to-the-owner)
+- [Integrations accept owners when they can](services_workflow.html#integrations-accept-owners-when-they-can)
+- [Environments are execution resources, not shared services](services_workflow.html#environments-are-execution-resources-not-shared-services)
+- [Discovery is optional](services_workflow.html#discovery-is-optional)
+- [Design compromises](services_workflow.html#design-compromises)
+- [Runnable examples](services_workflow.html#runnable-examples)
 - [torchrl.trainers package](trainers.html)
 
 - [Key Features](trainers.html#key-features)

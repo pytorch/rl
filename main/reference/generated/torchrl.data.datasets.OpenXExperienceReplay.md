@@ -1,6 +1,6 @@
 # OpenXExperienceReplay
 
-*class*torchrl.data.datasets.OpenXExperienceReplay(*dataset_id*, *batch_size: int | None = None*, ***, *shuffle: bool = True*, *num_slices: int | None = None*, *slice_len: int | None = None*, *pad: float | bool | None = None*, *replacement: bool | None = None*, *streaming: bool | None = None*, *root: str | Path | None = None*, *download: bool | None = None*, *sampler: [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler) | None = None*, *writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer) | None = None*, *collate_fn: Callable | None = None*, *pin_memory: bool = False*, *prefetch: int | None = None*, *transform: torchrl.envs.Transform | None = None*, *split_trajs: bool = False*, *strict_length: bool = True*)[[source]](../../_modules/torchrl/data/datasets/openx.html#OpenXExperienceReplay)
+*class*torchrl.data.datasets.OpenXExperienceReplay(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/datasets/openx.html#OpenXExperienceReplay)
 
 Open X-Embodiment datasets experience replay.
 
@@ -276,6 +276,10 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
+client() → T
+
+Return `self` for the zero-overhead direct backend.
+
 *property*data_path
 
 Path to the dataset, including split.
@@ -376,6 +380,10 @@ Keyword Arguments:
 
 **invert** (*bool**,**optional*) - if `True`, the transform will be inverted (forward calls will be called
 during writing and inverse calls during reading). Defaults to `False`.
+
+*property*is_alive*: bool*
+
+Whether this direct replay buffer remains available.
 
 load(**args*, ***kwargs*)
 
@@ -663,6 +671,10 @@ save(**args*, ***kwargs*)
 
 Alias for `dumps()`.
 
+*property*service_backend*: str*
+
+The canonical deployment backend for this replay buffer.
+
 set_(*key*, *value*)
 
 Sets the value of a key across the entire replay buffer in-place.
@@ -707,6 +719,14 @@ value. Otherwise it is reset to a default value.
 set_writer(*writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*)
 
 Sets a new writer in the replay buffer and returns the previous writer.
+
+shutdown(*timeout: float | None = None*) → None
+
+Mark this direct replay-buffer owner as shut down.
+
+start() → T
+
+Return this already-started direct replay buffer.
 
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 

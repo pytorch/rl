@@ -1122,6 +1122,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../../reference/trainers.html">
                   torchrl.trainers package
                 </a>
@@ -1469,11 +1475,16 @@ document.write(`
 
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
-<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">TransportBackend</span><span class="p">,</span> <span class="n">WeightSyncScheme</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">register_weight_sync_backend</span><span class="p">,</span>
+    <span class="n">TransportBackend</span><span class="p">,</span>
+    <span class="n">WeightSyncScheme</span><span class="p">,</span>
+<span class="p">)</span>
 
 
 <div class="viewcode-block" id="NoWeightSyncScheme">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.NoWeightSyncScheme.html#torchrl.weight_update.NoWeightSyncScheme">[docs]</a>
+<span class="nd">@register_weight_sync_backend</span><span class="p">(</span><span class="s2">&quot;none&quot;</span><span class="p">)</span>
 <span class="k">class</span> <span class="nc">NoWeightSyncScheme</span><span class="p">(</span><span class="n">WeightSyncScheme</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;No-op weight synchronization scheme.</span>
 
@@ -1844,7 +1855,7 @@ document.write(`
        "headline": "torchrl.weight_update._noupdate",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/weight_update/_noupdate.html",
-       "articleBody": "Source code for torchrl.weight_update._noupdate from __future__ import annotations from typing import Any from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme [docs] class NoWeightSyncScheme(WeightSyncScheme): \"\"\"No-op weight synchronization scheme. This scheme disables weight synchronization entirely. \"\"\" def _init_on_sender_impl( self, model_id: str, context: Any = None, **kwargs, ) -\u003e None: \"\"\"Initialize on the main process (sender side). Args: model_id: Identifier for the model being synchronized context: Optional context object (not used) **kwargs: Optional parameters (not used) \"\"\" # Store model_id directly on scheme (no-op) self.model_id = model_id def _init_on_receiver_impl( self, *, model_id: str, context: Any = None, **kwargs, ) -\u003e None: \"\"\"Initialize on worker process (receiver side). Args: model_id: Identifier for the model being synchronized context: Optional context object (not used) **kwargs: Optional parameters (not used) \"\"\" # Store model_id directly on scheme (no-op) self.model_id = model_id [docs] def create_transport(self, **kwargs) -\u003e TransportBackend: \"\"\"Create a no-op transport. Note: This is used internally by init_on_sender/init_on_receiver. \"\"\" # Return a dummy transport that does nothing class NoOpTransport: def send_weights(self, weights: Any) -\u003e None: pass def receive_weights( self, timeout: float | None = None, *, weights: Any = None, model: Any = None, strategy: Any = None, ) -\u003e Any | None: return None def check_connection(self) -\u003e bool: return True def setup_connection_and_weights_on_sender(self) -\u003e None: pass def setup_connection_and_weights_on_receiver( self, *, worker_idx: int, weights: Any = None, model: Any = None, strategy: Any = None, ) -\u003e Any: return None return NoOpTransport() [docs] def send( self, weights: Any = None, worker_ids: int | list[int] | None = None, ) -\u003e None: \"\"\"No-op send - does nothing.\"\"\" [docs] def receive(self, timeout: float | None = None) -\u003e None: \"\"\"No-op receive - always returns None.\"\"\" return None [docs] def connect(self, *, worker_idx: int | None = None) -\u003e None: \"\"\"No-op synchronize - does nothing.\"\"\" if self._initialized_on_sender: self.synchronized_on_sender = True elif self._initialized_on_receiver: self.synchronized_on_receiver = True",
+       "articleBody": "Source code for torchrl.weight_update._noupdate from __future__ import annotations from typing import Any from torchrl.weight_update.weight_sync_schemes import ( register_weight_sync_backend, TransportBackend, WeightSyncScheme, ) [docs] @register_weight_sync_backend(\"none\") class NoWeightSyncScheme(WeightSyncScheme): \"\"\"No-op weight synchronization scheme. This scheme disables weight synchronization entirely. \"\"\" def _init_on_sender_impl( self, model_id: str, context: Any = None, **kwargs, ) -\u003e None: \"\"\"Initialize on the main process (sender side). Args: model_id: Identifier for the model being synchronized context: Optional context object (not used) **kwargs: Optional parameters (not used) \"\"\" # Store model_id directly on scheme (no-op) self.model_id = model_id def _init_on_receiver_impl( self, *, model_id: str, context: Any = None, **kwargs, ) -\u003e None: \"\"\"Initialize on worker process (receiver side). Args: model_id: Identifier for the model being synchronized context: Optional context object (not used) **kwargs: Optional parameters (not used) \"\"\" # Store model_id directly on scheme (no-op) self.model_id = model_id [docs] def create_transport(self, **kwargs) -\u003e TransportBackend: \"\"\"Create a no-op transport. Note: This is used internally by init_on_sender/init_on_receiver. \"\"\" # Return a dummy transport that does nothing class NoOpTransport: def send_weights(self, weights: Any) -\u003e None: pass def receive_weights( self, timeout: float | None = None, *, weights: Any = None, model: Any = None, strategy: Any = None, ) -\u003e Any | None: return None def check_connection(self) -\u003e bool: return True def setup_connection_and_weights_on_sender(self) -\u003e None: pass def setup_connection_and_weights_on_receiver( self, *, worker_idx: int, weights: Any = None, model: Any = None, strategy: Any = None, ) -\u003e Any: return None return NoOpTransport() [docs] def send( self, weights: Any = None, worker_ids: int | list[int] | None = None, ) -\u003e None: \"\"\"No-op send - does nothing.\"\"\" [docs] def receive(self, timeout: float | None = None) -\u003e None: \"\"\"No-op receive - always returns None.\"\"\" return None [docs] def connect(self, *, worker_idx: int | None = None) -\u003e None: \"\"\"No-op synchronize - does nothing.\"\"\" if self._initialized_on_sender: self.synchronized_on_sender = True elif self._initialized_on_receiver: self.synchronized_on_receiver = True",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

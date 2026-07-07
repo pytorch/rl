@@ -1,6 +1,6 @@
 # MLFlowLogger
 
-torchrl.record.loggers.mlflow.MLFlowLogger(**args*, *use_ray_service=False*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/mlflow.html#MLFlowLogger)
+torchrl.record.loggers.mlflow.MLFlowLogger(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/record/loggers/mlflow.html#MLFlowLogger)
 
 Wrapper for the mlflow logger.
 
