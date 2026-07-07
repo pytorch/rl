@@ -42,13 +42,15 @@ What you will learn
 - how to use :class:`~torchrl.envs.transforms.RobotMacroAction` as a readable action object;
 - how :class:`~torchrl.envs.transforms.URScriptPrimitiveTransform` lets ``env.step(td)``
   consume those actions directly;
+- how to hold the end effector still for gripper-only commands and keep its
+  orientation constrained along a Cartesian motion;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
   of poses and gripper commands;
 - how to request rendered pixels from the environment and record them with
   :class:`~torchrl.record.VideoRecorder`;
 - how to reset and reuse one environment across scripted scenes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-51
+.. GENERATED FROM PYTHON SOURCE LINES 34-53
 
 .. code-block:: Python
 
@@ -78,7 +80,7 @@ What you will learn
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 52-72
+.. GENERATED FROM PYTHON SOURCE LINES 54-74
 
 Environment
 -----------
@@ -101,7 +103,7 @@ bowl target and a success flag. The task reward is intentionally sparse. It is
 ``1`` only when the cube center is within the environment's placement
 tolerance of the bowl target coordinate, and ``0`` otherwise.
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-93
+.. GENERATED FROM PYTHON SOURCE LINES 74-95
 
 .. code-block:: Python
 
@@ -133,7 +135,7 @@ tolerance of the bowl target coordinate, and ``0`` otherwise.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 94-115
+.. GENERATED FROM PYTHON SOURCE LINES 96-119
 
 RobotMacroAction as the action
 -------------------------
@@ -147,6 +149,8 @@ under ``"action"``. ``RobotMacroAction`` is that object:
   where it is;
 - ``RobotMacroAction.reach_pose(..., gripper="closed")`` moves the arm and closes
   the gripper in one macro action;
+- ``RobotMacroAction.wait()`` holds the complete low-level target, while
+  ``open_gripper`` and ``close_gripper`` preserve the six arm-joint targets;
 - ``RobotMacroAction.RESET`` asks the environment to return to its configured home
   joint posture.
 
@@ -157,7 +161,7 @@ the target explicit in object units: close about one millimeter past the cube
 width, ask the environment to convert that width to a gripper command, and
 pass that command to the ``RobotMacroAction``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 118-127
+.. GENERATED FROM PYTHON SOURCE LINES 122-131
 
 Create the MuJoCo scene
 -----------------------
@@ -169,7 +173,7 @@ one primitive-control transform with ``execute=True``. After that,
 ``env.step`` accepts a ``RobotMacroAction`` directly under ``td["action"]`` and
 executes the expanded low-level sequence internally.
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-157
+.. GENERATED FROM PYTHON SOURCE LINES 131-161
 
 .. code-block:: Python
 
@@ -210,7 +214,7 @@ executes the expanded low-level sequence internally.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 158-177
+.. GENERATED FROM PYTHON SOURCE LINES 162-181
 
 Indexing MuJoCo batches
 -----------------------
@@ -232,7 +236,7 @@ snapshots, while boolean masks are intentionally not supported.
 Preserving a singleton batch for integer indexing keeps downstream code that
 expects batched specs and TensorDicts working unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-224
+.. GENERATED FROM PYTHON SOURCE LINES 181-228
 
 .. code-block:: Python
 
@@ -290,7 +294,7 @@ expects batched specs and TensorDicts working unchanged.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 225-232
+.. GENERATED FROM PYTHON SOURCE LINES 229-236
 
 Policy shape
 ------------
@@ -300,7 +304,7 @@ the minimal shape we want users to see: build a list of poses and gripper
 commands, place the next ``RobotMacroAction`` under the normal action key, and call
 ``env.step``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 232-247
+.. GENERATED FROM PYTHON SOURCE LINES 236-251
 
 .. code-block:: Python
 
@@ -326,7 +330,47 @@ commands, place the next ``RobotMacroAction`` under the normal action key, and c
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 248-255
+.. GENERATED FROM PYTHON SOURCE LINES 252-289
+
+Keeping the end effector constrained
+-------------------------------------
+
+There are two different ways to keep the end effector in place. When only the
+gripper should move, :meth:`~torchrl.envs.RobotMacroAction.open_gripper` and
+:meth:`~torchrl.envs.RobotMacroAction.close_gripper` copy the current arm
+target and modify only the gripper command. A
+:meth:`~torchrl.envs.RobotMacroAction.wait` action holds both the arm and the
+gripper target.
+
+During a Cartesian move, keeping the tool *orientation* fixed requires an
+orientation constraint. A full target quaternion locks all three rotational
+degrees of freedom. Often two are enough: for a level gripper, rotations about
+the world x and y axes must remain constrained, while spin about world z can
+stay free. ``orientation_mask=(1.0, 1.0, 0.0)`` expresses exactly that
+constraint and avoids over-constraining the inverse-kinematics solve.
+
+By default, ``reach_pose`` solves inverse kinematics at the endpoint and then
+interpolates the arm joints. Both endpoint poses can be valid even though the
+tool tilts or leaves the straight Cartesian line between them. Setting
+``path="cartesian"`` asks the solver to warm-start a new IK solve at every
+waypoint, so the position and orientation constraints hold throughout the
+motion. The carry actions below use both options:
+
+.. code-block:: python
+
+   RobotMacroAction.reach_pose(
+       position=target_position,
+       quaternion=level_quaternion,
+       orientation_mask=(1.0, 1.0, 0.0),
+       path="cartesian",
+       gripper="closed",
+   )
+
+Cartesian waypoint solving is more expensive than joint interpolation. It is
+most useful when intermediate geometry matters, such as transporting a held
+object without tilting it or drifting sideways.
+
+.. GENERATED FROM PYTHON SOURCE LINES 292-299
 
 A scripted cube-to-bowl macro
 -----------------------------
@@ -336,7 +380,7 @@ robot commands. The generator below is deliberately explicit: it names the
 poses we want the pinch site to reach and interleaves them with gripper
 commands.
 
-.. GENERATED FROM PYTHON SOURCE LINES 255-512
+.. GENERATED FROM PYTHON SOURCE LINES 299-560
 
 .. code-block:: Python
 
@@ -383,6 +427,8 @@ commands.
         return RobotMacroAction.reach_pose(
             position=position,
             quaternion=quaternion,
+            orientation_mask=(1.0, 1.0, 0.0),
+            path="cartesian",
             gripper="closed",
             gripper_command=gripper_close_command,
             steps=80,
@@ -454,8 +500,10 @@ commands.
         # bowl, the fingers can drag faster than the cube can safely follow: the
         # cube may slide inside the grasp, get pushed out, or arrive shifted enough
         # that the final drop misses the bowl. We therefore carry it through a few
-        # intermediate waypoints in the table plane. After each waypoint, the next
-        # command uses the latest observed cube and finger positions.
+        # intermediate macro targets in the table plane. Within each macro,
+        # ``path="cartesian"`` keeps the pinch site on the straight Cartesian line
+        # and ``orientation_mask`` keeps the gripper level. After each target, the
+        # next command uses the latest observed cube and finger positions.
         policy_state["carry_start_cube"] = policy_state["td"]["cube_pos"].clone()
 
         # Action 6: Carry the cube one quarter of the way toward the bowl.
@@ -604,7 +652,7 @@ commands.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 513-518
+.. GENERATED FROM PYTHON SOURCE LINES 561-566
 
 Fixed scene video
 -----------------
@@ -612,7 +660,7 @@ Fixed scene video
 First, render the default task once. This is the simple cube-to-bowl scene
 used above to introduce the scripted policy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 518-528
+.. GENERATED FROM PYTHON SOURCE LINES 566-576
 
 .. code-block:: Python
 
@@ -641,7 +689,7 @@ used above to introduce the scripted policy.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 529-538
+.. GENERATED FROM PYTHON SOURCE LINES 577-586
 
 Randomized workspace video
 --------------------------
@@ -653,7 +701,7 @@ front-to-left-back, and right-front to center-back. The ``VideoRecorder`` keeps
 appending frames until we ask it to render, so the final video is one long
 clip containing all four randomized rollouts.
 
-.. GENERATED FROM PYTHON SOURCE LINES 538-545
+.. GENERATED FROM PYTHON SOURCE LINES 586-593
 
 .. code-block:: Python
 
@@ -671,7 +719,7 @@ clip containing all four randomized rollouts.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 546-551
+.. GENERATED FROM PYTHON SOURCE LINES 594-599
 
 Rendered randomized rollouts
 ----------------------------
@@ -679,7 +727,7 @@ Rendered randomized rollouts
 The second animation shows the same hand-written policy on the randomized
 scenes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 551-559
+.. GENERATED FROM PYTHON SOURCE LINES 599-607
 
 .. code-block:: Python
 
@@ -706,7 +754,7 @@ scenes.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 560-565
+.. GENERATED FROM PYTHON SOURCE LINES 608-613
 
 Reset and reuse the same environment
 ------------------------------------
@@ -714,7 +762,7 @@ Reset and reuse the same environment
 The same transformed environment can be reset and reused for another scripted
 rollout.
 
-.. GENERATED FROM PYTHON SOURCE LINES 565-570
+.. GENERATED FROM PYTHON SOURCE LINES 613-618
 
 .. code-block:: Python
 
@@ -730,7 +778,7 @@ rollout.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 571-597
+.. GENERATED FROM PYTHON SOURCE LINES 619-647
 
 Conclusion and further reading
 ------------------------------
@@ -741,7 +789,9 @@ are not a replacement for learning in difficult contact-rich settings: they
 still depend on calibration, solver quality and reachable waypoints. Their
 practical value is that they provide a strong baseline, a source of
 demonstrations, and a structured action space for residual policies or RL fine
-tuning.
+tuning. Use gripper-only actions or ``wait`` when the arm must remain still;
+use an orientation mask and a Cartesian path when pose constraints must hold
+while the arm is moving.
 
 .. seealso::
 
@@ -759,7 +809,7 @@ tuning.
    - :class:`~torchrl.envs.transforms.MultiAction` for executing batched low-level action
      sequences.
 
-.. GENERATED FROM PYTHON SOURCE LINES 597-599
+.. GENERATED FROM PYTHON SOURCE LINES 647-649
 
 .. code-block:: Python
 
@@ -775,7 +825,7 @@ tuning.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (45 minutes 54.691 seconds)
+   **Total running time of the script:** (45 minutes 59.508 seconds)
 
 
 .. _sphx_glr_download_tutorials_mujoco_cube_bowl_macros.py:

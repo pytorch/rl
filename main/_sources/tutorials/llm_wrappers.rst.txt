@@ -209,7 +209,7 @@ The Transformers wrapper provides more flexibility and is great for research and
 
 
     Loading Transformers model...
-    Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]    Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3691.91it/s]
+    Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]    Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3579.78it/s]
     Transformers wrapper input keys: [('history', 'prompt')]
     Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
     Transformers Results:
@@ -565,7 +565,7 @@ different LLM backends without changing your RL code.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.659 seconds)
+   **Total running time of the script:** (0 minutes 8.113 seconds)
 
 
 .. _sphx_glr_download_tutorials_llm_wrappers.py:

@@ -36,7 +36,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fae818c01b0>
+<torch._C.Generator object at 0x7fb294370070>
 ```
 
 ## Why collectors return fixed-size chunks
@@ -697,7 +697,7 @@ and replay-buffer workflow.
 policy where per-episode data is essential.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 0.392 seconds)
+**Total running time of the script:** (0 minutes 0.387 seconds)
 
 [`Download Jupyter notebook: collector_trajectory_assembly.ipynb`](../_downloads/a2c17acd7f5b44ec53e851e28c3416ac/collector_trajectory_assembly.ipynb)
 

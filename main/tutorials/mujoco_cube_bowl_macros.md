@@ -25,6 +25,8 @@ for residual RL.
 - how to use [`RobotMacroAction`](../reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction) as a readable action object;
 - how [`URScriptPrimitiveTransform`](../reference/generated/torchrl.envs.transforms.URScriptPrimitiveTransform.html#torchrl.envs.transforms.URScriptPrimitiveTransform) lets `env.step(td)`
 consume those actions directly;
+- how to hold the end effector still for gripper-only commands and keep its
+orientation constrained along a Cartesian motion;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
 of poses and gripper commands;
 - how to request rendered pixels from the environment and record them with
@@ -102,6 +104,8 @@ under `"action"`. `RobotMacroAction` is that object:
 where it is;
 - `RobotMacroAction.reach_pose(..., gripper="closed")` moves the arm and closes
 the gripper in one macro action;
+- `RobotMacroAction.wait()` holds the complete low-level target, while
+`open_gripper` and `close_gripper` preserve the six arm-joint targets;
 - `RobotMacroAction.RESET` asks the environment to return to its configured home
 joint posture.
 
@@ -237,6 +241,43 @@ td["action"] = small_action
 assert td["action"].mode.shape == torch.Size([1, 1])
 ```
 
+## Keeping the end effector constrained
+
+There are two different ways to keep the end effector in place. When only the
+gripper should move, `open_gripper()` and
+`close_gripper()` copy the current arm
+target and modify only the gripper command. A
+`wait()` action holds both the arm and the
+gripper target.
+
+During a Cartesian move, keeping the tool *orientation* fixed requires an
+orientation constraint. A full target quaternion locks all three rotational
+degrees of freedom. Often two are enough: for a level gripper, rotations about
+the world x and y axes must remain constrained, while spin about world z can
+stay free. `orientation_mask=(1.0, 1.0, 0.0)` expresses exactly that
+constraint and avoids over-constraining the inverse-kinematics solve.
+
+By default, `reach_pose` solves inverse kinematics at the endpoint and then
+interpolates the arm joints. Both endpoint poses can be valid even though the
+tool tilts or leaves the straight Cartesian line between them. Setting
+`path="cartesian"` asks the solver to warm-start a new IK solve at every
+waypoint, so the position and orientation constraints hold throughout the
+motion. The carry actions below use both options:
+
+```
+RobotMacroAction.reach_pose(
+ position=target_position,
+ quaternion=level_quaternion,
+ orientation_mask=(1.0, 1.0, 0.0),
+ path="cartesian",
+ gripper="closed",
+)
+```
+
+Cartesian waypoint solving is more expensive than joint interpolation. It is
+most useful when intermediate geometry matters, such as transporting a held
+object without tilting it or drifting sideways.
+
 ## A scripted cube-to-bowl macro
 
 We can now write the cube-to-bowl controller as a readable sequence of manual
@@ -285,6 +326,8 @@ def carry_action(alpha: float, bowl: torch.Tensor) -> RobotMacroAction:
  return RobotMacroAction.reach_pose(
  position=position,
  quaternion=quaternion,
+ orientation_mask=(1.0, 1.0, 0.0),
+ path="cartesian",
  gripper="closed",
  gripper_command=gripper_close_command,
  steps=80,
@@ -355,8 +398,10 @@ def gen_actions(td: TensorDictBase) -> Iterator:
  # bowl, the fingers can drag faster than the cube can safely follow: the
  # cube may slide inside the grasp, get pushed out, or arrive shifted enough
  # that the final drop misses the bowl. We therefore carry it through a few
- # intermediate waypoints in the table plane. After each waypoint, the next
- # command uses the latest observed cube and finger positions.
+ # intermediate macro targets in the table plane. Within each macro,
+ # ``path="cartesian"`` keeps the pinch site on the straight Cartesian line
+ # and ``orientation_mask`` keeps the gripper level. After each target, the
+ # next command uses the latest observed cube and finger positions.
  policy_state["carry_start_cube"] = policy_state["td"]["cube_pos"].clone()
 
  # Action 6: Carry the cube one quarter of the way toward the bowl.
@@ -557,7 +602,9 @@ are not a replacement for learning in difficult contact-rich settings: they
 still depend on calibration, solver quality and reachable waypoints. Their
 practical value is that they provide a strong baseline, a source of
 demonstrations, and a structured action space for residual policies or RL fine
-tuning.
+tuning. Use gripper-only actions or `wait` when the arm must remain still;
+use an orientation mask and a Cartesian path when pose constraints must hold
+while the arm is moving.
 
 See also
 
@@ -579,7 +626,7 @@ sequences.
 env.close()
 ```
 
-**Total running time of the script:** (45 minutes 54.691 seconds)
+**Total running time of the script:** (45 minutes 59.508 seconds)
 
 [`Download Jupyter notebook: mujoco_cube_bowl_macros.ipynb`](../_downloads/bcaf588259087706c7dcfb03a5a9380e/mujoco_cube_bowl_macros.ipynb)
 
