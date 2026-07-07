@@ -12,6 +12,7 @@ from tensordict import NestedKey, TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.postprocs.postprocs import _multi_step_func
+from torchrl.data.replay_buffers.utils import DEFAULT_DONE_KEYS
 from torchrl.envs.transforms.transforms import Transform
 
 
@@ -59,7 +60,8 @@ class MultiStepTransform(Transform):
             Defaults to ``"done"``.
         done_keys (list of NestedKey, optional): the list of end keys in the input tensordict.
             All the entries indicated by these keys will be left untouched by the transform.
-            Defaults to ``["done", "truncated", "terminated"]``.
+            Defaults to :data:`~torchrl.data.DEFAULT_DONE_KEYS`, i.e.
+            ``["done", "truncated", "terminated"]``.
         mask_key (NestedKey, optional): the mask key in the input tensordict.
             The mask represents the valid frames in the input tensordict and
             should have a shape that allows the input tensordict to be masked
@@ -169,7 +171,7 @@ class MultiStepTransform(Transform):
     @done_keys.setter
     def done_keys(self, value):
         if value is None:
-            value = ["done", "terminated", "truncated"]
+            value = list(DEFAULT_DONE_KEYS)
         self._done_keys = value
 
     @property

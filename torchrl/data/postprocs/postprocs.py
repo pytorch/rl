@@ -11,6 +11,8 @@ from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right
 from torch import nn
 
+from torchrl.data.replay_buffers.utils import DEFAULT_DONE_KEYS
+
 
 def _get_reward(
     gamma: float,
@@ -159,7 +161,7 @@ class MultiStep(nn.Module):
             ).reshape(1, 1, -1),
         )
         self.done_key = "done"
-        self.done_keys = ("done", "terminated", "truncated")
+        self.done_keys = DEFAULT_DONE_KEYS
         self.reward_keys = ("reward",)
         self.mask_key = ("collector", "mask")
 

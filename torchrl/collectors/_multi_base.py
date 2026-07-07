@@ -982,6 +982,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Warn when a SliceSampler is used without trajs_per_batch: workers
         # write batches independently so adjacent frames in the buffer can
         # come from different episodes without an intervening done signal.
+        # This hazard is specific to multi-process collectors: a single
+        # Collector writes batches in temporal order, so consecutive batches
+        # are contiguous continuations of the same trajectories and the only
+        # mid-trajectory edge is the live write cursor, which SliceSampler
+        # already resolves at read time (see the trajectory-boundary section
+        # of the replay-buffer docs).
         from torchrl.data.replay_buffers.samplers import SliceSampler
 
         if (

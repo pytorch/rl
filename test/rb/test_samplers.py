@@ -17,7 +17,13 @@ from tensordict import TensorDict
 
 from torchrl._utils import _replace_last
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
+from torchrl.data import (
+    DEFAULT_DONE_KEYS,
+    find_start_stop_traj,
+    TED2Flat,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
@@ -1991,6 +1997,138 @@ def test_prioritized_parameter_scheduler(
         )
         rb.sample(20)
         scheduler.step()
+
+
+class TestFindStartStopTraj:
+    """Tests for the shared trajectory-boundary recovery utility.
+
+    ``find_start_stop_traj`` is the module-level extraction of
+    ``SliceSampler._find_start_stop_traj``; these tests pin down its contract
+    (wraparound, cursor-as-implicit-truncation, time-first layout) and its
+    equivalence with the sampler's method.
+    """
+
+    def test_end_flags_wraparound_cursor(self):
+        # Full circular storage, ends at rows 2 and 7, write cursor at row 4:
+        # the trajectory starting at row 8 spans the wrap point down to row 2.
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
+
+    @pytest.mark.parametrize("cursor_type", ["int", "tensor", "range"])
+    def test_cursor_types(self, cursor_type):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        cursor = {
+            "int": 4,
+            "tensor": torch.tensor([2, 3, 4]),
+            "range": range(2, 5),
+        }[cursor_type]
+        start, stop, lengths = find_start_stop_traj(
+            end=end, at_capacity=True, cursor=cursor
+        )
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+
+    def test_trajectory_ids_match_end_flags(self):
+        # The same boundaries expressed as trajectory ids: id changes at
+        # rows 2->3, 4->5 and 7->8; ids wrap seamlessly at the storage edge.
+        trajectory = torch.tensor([5, 5, 5, 0, 0, 1, 1, 1, 5, 5])
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=True
+        )
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
+
+    def test_not_at_capacity_forces_last_end(self):
+        # When the storage is not full, the last valid element is always an
+        # end (the write head is an implicit truncation) and the input is not
+        # mutated.
+        end = torch.zeros(6, dtype=torch.bool)
+        end[2] = True
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=False)
+        assert start.squeeze(-1).tolist() == [0, 3]
+        assert stop.squeeze(-1).tolist() == [2, 5]
+        assert lengths.tolist() == [3, 3]
+        assert not end[5], "input end flags must not be mutated"
+
+    def test_at_capacity_no_end_flag(self):
+        # A full storage without any end flag holds a single trajectory that
+        # is forced to end at the last row.
+        end = torch.zeros(4, dtype=torch.bool)
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True)
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [3]
+        assert lengths.tolist() == [4]
+
+    def test_multidim_time_first(self):
+        # [T, B] layout: time along dim 0, one column per batch element.
+        # Boundary rows are [time_idx, batch_idx], grouped by batch.
+        trajectory = torch.tensor(
+            [
+                [0, 3],
+                [0, 3],
+                [1, 3],
+                [1, 4],
+                [1, 4],
+            ]
+        )
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=False
+        )
+        assert start.tolist() == [[0, 0], [2, 0], [0, 1], [3, 1]]
+        assert stop.tolist() == [[1, 0], [4, 0], [2, 1], [4, 1]]
+        assert lengths.tolist() == [2, 3, 3, 2]
+
+    def test_exclusive_args(self):
+        end = torch.zeros(4, dtype=torch.bool)
+        trajectory = torch.zeros(4)
+        with pytest.raises(TypeError, match="Exactly one"):
+            find_start_stop_traj(at_capacity=True)
+        with pytest.raises(TypeError, match="Exactly one"):
+            find_start_stop_traj(trajectory=trajectory, end=end, at_capacity=True)
+
+    @pytest.mark.parametrize("use_traj", [True, False])
+    @pytest.mark.parametrize("at_capacity", [True, False])
+    def test_matches_slice_sampler(self, use_traj, at_capacity):
+        # SliceSampler._find_start_stop_traj must behave exactly like the
+        # module-level function it delegates to.
+        torch.manual_seed(0)
+        trajectory = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2, 2, 0])
+        end = torch.zeros(10, dtype=torch.bool)
+        end[[2, 4, 8]] = True
+        sampler = SliceSampler(num_slices=2)
+        if use_traj:
+            kwargs = {"trajectory": trajectory}
+        else:
+            kwargs = {"end": end}
+        expected = find_start_stop_traj(at_capacity=at_capacity, **kwargs)
+        result = sampler._find_start_stop_traj(at_capacity=at_capacity, **kwargs)
+        for r, e in zip(result, expected):
+            assert (r == e).all()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_device_kwarg(self):
+        # The computation device is a scratch device: results come back on
+        # the input's device.
+        end = torch.zeros(10, dtype=torch.bool)
+        end[[2, 7]] = True
+        ref = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        out = find_start_stop_traj(
+            end=end, at_capacity=True, cursor=4, device=torch.device("cuda:0")
+        )
+        for r, o in zip(ref, out):
+            assert o.device == end.device
+            assert (r == o).all()
+
+    def test_default_done_keys_constant(self):
+        assert DEFAULT_DONE_KEYS == ("done", "truncated", "terminated")
+        # TED2Flat consumes the shared constant as its default.
+        assert TED2Flat().done_keys == set(DEFAULT_DONE_KEYS)
 
 
 if __name__ == "__main__":

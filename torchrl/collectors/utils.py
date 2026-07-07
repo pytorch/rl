@@ -140,6 +140,12 @@ def split_trajectories(
         ``trajs_per_batch`` to the collector instead (see
         :ref:`collectors_replay_trajs`).
 
+    .. seealso:: This function operates on contiguous *rollout batches* (fresh
+        collector output). To recover trajectory boundaries from data laid out
+        in a replay-buffer storage -- where the ring buffer can wrap and the
+        write cursor acts as an implicit truncation -- use
+        :func:`~torchrl.data.find_start_stop_traj` instead.
+
     Examples:
         >>> from tensordict import TensorDict
         >>> import torch
