@@ -131,6 +131,8 @@ class CSVExperiment:
 class CSVLogger(Logger):
     """A minimal-dependency CSV logger.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.CSVLoggerConfig`.
+
     Args:
         exp_name (str): The name of the experiment.
         log_dir (str or Path, optional): where the experiment should be saved.

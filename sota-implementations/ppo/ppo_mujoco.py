@@ -64,6 +64,9 @@ def _save_checkpoint(
         "env_config_overrides": _to_container(cfg.env.config_overrides),
         "normalize_observation": bool(cfg.env.normalize_observation),
         "vecnorm": get_vecnorm_state(train_env) if train_env is not None else None,
+        "max_episode_steps": int(cfg.env.max_episode_steps)
+        if cfg.env.get("max_episode_steps")
+        else None,
     }
     return save_render_checkpoint(
         path,

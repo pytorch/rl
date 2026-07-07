@@ -11,6 +11,15 @@ env:
   success_tol: 0.35 # sized so a random policy succeeds sometimes (cold-start signal)
   max_outer_steps: 6 # episode truncation, in chunk decisions
   render_size: 64 # side length of the from_pixels eval-video frame
+  num_envs: 1
+  eval_num_envs: 1
+  parallel_group_repeats: false
+  train_init_state_mode: random
+  render_backend: null
+  render_gpu_ids: null
+  eval_render_gpu_ids: null
+  render_gpu_device_zero_fallback: true
+  env_kwargs: null
   seed: 0
 
 tokenizer:
@@ -25,16 +34,24 @@ collector:
   group_size: 4 # n: rollouts per initial state (GRPO group)
   candidate_group_size: null # null = group_size; larger values oversample then select group_size
   groups_per_iter: 8 # initial states per iteration
-  # Safety cap in target group waves. The collector writes complete
-  # trajectories directly to the replay buffer every one-outer-step internal
-  # poll; one wave is approximately max_outer_steps *
-  # ceil(groups_per_iter * group_size / num_envs) polls.
-  max_collect_batches_per_iter: 1
-  # Retry a capped wave once under the same policy if too few useful replay
-  # decisions have reached the replay buffer.
-  max_same_policy_collect_attempts: 2
   min_replay_decisions: null # null/0 = collect one target group wave
   total_iters: 200
+  replay_wait_s: 0.05
+  replay_log_s: 30.0
+  policy_device: null
+  policy_micro_batch_size: null
+  num_collectors: 1
+  envs_per_collector: 1
+  num_threads: 1
+  env_sub_threads: 1
+  server_max_batch_size: 1
+  server_min_batch_size: 1
+  server_timeout: 0.01
+  server_collect_stats: true
+  server_stats_window_size: 1024
+  max_inflight_per_env: 1
+  storing_device: cpu
+  use_buffers: null
 
 advantage:
   trajectory_return: sum # binary success return per trajectory
@@ -44,12 +61,19 @@ advantage:
   candidate_selection_max_combinations: 100000
 
 buffer:
-  device: null # null = training device
+  # The collector's worker-init path shares the buffer as a CPU memmap, so
+  # a GPU buffer device cannot be honored; keep it off-GPU (the update loop
+  # moves sampled batches to the training device).
+  device: cpu
+  shared_init: false
+  capacity_group_waves: 1 # replay capacity as multiples of one target group wave
+  consume_after_n_samples: 1 # sampled decisions leave the buffer after one update pass
 
 loss:
   clip_epsilon: [0.2, 0.28] # asymmetric DAPO clip; a float gives symmetric clipping
   ratio_level: sequence # sequence: one ratio per decision; token: one per action token
-  ppo_epochs: 1
+  # epochs are controlled by buffer.consume_after_n_samples: each decision
+  # leaves the buffer after that many sampling passes
   mini_batch_size: 64 # decisions per micro-batch
   accumulate_batches: 1 # optimizer step every N micro-batches
 
@@ -59,22 +83,30 @@ optim:
   warmup_updates: 1 # linear LR warmup, in optimizer steps (1 = no warmup)
   max_grad_norm: 1.0
 
+train:
+  # true: push only requires_grad=True parameters to the rollout policy server
+  # on each sync (partial in-place update on the receiving side); false ships
+  # the full parameter/buffer set. TinyVLA trains all parameters, so this only
+  # skips buffers at toy scale; it matters for the LoRA LIBERO config.
+  weight_sync_trainable_only: true
+
 logger:
   backend: wandb
+  service_backend: direct # direct | process | ray
   project_name: torchrl-sota-vla-grpo
   group_name: null
   exp_name: vla_grpo_toy
   mode: online
   eval_iter: 10 # evaluate every N iterations
   eval_episodes: 50 # greedy episodes per evaluation
-  eval_process: false # true = run eval in a dedicated process
-  eval_async: false # with eval_process, submit eval and log result later
-  eval_device: null # null = policy.device/auto; set e.g. cuda:7 with eval_process
-  eval_state_dir: null # null = tempfile dir for trainable-weight snapshots
-  record_video: true # render eval rollouts via VideoRecorder (needs a logger)
-  video_episodes: 2 # greedy episodes per recorded video
+  eval_backend: thread # TorchRL Evaluator backend: thread | process | ray
+  eval_async: false # submit eval and log result later
+  eval_busy_policy: skip # skip | error | queue
+  eval_timeout_s: 300.0
+  eval_device: cpu # eval env/client device; inference stays on the policy-server device
   video_fps: 4 # frames per second of the logged video (one frame per decision)
+  # VideoRecorder logs the frames from the same rollout used for eval metrics.
 
 checkpoint:
   save_iter: 25 # save every N iterations (0 disables)
-  resume: null # path to a checkpoint_latest.pt to resume from
+  resume: null # path to a checkpoint_latest TensorDict directory to resume from

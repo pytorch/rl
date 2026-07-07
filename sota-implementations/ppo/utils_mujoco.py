@@ -200,6 +200,9 @@ def make_render_env(spec: Any):
         "qpos" if backend == "gym" and env_name in _MUJOCO_QPOS_DIMS else None
     )
     qpos_key = spec.env_kwargs.get("qpos_key", default_qpos_key)
+    max_episode_steps = spec.env_kwargs.get(
+        "max_episode_steps", checkpoint.get("max_episode_steps")
+    )
     return make_env(
         env_name,
         device=spec.device,
@@ -208,6 +211,7 @@ def make_render_env(spec: Any):
         config_overrides=config_overrides,
         normalize_observation=normalize_observation,
         vecnorm_stats=vecnorm_stats,
+        max_episode_steps=max_episode_steps,
         qpos_key=qpos_key,
     )
 
@@ -317,19 +321,29 @@ def make_ppo_models(
 def make_render_policy(spec: Any):
     """Builds the PPO policy module for ``rlrender`` checkpoint loading."""
     checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
-    env_name = checkpoint.get(
+    env_name = spec.policy_kwargs.get(
         "env_name",
-        spec.policy_kwargs.get("env_name", "InvertedPendulum-v4"),
+        checkpoint.get("env_name", "InvertedPendulum-v4"),
     )
-    backend = checkpoint.get("env_backend", spec.policy_kwargs.get("backend", "gym"))
-    config_overrides = checkpoint.get("env_config_overrides")
-    normalize_observation = bool(checkpoint.get("normalize_observation", False))
+    normalize_observation = bool(
+        spec.policy_kwargs.get(
+            "normalize_observation", checkpoint.get("normalize_observation", False)
+        )
+    )
+    backend = spec.policy_kwargs.get("backend", checkpoint.get("env_backend", "gym"))
+    config_overrides = spec.policy_kwargs.get(
+        "config_overrides", checkpoint.get("env_config_overrides")
+    )
+    max_episode_steps = spec.policy_kwargs.get(
+        "max_episode_steps", checkpoint.get("max_episode_steps")
+    )
     actor, _ = make_ppo_models(
         env_name,
         device=spec.device,
         backend=backend,
         config_overrides=config_overrides,
         normalize_observation=normalize_observation,
+        max_episode_steps=max_episode_steps,
     )
     return actor
 
@@ -346,7 +360,12 @@ class _MujocoQposTransform(Transform):
         self.qpos_dim = qpos_dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        return observation[..., : self.qpos_dim].clone()
+        data = self.parent.base_env._env.unwrapped.data
+        return torch.as_tensor(
+            data.qpos.copy(),
+            dtype=observation.dtype,
+            device=observation.device,
+        )
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
