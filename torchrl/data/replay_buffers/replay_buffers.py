@@ -1365,6 +1365,51 @@ class ReplayBuffer:
         return result[0]
 
     @_maybe_delay_init
+    def query(
+        self,
+        predicate=None,
+        *,
+        trajectory_key=None,
+    ) -> list:
+        """Filters the stored trajectories with a query predicate.
+
+        Splits the buffer content into trajectories (see
+        :func:`~torchrl.data.replay_buffers.query.iter_trajectories`) and
+        returns those matching the predicate as
+        :class:`~torchrl.data.replay_buffers.query.Trajectory` views.
+
+        Args:
+            predicate (Callable[[Trajectory], bool], optional): a
+                :class:`~torchrl.data.replay_buffers.query.TrajectoryPredicate`
+                built from :data:`~torchrl.data.replay_buffers.query.traj`, or
+                any callable mapping a trajectory to a boolean. Defaults to
+                None (return all trajectories).
+
+        Keyword Args:
+            trajectory_key (NestedKey, optional): entry holding
+                per-transition trajectory ids. Defaults to None
+                (auto-detection from ``("collector", "traj_ids")``,
+                ``"traj_ids"``, ``"episode"`` or the done flags).
+
+        Returns:
+            A list of matching trajectory views.
+
+        Examples:
+            >>> from torchrl.data import traj
+            >>> good_trajs = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+            >>> observations = good_trajs[0].observation
+        """
+        from torchrl.data.replay_buffers.query import filter_trajectories
+
+        data = self[:]
+        if not is_tensor_collection(data):
+            raise TypeError(
+                "ReplayBuffer.query requires a tensordict-backed storage, "
+                f"got content of type {type(data)}."
+            )
+        return filter_trajectories(data, predicate, trajectory_key=trajectory_key)
+
+    @_maybe_delay_init
     def mark_update(self, index: int | torch.Tensor) -> None:
         self._sampler.mark_update(index, storage=self._storage)
 

@@ -15,6 +15,13 @@ from .checkpointers import (
 )
 from .her import HERReplayBuffer, HindsightStrategy
 from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
+from .query import (
+    filter_trajectories,
+    iter_trajectories,
+    traj,
+    Trajectory,
+    TrajectoryPredicate,
+)
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -58,6 +65,11 @@ from .writers import (
 )
 
 __all__ = [
+    "filter_trajectories",
+    "iter_trajectories",
+    "traj",
+    "Trajectory",
+    "TrajectoryPredicate",
     "HERReplayBuffer",
     "HindsightStrategy",
     "CompressedListStorage",
