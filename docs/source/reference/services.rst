@@ -640,8 +640,9 @@ Examples
 
 For complete examples, see:
 
-- ``examples/services/multi_service_training.py`` - Combined inference,
-  replay-buffer, and logger ownership
+- ``examples/services/multi_service_single_process.py`` - Direct services
+- ``examples/services/multi_service_multiprocess.py`` - Process services
+- ``examples/services/multi_service_ray.py`` - Ray services
 - ``examples/services/distributed_services.py`` - Basic service registry usage
 - ``examples/llm/python_executor_service.py`` - Python executor service examples
 - ``test/test_services.py`` - Comprehensive test suite

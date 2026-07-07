@@ -10,80 +10,80 @@ actors request policy inference, write transitions to a replay buffer, and
 report metrics to a logger. TorchRL gives these components the same ownership
 shape without imposing a single communication protocol on all of them.
 
-This page builds a small pipeline with three owners:
+The examples run one dummy actor/replay/trainer loop under three deployment
+profiles. Each entry point is intentionally short and delegates the shared
+TensorDict training logic to ``multi_service_utils.py``:
 
-.. list-table:: Example deployment
+.. list-table:: Example profiles
    :header-rows: 1
 
-   * - Owner
-     - Backend
-     - Worker-side capability
-   * - :class:`~torchrl.modules.inference_server.InferenceServer`
-     - thread
-     - :class:`~torchrl.modules.inference_server.PolicyClientModule`
-   * - :class:`~torchrl.data.TensorDictReplayBuffer`
-     - direct or Ray
-     - replay-buffer client
-   * - :class:`~torchrl.record.loggers.CSVLogger`
-     - process
-     - logger client
+   * - Entry point
+     - Inference
+     - Logger
+     - Replay buffer
+     - Actors
+   * - ``multi_service_single_process.py``
+     - background thread
+     - direct
+     - direct
+     - threads
+   * - ``multi_service_multiprocess.py``
+     - spawned process
+     - spawned process
+     - direct
+     - threads
+   * - ``multi_service_ray.py``
+     - Ray transport to a driver-owned server
+     - Ray actor
+     - Ray actor
+     - Ray tasks
 
-The complete runnable source is
-`examples/services/multi_service_training.py
-<https://github.com/pytorch/rl/blob/main/examples/services/multi_service_training.py>`_.
-It uses only core dependencies with a direct replay buffer; the Ray variant
-requires ``pip install ray``.
+The runnable sources are:
+
+- `single-process example
+  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_single_process.py>`_;
+- `multiprocess example
+  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_multiprocess.py>`_;
+- `Ray example
+  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_ray.py>`_;
+- `shared training helper
+  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_utils.py>`_.
+
+The first two use core dependencies. The third requires ``pip install ray``.
 
 .. code-block:: bash
 
-    python examples/services/multi_service_training.py
-    python examples/services/multi_service_training.py --replay-backend ray
+    python examples/services/multi_service_single_process.py
+    python examples/services/multi_service_multiprocess.py
+    python examples/services/multi_service_ray.py
 
 Create owners in the driver
 ---------------------------
 
-The driver constructs each heavy component exactly once. Backend selection is
-local to construction and does not leak into the actor loop:
+The driver constructs each heavy component exactly once. The three entry
+points differ only in the profile passed to the helper:
 
 .. code-block:: python
 
-    from functools import partial
+    from multi_service_utils import run_training
 
-    from torchrl.data import ListStorage, TensorDictReplayBuffer
-    from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
-    from torchrl.record import CSVLogger
+    run_training(service_backend="direct")
+    run_training(service_backend="process")
+    run_training(service_backend="ray")
 
-    logger = CSVLogger(
-        exp_name="multi-service",
-        log_dir="/tmp/torchrl-service-example",
-        service_backend="process",
-    )
-
-    replay_buffer = TensorDictReplayBuffer(
-        storage=partial(ListStorage, max_size=1_000),
-        batch_size=32,
-        service_backend="ray",
-        service_backend_options={"remote_config": {"num_cpus": 1}},
-    )
-
-    inference_server = InferenceServer(
-        policy,
-        ThreadingTransport(),
-        max_batch_size=8,
-    )
-    inference_server.start()
-
-For a dependency-free run, set the replay-buffer backend to ``"direct"`` and
-omit its backend options. The direct client's identity semantics mean that
-``replay_buffer.client() is replay_buffer``; no proxy is added to the local
-hot path.
+The helper resolves the profile into the backends currently supported by each
+domain. The process profile uses process owners for inference and logging but
+keeps the replay buffer in the driver because replay buffers do not yet expose
+a process service backend. The direct client's identity semantics mean that
+``replay_buffer.client() is replay_buffer``; no proxy is added to that hot
+path. The Ray profile uses restricted Ray clients for both logging and replay.
 
 Distribute clients, not owners
 ------------------------------
 
 Call :meth:`Service.client` once for each independent producer. Remote clients
 are small and picklable and expose only their domain operations. In particular,
-a worker holding the Ray replay-buffer and process-logger clients below cannot
+a worker holding the Ray-profile replay-buffer and logger clients below cannot
 stop their owners:
 
 .. code-block:: python
@@ -129,17 +129,22 @@ it is not required as a command-completion barrier.
 Only the driver controls lifecycle
 ----------------------------------
 
-Shut owners down after their consumers, with the logger last so teardown
-metrics can still be recorded:
+The helper uses an :class:`contextlib.ExitStack` to shut owners down after
+their consumers, with the logger last so teardown metrics can still be
+recorded:
 
 .. code-block:: python
 
-    try:
-        run_training()
-    finally:
-        inference_server.shutdown()
-        replay_buffer.shutdown()
-        logger.shutdown()
+    from contextlib import ExitStack
+
+    with ExitStack() as owners:
+        logger = make_logger()
+        owners.callback(logger.shutdown)
+        replay_buffer = make_replay_buffer()
+        owners.callback(replay_buffer.shutdown)
+        inference_server = make_inference_server()
+        owners.callback(inference_server.shutdown)
+        run_actor_loop()
 
 Shutdown is idempotent. Explicit teardown also releases process queues, feeder
 threads, and Ray actors deterministically instead of relying on garbage
