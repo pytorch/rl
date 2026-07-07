@@ -2,91 +2,122 @@
 
 .. _ref_services_workflow:
 
-Combining TorchRL Services
-==========================
+Designing Training Applications with Services
+==============================================
 
-Training applications commonly need several independently deployed services:
-actors request policy inference, write transitions to a replay buffer, and
-report metrics to a logger. TorchRL gives these components the same ownership
-shape without imposing a single communication protocol on all of them.
+Distributed reinforcement learning combines components with very different
+resource and communication requirements. Actors need low-latency policy
+inference, replay buffers coordinate concurrent producers and consumers, and
+loggers own stateful SDKs, files, credentials, and artifact uploads. These
+components often need to live in different threads, processes, or cluster
+actors while remaining easy to use from the training loop.
 
-The examples run one ordinary environment/replay/training loop under three
-deployment profiles. Each entry point is intentionally short and delegates
-the same TensorDict training logic to ``multi_service_utils.py``:
+Making an object remote is not sufficient. A useful distributed API must also
+answer:
 
-.. list-table:: Example profiles
-   :header-rows: 1
+* Who constructs and owns the expensive resource?
+* What can safely be copied or pickled into a worker?
+* Which operations are available to workers, and which remain driver-only?
+* When is an operation complete, and where are failures reported?
+* Who shuts down child processes, actors, queues, and background threads?
 
-   * - Entry point
-     - Inference
-     - Logger
-     - Replay buffer
-     - Training loop
-   * - ``multi_service_single_process.py``
-     - background thread
-     - direct
-     - direct
-     - driver
-   * - ``multi_service_multiprocess.py``
-     - spawned process
-     - spawned process
-     - direct
-     - driver
-   * - ``multi_service_ray.py``
-     - Ray transport to a driver-owned server
-     - Ray actor
-     - Ray actor
-     - driver
+TorchRL services answer these questions with a common ownership model while
+preserving the domain API of each component.
 
-The runnable sources are:
+Owners and clients
+------------------
 
-- `single-process example
-  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_single_process.py>`_;
-- `multiprocess example
-  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_multiprocess.py>`_;
-- `Ray example
-  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_ray.py>`_;
-- `shared training helper
-  <https://github.com/pytorch/rl/blob/main/examples/services/multi_service_utils.py>`_.
+A :class:`Service` is the owner of a long-lived resource. The owner controls
+construction, liveness, and teardown through ``start()``, ``is_alive``, and
+``shutdown()``. Its ``client()`` method returns the object intended for
+consumers.
 
-All three require Gymnasium; the third additionally requires Ray.
-
-.. code-block:: bash
-
-    pip install gymnasium
-    python examples/services/multi_service_single_process.py
-    python examples/services/multi_service_multiprocess.py
-    pip install ray
-    python examples/services/multi_service_ray.py
-
-Create owners in the driver
----------------------------
-
-The driver constructs each heavy component exactly once. The three entry
-points differ only in the profile passed to the helper:
+Remote clients are lightweight, picklable capabilities. They expose domain
+operations such as policy calls, ``add`` and ``sample``, or ``log_scalar``, but
+not lifecycle operations. A worker can use a service without being able to
+terminate the process or actor shared by other workers.
 
 .. code-block:: python
 
-    from multi_service_utils import run_training
+    owner = make_service()
+    owner.start()
 
-    run_training(service_backend="direct")
-    run_training(service_backend="process")
-    run_training(service_backend="ray")
+    client = owner.client()
+    send_to_worker(client)
 
-The helper resolves the profile into the backends currently supported by each
-domain. The process profile uses process owners for inference and logging but
-keeps the replay buffer in the driver because replay buffers do not yet expose
-a process service backend. The direct client's identity semantics mean that
-``replay_buffer.client() is replay_buffer``; no proxy is added to that hot
-path. The Ray profile uses restricted Ray clients for both logging and replay.
+    # The owner remains in the driver.
+    owner.shutdown()
 
-Use clients in the loop, not owners
------------------------------------
+Direct services make a deliberate exception to capability restriction:
+``owner.client() is owner``. Adding a proxy in the same process would impose
+overhead without creating a meaningful isolation boundary. Code that requires
+restricted capabilities should therefore rely on that guarantee only for
+remote backends.
 
-Remote clients expose the same domain operations as their direct counterparts,
-without lifecycle methods. The helper extracts them once before entering the
-loop; :class:`~torchrl.modules.inference_server.PolicyClientModule` performs
-the same extraction automatically for the inference owner:
+The owner/client split also ensures that heavy resources are constructed once.
+For example, a process logger constructs its concrete logging SDK inside the
+logging process, and a Ray replay buffer constructs its storage and sampler in
+its actor. Pickling a client does not reconstruct those resources.
+
+Placement does not define communication
+---------------------------------------
+
+``service_backend`` selects where ownership lives. TorchRL uses the canonical
+backend vocabulary ``direct``, ``thread``, ``process``, ``ray``, ``monarch``,
+and ``distributed``, but each service supports only the placements that fit
+its implementation.
+
+Placement is intentionally separate from the operation protocol. The domains
+have incompatible communication requirements:
+
+* Inference is request/reply traffic that benefits from batching and
+  specialized tensor transports.
+* Replay buffers combine writes, sampling, priority updates, and storage
+  ownership.
+* Logging carries small scalars as well as large videos and must preserve SDK
+  completion and error semantics.
+* Weight synchronization distributes versioned model state rather than
+  serving arbitrary requests.
+
+Forcing these interactions behind one transport interface would either erase
+important guarantees or fill the interface with operations that are
+meaningless for most implementations. The common abstraction therefore covers
+ownership and lifecycle; each domain retains its own communication contract.
+
+.. list-table:: Service capabilities
+   :header-rows: 1
+
+   * - Domain
+     - Owner placement
+     - Worker-facing interface
+   * - Inference
+     - ``thread`` or ``process``; transport may use threads, process queues,
+       slots, Ray, or Monarch
+     - Callable TensorDict policy through
+       :class:`~torchrl.modules.inference_server.PolicyClientModule`
+   * - Logging
+     - ``direct``, ``process``, or ``ray``
+     - ``log_*`` methods
+   * - Replay buffer
+     - ``direct`` or ``ray``
+     - ``add``, ``extend``, ``sample``, and priority updates
+
+The supported combinations are explicit rather than emulated. For example, a
+process deployment can place inference and logging in child processes while
+keeping a replay buffer direct. This avoids presenting a process replay
+backend whose performance and data-movement contract have not been defined.
+
+Preserving domain APIs
+----------------------
+
+Consumers should not branch on service placement. A policy client remains a
+TensorDict policy, a replay-buffer client remains a replay buffer, and a
+logger client retains its logging methods. Only construction and lifecycle
+belong to the owner.
+
+:class:`~torchrl.modules.inference_server.PolicyClientModule` accepts an
+inference owner, transport, or callable client and obtains the restricted
+client automatically:
 
 .. code-block:: python
 
@@ -100,21 +131,12 @@ the same extraction automatically for the inference owner:
     replay_buffer = replay_owner.client()
     logger = logger_owner.client()
 
-A direct service uses identity semantics: its client is the owner because no
-process boundary needs capability restriction or proxying. Process and Ray
-profiles return lightweight clients that transparently cross their respective
-boundaries.
-
-Keep the training loop backend-neutral
---------------------------------------
-
-The core loop does not need to know where any service runs. Policy inference,
-replay writes and samples, and logging retain their normal TorchRL interfaces:
+The resulting training code is independent of placement:
 
 .. code-block:: python
 
     td = env.reset()
-    for step in range(steps):
+    for step in range(num_steps):
         td = policy(td)
         step_td = env.step(td)
         replay_buffer.add(step_td)
@@ -130,71 +152,147 @@ replay writes and samples, and logging retain their normal TorchRL interfaces:
             "train/loss", float(loss["loss"].detach()), step=step
         )
 
-``loss_fn`` returns a TensorDict of loss terms, as TorchRL objective modules
-do. ``reduce=True`` reduces all of those terms to one scalar tensor before
-backpropagation. Nothing in this loop branches on ``service_backend``; the
-owners created before the loop determine which calls are local and which cross
-a process or Ray boundary.
+Moving an owner changes which calls cross an execution boundary; it does not
+change the loop that consumes its client.
 
-Remote logger methods have the same completion semantics as direct logger
-methods: when ``log_scalar`` returns, the concrete logger method has run, and
-service-side errors are raised at that call. Custom ``log_*`` methods likewise
-return the concrete method's result. :meth:`~torchrl.record.loggers.Logger.flush`
-is still useful to flush buffers maintained by the underlying logging SDK, but
-it is not required as a command-completion barrier.
+Completion and failure semantics
+--------------------------------
 
-Only the driver controls lifecycle
-----------------------------------
+Remote execution should not silently weaken the contract of a domain method.
+TorchRL therefore uses acknowledged calls where their direct counterparts are
+complete on return:
 
-The helper uses an :class:`contextlib.ExitStack` to shut owners down after
-their consumers, with the logger last so teardown metrics can still be
-recorded:
+* Logger methods return after the concrete logger method has run. Service-side
+  failures are raised at the call site, and custom ``log_*`` methods preserve
+  their return values.
+* Video logging waits for encoding or upload so evaluation cannot finish while
+  its artifact is still pending. CUDA payloads are moved to CPU for transport,
+  while video shape, dtype, and content are preserved.
+* Replay-buffer operations return their result or raise the remote failure.
+* A synchronous policy call returns the inference result; asynchronous
+  inference remains available through its domain-specific submission API.
+
+Acknowledgement adds a round trip to remote calls. For logging this favors
+correctness, bounded memory, and immediate error reporting over fire-and-forget
+throughput. Applications should avoid logging every hot-path intermediate and
+prefer meaningful aggregated metrics.
+
+Bounded queues and actor limits provide backpressure rather than allowing an
+unbounded backlog. Clients preserve submission order for each producer;
+independent producers do not imply a global ordering.
+
+When a process or actor exits before replying, clients report peer failure
+instead of waiting indefinitely. Startup also waits until the owned resource
+is ready, so obtaining a usable owner implies that its service construction
+has completed.
+
+Lifecycle belongs to the owner
+------------------------------
+
+Clients never stop shared infrastructure. The driver shuts services down only
+after collectors, evaluators, and other client users have finished. Explicit
+teardown releases processes, actors, queues, feeder threads, and SDK resources
+deterministically.
 
 .. code-block:: python
 
     from contextlib import ExitStack
 
-    with ExitStack() as owners:
-        logger = make_logger()
-        owners.callback(logger.shutdown)
-        replay_buffer = make_replay_buffer()
-        owners.callback(replay_buffer.shutdown)
-        inference_server = make_inference_server()
-        owners.callback(inference_server.shutdown)
-        run_training_loop()
+    with ExitStack() as services:
+        logger_owner = make_logger()
+        services.callback(logger_owner.shutdown)
 
-Shutdown is idempotent. Explicit teardown also releases process queues, feeder
-threads, and Ray actors deterministically instead of relying on garbage
-collection.
+        replay_owner = make_replay_buffer()
+        services.callback(replay_owner.shutdown)
 
-Add evaluation video without service plumbing
----------------------------------------------
+        inference_owner = make_inference_server()
+        services.callback(inference_owner.shutdown)
 
-:class:`~torchrl.record.recorder.VideoRecorder` accepts a logger owner and
-obtains its restricted client itself. A vector environment is recorded as one
-synchronized grid, using the root ``"pixels"`` key by default:
+        run_training(
+            policy=PolicyClientModule(inference_owner),
+            replay_buffer=replay_owner.client(),
+            logger=logger_owner.client(),
+        )
+
+Callbacks run in reverse registration order, so consumers should be registered
+after the services they use. Keeping the logger alive longest permits teardown
+metrics to be recorded before its final flush and shutdown. Shutdown is
+idempotent, which makes cleanup safe in both normal and exceptional paths.
+
+Integrations accept owners when they can
+----------------------------------------
+
+An integration that only needs domain operations can accept either a logger
+or logger owner and obtain the client internally. This keeps deployment
+plumbing out of recipes. :class:`~torchrl.record.VideoRecorder`, for example,
+accepts a logger owner directly:
 
 .. code-block:: python
 
-    from torchrl.envs import TransformedEnv
     from torchrl.record import VideoRecorder
 
-    eval_env = TransformedEnv(
-        parallel_eval_env,
-        VideoRecorder(logger, tag="eval/video", fps=30),
-    )
+    recorder = VideoRecorder(logger_owner, tag="eval/video", fps=30)
 
-No logger-client extraction, recorder lookup, input-key override, or grid
-configuration is needed. Calling ``env.transform.dump(step=step)`` writes the
-video; :class:`~torchrl.collectors.Evaluator` performs the same dump through
-its collector RPC path when evaluation runs in another process.
+The recorder uses the restricted client and records vector-environment frames
+as a synchronized grid. Lifecycle remains with ``logger_owner``.
+
+Environments are execution resources, not shared services
+---------------------------------------------------------
+
+Environment instances carry trajectory state and require ordered, exclusive
+stepping. Giving several interchangeable clients access to one environment
+session would make reset and step ordering ambiguous. Their latency can also
+be low enough that a generic remote call on every step dominates collection
+cost.
+
+TorchRL therefore scales environments through serial, parallel, or
+asynchronous environment pools and through collectors that own environment
+replicas. The actor loop is normally placed with its environment and uses a
+policy client to reach shared inference when needed. This preserves session
+affinity and allows environment communication to use specialized shared-memory
+or asynchronous paths.
+
+Remote simulators and physical systems still require networked environment
+clients, but those clients need session leases, ordered step/reset semantics,
+timeouts, and trajectory-aware recovery. Those requirements form an
+environment-pool protocol rather than the generic shared-service contract.
 
 Discovery is optional
 ---------------------
 
-The example passes clients explicitly because their destinations are known at
-startup. :func:`get_services` is an orthogonal discovery mechanism for clients
-that must be found dynamically by Ray workers. Registering an existing owner
-stores its restricted client without transferring ownership; resetting the
-registry removes discovery entries but does not shut that owner down. See
-:ref:`ref_services` for registry usage and namespace isolation.
+Explicitly passing clients is preferable when worker destinations are known at
+construction time. Discovery is useful when independently created Ray workers
+must locate a service by name. Registering a running owner stores its
+restricted client without transferring ownership; removing the discovery
+entry does not shut down that externally owned service.
+
+See :ref:`ref_services` for registry and namespace behavior. Discovery does not
+replace the owner/client lifecycle and does not grant workers shutdown rights.
+
+Design compromises
+------------------
+
+The service model makes several trade-offs explicit:
+
+* Direct clients use identity semantics for zero overhead and therefore do not
+  provide capability isolation.
+* Remote completion semantics add latency but prevent lost errors and preserve
+  return values.
+* Backend support differs by domain rather than exposing nominal combinations
+  without a suitable transport and performance contract.
+* Ownership is unified, while payload transport remains specialized for
+  inference, logging, replay, commands, shared state, and weight updates.
+* Environment execution remains a separate stateful abstraction.
+* Discovery is opt-in and does not transfer lifecycle ownership.
+
+These boundaries keep the consumer API small without hiding costs or weakening
+domain guarantees.
+
+Runnable examples
+-----------------
+
+The `service examples
+<https://github.com/pytorch/rl/tree/main/examples/services>`_ demonstrate the
+same TensorDict training loop with direct, process, and Ray placement. Their
+README contains dependencies, commands, and the mapping from each profile to
+its concrete owners.
