@@ -10,8 +10,10 @@ Logger classes for experiment tracking and visualization.
 Loggers support an owner/client deployment model. The direct backend returns
 the logger itself from ``client()``. Process and Ray backends return a
 picklable client that only exposes logging operations; lifecycle calls remain
-on the owner. Ordinary records are submitted asynchronously, while
-``log_video`` waits for encoding or upload to finish.
+on the owner. Remote calls preserve direct-logger semantics: they return after
+the concrete logger method has run, propagate service-side errors immediately,
+and preserve custom ``log_*`` return values. Bounded transport queues provide
+backpressure when several clients log concurrently.
 
 .. code-block:: python
 
@@ -25,7 +27,7 @@ on the owner. Ordinary records are submitted asynchronously, while
     )
     worker_logger = logger.client()
     worker_logger.log_scalar("loss", 1.0, step=0)
-    logger.flush()
+    logger.flush()  # Flush buffers owned by the concrete logging SDK.
     logger.shutdown()
 
 .. autosummary::

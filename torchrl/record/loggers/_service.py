@@ -34,8 +34,8 @@ class _LoggerClient:
     def log_scalar(
         self, name: str, value: float, step: int | None = None, **kwargs
     ) -> None:
-        """Submit a scalar logging command asynchronously."""
-        self._submit("log_scalar", (name, value), {"step": step, **kwargs}, wait=False)
+        """Log a scalar and wait for service-side completion."""
+        self._submit("log_scalar", (name, value), {"step": step, **kwargs}, wait=True)
 
     def log_video(
         self, name: str, video: Tensor, step: int | None = None, **kwargs
@@ -46,12 +46,12 @@ class _LoggerClient:
         self._submit("log_video", (name, video), {"step": step, **kwargs}, wait=True)
 
     def log_hparams(self, cfg) -> None:
-        """Submit hyperparameters asynchronously."""
-        self._submit("log_hparams", (cfg,), {}, wait=False)
+        """Log hyperparameters and wait for service-side completion."""
+        self._submit("log_hparams", (cfg,), {}, wait=True)
 
     def log_histogram(self, name: str, data: Sequence, **kwargs) -> None:
-        """Submit histogram data asynchronously."""
-        self._submit("log_histogram", (name, data), kwargs, wait=False)
+        """Log histogram data and wait for service-side completion."""
+        self._submit("log_histogram", (name, data), kwargs, wait=True)
 
     def log_metrics(
         self,
@@ -61,12 +61,12 @@ class _LoggerClient:
         keys_sep: str = "/",
         override_global_step: bool = False,
     ) -> dict[str, Any]:
-        """Convert metrics locally and submit them asynchronously."""
+        """Convert metrics locally and wait for service-side completion."""
         safe_metrics = _make_metrics_safe(metrics, keys_sep=keys_sep)
         kwargs = {"step": step, "keys_sep": keys_sep}
         if override_global_step:
             kwargs["override_global_step"] = True
-        self._submit("log_metrics", (safe_metrics,), kwargs, wait=False)
+        self._submit("log_metrics", (safe_metrics,), kwargs, wait=True)
         return safe_metrics
 
     @property
@@ -89,7 +89,7 @@ class _LoggerClient:
             )
 
         def log_method(*args, **kwargs):
-            return self._submit(name, args, kwargs, wait=False)
+            return self._submit(name, args, kwargs, wait=True)
 
         return log_method
 

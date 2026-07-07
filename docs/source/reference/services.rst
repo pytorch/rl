@@ -8,6 +8,9 @@ Service Registry
 Service owners and clients
 --------------------------
 
+For an end-to-end inference, replay-buffer, and logger example, see
+:ref:`ref_services_workflow`.
+
 :class:`Service` is the common owner-side lifecycle contract. Owners expose
 ``start()``, ``shutdown(timeout)``, ``is_alive``, and ``client()``. A remote
 client is deliberately capability-restricted: it performs domain operations
@@ -637,6 +640,8 @@ Examples
 
 For complete examples, see:
 
+- ``examples/services/multi_service_training.py`` - Combined inference,
+  replay-buffer, and logger ownership
 - ``examples/services/distributed_services.py`` - Basic service registry usage
 - ``examples/llm/python_executor_service.py`` - Python executor service examples
 - ``test/test_services.py`` - Comprehensive test suite

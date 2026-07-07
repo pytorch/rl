@@ -65,6 +65,9 @@ class _ProcessTestLogger:
     def log_fail(self):
         raise RuntimeError("expected logger failure")
 
+    def log_with_result(self, value):
+        return value + 1
+
     def flush(self):
         return None
 
@@ -826,10 +829,17 @@ def test_ray_logger_log_metrics_forwards_override_global_step():
         def __init__(self):
             self._execute = _FakeRemoteMethod()
 
+    class _FakeRay:
+        @staticmethod
+        def get(value, timeout=None):
+            del timeout
+            return value
+
     logger = RayLogger.__new__(RayLogger)
     logger._actor = _FakeActor()
     logger._client_id = 3
     logger._sequence = 0
+    logger._ray = _FakeRay()
 
     result = logger.log_metrics(
         {"loss": torch.tensor(0.5)},
@@ -850,10 +860,41 @@ def test_ray_logger_log_metrics_forwards_override_global_step():
                     "keys_sep": "/",
                     "override_global_step": True,
                 },
-                False,
+                True,
             ),
             {},
         )
+    ]
+
+
+def test_ray_logger_custom_log_method_returns_synchronously():
+    class _FakeRemoteMethod:
+        def __init__(self):
+            self.calls = []
+
+        def remote(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return "remote-result"
+
+    class _FakeActor:
+        def __init__(self):
+            self._execute = _FakeRemoteMethod()
+
+    class _FakeRay:
+        @staticmethod
+        def get(value, timeout=None):
+            del timeout
+            return value
+
+    logger = RayLogger.__new__(RayLogger)
+    logger._actor = _FakeActor()
+    logger._client_id = 4
+    logger._sequence = 0
+    logger._ray = _FakeRay()
+
+    assert logger.log_with_result(4) == "remote-result"
+    assert logger._actor._execute.calls == [
+        ((4, 0, "log_with_result", (4,), {}, True), {})
     ]
 
 
@@ -901,9 +942,9 @@ class TestProcessLogger:
             torch.testing.assert_close(payload["video"], video)
             assert payload["video"].dtype is torch.uint8
 
-            client.log_fail()
             with pytest.raises(RuntimeError, match="expected logger failure"):
-                logger.flush(timeout=20)
+                client.log_fail()
+            assert client.log_with_result(4) == 5
         finally:
             logger.shutdown(timeout=20)
         assert not logger.is_alive
@@ -920,7 +961,6 @@ class TestProcessLogger:
             assert isinstance(logger, ProcessLogger)
             assert isinstance(logger, CSVLogger)
             logger.log_scalar("loss", 1.0, step=0)
-            logger.flush(timeout=20)
             assert (tmp_path / "process-csv" / "scalars" / "loss.csv").is_file()
         finally:
             logger.shutdown(timeout=20)
@@ -1014,11 +1054,23 @@ class TestRayLogger:
             )
             logger.log_scalar("loss", 0.5, step=0)
             logger.log_scalar("loss", 0.3, step=1)
-            logger.flush()
 
             scalars_dir = os.path.join(tmpdir, "test_scalar", "scalars")
             assert os.path.isdir(scalars_dir)
             assert os.path.isfile(os.path.join(scalars_dir, "loss.csv"))
+
+    def test_errors_are_synchronous(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = CSVLogger(
+                exp_name="test_sync_errors",
+                log_dir=tmpdir,
+                service_backend="ray",
+            )
+            try:
+                with pytest.raises(RuntimeError, match="Logging histograms"):
+                    logger.log_histogram("values", [1, 2, 3])
+            finally:
+                logger.shutdown()
 
     def test_log_metrics(self):
         with tempfile.TemporaryDirectory() as tmpdir:
