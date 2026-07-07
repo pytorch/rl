@@ -5,13 +5,20 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable, Iterator
 
+import numpy as np
 import torch
-from tensordict import TensorDictBase
+from tensordict import NestedKey, TensorDictBase
 
 _DEFAULT_TRAJECTORY_KEYS = (("collector", "traj_ids"), "traj_ids", "episode")
-_DONE_KEYS = (("next", "done"), "done")
+# TED convention: a trajectory ends when any of done / terminated / truncated
+# is set, so all present end signals within a group are OR-ed together.
+_END_KEY_GROUPS = (
+    (("next", "done"), ("next", "terminated"), ("next", "truncated")),
+    ("done", "terminated", "truncated"),
+)
 
 
 class Trajectory:
@@ -323,7 +330,55 @@ class _TrajectoryRef:
 traj = _TrajectoryRef()
 
 
-def _trajectory_ids(data: TensorDictBase, trajectory_key=None) -> torch.Tensor | None:
+def _last_write_index(cursor) -> int | None:
+    """Best-effort extraction of the last written flat index from a storage cursor."""
+    if cursor is None:
+        return None
+    if isinstance(cursor, torch.Tensor):
+        if cursor.numel() == 0:
+            return None
+        return int(cursor.reshape(-1)[-1])
+    if isinstance(cursor, np.ndarray):
+        if cursor.size == 0:
+            return None
+        return int(cursor.reshape(-1)[-1])
+    if isinstance(cursor, range):
+        return cursor[-1] if len(cursor) else None
+    if isinstance(cursor, int):
+        return cursor
+    return None
+
+
+def _chronological(data: TensorDictBase, storage) -> TensorDictBase:
+    """Reorder a full ring-buffer view from storage order to chronological order.
+
+    Once a round-robin storage has wrapped around, ``storage[:]`` returns the
+    transitions in storage order, with the write cursor sitting mid-buffer.
+    This helper rolls the data so that the oldest transition comes first,
+    restoring the contiguity assumption of :func:`iter_trajectories`. It is a
+    no-op when the storage is not at capacity, when the cursor is unknown, or
+    when the data does not have a single batch dimension.
+    """
+    if data.batch_dims != 1:
+        return data
+    if not getattr(storage, "_is_full", False):
+        return data
+    last = _last_write_index(getattr(storage, "_last_cursor", None))
+    if last is None:
+        return data
+    numel = data.batch_size[0]
+    if numel == 0:
+        return data
+    last = last % numel
+    if last == numel - 1:
+        return data
+    index = (torch.arange(numel, device=data.device) + last + 1) % numel
+    return data[index]
+
+
+def _trajectory_ids(
+    data: TensorDictBase, trajectory_key: NestedKey | None = None
+) -> torch.Tensor | None:
     keys = (trajectory_key,) if trajectory_key is not None else _DEFAULT_TRAJECTORY_KEYS
     for key in keys:
         ids = data.get(key, None)
@@ -334,39 +389,73 @@ def _trajectory_ids(data: TensorDictBase, trajectory_key=None) -> torch.Tensor |
     return None
 
 
-def _split_boundaries(data: TensorDictBase, trajectory_key=None) -> list[int]:
+def _end_flags(data: TensorDictBase) -> tuple[torch.Tensor, tuple] | None:
+    numel = data.batch_size[0]
+    for key_group in _END_KEY_GROUPS:
+        end = None
+        found = []
+        for end_key in key_group:
+            flag = data.get(end_key, None)
+            if flag is not None:
+                flag = flag.reshape(numel)
+                end = flag if end is None else end | flag
+                found.append(end_key)
+        if end is not None:
+            return end, tuple(found)
+    return None
+
+
+def _split_boundaries(
+    data: TensorDictBase, trajectory_key: NestedKey | None = None
+) -> list[int]:
     numel = data.batch_size[0]
     ids = _trajectory_ids(data, trajectory_key)
     if ids is not None:
         changes = (ids[1:] != ids[:-1]).nonzero().flatten() + 1
         return [0, *changes.tolist(), numel]
-    for done_key in _DONE_KEYS:
-        done = data.get(done_key, None)
-        if done is not None:
-            done = done.reshape(numel)
-            ends = done.nonzero().flatten() + 1
-            boundaries = [0, *ends.tolist()]
-            if boundaries[-1] != numel:
-                boundaries.append(numel)
-            return boundaries
+    end_and_keys = _end_flags(data)
+    if end_and_keys is not None:
+        end, found = end_and_keys
+        warnings.warn(
+            "No trajectory id entry was found; splitting on the end-of-episode "
+            f"flags {found}. Any trajectory whose last transition does not "
+            "carry a positive end flag will be silently merged with the "
+            "following one. Store trajectory ids (e.g. ('collector', "
+            "'traj_ids')) or pass trajectory_key explicitly for reliable "
+            "splitting.",
+            category=UserWarning,
+        )
+        ends = end.nonzero().flatten() + 1
+        boundaries = [0, *ends.tolist()]
+        if boundaries[-1] != numel:
+            boundaries.append(numel)
+        return boundaries
     raise KeyError(
         "Cannot split data into trajectories: no trajectory id entry found "
-        f"(looked up {_DEFAULT_TRAJECTORY_KEYS}) and no done entry found "
-        f"(looked up {_DONE_KEYS}). Pass trajectory_key explicitly."
+        f"(looked up {_DEFAULT_TRAJECTORY_KEYS}) and no end-of-episode entry "
+        f"found (looked up {_END_KEY_GROUPS}). Pass trajectory_key explicitly."
     )
 
 
 def iter_trajectories(
-    data: TensorDictBase, trajectory_key=None
+    data: TensorDictBase, trajectory_key: NestedKey | None = None
 ) -> Iterator[Trajectory]:
     """Iterate over the trajectories stored in a flat batch of transitions.
 
     Consecutive transitions are grouped into trajectories using, in order of
     preference: an explicit ``trajectory_key``, the conventional
     ``("collector", "traj_ids")`` / ``"traj_ids"`` / ``"episode"`` entries, or
-    the ``("next", "done")`` flags. Transitions belonging to the same
+    the union of the ``("next", "done")`` / ``("next", "terminated")`` /
+    ``("next", "truncated")`` end flags. Transitions belonging to the same
     trajectory are assumed to be stored contiguously and in order, as written
     by the standard round-robin writers.
+
+    .. warning::
+        When no trajectory id entry is available, splitting falls back to the
+        end-of-episode flags and a ``UserWarning`` is emitted: a trajectory
+        whose last transition does not carry a positive end flag cannot be
+        distinguished from the following one and the two are silently merged.
+        Store trajectory ids for reliable splitting.
 
     Args:
         data (TensorDictBase): a tensordict of transitions with a single
@@ -397,7 +486,7 @@ def filter_trajectories(
     data: TensorDictBase,
     predicate: Callable[[Trajectory], bool] | None = None,
     *,
-    trajectory_key=None,
+    trajectory_key: NestedKey | None = None,
 ) -> list[Trajectory]:
     """Split ``data`` into trajectories and keep those matching ``predicate``.
 
@@ -421,7 +510,11 @@ def filter_trajectories(
         >>> good = filter_trajectories(data, traj.reward.sum() > 100)
     """
     if isinstance(predicate, _ElementwisePredicate):
-        predicate()
+        raise TypeError(
+            f"{predicate._description} compares per-transition values and is "
+            "ambiguous as a trajectory filter. Call .any() or .all() to "
+            "reduce it to a single boolean."
+        )
     return [
         trajectory
         for trajectory in iter_trajectories(data, trajectory_key)

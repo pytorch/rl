@@ -52,6 +52,11 @@ except ImportError:
 
 
 from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
+from torchrl.data.replay_buffers.query import (
+    _chronological,
+    filter_trajectories,
+    Trajectory,
+)
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -1367,10 +1372,10 @@ class ReplayBuffer:
     @_maybe_delay_init
     def query(
         self,
-        predicate=None,
+        predicate: Callable[[Trajectory], bool] | None = None,
         *,
-        trajectory_key=None,
-    ) -> list:
+        trajectory_key: NestedKey | None = None,
+    ) -> list[Trajectory]:
         """Filters the stored trajectories with a query predicate.
 
         Splits the buffer content into trajectories (see
@@ -1389,24 +1394,33 @@ class ReplayBuffer:
             trajectory_key (NestedKey, optional): entry holding
                 per-transition trajectory ids. Defaults to None
                 (auto-detection from ``("collector", "traj_ids")``,
-                ``"traj_ids"``, ``"episode"`` or the done flags).
+                ``"traj_ids"``, ``"episode"`` or the done/terminated/truncated
+                flags).
 
         Returns:
             A list of matching trajectory views.
+
+        .. note::
+            Once the buffer has wrapped around (it is at capacity and older
+            entries have been overwritten), the storage order no longer
+            matches the chronological order. In that case the content is
+            reordered chronologically (based on the write cursor) before
+            splitting, which copies the data. The oldest trajectory may have
+            lost its first transitions to overwriting and will appear
+            truncated at the front.
 
         Examples:
             >>> from torchrl.data import traj
             >>> good_trajs = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
             >>> observations = good_trajs[0].observation
         """
-        from torchrl.data.replay_buffers.query import filter_trajectories
-
         data = self[:]
         if not is_tensor_collection(data):
             raise TypeError(
                 "ReplayBuffer.query requires a tensordict-backed storage, "
                 f"got content of type {type(data)}."
             )
+        data = _chronological(data, self._storage)
         return filter_trajectories(data, predicate, trajectory_key=trajectory_key)
 
     @_maybe_delay_init

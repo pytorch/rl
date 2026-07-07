@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 
 import pytest
 import torch
@@ -111,6 +112,41 @@ class TestIterTrajectories:
         with pytest.raises(KeyError, match="Cannot split data into trajectories"):
             list(iter_trajectories(data))
 
+    def test_end_flag_fallback_warns(self):
+        data = _make_data(lengths=(5, 3), with_ids=False)
+        with pytest.warns(UserWarning, match="end-of-episode"):
+            trajs = list(iter_trajectories(data))
+        assert [t.length for t in trajs] == [5, 3]
+
+    def test_id_split_does_not_warn(self):
+        data = _make_data(lengths=(5, 3), with_ids=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            trajs = list(iter_trajectories(data))
+        assert [t.length for t in trajs] == [5, 3]
+
+    def test_truncated_only_split(self):
+        data = _make_data(lengths=(5, 3, 7), with_ids=False, with_done=False)
+        truncated = torch.zeros(15, 1, dtype=torch.bool)
+        truncated[4] = truncated[7] = truncated[14] = True
+        data["next", "truncated"] = truncated
+        with pytest.warns(UserWarning, match="end-of-episode"):
+            trajs = list(iter_trajectories(data))
+        assert [t.length for t in trajs] == [5, 3, 7]
+
+    def test_end_flag_union(self):
+        # first episode ends by termination, second by truncation only
+        data = _make_data(lengths=(5, 3), with_ids=False, with_done=False)
+        terminated = torch.zeros(8, 1, dtype=torch.bool)
+        terminated[4] = True
+        truncated = torch.zeros(8, 1, dtype=torch.bool)
+        truncated[7] = True
+        data["next", "terminated"] = terminated
+        data["next", "truncated"] = truncated
+        with pytest.warns(UserWarning, match="end-of-episode"):
+            trajs = list(iter_trajectories(data))
+        assert [t.length for t in trajs] == [5, 3]
+
     def test_wrong_key_raises(self):
         data = _make_data(lengths=(5,))
         with pytest.raises(KeyError, match="trajectory_key"):
@@ -204,6 +240,22 @@ class TestReplayBufferQuery:
         kept = rb.query(traj.length == 5)
         assert len(kept) == 1
         assert torch.equal(kept[0].observation, rb[:]["observation"][:5])
+
+    def test_query_after_wraparound(self):
+        # Capacity 10; write trajs of lengths (5, 3), then a third of length 4
+        # that wraps around and overwrites the head of the first trajectory.
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        rb.extend(_make_data(lengths=(5, 3)))
+        third = _make_data(lengths=(4,))
+        third["collector", "traj_ids"] = torch.full((4,), 2, dtype=torch.long)
+        rb.extend(third)
+        trajs = rb.query()
+        # Chronological order: head-truncated traj 0 (2 transitions
+        # overwritten), whole traj 1, whole traj 2 (spanning the wrap point).
+        assert [t.length for t in trajs] == [3, 3, 4]
+        wrapped = rb.query(traj[("collector", "traj_ids")].first() == 2)
+        assert len(wrapped) == 1
+        assert torch.equal(wrapped[0].reward, third["next", "reward"])
 
 
 if __name__ == "__main__":
