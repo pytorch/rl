@@ -190,6 +190,25 @@ class TestMCAdvantage:
         assert adv_t.completed_trajectories == 0
         assert adv_t.completed_decisions == 0
 
+    def test_mc_advantage_clear_queues_preserves_stats(self):
+        adv_t = MCAdvantage(
+            grpo_size=2,
+            prompt_key="group_id",
+            trajectory_return="sum",
+        )
+        assert adv_t.inv(_make_group_traj(0, [1.0])) is None
+        assert adv_t.queued_groups == 1
+        assert adv_t.queued_trajectories == 1
+        assert adv_t.completed_trajectories == 1
+        stats = adv_t.get_stats()
+        assert stats["queued_groups"] == 1
+        assert stats["queued_trajectories"] == 1
+        assert stats["completed_trajectories"] == 1
+        adv_t.clear_queues()
+        assert adv_t.queued_groups == 0
+        assert adv_t.queued_trajectories == 0
+        assert adv_t.completed_trajectories == 1
+
     def test_mc_advantage_candidate_selection_rescues_dynamic_sampling_group(self):
         selector = MCAdvantageSelector()
         assert selector.select(
@@ -359,6 +378,32 @@ class TestMCAdvantage:
         assert sum(len(q) for q in adv_t.queues.values()) == 1
         assert adv_t.max_queued_trajectories_per_group == 1
 
+    def test_mc_advantage_mixed_lazy_plain_trajectories_return_plain_tensordict(self):
+        # Collector/replay paths can hand MCAdvantage a mix of lazy/view
+        # trajectories and plain TensorDicts. MCAdvantage should normalize its
+        # queued trajectories and return a consistent concrete TensorDict.
+        adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+        assert adv_t.inv(_make_group_traj(0, [1.0])) is None
+        lazy_traj = lazy_stack([_make_group_traj(1, [0.0])], 0).unbind(0)[0]
+        assert adv_t.inv(lazy_traj) is None
+        assert isinstance(adv_t._queue_list(0)[0], TensorDict)
+        assert isinstance(adv_t._queue_list(1)[0], TensorDict)
+
+        flat = torch.cat(
+            [
+                _make_group_traj(0, [0.0]),
+                _make_group_traj(1, [1.0]),
+            ],
+            0,
+        )
+        out = adv_t.inv(flat)
+
+        assert isinstance(out, TensorDict)
+        assert out.shape == (4,)
+        assert out["advantage"].shape == out["next", "reward"].shape
+        assert adv_t.queued_groups == 0
+        assert adv_t.max_queued_trajectories_per_group == 0
+
     def test_mc_advantage_share_memory(self):
         adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
         assert not adv_t.is_shared
@@ -379,6 +424,12 @@ class TestMCAdvantage:
         assert adv_t.queued_groups == 1
         adv_t.queues.clear()
         assert adv_t.queued_groups == 0
+
+    def test_mc_advantage_local_queues(self, monkeypatch):
+        monkeypatch.setenv("TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES", "1")
+        adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+        assert adv_t.share_memory_() is adv_t
+        assert not adv_t.is_shared
 
     def test_mc_advantage_share_memory_multiprocessing(self):
         start_method = "fork" if "fork" in mp.get_all_start_methods() else "spawn"

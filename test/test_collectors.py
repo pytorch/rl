@@ -136,9 +136,14 @@ from torchrl.testing.mocking_classes import (
 from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
+    DistributedWeightSyncScheme,
     MultiProcessWeightSyncScheme,
+    NoWeightSyncScheme,
+    RayWeightSyncScheme,
+    RPCWeightSyncScheme,
     SharedMemTransport,
     SharedMemWeightSyncScheme,
+    WeightSyncScheme,
 )
 
 # torch.set_default_dtype(torch.double)
@@ -148,6 +153,36 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+@pytest.mark.parametrize(
+    ("backend", "scheme_cls"),
+    [
+        ("none", NoWeightSyncScheme),
+        ("direct", NoWeightSyncScheme),
+        ("shared", SharedMemWeightSyncScheme),
+        ("thread", SharedMemWeightSyncScheme),
+        ("process", MultiProcessWeightSyncScheme),
+        ("multiprocessing", MultiProcessWeightSyncScheme),
+        ("distributed", DistributedWeightSyncScheme),
+        ("rpc", RPCWeightSyncScheme),
+        ("ray", RayWeightSyncScheme),
+    ],
+)
+def test_weight_sync_scheme_from_backend(backend, scheme_cls):
+    scheme = WeightSyncScheme.from_backend(backend)
+    assert isinstance(scheme, scheme_cls)
+
+
+def test_weight_sync_scheme_from_backend_forwards_kwargs():
+    scheme = WeightSyncScheme.from_backend("shared", sync=False)
+    assert isinstance(scheme, SharedMemWeightSyncScheme)
+    assert not scheme.sync
+
+
+def test_weight_sync_scheme_from_backend_rejects_unknown():
+    with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
+        WeightSyncScheme.from_backend("unknown")
 
 
 def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
@@ -6113,6 +6148,13 @@ class TestAsyncCollection:
                     break
             else:
                 raise RuntimeError("RB is empty")
+            with collector.pause():
+                worker_lengths = collector.map_fn("replay_buffer.__len__")
+                worker_write_counts = collector.get_distant_attr(
+                    "replay_buffer.write_count"
+                )
+                assert worker_lengths == [len(rb)] * 2
+                assert worker_write_counts == [rb.write_count] * 2
         finally:
             collector.async_shutdown()
             del collector
@@ -7018,6 +7060,51 @@ class TestTrajsPerBatchReplayBuffer:
     * **SliceSampler integration**: sampled slices respect episode boundaries.
     """
 
+    def test_replay_buffer_tensordict_device_metadata_normalization(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        data0 = TensorDict({"obs": torch.zeros(4, 3)}, [4])
+        data1 = TensorDict({"obs": torch.ones(4, 3)}, [4])
+        assert data0.device is None
+        assert data1.device is None
+
+        rb.extend(_maybe_normalize_replay_buffer_tensordict_device(data0, rb))
+        rb.extend(_maybe_normalize_replay_buffer_tensordict_device(data1, rb))
+
+        stored = rb.storage.get(slice(0, len(rb)))
+        assert stored.device == torch.device("cpu")
+        assert len(rb) == 8
+
+    def test_replay_buffer_tensordict_device_metadata_uses_storage_payload(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        rb.extend(TensorDict({"obs": torch.zeros(4, 3)}, [4]))
+        rb.storage.device = None
+
+        data = TensorDict({"obs": torch.ones(4, 3)}, [4])
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 8
+
+    def test_replay_buffer_tensordict_device_metadata_normalizes_nested(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        data = TensorDict(
+            {
+                "obs": torch.zeros(4, 3),
+                "next": TensorDict({"obs": torch.ones(4, 3)}, [4]),
+            },
+            [4],
+            device="cpu",
+        )
+        data["next"].clear_device_()
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        assert data["next"].device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 4
+
     @staticmethod
     def _make_env_and_policy(max_steps=4):
         env_fn = lambda: TransformedEnv(  # noqa: E731
@@ -7706,6 +7793,29 @@ class TestTrajsPerBatchReplayBuffer:
         assert len(rb) > 0, "replay buffer must be non-empty"
         assert ("collector", "traj_ids") in rb.sample(2).keys(True)
         self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_multi_async_collector_empty_rb_ack(self):
+        """MultiAsyncCollector handles replay-buffer ACKs before any complete traj."""
+        max_steps = 10
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=1,
+            total_frames=1,
+            trajs_per_batch=1,
+            cat_results="stack",
+        )
+        try:
+            collector_iter = iter(collector)
+            out = next(collector_iter)
+        finally:
+            collector.shutdown()
+
+        assert out is None
+        assert len(rb) == 0
 
     def test_multi_async_probabilistic_actor_writes_log_prob_to_rb(self):
         max_steps = 4

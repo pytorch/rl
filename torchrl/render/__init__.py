@@ -105,6 +105,10 @@ def render_policy(config: RenderConfig) -> RenderResult:
             config, env, checkpoint=checkpoint, checkpoint_digest=digest
         )
         result = collect_render_rollouts(env, policy, config)
+        result.metadata["checkpoint"] = {
+            "path": str(config.ckpt),
+            "sha256": digest,
+        }
         return write_render_artifact(result, config)
     finally:
         close = getattr(env, "close", None)

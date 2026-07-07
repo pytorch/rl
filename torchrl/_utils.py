@@ -31,6 +31,8 @@ from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 from torch.autograd.profiler import record_function
 
+from torchrl._comm.backends import normalize_service_backend
+
 try:
     from torch.compiler import is_compiling
 except ImportError:
@@ -1513,10 +1515,10 @@ class cuda_memory_profile(_DecoratorContextManager):
 
 
 class _RayServiceMetaClass(type):
-    """Metaclass that enables dynamic class selection based on use_ray_service parameter.
+    """Metaclass that selects direct or service-backed implementations.
 
-    This metaclass allows a class to dynamically return either itself or a Ray-based
-    alternative class when instantiated with use_ray_service=True.
+    ``use_ray_service`` remains supported as a compatibility spelling for
+    ``service_backend="ray"`` until v0.16.
 
     Usage:
         >>> class MyRayClass():
@@ -1543,20 +1545,61 @@ class _RayServiceMetaClass(type):
             return True
         # If the instance wraps a class (e.g. RayLogger), check if the
         # wrapped class is a subclass of cls.
-        wrapped_cls = getattr(instance, "_logger_cls", None)
+        wrapped_cls = getattr(instance, "_service_cls", None)
+        if wrapped_cls is None:
+            wrapped_cls = getattr(instance, "_logger_cls", None)
         if wrapped_cls is not None:
             return issubclass(wrapped_cls, cls)
         return False
 
-    def __call__(cls, *args, use_ray_service=False, **kwargs):
+    def __call__(
+        cls,
+        *args,
+        use_ray_service=False,
+        service_backend=None,
+        service_backend_options=None,
+        **kwargs,
+    ):
         if use_ray_service:
-            if not hasattr(cls, "_RayServiceClass"):
+            if service_backend not in (None, "ray"):
                 raise ValueError(
-                    f"Class {cls.__name__} does not have a _RayServiceClass attribute"
+                    "use_ray_service=True conflicts with "
+                    f"service_backend={service_backend!r}."
                 )
-            return cls._RayServiceClass(*args, **kwargs)
-        else:
+            warnings.warn(
+                "use_ray_service is deprecated and will be removed in v0.16. "
+                "Use service_backend='ray' instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            service_backend = "ray"
+
+        if service_backend is None:
+            service_backend = "direct"
+        service_backend = normalize_service_backend(service_backend)
+        options = dict(service_backend_options or {})
+
+        if service_backend == "direct":
+            if options:
+                raise ValueError(
+                    "service_backend_options are only valid for non-direct services."
+                )
             return super().__call__(*args, **kwargs)
+
+        if hasattr(cls, "_ServiceClass"):
+            return cls._ServiceClass(
+                service_backend,
+                *args,
+                service_backend_options=options,
+                **kwargs,
+            )
+        if service_backend == "ray" and hasattr(cls, "_RayServiceClass"):
+            if options and "ray_actor_options" not in kwargs:
+                kwargs["ray_actor_options"] = options.get("actor_options", options)
+            return cls._RayServiceClass(*args, **kwargs)
+        raise ValueError(
+            f"{cls.__name__} does not support service_backend={service_backend!r}."
+        )
 
 
 @classmethod

@@ -8,7 +8,7 @@ from typing import Any
 
 from tensordict import TensorDictBase
 
-from torchrl.render.config import FrameBundle, RenderConfig
+from torchrl.render.config import FrameBundle, key_to_string, RenderConfig
 from torchrl.render.video import normalize_frame_output
 
 __all__ = ["TensorDictPixelsBackend"]
@@ -53,7 +53,7 @@ class TensorDictPixelsBackend:
                     frames=frames,
                     step=step,
                     trajectory_index=trajectory_index,
-                    metadata={"backend": self.name, "pixel_key": _key_to_metadata(key)},
+                    metadata={"backend": self.name, "pixel_key": key_to_string(key)},
                 )
         return None
 
@@ -78,7 +78,10 @@ def _pixel_key_candidates(config: RenderConfig) -> list[Any]:
     return out
 
 
-def _key_to_metadata(key: Any) -> str:
-    if isinstance(key, tuple):
-        return ".".join(str(item) for item in key)
-    return str(key)
+def _exclude_pixel_keys(
+    tensordict: TensorDictBase, config: RenderConfig
+) -> TensorDictBase:
+    present = [
+        key for key in _pixel_key_candidates(config) if key in tensordict.keys(True)
+    ]
+    return tensordict.exclude(*present) if present else tensordict
