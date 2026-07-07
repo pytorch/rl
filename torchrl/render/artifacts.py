@@ -15,6 +15,7 @@ import torch
 
 import torchrl
 from tensordict import TensorDictBase
+from torchrl.render.backends.pixels import _exclude_pixel_keys
 from torchrl.render.checkpoint import checkpoint_hash
 from torchrl.render.config import FrameBundle, key_to_string, RenderConfig, RenderResult
 from torchrl.render.mujoco_wasm import write_mujoco_wasm_viewer
@@ -30,7 +31,10 @@ def write_render_artifact(result: RenderResult, config: RenderConfig) -> RenderR
     _ensure_writable(out, config)
     asset_dir = _asset_dir(out, config)
     asset_dir.mkdir(parents=True, exist_ok=True)
-    result.metadata.update(_runtime_metadata(config, asset_dir))
+    checkpoint_digest = result.metadata.get("checkpoint", {}).get("sha256")
+    result.metadata.update(
+        _runtime_metadata(config, asset_dir, checkpoint_digest=checkpoint_digest)
+    )
     frame_paths: list[Path] = []
     artifact_path: Path | None = out
     if config.format == "frames":
@@ -70,7 +74,7 @@ def write_render_artifact(result: RenderResult, config: RenderConfig) -> RenderR
         )
         frame_paths.extend(_write_frames(result.frames, frame_dir, config))
     if (config.save_rollout or config.save_tensordicts) and config.format != "ipynb":
-        _write_rollout_assets(result, asset_dir)
+        _write_rollout_assets(result, asset_dir, config)
         _write_json(asset_dir / "config.json", config.to_dict())
     if config.format != "ipynb":
         result.frame_paths = frame_paths
@@ -227,7 +231,7 @@ def _write_notebook_assets(
             and config.notebook_rollout_mode in ("saved", "both")
         )
     ):
-        _write_rollout_assets(result, asset_dir)
+        _write_rollout_assets(result, asset_dir, config)
     _write_json(asset_dir / "config.json", config.to_dict())
 
 
@@ -276,20 +280,29 @@ def _append_warning(result: RenderResult, warning: str) -> None:
     result.metadata.setdefault("warnings", []).append(warning)
 
 
-def _write_rollout_assets(result: RenderResult, asset_dir: Path) -> None:
+def _write_rollout_assets(
+    result: RenderResult, asset_dir: Path, config: RenderConfig
+) -> None:
     rollouts_dir = asset_dir / "rollouts"
     rollouts_dir.mkdir(parents=True, exist_ok=True)
     for index, trajectory in enumerate(result.trajectories):
+        if not config.save_tensordicts:
+            trajectory = _exclude_pixel_keys(trajectory, config)
         torch.save(trajectory, rollouts_dir / f"traj_{index:03d}.pt")
 
 
-def _runtime_metadata(config: RenderConfig, asset_dir: Path) -> dict[str, Any]:
+def _runtime_metadata(
+    config: RenderConfig,
+    asset_dir: Path,
+    *,
+    checkpoint_digest: str | None = None,
+) -> dict[str, Any]:
     try:
         torchrl_version = torchrl.__version__
     except Exception:
         torchrl_version = None
-    checkpoint = {"path": str(config.ckpt), "sha256": None}
-    if config.ckpt.is_file():
+    checkpoint = {"path": str(config.ckpt), "sha256": checkpoint_digest}
+    if checkpoint_digest is None and config.ckpt.is_file():
         checkpoint["sha256"] = checkpoint_hash(config.ckpt)
     return {
         "config": config.to_dict(),

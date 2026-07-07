@@ -956,10 +956,19 @@ class CubeBowlEnv(MujocoEnv):
             ik_kwargs = dict(ik_kwargs)
 
         def cartesian_solver(
-            target_pose: torch.Tensor, start_action: torch.Tensor
+            target_pose: torch.Tensor,
+            start_action: torch.Tensor,
+            *,
+            orientation_mask: torch.Tensor | None = None,
+            waypoints: int | None = None,
         ) -> torch.Tensor:
+            kwargs = dict(ik_kwargs)
+            if orientation_mask is not None:
+                kwargs["orientation_mask"] = orientation_mask
+            if waypoints is not None:
+                kwargs["waypoints"] = waypoints
             return self._cartesian_pose_to_joint_target(
-                target_pose, start_action, **ik_kwargs
+                target_pose, start_action, **kwargs
             )
 
         return URScriptPrimitiveTransform(
@@ -1083,12 +1092,27 @@ class CubeBowlEnv(MujocoEnv):
         damping: float = 1e-4,
         step_size: float = 0.7,
         orientation_weight: float = 0.0,
+        orientation_mask: torch.Tensor | None = None,
+        waypoints: int | None = None,
     ) -> torch.Tensor:
         """Best-effort MuJoCo damped-least-squares IK for ``movel``.
 
-        The solver optimizes the ``pinch`` site over the first six arm joints.
+        The solver optimizes the ``pinch`` site over the first six arm joints
+        and honors the :class:`~torchrl.envs.CartesianSolver` contract:
+
+        * ``orientation_mask`` applies per-axis weights to the world-frame
+          rotation error rows (a zero entry leaves rotation about that world
+          axis free). Providing a mask enables orientation tracking even when
+          ``orientation_weight`` is zero; a positive ``orientation_weight``
+          scales the masked rows.
+        * ``waypoints`` re-solves the inverse kinematics along a straight-line
+          Cartesian path (linear position, geodesic orientation) from the
+          current end-effector pose to ``target_pose``, returning the joint
+          sequence of shape ``(1, waypoints, 7)``.
+
         If the active backend is not the official MuJoCo C backend, the input
-        action is returned unchanged.
+        action is returned unchanged (expanded across waypoints when
+        requested).
         """
         if start_action is None:
             start_action = torch.zeros(
@@ -1096,14 +1120,26 @@ class CubeBowlEnv(MujocoEnv):
                 dtype=self.dtype,
                 device=target_pose.device,
             )
+
+        def fallback() -> torch.Tensor:
+            if waypoints is None:
+                return start_action
+            return (
+                start_action.unsqueeze(-2)
+                .expand(start_action.shape[:-1] + (waypoints, start_action.shape[-1]))
+                .clone()
+            )
+
         if (
             not _has_mujoco
             or self._pinch_site_id is None
             or not hasattr(self._backend, "_m")
         ):
-            return start_action
+            return fallback()
         if target_pose.shape[0] != 1:
-            return start_action
+            return fallback()
+        if waypoints is not None and waypoints <= 0:
+            raise ValueError("waypoints must be strictly positive.")
         import mujoco
 
         model = self._backend._m
@@ -1111,16 +1147,33 @@ class CubeBowlEnv(MujocoEnv):
         data.qpos[:] = self._backend._d.qpos.copy()
         data.qvel[:] = 0.0
         q = data.qpos.copy()
+        qpos_idx = list(self._robot_qpos_indices)
+        dof_idx = list(self._robot_qvel_indices)
         if start_action.shape[-1] >= self.ROBOT_QPOS_DIM:
-            q[list(self._robot_qpos_indices)] = (
+            q[qpos_idx] = (
                 start_action[0, : self.ROBOT_QPOS_DIM].detach().cpu().double().numpy()
             )
         ctrl_low = model.actuator_ctrlrange[: self.ROBOT_QPOS_DIM, 0]
         ctrl_high = model.actuator_ctrlrange[: self.ROBOT_QPOS_DIM, 1]
         target = target_pose[0, :3].detach().cpu().double().numpy()
+        mask = None
+        if orientation_mask is not None:
+            mask_np = (
+                torch.as_tensor(orientation_mask)
+                .detach()
+                .cpu()
+                .double()
+                .numpy()
+                .reshape(-1)[:3]
+            )
+            if np.all(np.isfinite(mask_np)):
+                mask = mask_np
         target_quat = None
         target_mat = None
-        if target_pose.shape[-1] >= 7 and orientation_weight > 0.0:
+        rot_weights = None
+        if target_pose.shape[-1] >= 7 and (
+            orientation_weight > 0.0 or mask is not None
+        ):
             quat = target_pose[0, 3:7].detach().cpu().double().numpy()
             norm = float(np.linalg.norm(quat))
             if norm > 1e-6:
@@ -1128,41 +1181,73 @@ class CubeBowlEnv(MujocoEnv):
                 target_mat = np.zeros(9)
                 mujoco.mju_quat2Mat(target_mat, target_quat)
                 target_mat = target_mat.reshape(3, 3)
+                base_weight = orientation_weight if orientation_weight > 0.0 else 1.0
+                rot_weights = base_weight * (mask if mask is not None else np.ones(3))
         jacp = np.zeros((3, model.nv))
         jacr = np.zeros((3, model.nv))
-        err_dim = 6 if target_quat is not None else 3
+        err_dim = 3 if rot_weights is None else 6
         eye = np.eye(err_dim)
-        for _ in range(iterations):
-            data.qpos[:] = q
-            mujoco.mj_forward(model, data)
-            pos_err = target - data.site_xpos[self._pinch_site_id]
-            mujoco.mj_jacSite(model, data, jacp, jacr, self._pinch_site_id)
-            if target_quat is None:
-                err = pos_err
-                jac = jacp[:, list(self._robot_qvel_indices)]
-            else:
-                rot_err = self._rotation_error(
-                    target_mat, data.site_xmat[self._pinch_site_id].reshape(3, 3)
-                )
-                err = np.concatenate([pos_err, orientation_weight * rot_err])
-                jac = np.concatenate(
-                    [
-                        jacp[:, list(self._robot_qvel_indices)],
-                        orientation_weight * jacr[:, list(self._robot_qvel_indices)],
-                    ],
-                    axis=0,
-                )
-            if float(np.linalg.norm(err)) < 1e-4:
-                break
-            lhs = jac @ jac.T + damping * eye
-            dq = jac.T @ np.linalg.solve(lhs, err)
-            q[list(self._robot_qpos_indices)] += step_size * dq
-            q[list(self._robot_qpos_indices)] = self._wrap_ctrl_range(
-                q[list(self._robot_qpos_indices)], ctrl_low, ctrl_high
+
+        def solve(q: np.ndarray, wp_pos: np.ndarray, wp_mat: np.ndarray | None):
+            for _ in range(iterations):
+                data.qpos[:] = q
+                mujoco.mj_forward(model, data)
+                pos_err = wp_pos - data.site_xpos[self._pinch_site_id]
+                mujoco.mj_jacSite(model, data, jacp, jacr, self._pinch_site_id)
+                if rot_weights is None:
+                    err = pos_err
+                    jac = jacp[:, dof_idx]
+                else:
+                    rot_err = self._rotation_error(
+                        wp_mat, data.site_xmat[self._pinch_site_id].reshape(3, 3)
+                    )
+                    err = np.concatenate([pos_err, rot_weights * rot_err])
+                    jac = np.concatenate(
+                        [jacp[:, dof_idx], rot_weights[:, None] * jacr[:, dof_idx]],
+                        axis=0,
+                    )
+                if float(np.linalg.norm(err)) < 1e-4:
+                    break
+                lhs = jac @ jac.T + damping * eye
+                dq = jac.T @ np.linalg.solve(lhs, err)
+                q[qpos_idx] += step_size * dq
+                q[qpos_idx] = self._wrap_ctrl_range(q[qpos_idx], ctrl_low, ctrl_high)
+            return q
+
+        if waypoints is None:
+            q = solve(q, target, target_mat)
+            out = start_action.clone()
+            out[0, : self.ROBOT_QPOS_DIM] = torch.as_tensor(
+                q[qpos_idx], dtype=out.dtype, device=out.device
             )
-        out = start_action.clone()
-        out[0, : self.ROBOT_QPOS_DIM] = torch.as_tensor(
-            q[list(self._robot_qpos_indices)], dtype=out.dtype, device=out.device
+            return out
+
+        data.qpos[:] = q
+        mujoco.mj_forward(model, data)
+        start_pos = data.site_xpos[self._pinch_site_id].copy()
+        rot_vel = None
+        start_quat = None
+        if target_quat is not None:
+            start_quat = np.zeros(4)
+            mujoco.mju_mat2Quat(start_quat, data.site_xmat[self._pinch_site_id].copy())
+            rot_vel = np.zeros(3)
+            mujoco.mju_subQuat(rot_vel, target_quat, start_quat)
+        rows = []
+        for k in range(1, waypoints + 1):
+            alpha = k / waypoints
+            wp_pos = start_pos + alpha * (target - start_pos)
+            wp_mat = target_mat
+            if rot_vel is not None:
+                wp_quat = start_quat.copy()
+                mujoco.mju_quatIntegrate(wp_quat, rot_vel, alpha)
+                wp_mat9 = np.zeros(9)
+                mujoco.mju_quat2Mat(wp_mat9, wp_quat)
+                wp_mat = wp_mat9.reshape(3, 3)
+            q = solve(q, wp_pos, wp_mat)
+            rows.append(q[qpos_idx].copy())
+        out = fallback()
+        out[0, :, : self.ROBOT_QPOS_DIM] = torch.as_tensor(
+            np.stack(rows), dtype=out.dtype, device=out.device
         )
         return out
 

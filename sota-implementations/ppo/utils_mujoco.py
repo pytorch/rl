@@ -247,11 +247,15 @@ def make_ppo_models(env_name, device, *, normalize_observation: bool = True):
 def make_render_policy(spec: Any):
     """Builds the PPO policy module for ``rlrender`` checkpoint loading."""
     checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
-    env_name = checkpoint.get(
+    env_name = spec.policy_kwargs.get(
         "env_name",
-        spec.policy_kwargs.get("env_name", "InvertedPendulum-v4"),
+        checkpoint.get("env_name", "InvertedPendulum-v4"),
     )
-    normalize_observation = bool(checkpoint.get("normalize_observation", False))
+    normalize_observation = bool(
+        spec.policy_kwargs.get(
+            "normalize_observation", checkpoint.get("normalize_observation", False)
+        )
+    )
     actor, _ = make_ppo_models(
         env_name,
         device=spec.device,
@@ -272,7 +276,12 @@ class _MujocoQposTransform(Transform):
         self.qpos_dim = qpos_dim
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        return observation[..., : self.qpos_dim].clone()
+        data = self.parent.base_env._env.unwrapped.data
+        return torch.as_tensor(
+            data.qpos.copy(),
+            dtype=observation.dtype,
+            device=observation.device,
+        )
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
