@@ -30,6 +30,7 @@ from torchrl.data.vla import (
 )
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+_has_tensorflow = importlib.util.find_spec("tensorflow") is not None
 _has_torchvision = importlib.util.find_spec("torchvision") is not None
 
 
@@ -296,6 +297,17 @@ class TestOpenVLAImagePreprocessor:
         assert fast.dtype == fast_again.dtype == ref.dtype == torch.uint8
         assert (fast.float() - ref.float()).abs().mean() < 25.0
 
+    @pytest.mark.skipif(not _has_tensorflow, reason="TensorFlow not found")
+    def test_tensorflow_reference_backend(self):
+        proc = OpenVLAImagePreprocessor(size=32, backend="tensorflow", center_crop=True)
+        images = torch.arange(3 * 24 * 40, dtype=torch.int64).reshape(1, 3, 24, 40)
+        images = images.remainder(256).to(torch.uint8)
+        first = proc(images)
+        second = proc(images)
+        assert first.shape == torch.Size([1, 3, 32, 32])
+        assert first.dtype == torch.uint8
+        torch.testing.assert_close(first, second)
+
     @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
     def test_normalization(self):
         proc = OpenVLAImagePreprocessor(
@@ -304,6 +316,19 @@ class TestOpenVLAImagePreprocessor:
         out = proc(torch.zeros(3, 16, 16, dtype=torch.uint8))
         assert out.shape == torch.Size([3, 16, 16])
         assert out.dtype == torch.float32
+
+    @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
+    def test_fused_backbone_normalization(self):
+        proc = OpenVLAImagePreprocessor(
+            size=16,
+            backend="pil",
+            mean=[[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]],
+            std=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+        )
+        out = proc(torch.zeros(3, 16, 16, dtype=torch.uint8))
+        assert out.shape == torch.Size([6, 16, 16])
+        torch.testing.assert_close(out[:3], torch.zeros_like(out[:3]))
+        torch.testing.assert_close(out[3:], -torch.ones_like(out[3:]))
 
 
 class TestActionTokenizer:
@@ -421,6 +446,58 @@ class TestVocabTailActionTokenizer:
         # gripper dim decodes near the un-normalized [-1, 1] poles
         assert (recon[:, 2] - actions[:, 2]).abs().max() <= 2.0 / 255 + 1e-5
 
+    def test_cpu_decode_matches_openvla_numpy_reference_exactly(self):
+        norm_low = [-0.7454732114076613, -0.6616071462631226]
+        norm_high = [0.9375, 0.8758928775787354]
+        tok = VocabTailActionTokenizer(
+            256,
+            full_vocab_size=32064,
+            norm_low=norm_low,
+            norm_high=norm_high,
+            norm_mask=torch.ones(2, dtype=torch.bool),
+        )
+        tokens = torch.tensor([[32063, 31936], [31808, 32000]])
+        bins = np.linspace(-1.0, 1.0, 256)
+        centers = (bins[:-1] + bins[1:]) / 2.0
+        indices = np.clip(32064 - tokens.numpy() - 1, 0, len(centers) - 1)
+        normalized = centers[indices]
+        expected = 0.5 * (normalized + 1.0) * (
+            np.asarray(norm_high) - np.asarray(norm_low) + 1e-8
+        ) + np.asarray(norm_low)
+        decoded = tok.decode(tokens)
+        # the affine runs in NumPy float64 for reference parity, then the
+        # result is cast back to the tokenizer's float32 working dtype
+        assert decoded.dtype == torch.float32
+        np.testing.assert_array_equal(decoded.numpy(), expected.astype(np.float32))
+
+    def test_decode_norm_stats_output_dtype_and_device(self):
+        # the NumPy float64 detour must not leak float64 (or a device change)
+        # into the returned action chunk
+        norm_low = torch.tensor([-0.5, 0.0])
+        norm_high = torch.tensor([0.5, 2.0])
+        tok = VocabTailActionTokenizer(256, norm_low=norm_low, norm_high=norm_high)
+        tokens = tok.encode(torch.tensor([[0.1, 1.0], [-0.2, 0.5]]))
+        decoded = tok.decode(tokens)
+        assert decoded.dtype == torch.float32
+        assert decoded.device == tokens.device
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_decode_norm_stats_cuda(self):
+        norm_low = torch.tensor([-0.5, 0.0])
+        norm_high = torch.tensor([0.5, 2.0])
+        tok = VocabTailActionTokenizer(
+            256, norm_low=norm_low, norm_high=norm_high
+        ).cuda()
+        actions = torch.tensor([[0.1, 1.0], [-0.2, 0.5]], device="cuda")
+        tokens = tok.encode(actions)
+        assert tokens.device.type == "cuda"
+        decoded = tok.decode(tokens)
+        assert decoded.device.type == "cuda"
+        assert decoded.dtype == torch.float32
+        ref = VocabTailActionTokenizer(256, norm_low=norm_low, norm_high=norm_high)
+        torch.testing.assert_close(decoded.cpu(), ref.decode(tokens.cpu()))
+
     def test_from_norm_stats(self):
         norm_stats = {
             "libero_spatial_no_noops": {
@@ -440,9 +517,9 @@ class TestVocabTailActionTokenizer:
             VocabTailActionTokenizer.from_norm_stats(norm_stats, "bad_key")
 
     def test_gripper_binarize_threshold(self):
-        # SimpleVLA-RL's LIBERO gripper post-processing normalizes a [0, 1]
-        # gripper to [-1, 1] before taking the sign, which is equivalent to
-        # thresholding the decoded gripper at 0.5.
+        # Unmasked OpenVLA gripper dims are already decoded in the normalized
+        # [-1, 1] convention; SimpleVLA-RL signs that value before inverting
+        # for LIBERO.
         norm_low = torch.tensor([0.0])
         norm_high = torch.tensor([1.0])
         mask = torch.tensor([False])
@@ -455,11 +532,14 @@ class TestVocabTailActionTokenizer:
             norm_high=norm_high,
             norm_mask=mask,
             gripper_binarize=True,
-            gripper_binarize_threshold=0.5,
+            gripper_binarize_threshold=0.0,
             gripper_invert=True,
         )
-        tokens = base.encode(torch.tensor([[0.25], [0.75]]))
-        torch.testing.assert_close(tok.decode(tokens), torch.tensor([[1.0], [-1.0]]))
+        tokens = base.encode(torch.tensor([[-0.25], [0.25]]))
+        decoded = tok.decode(tokens)
+        torch.testing.assert_close(
+            decoded, torch.tensor([[1.0], [-1.0]], dtype=decoded.dtype)
+        )
 
     def test_validation(self):
         with pytest.raises(ValueError, match="num_bins"):

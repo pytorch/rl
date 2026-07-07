@@ -68,6 +68,9 @@ class TinyVLA(VLAWrapperBase):
         mode (str, optional): backward-compatible alias for
             ``default_interaction_type``. Defaults to ``None``.
         device (DEVICE_TYPING, optional): device to move the parameters to.
+        return_vla_action_container (bool): whether to write the structured
+            VLAAction container in addition to its TensorDict fields. Defaults
+            to ``True``.
 
     Examples:
         >>> import torch
@@ -105,6 +108,7 @@ class TinyVLA(VLAWrapperBase):
         device: DEVICE_TYPING | None = None,
         input_mode: InputMode = "canonical",
         output_mode: OutputMode | None = None,
+        return_vla_action_container: bool = True,
         action_tokenizer: ActionTokenizerBase | None = None,
         return_log_probs: bool | None = None,
         return_logits: bool = False,
@@ -120,6 +124,7 @@ class TinyVLA(VLAWrapperBase):
             use_state=use_state,
             input_mode=input_mode,
             output_mode=output_mode,
+            return_vla_action_container=return_vla_action_container,
             action_tokenizer=action_tokenizer,
             default_interaction_type=default_interaction_type,
             log_probs_mode=log_probs_mode,
@@ -157,13 +162,25 @@ class TinyVLA(VLAWrapperBase):
         ]
         return torch.tensor(indices, dtype=torch.long, device=device)
 
+    def _flatten_instruction_strings(self, data) -> list[str]:
+        if isinstance(data, str):
+            return [data]
+        if isinstance(data, list):
+            result = []
+            for item in data:
+                result.extend(self._flatten_instruction_strings(item))
+            return result
+        return [str(data)]
+
     def _instruction_strings(self, tensordict: TensorDictBase, batch: int) -> list[str]:
         instruction = self._get_instruction(tensordict)
         data = getattr(instruction, "tolist", lambda: instruction)()
         if isinstance(data, str):
             data = [data] * batch
-        elif not isinstance(data, list):
-            data = [str(data)] * batch
+        else:
+            data = self._flatten_instruction_strings(data)
+            if len(data) == 1 and batch != 1:
+                data = data * batch
         return data
 
     def _features(self, tensordict: TensorDictBase) -> torch.Tensor:
@@ -172,12 +189,17 @@ class TinyVLA(VLAWrapperBase):
             image = image.float() / 255.0
         else:
             image = image.float()
-        batch = image.shape[0]
-        feats = [self.image_encoder(image)]
+        batch_shape = image.shape[:-3]
+        batch = int(torch.tensor(batch_shape).prod().item())
+        image = image.reshape(batch, *image.shape[-3:])
+        feats = [self.image_encoder(image).reshape(*batch_shape, -1)]
         if self.use_state:
-            feats.append(self.state_encoder(self._get_state(tensordict).float()))
+            state = self._get_state(tensordict).float()
+            state = state.reshape(batch, state.shape[-1])
+            feats.append(self.state_encoder(state).reshape(*batch_shape, -1))
         strings = self._instruction_strings(tensordict, batch)
-        feats.append(self.text_embedding(self._hash_text(strings, image.device)))
+        text = self.text_embedding(self._hash_text(strings, image.device))
+        feats.append(text.reshape(*batch_shape, -1))
         return self.trunk(torch.cat(feats, dim=-1))
 
     def _predict(self, tensordict: TensorDictBase) -> torch.Tensor:

@@ -90,7 +90,9 @@ def make_dqn_model(env_name, device):
 def make_render_policy(spec: Any):
     """Builds the DQN policy module for ``rlrender`` checkpoint loading."""
     checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
-    env_name = checkpoint.get("env_name", "CartPole-v1")
+    env_name = spec.policy_kwargs.get(
+        "env_name", checkpoint.get("env_name", "CartPole-v1")
+    )
     return make_dqn_model(env_name, device=spec.device)
 
 
