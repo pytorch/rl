@@ -708,6 +708,7 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
+        self._warned_alpha_change = False
         self._device = torch.device(device) if device is not None else None
         self._init()
         if rl_warnings() and SumSegmentTreeFp32 is None:
@@ -731,10 +732,39 @@ class PrioritizedSampler(Sampler):
 
     @property
     def alpha(self):
+        """The priority exponent.
+
+        .. note:: Changing ``alpha`` on a sampler that already holds priorities
+          (e.g. when annealing it with a
+          :class:`~torchrl.data.replay_buffers.scheduler.ParameterScheduler`)
+          does not re-transform the ``(p + eps) ** alpha`` values already
+          written to the sum/min trees: old and new exponents mix until every
+          entry's priority is updated again.
+        """
         return self._alpha
 
     @alpha.setter
     def alpha(self, value):
+        if value < 0:
+            raise ValueError(
+                f"alpha must be greater or equal than 0, got alpha={value}"
+            )
+        if (
+            value != self._alpha
+            and self._max_priority_within_buffer
+            and not self._warned_alpha_change
+            and self._max_priority[0] is not None
+        ):
+            self._warned_alpha_change = True
+            warnings.warn(
+                "Changing alpha on a PrioritizedSampler with "
+                "max_priority_within_buffer=True does not re-transform the "
+                "(p + eps) ** alpha values already stored in the sum/min trees, "
+                "and the max-priority recomputation inverts tree values with the "
+                "new alpha. Large changes to alpha can corrupt the tracked max "
+                "priority until the corresponding entries are updated again. "
+                "This warning is emitted once per sampler."
+            )
         self._alpha = value
 
     @property
@@ -884,13 +914,19 @@ class PrioritizedSampler(Sampler):
             self._max_priority = None
 
     @property
-    def default_priority(self) -> float:
+    def default_priority(self) -> float | torch.Tensor:
+        # Return the RAW max priority. Every consumer feeds this value back through
+        # ``update_priority``, which applies the ``(p + eps) ** alpha`` transform
+        # exactly once. Returning an already-transformed value here caused new items
+        # to be transformed twice (``((p + eps) ** alpha + eps) ** alpha``), which
+        # systematically under-prioritized them (for ``alpha < 1``) and broke PER's
+        # "new experience is sampled at least once" guarantee.
         mp = self._max_priority[0]
         if mp is None:
-            mp = 1
+            mp = 1.0
         if isinstance(mp, torch.Tensor):
             mp = mp.to(self.device)
-        return (mp + self._eps) ** self._alpha
+        return mp
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
         self._maybe_init_from_storage(storage)
@@ -1077,6 +1113,14 @@ class PrioritizedSampler(Sampler):
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
         if self._max_priority_within_buffer and cur_max_priority_index is not None:
+            if self._alpha == 0:
+                # With alpha == 0 the tree stores (p + eps) ** 0 == 1 for every
+                # entry, so the raw priorities of untouched entries cannot be
+                # recovered from it. Keep the raw max tracked above instead of
+                # storing a transformed value in ``_max_priority``; sampling is
+                # uniform in this regime, so a stale max only matters if alpha
+                # is raised later (see the ``alpha`` setter).
+                return
             if tree_device.type == "cuda":
                 all_indices = torch.arange(
                     self._max_capacity, dtype=torch.long, device=tree_device
@@ -1088,6 +1132,11 @@ class PrioritizedSampler(Sampler):
                 ).max(0)
             else:
                 return
+            # ``maxval`` is read from the sum-tree, which stores (p + eps) ** alpha.
+            # Convert it back to the raw priority so ``_max_priority`` is always the
+            # raw max, matching the non-recomputed path and what ``default_priority``
+            # expects (it re-applies the alpha transform once via ``update_priority``).
+            maxval = (maxval ** (1.0 / self._alpha) - self._eps).clamp_min(0)
             self._max_priority = (maxval, maxidx)
 
     def mark_update(
