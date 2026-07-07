@@ -876,6 +876,7 @@ Available Transports
     :template: rl_template.rst
 
     TransportBackend
+    InitialSyncTransport
     MPTransport
     SharedMemTransport
     RayTransport
@@ -887,6 +888,18 @@ Schemes
 
 Schemes orchestrate the weight synchronization lifecycle, managing initialization, connection setup,
 and ongoing weight transfers.
+
+Schemes can be selected from the common backend vocabulary while retaining all
+constructor options of the concrete scheme:
+
+.. code-block:: python
+
+    from torchrl.weight_update import WeightSyncScheme
+
+    scheme = WeightSyncScheme.from_backend("shared", sync=False)
+
+The mappings are ``none``/``direct`` (no synchronization), ``shared``/``thread``,
+``process``/``multiprocessing``, ``distributed``, ``rpc``, and ``ray``.
 
 .. autosummary::
     :toctree: generated/

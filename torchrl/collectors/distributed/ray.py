@@ -404,13 +404,12 @@ class RayCollector(BaseCollector):
                     "write to serialized copies, not the main process buffer. "
                     "Use torchrl.data.RayReplayBuffer instead."
                 )
+            replay_buffer_client = replay_buffer.client()
             if isinstance(collector_kwargs, dict):
-                collector_kwargs.setdefault("replay_buffer", replay_buffer)
+                collector_kwargs.setdefault("replay_buffer", replay_buffer_client)
             else:
-                collector_kwargs = [
-                    ck.setdefault("replay_buffer", replay_buffer)
-                    for ck in collector_kwargs
-                ]
+                for ck in collector_kwargs:
+                    ck.setdefault("replay_buffer", replay_buffer_client)
         if trajs_per_batch is not None:
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("trajs_per_batch", trajs_per_batch)

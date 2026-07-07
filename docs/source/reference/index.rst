@@ -13,6 +13,7 @@ API Reference
     objectives
     render
     services
+    services_workflow
     trainers
     utils
     vla

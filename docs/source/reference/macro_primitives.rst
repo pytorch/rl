@@ -283,6 +283,87 @@ and executes it when ``execute=True``.
      <source src="../_static/videos/macro_cube_bowl.mp4" type="video/mp4">
    </video>
 
+Custom Cartesian solvers and partial pose constraints
+-----------------------------------------------------
+
+:class:`~torchrl.envs.URScriptPrimitiveTransform` maps ``reach_pose`` targets to
+joint destinations through a Cartesian solver. The solver is the sanctioned
+extension point for custom inverse-kinematics behavior; its contract is
+documented by the :class:`~torchrl.envs.CartesianSolver` protocol. A plain
+two-argument callable ``(target_pose, start_action) -> action`` remains a valid
+solver: the transform inspects the signature and only forwards the optional
+keyword arguments the solver declares.
+
+Two flavors of Cartesian target need no extra arguments: a position-only target
+(quaternion omitted, all three rotational degrees of freedom free) and a full
+6D pose (all three rotational degrees of freedom locked). Many practical
+constraints live in between: keep the gripper level, hold a rod vertically,
+keep a camera pointing at a target with the roll free. These use one to two
+rotational degrees of freedom and are expressed with ``orientation_mask``:
+
+.. code-block:: python
+
+   # Keep the tool axis aligned with the target orientation ("stay level"),
+   # leave the spin about the world z axis free.
+   td["action"] = RobotMacroAction.reach_pose(
+       position=target_position,
+       quaternion=td["pinch_quat"],
+       orientation_mask=(1.0, 1.0, 0.0),
+       steps=36,
+   )
+
+The mask entries are per-axis weights on the world-frame rotation error inside
+the damped-least-squares loop: a zero entry removes the corresponding error row
+so rotation about that world axis remains unconstrained, avoiding the
+over-constrained full-quaternion solve near singularities.
+
+Constraints applied only at the endpoint can still be violated mid-macro,
+because the default expansion interpolates in joint space between the start
+configuration and the endpoint solution. Passing ``path="cartesian"`` re-solves
+the inverse kinematics at every interpolation waypoint along the straight-line
+Cartesian path (linear in position, geodesic in orientation), so constraints
+such as "stay on the line" and "stay level" hold along the whole macro action:
+
+.. code-block:: python
+
+   # Translate a vertically held rod along a line, no lateral motion.
+   td["action"] = RobotMacroAction.reach_pose(
+       position=target_position,
+       quaternion=vertical_quat,
+       orientation_mask=(1.0, 1.0, 0.0),
+       path="cartesian",
+       steps=36,
+   )
+
+The :meth:`~torchrl.envs.CubeBowlEnv.make_urscript_transform` preset honors
+both keywords out of the box. A custom solver opts in by declaring the
+corresponding keyword arguments; the sketch below shows the shape of a
+partial-orientation damped-least-squares solver (compare
+``CubeBowlEnv._cartesian_pose_to_joint_target`` for a complete MuJoCo
+implementation):
+
+.. code-block:: python
+
+   def cartesian_solver(target_pose, start_action, *, orientation_mask=None, waypoints=None):
+       # target_pose: (*batch, 7) position + (w, x, y, z) quaternion, world frame
+       # start_action: (*batch, action_dim); trailing entry is the gripper
+       q = start_action[..., :-1]
+       weights = orientation_mask if orientation_mask is not None else ones3
+       for wp_pose in interpolate_cartesian(fk(q), target_pose, waypoints or 1):
+           for _ in range(iterations):
+               pos_err = wp_pose[..., :3] - fk(q).position
+               rot_err = weights * world_rotation_error(wp_pose[..., 3:], fk(q).rotation)
+               err = concat([pos_err, rot_err])
+               jac = concat([jac_pos(q), weights[..., None] * jac_rot(q)])
+               q = q + damped_least_squares_step(jac, err)
+       # single endpoint (*batch, action_dim) or a (*batch, waypoints, action_dim) path
+       return assemble_actions(q, start_action)
+
+If a macro action requests ``orientation_mask`` or ``path="cartesian"`` and the
+configured solver does not declare the matching keyword, the transform raises a
+``TypeError`` pointing at the :class:`~torchrl.envs.CartesianSolver` contract
+rather than silently dropping the constraint.
+
 Designing target-driven macros for a new environment
 ----------------------------------------------------
 

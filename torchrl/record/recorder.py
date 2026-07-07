@@ -20,9 +20,24 @@ from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
+from torchrl.services.base import Service
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 _has_matplotlib = importlib.util.find_spec("matplotlib", None) is not None
+
+
+def _make_video_grid(frames: torch.Tensor) -> torch.Tensor:
+    """Tile ``[N, C, H, W]`` frames without requiring torchvision."""
+    nframes, channels, height, width = frames.shape
+    ncols = int(math.ceil(math.sqrt(nframes)))
+    nrows = int(math.ceil(nframes / ncols))
+    grid = frames.new_zeros(channels, nrows * height, ncols * width)
+    for index, frame in enumerate(frames):
+        row, col = divmod(index, ncols)
+        grid[
+            :, row * height : (row + 1) * height, col * width : (col + 1) * width
+        ] = frame
+    return grid
 
 
 class VideoRecorder(ObservationTransform):
@@ -32,14 +47,15 @@ class VideoRecorder(ObservationTransform):
     to a Logger object when needed.
 
     Args:
-        logger (Logger): a Logger instance where the video
+        logger (Logger or Service): a logger or logger-service owner where the video
             should be written. To save the video under a memmap tensor or an mp4 file, use
             the :class:`~torchrl.record.loggers.CSVLogger` class.
         tag (str): the video tag in the logger.
         in_keys (Sequence of NestedKey, optional): keys to be read to produce the video.
             Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
-            Default is ``2`` if the transform has a parent environment, and ``1`` if not.
+            Defaults to ``1`` for vector environments and standalone use, and
+            ``2`` for a single parent environment.
         center_crop (int, optional): value of square center crop.
         make_grid (bool, optional): if ``True``, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
@@ -104,8 +120,8 @@ class VideoRecorder(ObservationTransform):
 
     def __init__(
         self,
-        logger: Logger,
-        tag: str,
+        logger: Logger | Service | None,
+        tag: str | None,
         in_keys: Sequence[NestedKey] | None = None,
         skip: int | None = None,
         center_crop: int | None = None,
@@ -114,6 +130,9 @@ class VideoRecorder(ObservationTransform):
         fps: int | None = None,
         **kwargs,
     ) -> None:
+        client = getattr(logger, "client", None)
+        if callable(client):
+            logger = client()
         if in_keys is None:
             in_keys = ["pixels"]
         if out_keys is None:
@@ -156,11 +175,14 @@ class VideoRecorder(ObservationTransform):
     def skip(self):
         skip = self._skip
         if skip is None:
-            if self.parent is not None:
-                self._skip = 2
-                return 2
-            self._skip = 1
-            return 1
+            parent = self.parent
+            if parent is None:
+                skip = 1
+            else:
+                batch_size = getattr(parent, "batch_size", ())
+                skip = 1 if len(batch_size) else 2
+            self._skip = skip
+            return skip
         return skip
 
     @skip.setter
@@ -221,17 +243,8 @@ class VideoRecorder(ObservationTransform):
                     observation_trsf, [self.center_crop, self.center_crop]
                 )
             if self.make_grid and observation_trsf.ndimension() >= 4:
-                if not _has_tv:
-                    raise ImportError(
-                        "Could not import torchvision, `make_grid` not available. "
-                        "Make sure torchvision is installed in your environment."
-                    )
-                from torchvision.utils import make_grid
-
                 obs_flat = observation_trsf.flatten(0, -4)
-                observation_trsf = make_grid(
-                    obs_flat, nrow=int(math.ceil(math.sqrt(obs_flat.shape[0])))
-                )
+                observation_trsf = _make_video_grid(obs_flat)
                 self.obs.append(observation_trsf.to("cpu", torch.uint8))
             elif observation_trsf.ndimension() >= 4:
                 self.obs.extend(observation_trsf.to("cpu", torch.uint8).flatten(0, -4))
