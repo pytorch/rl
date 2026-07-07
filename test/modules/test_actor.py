@@ -981,6 +981,17 @@ class TestTinyVLA:
         assert policy.out_keys == [("vla_action", "chunk")]
         assert ("observation", "image") in policy.in_keys
 
+    def test_plain_vla_action_fields(self):
+        policy = TinyVLA(
+            action_dim=7,
+            chunk_size=4,
+            return_vla_action_container=False,
+        )
+        out = policy(_make_obs_td())
+        assert not isinstance(out["vla_action"], VLAAction)
+        assert out["vla_action", "chunk"].shape == torch.Size([2, 4, 7])
+        assert policy.out_keys == [("vla_action", "chunk")]
+
     def test_multistep_actor_uses_vla_chunk_as_cache(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)
         actor = MultiStepActorWrapper(policy, n_steps=2)

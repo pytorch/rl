@@ -22,10 +22,11 @@ Example:
 """
 from __future__ import annotations
 
-from torchrl.services.base import ServiceBase
+from torchrl._comm.backends import ServiceBackend
+from torchrl.services.base import Service, ServiceBase
 from torchrl.services.ray_service import RayService
 
-__all__ = ["ServiceBase", "RayService", "get_services"]
+__all__ = ["Service", "ServiceBackend", "ServiceBase", "RayService", "get_services"]
 
 
 def get_services(backend: str = "ray", **init_kwargs) -> ServiceBase:

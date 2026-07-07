@@ -54,6 +54,8 @@ def _collect_env_metadata() -> dict[str, Any]:
 class WandbLogger(Logger):
     """Wrapper for the wandb logger.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.WandbLoggerConfig`.
+
     The keyword arguments are mainly based on the :func:`wandb.init` kwargs.
     See the doc `here <https://docs.wandb.ai/ref/python/init>`__.
 
