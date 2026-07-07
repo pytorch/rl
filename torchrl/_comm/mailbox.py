@@ -11,6 +11,15 @@ from collections.abc import Callable
 from typing import Any
 
 _MISSING = object()
+_PEER_CHECK_INTERVAL = 0.1
+
+
+class MailboxTransportError(RuntimeError):
+    """Raised when a mailbox transport fails independently of a timeout."""
+
+
+class MailboxPeerClosedError(MailboxTransportError):
+    """Raised when a mailbox peer exits before replying to a request."""
 
 
 class MailboxFuture:
@@ -43,10 +52,18 @@ class MailboxFuture:
 class MailboxClient:
     """Picklable client for an N:1 request mailbox."""
 
-    def __init__(self, request_queue, response_queue, client_id: int) -> None:
+    def __init__(
+        self,
+        request_queue,
+        response_queue,
+        client_id: int,
+        *,
+        peer_alive=None,
+    ) -> None:
         self._request_queue = request_queue
         self._response_queue = response_queue
         self._client_id = client_id
+        self._peer_alive = peer_alive
         self._next_request_id = 0
         self._buffered: dict[int, Any] = {}
         self._request_lock = threading.Lock()
@@ -94,17 +111,39 @@ class MailboxClient:
         deadline = None if timeout is None else time.monotonic() + timeout
         while True:
             remaining = None if deadline is None else deadline - time.monotonic()
-            if remaining is not None and remaining <= 0:
-                raise queue.Empty(
-                    f"Timeout waiting for result of request {request_id}."
+            if remaining is not None:
+                wait_timeout = max(remaining, 0)
+            else:
+                wait_timeout = None
+            if self._peer_alive is not None:
+                wait_timeout = (
+                    _PEER_CHECK_INTERVAL
+                    if wait_timeout is None
+                    else min(wait_timeout, _PEER_CHECK_INTERVAL)
                 )
             try:
-                response_id, result = self._response_queue.get(timeout=remaining)
+                response_id, result = self._response_queue.get(timeout=wait_timeout)
             except queue.Empty:
-                raise
+                if self._peer_alive is not None:
+                    try:
+                        peer_is_alive = self._peer_alive.is_set()
+                    except Exception as err:
+                        raise MailboxTransportError(
+                            "Failed to query the mailbox peer's liveness."
+                        ) from err
+                    if not peer_is_alive:
+                        raise MailboxPeerClosedError(
+                            f"Mailbox peer closed before replying to request "
+                            f"{request_id}."
+                        ) from None
+                if remaining is not None and remaining <= 0:
+                    raise queue.Empty(
+                        f"Timeout waiting for result of request {request_id}."
+                    ) from None
+                continue
             except Exception as err:
-                raise queue.Empty(
-                    f"Timeout waiting for result of request {request_id}."
+                raise MailboxTransportError(
+                    f"Mailbox transport failed while waiting for request {request_id}."
                 ) from err
             if response_id == request_id:
                 return result
@@ -124,10 +163,12 @@ class Mailbox:
         response_queue_factory: Callable[[], Any],
         *,
         response_queues=None,
+        peer_alive=None,
     ) -> None:
         self.request_queue = request_queue
         self.response_queue_factory = response_queue_factory
         self.response_queues = {} if response_queues is None else response_queues
+        self.peer_alive = peer_alive
         self._next_client_id = 0
         self._client_lock = threading.Lock()
         self._peeked = None
@@ -148,7 +189,12 @@ class Mailbox:
             self._next_client_id += 1
         response_queue = self.response_queue_factory()
         self.response_queues[client_id] = response_queue
-        return MailboxClient(self.request_queue, response_queue, client_id)
+        return MailboxClient(
+            self.request_queue,
+            response_queue,
+            client_id,
+            peer_alive=self.peer_alive,
+        )
 
     def wait_for_work(self, timeout: float) -> None:
         """Block until a request is ready or the timeout expires."""
@@ -192,11 +238,15 @@ class Mailbox:
                 append(request)
         return payloads, callbacks, submitted_at
 
-    def resolve(self, callback: tuple[int, int], result: Any) -> None:
-        """Resolve a request through its client's response queue."""
+    def resolve(self, callback: tuple[int, int], result: Any) -> bool:
+        """Resolve a request, returning ``False`` for a stale client id."""
         client_id, request_id = callback
-        self.response_queues[client_id].put((request_id, result))
+        response_queue = self.response_queues.get(client_id)
+        if response_queue is None:
+            return False
+        response_queue.put((request_id, result))
+        return True
 
-    def reject(self, callback: tuple[int, int], error: BaseException) -> None:
-        """Resolve a request with an exception."""
-        self.resolve(callback, error)
+    def reject(self, callback: tuple[int, int], error: BaseException) -> bool:
+        """Resolve a request with an exception if the client is registered."""
+        return self.resolve(callback, error)

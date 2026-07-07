@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import queue
+import threading
+from multiprocessing.connection import wait as wait_for_connection
 
 from typing import Any, TYPE_CHECKING, TypeVar
 
@@ -29,6 +31,17 @@ def _unused_response_queue():
     raise RuntimeError("The logger service cannot create caller response queues.")
 
 
+def _watch_logger_process(process_sentinel, alive_event) -> None:
+    """Clear the shared liveness flag when the logger process exits."""
+    try:
+        wait_for_connection([process_sentinel])
+    finally:
+        try:
+            alive_event.clear()
+        except Exception:
+            pass
+
+
 def _logger_process_entry(
     logger_cls,
     args: tuple,
@@ -36,10 +49,12 @@ def _logger_process_entry(
     request_queue,
     response_queues,
     ready_queue,
+    alive_event,
 ) -> None:
     logger = None
     try:
         logger = logger_cls(*args, **kwargs)
+        alive_event.set()
         ready_queue.put(
             (
                 True,
@@ -96,6 +111,7 @@ def _logger_process_entry(
                     if wait:
                         mailbox.resolve(callback, result)
     finally:
+        alive_event.clear()
         if running and logger is not None:
             try:
                 _shutdown_logger(logger)
@@ -173,13 +189,16 @@ class ProcessLogger(_ProcessLoggerClient):
         self._manager = self._ctx.Manager()
         self._request_queue = self._manager.Queue(maxsize=max_queue_size)
         self._response_queues = self._manager.dict()
+        self._service_alive = self._manager.Event()
         self._mailbox = Mailbox(
             self._request_queue,
             self._manager.Queue,
             response_queues=self._response_queues,
+            peer_alive=self._service_alive,
         )
         self._ready_queue = self._ctx.Queue()
         self._process: mp.Process | None = None
+        self._process_monitor: threading.Thread | None = None
         self._closed = False
         self.start()
         try:
@@ -214,6 +233,7 @@ class ProcessLogger(_ProcessLoggerClient):
             raise RuntimeError("A closed ProcessLogger cannot be restarted.")
         if self.is_alive:
             return self
+        self._service_alive.clear()
         self._process = self._ctx.Process(
             target=_logger_process_entry,
             args=(
@@ -223,10 +243,18 @@ class ProcessLogger(_ProcessLoggerClient):
                 self._request_queue,
                 self._response_queues,
                 self._ready_queue,
+                self._service_alive,
             ),
             name="ProcessLogger",
         )
         self._process.start()
+        self._process_monitor = threading.Thread(
+            target=_watch_logger_process,
+            args=(self._process.sentinel, self._service_alive),
+            daemon=True,
+            name="ProcessLoggerMonitor",
+        )
+        self._process_monitor.start()
         return self
 
     @property
@@ -254,28 +282,55 @@ class ProcessLogger(_ProcessLoggerClient):
         if self._closed:
             return
         process = self._process
+        monitor = self._process_monitor
         error: BaseException | None = None
+
+        def capture(caught: BaseException) -> None:
+            nonlocal error
+            if error is None:
+                error = caught
+
         if process is not None:
             if process.is_alive():
                 try:
                     self.flush(timeout=timeout)
                 except BaseException as caught:
-                    error = caught
+                    capture(caught)
                 try:
                     self._submit("__shutdown__", (), {}, wait=True, timeout=timeout)
                 except BaseException as caught:
-                    if error is None:
-                        error = caught
-            process.join(timeout=timeout)
-            if process.is_alive():
-                process.terminate()
+                    capture(caught)
+            try:
                 process.join(timeout=timeout)
-            process.close()
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=timeout)
+            except BaseException as caught:
+                capture(caught)
+            if monitor is not None:
+                try:
+                    monitor.join(timeout=timeout)
+                except BaseException as caught:
+                    capture(caught)
+            try:
+                process.close()
+            except BaseException as caught:
+                capture(caught)
         self._process = None
+        self._process_monitor = None
         self._closed = True
-        self._ready_queue.close()
-        self._ready_queue.join_thread()
-        self._manager.shutdown()
+        try:
+            self._ready_queue.close()
+        except BaseException as caught:
+            capture(caught)
+        try:
+            self._ready_queue.join_thread()
+        except BaseException as caught:
+            capture(caught)
+        try:
+            self._manager.shutdown()
+        except BaseException as caught:
+            capture(caught)
         if error is not None:
             raise error
 

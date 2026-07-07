@@ -10,7 +10,13 @@ from torchrl._comm.backends import (
     ServiceBackendAlias,
 )
 from torchrl._comm.command import CommandChannel, CommandClient, CommandRequest
-from torchrl._comm.mailbox import Mailbox, MailboxClient, MailboxFuture
+from torchrl._comm.mailbox import (
+    Mailbox,
+    MailboxClient,
+    MailboxFuture,
+    MailboxPeerClosedError,
+    MailboxTransportError,
+)
 from torchrl._comm.rendezvous import (
     MappingRendezvous,
     RayRendezvous,
@@ -26,6 +32,8 @@ __all__ = [
     "Mailbox",
     "MailboxClient",
     "MailboxFuture",
+    "MailboxPeerClosedError",
+    "MailboxTransportError",
     "MappingRendezvous",
     "RayRendezvous",
     "Rendezvous",

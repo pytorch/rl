@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import threading
 import warnings
 
 from typing import Any, TYPE_CHECKING, TypeVar
@@ -97,6 +98,7 @@ class _RayLoggerClient(_LoggerClient):
         self._actor = actor
         self._client_id = client_id
         self._sequence = 0
+        self._sequence_lock = threading.Lock()
         self._ray = None
 
     @property
@@ -110,7 +112,12 @@ class _RayLoggerClient(_LoggerClient):
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state["_ray"] = None
+        state["_sequence_lock"] = None
         return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._sequence_lock = threading.Lock()
 
     def _submit(
         self,
@@ -121,11 +128,12 @@ class _RayLoggerClient(_LoggerClient):
         wait: bool,
         timeout: float | None = None,
     ) -> Any:
-        sequence = self._sequence
-        self._sequence += 1
-        result = self._actor._execute.remote(
-            self._client_id, sequence, method, args, kwargs, wait
-        )
+        with self._sequence_lock:
+            sequence = self._sequence
+            self._sequence += 1
+            result = self._actor._execute.remote(
+                self._client_id, sequence, method, args, kwargs, wait
+            )
         if wait:
             return self.ray.get(result, timeout=timeout)
         return None

@@ -11,6 +11,7 @@ import os
 import os.path
 import pathlib
 import tempfile
+import threading
 from time import sleep
 
 import pytest
@@ -18,11 +19,12 @@ import torch
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl._comm import MailboxPeerClosedError
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.process import ProcessLogger
-from torchrl.record.loggers.ray import RayLogger
+from torchrl.record.loggers.ray import _RayLoggerClient, RayLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
 from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.utils import get_logger
@@ -839,6 +841,7 @@ def test_ray_logger_log_metrics_forwards_override_global_step():
     logger._actor = _FakeActor()
     logger._client_id = 3
     logger._sequence = 0
+    logger._sequence_lock = threading.Lock()
     logger._ray = _FakeRay()
 
     result = logger.log_metrics(
@@ -890,12 +893,47 @@ def test_ray_logger_custom_log_method_returns_synchronously():
     logger._actor = _FakeActor()
     logger._client_id = 4
     logger._sequence = 0
+    logger._sequence_lock = threading.Lock()
     logger._ray = _FakeRay()
 
     assert logger.log_with_result(4) == "remote-result"
     assert logger._actor._execute.calls == [
         ((4, 0, "log_with_result", (4,), {}, True), {})
     ]
+
+
+def test_ray_logger_client_sequences_concurrent_submissions_in_call_order():
+    class _FakeRemoteMethod:
+        def __init__(self):
+            self.sequences = []
+
+        def remote(self, client_id, sequence, method, args, kwargs, wait):
+            del client_id, method, args, kwargs, wait
+            if sequence == 0:
+                sleep(0.05)
+            self.sequences.append(sequence)
+
+    class _FakeActor:
+        def __init__(self):
+            self._execute = _FakeRemoteMethod()
+
+    actor = _FakeActor()
+    client = _RayLoggerClient(actor, 0, exp_name="test", log_dir=".")
+    barrier = threading.Barrier(3)
+
+    def submit():
+        barrier.wait()
+        client._submit("log_scalar", (), {}, wait=False)
+
+    threads = [threading.Thread(target=submit) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=1.0)
+        assert not thread.is_alive()
+
+    assert actor._execute.sequences == [0, 1]
 
 
 class TestProcessLogger:
@@ -963,6 +1001,36 @@ class TestProcessLogger:
             logger.log_scalar("loss", 1.0, step=0)
             assert (tmp_path / "process-csv" / "scalars" / "loss.csv").is_file()
         finally:
+            logger.shutdown(timeout=20)
+
+    def test_dead_process_is_reported_without_an_unbounded_flush(self, tmp_path):
+        logger = ProcessLogger(_ProcessTestLogger, tmp_path)
+        process = logger._process
+        process.terminate()
+        process.join(timeout=10)
+        try:
+            with pytest.raises(MailboxPeerClosedError, match="peer closed"):
+                logger.flush()
+        finally:
+            logger.shutdown(timeout=2)
+
+    def test_shutdown_preserves_the_first_error(self, tmp_path, monkeypatch):
+        logger = ProcessLogger(_ProcessTestLogger, tmp_path)
+        original_submit = logger._submit
+        original_manager_shutdown = logger._manager.shutdown
+
+        def submit(method, *args, **kwargs):
+            if method == "__flush__":
+                raise RuntimeError("primary flush failure")
+            return original_submit(method, *args, **kwargs)
+
+        def manager_shutdown():
+            original_manager_shutdown()
+            raise RuntimeError("manager teardown failure")
+
+        monkeypatch.setattr(logger, "_submit", submit)
+        monkeypatch.setattr(logger._manager, "shutdown", manager_shutdown)
+        with pytest.raises(RuntimeError, match="primary flush failure"):
             logger.shutdown(timeout=20)
 
 

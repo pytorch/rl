@@ -27,6 +27,8 @@ from tensordict.nn.probabilistic import (
 from torchrl._comm import (
     CommandChannel,
     Mailbox,
+    MailboxPeerClosedError,
+    MailboxTransportError,
     MappingRendezvous,
     SharedBlock,
     TCPStoreRendezvous,
@@ -133,6 +135,40 @@ def test_mailbox_request_metadata_reply_and_exception():
     assert success.result(timeout=1.0) == 1
     with pytest.raises(ValueError, match="remote failure"):
         failure.result(timeout=1.0)
+
+
+def test_mailbox_peer_exit_and_transport_errors_are_distinct_from_timeouts():
+    peer_alive = threading.Event()
+    peer_alive.set()
+    mailbox = Mailbox(queue.Queue(), queue.Queue, peer_alive=peer_alive)
+    pending = mailbox.client().submit("pending")
+    peer_alive.clear()
+    with pytest.raises(MailboxPeerClosedError, match="peer closed"):
+        pending.result()
+
+    class _BrokenResponseQueue:
+        def get(self, timeout=None):
+            del timeout
+            raise EOFError("response pipe closed")
+
+    mailbox = Mailbox(queue.Queue(), _BrokenResponseQueue)
+    pending = mailbox.client().submit("pending")
+    with pytest.raises(MailboxTransportError, match="transport failed") as exc_info:
+        pending.result(timeout=1.0)
+    assert isinstance(exc_info.value.__cause__, EOFError)
+
+
+def test_mailbox_drops_stale_callbacks_without_disrupting_valid_clients():
+    mailbox = Mailbox(queue.Queue(), queue.Queue)
+    assert not mailbox.resolve((123, 0), "stale")
+
+    client = mailbox.client()
+    pending = client.submit("valid")
+    mailbox.wait_for_work(timeout=1.0)
+    payloads, callbacks, _ = mailbox.drain(1)
+    assert payloads == ["valid"]
+    assert mailbox.resolve(callbacks[0], "result")
+    assert pending.result(timeout=1.0) == "result"
 
 
 def test_command_channel_order_timeout_and_close():
