@@ -9,6 +9,25 @@ widely used replay buffers:
 Core Replay Buffer Classes
 --------------------------
 
+Replay buffers use ``service_backend="direct"`` by default, where
+``buffer.client() is buffer``. ``service_backend="ray"`` constructs a
+:class:`RayReplayBuffer` owner and ``client()`` returns the restricted,
+picklable handle intended for collector workers. Only the owner can shut down
+the actor.
+
+.. code-block:: python
+
+    from functools import partial
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+    buffer = ReplayBuffer(
+        storage=partial(LazyTensorStorage, 1000),
+        service_backend="ray",
+        service_backend_options={"remote_config": {"num_cpus": 1}},
+    )
+    worker_buffer = buffer.client()
+    buffer.shutdown()
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst

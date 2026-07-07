@@ -24,7 +24,6 @@ from torchrl.collectors.utils import (
     _traj_emit,
     _traj_ingest,
 )
-
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.weight_update.utils import _resolve_attr
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -635,6 +634,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             >>> collector.get_distant_attr("_receiver_schemes['policy']._sync_interval")
         """
         return _resolve_attr(self, attr)
+
+    def _dump_env_transform(self, step: int | None = None) -> None:
+        """Dump the environment transform when it supports ``dump``."""
+        env = getattr(self, "env", None)
+        transform = getattr(env, "transform", None)
+        dump = getattr(transform, "dump", None)
+        if callable(dump):
+            dump(step=step)
 
     def map_fn(
         self,

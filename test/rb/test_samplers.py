@@ -1150,41 +1150,49 @@ class TestSamplers:
             assert found_traj_0
 
     @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
-    def test_prb_update_max_priority(self, max_priority_within_buffer):
+    @pytest.mark.parametrize("alpha", [1.0, 0.6])
+    def test_prb_update_max_priority(self, max_priority_within_buffer, alpha):
+        # alpha < 1 makes raw and transformed priorities numerically distinct,
+        # so these assertions pin that _max_priority stays in the RAW domain
+        # while the sum-tree holds (p + eps) ** alpha.
         rb = ReplayBuffer(
             storage=LazyTensorStorage(11),
             sampler=PrioritizedSampler(
                 max_capacity=11,
-                alpha=1.0,
+                alpha=alpha,
                 beta=1.0,
                 max_priority_within_buffer=max_priority_within_buffer,
             ),
         )
+        eps = rb.sampler._eps
         for data in torch.arange(20):
             idx = rb.add(data)
             rb.update_priority(idx, 21 - data)
-            if data <= 10:
-                # The max is always going to be the first value
-                assert rb.sampler._max_priority[0] == 21
-                assert rb.sampler._max_priority[1] == 0
-            elif not max_priority_within_buffer:
-                # The max is the historical max, which was at idx 0
-                assert rb.sampler._max_priority[0] == 21
+            if data <= 10 or not max_priority_within_buffer:
+                # The max is (or remains, historically) the first value
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
                 assert rb.sampler._max_priority[1] == 0
             else:
-                # the max is the current max. Find it and compare
+                # the max is the current max: the oldest item still in the buffer
+                expected_raw = float(31 - data)
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(
+                    expected_raw, rel=1e-4
+                )
+                assert rb.sampler._max_priority[1] == data - 10
                 sumtree = torch.as_tensor(
                     [rb.sampler._sum_tree[i] for i in range(rb.sampler._max_capacity)]
                 )
-                assert rb.sampler._max_priority[0] == sumtree.max()
-                assert rb.sampler._max_priority[1] == sumtree.argmax()
+                assert float(sumtree.max()) == pytest.approx(
+                    (expected_raw + eps) ** alpha, rel=1e-4
+                )
+                assert sumtree.argmax() == data - 10
         idx = rb.extend(torch.arange(10))
         rb.update_priority(idx, 12)
         if max_priority_within_buffer:
-            assert rb.sampler._max_priority[0] == 12
+            assert float(rb.sampler._max_priority[0]) == pytest.approx(12, rel=1e-4)
             assert rb.sampler._max_priority[1] == 0
         else:
-            assert rb.sampler._max_priority[0] == 21
+            assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
             assert rb.sampler._max_priority[1] == 0
 
     @pytest.mark.skipif(

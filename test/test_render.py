@@ -11,6 +11,8 @@ import json
 import numpy as np
 import pytest
 import torch
+import torchrl.render as render_module
+import torchrl.render.artifacts as artifacts_module
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
@@ -238,10 +240,14 @@ class TestRenderRollouts:
         assert torch.equal(
             result.trajectories[0].get("action"), torch.full((2, 1), 0.5)
         )
+        assert "next" in result.trajectories[0].keys()
+        assert "count" in result.trajectories[0].keys()
+        assert "pixels" not in result.trajectories[0].keys(True)
+        assert ("next", "pixels") not in result.trajectories[0].keys(True)
 
 
 class TestRenderArtifacts:
-    def test_render_policy_writes_jsonl(self, tmp_path):
+    def test_render_policy_writes_jsonl(self, tmp_path, monkeypatch):
         ckpt = tmp_path / "policy.pt"
         torch.save({}, ckpt)
         out = tmp_path / "events.jsonl"
@@ -255,12 +261,25 @@ class TestRenderArtifacts:
             auto_load_policy=False,
             overwrite=True,
         )
+        hash_calls = 0
+        original_checkpoint_hash = checkpoint_hash
+
+        def counted_checkpoint_hash(path):
+            nonlocal hash_calls
+            hash_calls += 1
+            return original_checkpoint_hash(path)
+
+        monkeypatch.setattr(render_module, "checkpoint_hash", counted_checkpoint_hash)
+        monkeypatch.setattr(
+            artifacts_module, "checkpoint_hash", counted_checkpoint_hash
+        )
         result = render_policy(config)
         assert result.artifact_path == out
         lines = out.read_text(encoding="utf-8").splitlines()
         assert json.loads(lines[0])["type"] == "metadata"
         metadata = json.loads(out.with_suffix(".jsonl.metadata.json").read_text())
         assert metadata["checkpoint"]["sha256"] == checkpoint_hash(ckpt)
+        assert hash_calls == 1
 
     def test_write_npz_and_notebook_artifacts(self, tmp_path):
         ckpt = tmp_path / "policy.pt"
@@ -296,7 +315,16 @@ class TestRenderArtifacts:
         written = write_render_artifact(result, config)
         notebook = json.loads(written.artifact_path.read_text(encoding="utf-8"))
         assert notebook["nbformat"] == 4
+        namespace = {}
+        exec("".join(notebook["cells"][2]["source"]), namespace)
+        assert namespace["render_config"]["artifact_dir"] is None
         assert (tmp_path / "report" / "metadata.json").exists()
+        saved_rollout = torch.load(
+            tmp_path / "report" / "rollouts" / "traj_000.pt",
+            weights_only=False,
+        )
+        assert "pixels" not in saved_rollout.keys(True)
+        assert ("next", "pixels") not in saved_rollout.keys(True)
 
     @pytest.mark.skipif(
         not _has_pil, reason="Pillow is required for PNG frame artifacts"
