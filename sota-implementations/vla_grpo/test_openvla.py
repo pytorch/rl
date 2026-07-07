@@ -473,7 +473,8 @@ def _complete_logger_cfg(**logger_overrides):
         "eval_episodes": 4,
         "eval_backend": "thread",
         "eval_busy_policy": "skip",
-        "record_video_single_task": False,
+        "service_backend": "direct",
+        "video_fps": 4,
     }
     logger.update(logger_overrides)
     return SimpleNamespace(**logger)
@@ -632,8 +633,52 @@ class TestCollectorFactory:
 
 
 class TestEvaluatorFactory:
+    def test_eval_env_records_root_pixels_from_scalar_env(self, monkeypatch):
+        captured = {}
+
+        class _FakeEnv:
+            def append_transform(self, transform):
+                captured["transform"] = transform
+                return self
+
+        def _fake_make_env(*args, **kwargs):
+            captured["make_env_args"] = args
+            captured["make_env_kwargs"] = kwargs
+            return _FakeEnv()
+
+        monkeypatch.setattr(utils, "make_env", _fake_make_env)
+        logger_client = object()
+        cfg = SimpleNamespace(
+            env=_complete_toy_env_cfg(eval_num_envs=10),
+            logger=_complete_logger_cfg(video_fps=8),
+        )
+
+        env = utils._make_eval_env(
+            cfg,
+            utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
+            logger_client,
+            torch.device("cpu"),
+        )
+
+        assert isinstance(env, _FakeEnv)
+        assert captured["make_env_kwargs"]["eval_mode"]
+        assert captured["make_env_kwargs"]["from_pixels"]
+        transform = captured["transform"]
+        assert isinstance(transform, utils.VideoRecorder)
+        assert transform.logger is logger_client
+        assert transform.in_keys == ["pixels"]
+        assert transform.tag == "eval/video"
+        assert transform.video_kwargs == {"fps": 8}
+
     def test_make_evaluator_process_backend_uses_factories(self, monkeypatch):
         captured = {}
+        logger_client = object()
+
+        class _FakeProcessLogger:
+            service_backend = "process"
+
+            def client(self):
+                return logger_client
 
         class _FakeEvaluator:
             def __init__(self, env, policy=None, policy_factory=None, **kwargs):
@@ -653,15 +698,16 @@ class TestEvaluatorFactory:
             cfg,
             utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
             policy,
-            logger=object(),
+            logger=_FakeProcessLogger(),
             device=torch.device("cpu"),
         )
 
         assert isinstance(evaluator, _FakeEvaluator)
         assert callable(captured["env"])
+        assert captured["env"].args[2] is logger_client
         assert captured["policy"] is None
         assert captured["policy_factory"]() is policy
-        assert not captured["kwargs"]["dump_video"]
+        assert captured["kwargs"]["dump_video"]
         assert captured["kwargs"]["backend"] == "process"
         assert captured["kwargs"]["max_steps"] == 0
 
