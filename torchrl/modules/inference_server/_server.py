@@ -618,7 +618,10 @@ class InferenceServer:
         self.shutdown()
 
     def __del__(self) -> None:
-        if self._worker is not None and self._worker.is_alive():
+        # getattr: __del__ also runs on instances whose __init__ raised
+        # before attribute assignment (e.g. config-validation errors).
+        worker = getattr(self, "_worker", None)
+        if worker is not None and worker.is_alive():
             self.shutdown(timeout=1.0)
 
 
@@ -1088,7 +1091,10 @@ class ProcessInferenceServer:
         self.shutdown()
 
     def __del__(self) -> None:
-        if self.is_alive:
+        # getattr: __del__ also runs on instances whose __init__ raised
+        # before attribute assignment (e.g. config-validation errors).
+        process = getattr(self, "_process", None)
+        if process is not None and process.is_alive():
             self.shutdown(timeout=1.0)
 
 
