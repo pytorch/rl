@@ -1865,6 +1865,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.ThreadingTransport.html">ThreadingTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2023,13 +2024,17 @@ document.write(`
 <li class="toctree-l2 has-children"><a class="reference internal" href="trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.Trainer.html">Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.TrainerHookBase.html">TrainerHookBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.OnPolicyTrainer.html">OnPolicyTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.A2CTrainer.html">A2CTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.PPOTrainer.html">PPOTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.ReinforceTrainer.html">ReinforceTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.SACTrainer.html">SACTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html">OfflineToOnlineTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DQNTrainer.html">DQNTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DDPGTrainer.html">DDPGTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.IQLTrainer.html">IQLTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.CQLTrainer.html">CQLTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.TD3Trainer.html">TD3Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_offpolicy.html">make_collector_offpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_onpolicy.html">make_collector_onpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_dqn_loss.html">make_dqn_loss</a></li>
@@ -2066,6 +2071,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.CountFramesLog.html">CountFramesLog</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.EarlyStopping.html">EarlyStopping</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LogScalar.html">LogScalar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LRSchedulerHook.html">LRSchedulerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html">OptimizerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LogValidationReward.html">LogValidationReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html">ReplayBufferTrainer</a></li>
@@ -2074,6 +2080,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html">UpdateWeights</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.TargetNetUpdaterHook.html">TargetNetUpdaterHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.UTDRHook.html">UTDRHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
 </ul>
@@ -2221,13 +2228,17 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html">torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html">torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.HookConfig.html">torchrl.trainers.algorithms.configs.hooks.HookConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig.html">torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig.html">torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig</a></li>
@@ -2238,12 +2249,15 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig.html">torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig.html">torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.LossConfig.html">torchrl.trainers.algorithms.configs.objectives.LossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.A2CLossConfig.html">torchrl.trainers.algorithms.configs.objectives.A2CLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html">torchrl.trainers.algorithms.configs.objectives.PPOLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig.html">torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.SACLossConfig.html">torchrl.trainers.algorithms.configs.objectives.SACLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DQNLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.IQLLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.CQLLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html">torchrl.trainers.algorithms.configs.objectives.TD3LossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.GAEConfig.html">torchrl.trainers.algorithms.configs.objectives.GAEConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig.html">torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig.html">torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig</a></li>
@@ -2427,29 +2441,35 @@ document.write(`
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.LogScalar.html#torchrl.trainers.LogScalar" title="torchrl.trainers.LogScalar"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogScalar</span></code></a>([key, logname, log_pbar, ...])</p></td>
 <td><p>Generic scalar logger hook for any tensor values in the batch.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html#torchrl.trainers.OptimizerHook" title="torchrl.trainers.OptimizerHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptimizerHook</span></code></a>(optimizer[, loss_components])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.LRSchedulerHook.html#torchrl.trainers.LRSchedulerHook" title="torchrl.trainers.LRSchedulerHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LRSchedulerHook</span></code></a>(scheduler[, interval])</p></td>
+<td><p>A hook that steps a learning-rate scheduler during training.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html#torchrl.trainers.OptimizerHook" title="torchrl.trainers.OptimizerHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptimizerHook</span></code></a>(optimizer[, loss_components])</p></td>
 <td><p>Add an optimizer for one or more loss components.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.LogValidationReward.html#torchrl.trainers.LogValidationReward" title="torchrl.trainers.LogValidationReward"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogValidationReward</span></code></a>(*, record_interval, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.LogValidationReward.html#torchrl.trainers.LogValidationReward" title="torchrl.trainers.LogValidationReward"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LogValidationReward</span></code></a>(*, record_interval, ...)</p></td>
 <td><p>Recorder hook for <a class="reference internal" href="generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.Trainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">Trainer</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html#torchrl.trainers.ReplayBufferTrainer" title="torchrl.trainers.ReplayBufferTrainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferTrainer</span></code></a>(replay_buffer[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html#torchrl.trainers.ReplayBufferTrainer" title="torchrl.trainers.ReplayBufferTrainer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReplayBufferTrainer</span></code></a>(replay_buffer[, ...])</p></td>
 <td><p>Replay buffer hook provider.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.RewardNormalizer.html#torchrl.trainers.RewardNormalizer" title="torchrl.trainers.RewardNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardNormalizer</span></code></a>([decay, scale, eps, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.RewardNormalizer.html#torchrl.trainers.RewardNormalizer" title="torchrl.trainers.RewardNormalizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RewardNormalizer</span></code></a>([decay, scale, eps, ...])</p></td>
 <td><p>Reward normalizer hook.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.SelectKeys.html#torchrl.trainers.SelectKeys" title="torchrl.trainers.SelectKeys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelectKeys</span></code></a>(keys)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.SelectKeys.html#torchrl.trainers.SelectKeys" title="torchrl.trainers.SelectKeys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SelectKeys</span></code></a>(keys)</p></td>
 <td><p>Selects keys in a TensorDict batch.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights" title="torchrl.trainers.UpdateWeights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UpdateWeights</span></code></a>(collector, update_weights_interval)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights" title="torchrl.trainers.UpdateWeights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UpdateWeights</span></code></a>(collector, update_weights_interval)</p></td>
 <td><p>A collector weights update hook class.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.TargetNetUpdaterHook.html#torchrl.trainers.TargetNetUpdaterHook" title="torchrl.trainers.TargetNetUpdaterHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TargetNetUpdaterHook</span></code></a>(target_params_updater)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.TargetNetUpdaterHook.html#torchrl.trainers.TargetNetUpdaterHook" title="torchrl.trainers.TargetNetUpdaterHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TargetNetUpdaterHook</span></code></a>(target_params_updater)</p></td>
 <td><p>A hook for target parameters update.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook" title="torchrl.trainers.UTDRHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UTDRHook</span></code></a>(trainer)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook" title="torchrl.trainers.UTDRHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UTDRHook</span></code></a>(trainer)</p></td>
 <td><p>Hook for logging Update-to-Data (UTD) ratio during async collection.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.trainers.ValueEstimatorHook.html#torchrl.trainers.ValueEstimatorHook" title="torchrl.trainers.ValueEstimatorHook"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueEstimatorHook</span></code></a>(value_estimator)</p></td>
+<td><p>A hook that computes value estimates over a collected batch.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2814,7 +2834,7 @@ document.write(`
        "headline": "Training Hooks",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/trainers_hooks.html",
-       "articleBody": "Training Hooks# Hooks for customizing the training loop at various points. BatchSubSampler(batch_size[, sub_traj_len, ...]) Data subsampler for online RL sota-implementations. ClearCudaCache(interval) Clears cuda cache at a given interval. CountFramesLog(*args, **kwargs) A frame counter hook. EarlyStopping(*[, monitor, mode, min_delta, ...]) Early stopping hook for Trainer. LogScalar([key, logname, log_pbar, ...]) Generic scalar logger hook for any tensor values in the batch. OptimizerHook(optimizer[, loss_components]) Add an optimizer for one or more loss components. LogValidationReward(*, record_interval, ...) Recorder hook for Trainer. ReplayBufferTrainer(replay_buffer[, ...]) Replay buffer hook provider. RewardNormalizer([decay, scale, eps, ...]) Reward normalizer hook. SelectKeys(keys) Selects keys in a TensorDict batch. UpdateWeights(collector, update_weights_interval) A collector weights update hook class. TargetNetUpdaterHook(target_params_updater) A hook for target parameters update. UTDRHook(trainer) Hook for logging Update-to-Data (UTD) ratio during async collection.",
+       "articleBody": "Training Hooks# Hooks for customizing the training loop at various points. BatchSubSampler(batch_size[, sub_traj_len, ...]) Data subsampler for online RL sota-implementations. ClearCudaCache(interval) Clears cuda cache at a given interval. CountFramesLog(*args, **kwargs) A frame counter hook. EarlyStopping(*[, monitor, mode, min_delta, ...]) Early stopping hook for Trainer. LogScalar([key, logname, log_pbar, ...]) Generic scalar logger hook for any tensor values in the batch. LRSchedulerHook(scheduler[, interval]) A hook that steps a learning-rate scheduler during training. OptimizerHook(optimizer[, loss_components]) Add an optimizer for one or more loss components. LogValidationReward(*, record_interval, ...) Recorder hook for Trainer. ReplayBufferTrainer(replay_buffer[, ...]) Replay buffer hook provider. RewardNormalizer([decay, scale, eps, ...]) Reward normalizer hook. SelectKeys(keys) Selects keys in a TensorDict batch. UpdateWeights(collector, update_weights_interval) A collector weights update hook class. TargetNetUpdaterHook(target_params_updater) A hook for target parameters update. UTDRHook(trainer) Hook for logging Update-to-Data (UTD) ratio during async collection. ValueEstimatorHook(value_estimator) A hook that computes value estimates over a collected batch.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

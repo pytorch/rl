@@ -51,8 +51,8 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="SACTrainer" href="torchrl.trainers.algorithms.SACTrainer.html" />
-    <link rel="prev" title="TrainerHookBase" href="torchrl.trainers.TrainerHookBase.html" />
+    <link rel="next" title="ReinforceTrainer" href="torchrl.trainers.algorithms.ReinforceTrainer.html" />
+    <link rel="prev" title="A2CTrainer" href="torchrl.trainers.algorithms.A2CTrainer.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -1865,6 +1865,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ThreadingTransport.html">ThreadingTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2023,13 +2024,17 @@ document.write(`
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.TrainerHookBase.html">TrainerHookBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.OnPolicyTrainer.html">OnPolicyTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.A2CTrainer.html">A2CTrainer</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">PPOTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.ReinforceTrainer.html">ReinforceTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.SACTrainer.html">SACTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.OfflineToOnlineTrainer.html">OfflineToOnlineTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.DQNTrainer.html">DQNTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.DDPGTrainer.html">DDPGTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.IQLTrainer.html">IQLTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.CQLTrainer.html">CQLTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.TD3Trainer.html">TD3Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.helpers.make_collector_offpolicy.html">make_collector_offpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.helpers.make_collector_onpolicy.html">make_collector_onpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.helpers.make_dqn_loss.html">make_dqn_loss</a></li>
@@ -2066,6 +2071,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.CountFramesLog.html">CountFramesLog</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.EarlyStopping.html">EarlyStopping</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.LogScalar.html">LogScalar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.LRSchedulerHook.html">LRSchedulerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.OptimizerHook.html">OptimizerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.LogValidationReward.html">LogValidationReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ReplayBufferTrainer.html">ReplayBufferTrainer</a></li>
@@ -2074,6 +2080,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.UpdateWeights.html">UpdateWeights</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.TargetNetUpdaterHook.html">TargetNetUpdaterHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.UTDRHook.html">UTDRHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
 </ul>
@@ -2221,13 +2228,17 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html">torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html">torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.HookConfig.html">torchrl.trainers.algorithms.configs.hooks.HookConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig.html">torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig.html">torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig</a></li>
@@ -2238,12 +2249,15 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig.html">torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig.html">torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.LossConfig.html">torchrl.trainers.algorithms.configs.objectives.LossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.A2CLossConfig.html">torchrl.trainers.algorithms.configs.objectives.A2CLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html">torchrl.trainers.algorithms.configs.objectives.PPOLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig.html">torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.SACLossConfig.html">torchrl.trainers.algorithms.configs.objectives.SACLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DQNLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.IQLLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.CQLLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html">torchrl.trainers.algorithms.configs.objectives.TD3LossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.GAEConfig.html">torchrl.trainers.algorithms.configs.objectives.GAEConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig.html">torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig.html">torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig</a></li>
@@ -2432,69 +2446,17 @@ Hydra configuration counterpart.</p>
 Please report any issues or feedback to help improve this implementation.</p>
 </div>
 <p>This trainer implements the PPO algorithm for training reinforcement learning agents.
-It extends the base Trainer class with PPO-specific functionality including
-policy optimization, value function learning, and entropy regularization.</p>
+It extends <a class="reference internal" href="torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer" title="torchrl.trainers.algorithms.OnPolicyTrainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">OnPolicyTrainer</span></code></a> with PPO-specific
+defaults; see that class for the full list of keyword arguments, covering
+advantage estimation (GAE), replay-buffer wiring, collector weight
+synchronization and logging.</p>
 <p>PPO typically uses multiple epochs of optimization on the same batch of data.
 This trainer defaults to 4 epochs, which is a common choice for PPO implementations.</p>
-<p>The trainer includes comprehensive logging capabilities for monitoring training progress:
-- Training rewards (mean, std, max, total)
-- Action statistics (norms)
-- Episode completion rates
-- Observation statistics (optional)</p>
-<p>Logging can be configured via constructor parameters to enable/disable specific metrics.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>collector</strong> (<a class="reference internal" href="torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector" title="torchrl.collectors.BaseCollector"><em>BaseCollector</em></a>) – The data collector for gathering training data.</p></li>
-<li><p><strong>total_frames</strong> (<em>int</em>) – Total number of frames to train for.</p></li>
-<li><p><strong>frame_skip</strong> (<em>int</em>) – Frame skip value for the environment.</p></li>
-<li><p><strong>optim_steps_per_batch</strong> (<em>int</em>) – Number of optimization steps per batch.</p></li>
-<li><p><strong>loss_module</strong> (<a class="reference internal" href="torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><em>LossModule</em></a>) – The loss module for computing policy and value losses.</p></li>
-<li><p><strong>optimizer</strong> (<em>optim.Optimizer</em><em>, </em><em>optional</em>) – The optimizer for training.</p></li>
-<li><p><strong>logger</strong> (<em>Logger</em><em>, </em><em>optional</em>) – Logger for tracking training metrics.</p></li>
-<li><p><strong>clip_grad_norm</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to clip gradient norms. Default: True.</p></li>
-<li><p><strong>clip_norm</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum gradient norm value.</p></li>
-<li><p><strong>progress_bar</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to show a progress bar. Default: True.</p></li>
-<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – Random seed for reproducibility.</p></li>
-<li><p><strong>save_trainer_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – Interval for saving trainer state. Default: 10000.</p></li>
-<li><p><strong>log_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – Interval for logging metrics. Default: 10000.</p></li>
-<li><p><strong>save_trainer_file</strong> (<em>str</em><em> | </em><em>pathlib.Path</em><em>, </em><em>optional</em>) – File path for saving trainer state.</p></li>
-<li><p><strong>num_epochs</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of epochs per batch. Default: 4.</p></li>
-<li><p><strong>replay_buffer</strong> (<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><em>ReplayBuffer</em></a><em>, </em><em>optional</em>) – Replay buffer for storing data.</p></li>
-<li><p><strong>batch_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Batch size for optimization.</p></li>
-<li><p><strong>gamma</strong> (<em>float</em><em>, </em><em>optional</em>) – Discount factor for GAE. Default: 0.9.</p></li>
-<li><p><strong>lmbda</strong> (<em>float</em><em>, </em><em>optional</em>) – Lambda parameter for GAE. Default: 0.99.</p></li>
-<li><p><strong>enable_logging</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to enable logging. Default: True.</p></li>
-<li><p><strong>log_rewards</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log rewards. Default: True.</p></li>
-<li><p><strong>log_actions</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log actions. Default: True.</p></li>
-<li><p><strong>log_observations</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to log observations. Default: False.</p></li>
-<li><p><strong>async_collection</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to use async collection. Default: False.</p></li>
-<li><p><strong>add_gae</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to add GAE computation. Default: True.</p></li>
-<li><p><strong>gae</strong> (<em>Callable</em><em>, </em><em>optional</em>) – Custom GAE module. If None and add_gae is True, a default GAE will be created.</p></li>
-<li><p><strong>weight_update_map</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Mapping from collector destination paths (keys in
-collector’s weight_sync_schemes) to trainer source paths. Required if collector has
-weight_sync_schemes configured. Example: {“policy”: “loss_module.actor_network”,
-“replay_buffer.transforms[0]”: “loss_module.critic_network”}</p></li>
-<li><p><strong>log_timings</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, automatically register a LogTiming hook to log
-timing information for all hooks to the logger (e.g., wandb, tensorboard).
-Timing metrics will be logged with prefix “time/” (e.g., “time/hook/UpdateWeights”).
-Default is False.</p></li>
-<li><p><strong>done_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Done key used by GAE, losses, and logging. Default: “done”.</p></li>
-<li><p><strong>terminated_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Terminated key used by GAE, losses, and logging.
-Default: “terminated”.</p></li>
-<li><p><strong>reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Reward key used by GAE, losses, and logging. Default: “reward”.</p></li>
-<li><p><strong>episode_reward_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Episode reward key used for cumulative reward logging.
-Default: “reward”.</p></li>
-<li><p><strong>action_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Action key used by losses and logging. Default: “action”.</p></li>
-<li><p><strong>observation_key</strong> (<em>NestedKey</em><em>, </em><em>optional</em>) – Observation key used for logging. Default: “observation”.</p></li>
-</ul>
-</dd>
-</dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Basic usage with manual configuration</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.ppo</span> <span class="kn">import</span> <span class="n">PPOTrainer</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.configs</span> <span class="kn">import</span> <span class="n">PPOTrainerConfig</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">hydra</span> <span class="kn">import</span> <span class="n">instantiate</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">hydra.utils</span> <span class="kn">import</span> <span class="n">instantiate</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">PPOTrainerConfig</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># Configure with required parameters</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">instantiate</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
@@ -2505,16 +2467,11 @@ Default: “reward”.</p></li>
 <p>This trainer requires a configurable environment setup. See the
 <code class="xref py py-class docutils literal notranslate"><span class="pre">configs</span></code> module for configuration options.</p>
 </div>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>This is an experimental feature. The API may change in future versions.
-We welcome feedback and contributions to help improve this implementation!</p>
-</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.trainers.algorithms.PPOTrainer.load_from_file">
 <span class="sig-name descname"><span class="pre">load_from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.trainers.Trainer"><span class="pre">Trainer</span></a></span></span><a class="headerlink" href="#torchrl.trainers.algorithms.PPOTrainer.load_from_file" title="Link to this definition">#</a></dt>
 <dd><p>Loads a file and its state-dict in the trainer.</p>
-<p>Keyword arguments are passed to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a> function.
+<p>Keyword arguments are passed to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a> function.
 They are ignored when <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=memmap</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -2578,20 +2535,20 @@ state dict.</p>
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.trainers.TrainerHookBase.html"
+       href="torchrl.trainers.algorithms.A2CTrainer.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">TrainerHookBase</p>
+        <p class="prev-next-title">A2CTrainer</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.trainers.algorithms.SACTrainer.html"
+       href="torchrl.trainers.algorithms.ReinforceTrainer.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">SACTrainer</p>
+        <p class="prev-next-title">ReinforceTrainer</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2617,20 +2574,20 @@ state dict.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.trainers.TrainerHookBase.html"
+       href="torchrl.trainers.algorithms.A2CTrainer.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">TrainerHookBase</p>
+        <p class="prev-next-title">A2CTrainer</p>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.trainers.algorithms.SACTrainer.html"
+       href="torchrl.trainers.algorithms.ReinforceTrainer.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">SACTrainer</p>
+        <p class="prev-next-title">ReinforceTrainer</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2909,7 +2866,7 @@ state dict.</p>
        "headline": "PPOTrainer",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.trainers.algorithms.PPOTrainer.html",
-       "articleBody": "PPOTrainer# class torchrl.trainers.algorithms.PPOTrainer(*args, **kwargs)[source]# PPO (Proximal Policy Optimization) trainer implementation. See also PPOTrainerConfig for the Hydra configuration counterpart. Warning This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the PPO algorithm for training reinforcement learning agents. It extends the base Trainer class with PPO-specific functionality including policy optimization, value function learning, and entropy regularization. PPO typically uses multiple epochs of optimization on the same batch of data. This trainer defaults to 4 epochs, which is a common choice for PPO implementations. The trainer includes comprehensive logging capabilities for monitoring training progress: - Training rewards (mean, std, max, total) - Action statistics (norms) - Episode completion rates - Observation statistics (optional) Logging can be configured via constructor parameters to enable/disable specific metrics. Parameters: collector (BaseCollector) \u2013 The data collector for gathering training data. total_frames (int) \u2013 Total number of frames to train for. frame_skip (int) \u2013 Frame skip value for the environment. optim_steps_per_batch (int) \u2013 Number of optimization steps per batch. loss_module (LossModule) \u2013 The loss module for computing policy and value losses. optimizer (optim.Optimizer, optional) \u2013 The optimizer for training. logger (Logger, optional) \u2013 Logger for tracking training metrics. clip_grad_norm (bool, optional) \u2013 Whether to clip gradient norms. Default: True. clip_norm (float, optional) \u2013 Maximum gradient norm value. progress_bar (bool, optional) \u2013 Whether to show a progress bar. Default: True. seed (int, optional) \u2013 Random seed for reproducibility. save_trainer_interval (int, optional) \u2013 Interval for saving trainer state. Default: 10000. log_interval (int, optional) \u2013 Interval for logging metrics. Default: 10000. save_trainer_file (str | pathlib.Path, optional) \u2013 File path for saving trainer state. num_epochs (int, optional) \u2013 Number of epochs per batch. Default: 4. replay_buffer (ReplayBuffer, optional) \u2013 Replay buffer for storing data. batch_size (int, optional) \u2013 Batch size for optimization. gamma (float, optional) \u2013 Discount factor for GAE. Default: 0.9. lmbda (float, optional) \u2013 Lambda parameter for GAE. Default: 0.99. enable_logging (bool, optional) \u2013 Whether to enable logging. Default: True. log_rewards (bool, optional) \u2013 Whether to log rewards. Default: True. log_actions (bool, optional) \u2013 Whether to log actions. Default: True. log_observations (bool, optional) \u2013 Whether to log observations. Default: False. async_collection (bool, optional) \u2013 Whether to use async collection. Default: False. add_gae (bool, optional) \u2013 Whether to add GAE computation. Default: True. gae (Callable, optional) \u2013 Custom GAE module. If None and add_gae is True, a default GAE will be created. weight_update_map (dict[str, str], optional) \u2013 Mapping from collector destination paths (keys in collector\u2019s weight_sync_schemes) to trainer source paths. Required if collector has weight_sync_schemes configured. Example: {\u201cpolicy\u201d: \u201closs_module.actor_network\u201d, \u201creplay_buffer.transforms[0]\u201d: \u201closs_module.critic_network\u201d} log_timings (bool, optional) \u2013 If True, automatically register a LogTiming hook to log timing information for all hooks to the logger (e.g., wandb, tensorboard). Timing metrics will be logged with prefix \u201ctime/\u201d (e.g., \u201ctime/hook/UpdateWeights\u201d). Default is False. done_key (NestedKey, optional) \u2013 Done key used by GAE, losses, and logging. Default: \u201cdone\u201d. terminated_key (NestedKey, optional) \u2013 Terminated key used by GAE, losses, and logging. Default: \u201cterminated\u201d. reward_key (NestedKey, optional) \u2013 Reward key used by GAE, losses, and logging. Default: \u201creward\u201d. episode_reward_key (NestedKey, optional) \u2013 Episode reward key used for cumulative reward logging. Default: \u201creward\u201d. action_key (NestedKey, optional) \u2013 Action key used by losses and logging. Default: \u201caction\u201d. observation_key (NestedKey, optional) \u2013 Observation key used for logging. Default: \u201cobservation\u201d. Examples \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.ppo import PPOTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import PPOTrainerConfig \u003e\u003e\u003e from hydra import instantiate \u003e\u003e\u003e config = PPOTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() Note This trainer requires a configurable environment setup. See the configs module for configuration options. Warning This is an experimental feature. The API may change in future versions. We welcome feedback and contributions to help improve this implementation! load_from_file(file: str | Path, **kwargs) \u2192 Trainer# Loads a file and its state-dict in the trainer. Keyword arguments are passed to the load() function. They are ignored when CKPT_BACKEND=memmap. Note When CKPT_BACKEND=torch, weights_only=True is set by default for safer deserialization. Pass weights_only=False explicitly only if you have custom (non-stdlib) objects in your state dict. request_stop(reason: str | None = None) \u2192 None# Signal that training should stop at the next loop boundary.",
+       "articleBody": "PPOTrainer# class torchrl.trainers.algorithms.PPOTrainer(*args, **kwargs)[source]# PPO (Proximal Policy Optimization) trainer implementation. See also PPOTrainerConfig for the Hydra configuration counterpart. Warning This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the PPO algorithm for training reinforcement learning agents. It extends OnPolicyTrainer with PPO-specific defaults; see that class for the full list of keyword arguments, covering advantage estimation (GAE), replay-buffer wiring, collector weight synchronization and logging. PPO typically uses multiple epochs of optimization on the same batch of data. This trainer defaults to 4 epochs, which is a common choice for PPO implementations. Examples \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.ppo import PPOTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import PPOTrainerConfig \u003e\u003e\u003e from hydra.utils import instantiate \u003e\u003e\u003e config = PPOTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() Note This trainer requires a configurable environment setup. See the configs module for configuration options. load_from_file(file: str | Path, **kwargs) \u2192 Trainer# Loads a file and its state-dict in the trainer. Keyword arguments are passed to the load() function. They are ignored when CKPT_BACKEND=memmap. Note When CKPT_BACKEND=torch, weights_only=True is set by default for safer deserialization. Pass weights_only=False explicitly only if you have custom (non-stdlib) objects in your state dict. request_stop(reason: str | None = None) \u2192 None# Signal that training should stop at the next loop boundary.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

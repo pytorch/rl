@@ -1865,6 +1865,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.ThreadingTransport.html">ThreadingTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2023,13 +2024,17 @@ document.write(`
 <li class="toctree-l2 has-children"><a class="reference internal" href="trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.Trainer.html">Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.TrainerHookBase.html">TrainerHookBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.OnPolicyTrainer.html">OnPolicyTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.A2CTrainer.html">A2CTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.PPOTrainer.html">PPOTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.ReinforceTrainer.html">ReinforceTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.SACTrainer.html">SACTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html">OfflineToOnlineTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DQNTrainer.html">DQNTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.DDPGTrainer.html">DDPGTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.IQLTrainer.html">IQLTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.CQLTrainer.html">CQLTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.algorithms.TD3Trainer.html">TD3Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_offpolicy.html">make_collector_offpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_collector_onpolicy.html">make_collector_onpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.helpers.make_dqn_loss.html">make_dqn_loss</a></li>
@@ -2066,6 +2071,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.CountFramesLog.html">CountFramesLog</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.EarlyStopping.html">EarlyStopping</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LogScalar.html">LogScalar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LRSchedulerHook.html">LRSchedulerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.OptimizerHook.html">OptimizerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.LogValidationReward.html">LogValidationReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ReplayBufferTrainer.html">ReplayBufferTrainer</a></li>
@@ -2074,6 +2080,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.UpdateWeights.html">UpdateWeights</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.TargetNetUpdaterHook.html">TargetNetUpdaterHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.UTDRHook.html">UTDRHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
 </ul>
@@ -2221,13 +2228,17 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html">torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html">torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.HookConfig.html">torchrl.trainers.algorithms.configs.hooks.HookConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig.html">torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig.html">torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig</a></li>
@@ -2238,12 +2249,15 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig.html">torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig.html">torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.LossConfig.html">torchrl.trainers.algorithms.configs.objectives.LossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.A2CLossConfig.html">torchrl.trainers.algorithms.configs.objectives.A2CLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html">torchrl.trainers.algorithms.configs.objectives.PPOLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig.html">torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.SACLossConfig.html">torchrl.trainers.algorithms.configs.objectives.SACLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DQNLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.IQLLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.CQLLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html">torchrl.trainers.algorithms.configs.objectives.TD3LossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.GAEConfig.html">torchrl.trainers.algorithms.configs.objectives.GAEConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig.html">torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig.html">torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig</a></li>
@@ -2642,7 +2656,7 @@ packed together. The module calls <code class="docutils literal notranslate"><sp
 <code class="docutils literal notranslate"><span class="pre">torchrl.objectives.value.utils._get_num_per_traj_init</span></code>) to count
 per-trajectory lengths, then <code class="docutils literal notranslate"><span class="pre">_split_and_pad_sequence</span></code> to break the
 batch into shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">T')</span></code> with one trajectory per row.</p></li>
-<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> is run on each clean row, then results are
+<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> is run on each clean row, then results are
 unpadded back to the original shape.</p></li>
 <li><p>With the <code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;triton&quot;</span></code> backends, the module keeps the
 original <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">T,</span> <span class="pre">...)</span></code> layout and uses <code class="docutils literal notranslate"><span class="pre">is_init</span></code> to reset hidden
@@ -2672,7 +2686,7 @@ the post-done timesteps as a continuation of the pre-done trajectory.</p></li>
 TensorDict batch shape. These outputs should be read as “next hidden”
 checkpoints at trajectory ends, not as valid per-step hidden states at every
 position.</p>
-<p>With the pad backend, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> only returns the final hidden
+<p>With the pad backend, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> only returns the final hidden
 state for a sequence. <code class="docutils literal notranslate"><span class="pre">LSTMModule._lstm</span></code> therefore fills hidden slots
 at non-terminal positions with zeros and writes the real final hidden at the
 sequence end. If a batch contains multiple trajectories, the split path
@@ -2687,7 +2701,7 @@ checkpoints, while non-terminal slots are zero placeholders.</p>
 <p>The advantage of the scan and triton backends is that mid-batch resets do
 not require materializing split-and-padded trajectory chunks. This can reduce
 VRAM use and improve throughput for batches with many resets. The
-<code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> backend is designed for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> friendliness, and
+<code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> backend is designed for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> friendliness, and
 <code class="docutils literal notranslate"><span class="pre">recurrent_backend=&quot;auto&quot;</span></code> selects it when called under compilation. The
 <code class="docutils literal notranslate"><span class="pre">&quot;triton&quot;</span></code> backend uses CUDA kernels for the recurrent reset path. Some
 configurations still fall back to the pad backend or are unsupported (for

@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig
+===================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: ReinforceTrainerConfig

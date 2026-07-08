@@ -1,0 +1,7 @@
+# torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig
+
+*class*torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig(*collector: Any*, *total_frames: int*, *loss_module: Any*, *logger: Any*, *replay_buffer: Any*, *save_trainer_file: Any*, *optim_steps_per_batch: int | None = 1*, *optimizer: Any | None = None*, *optimizer_actor: Any | None = None*, *optimizer_critic: Any | None = None*, *actor_network: Any = None*, *qvalue_network: Any = None*, *exploration_module: Any = None*, *seed: int | None = None*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *frame_skip: int = 1*, *progress_bar: bool = True*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *num_epochs: int = 1*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *create_env_fn: Any = None*, *target_net_updater: Any = None*, *policy_update_delay: int = 2*, *value_estimator_gamma: float | None = None*, *hooks: list[Any] | None = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_td3_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#TD3TrainerConfig)
+
+Hydra configuration for [`TD3Trainer`](torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer).
+
+Every kwarg accepted by `TD3Trainer.__init__` is exposed as a field here.

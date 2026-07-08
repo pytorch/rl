@@ -1,0 +1,9 @@
+# torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig
+
+*class*torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *critic_network: Any = None*, *num_epochs: int = 1*, *async_collection: bool = False*, *add_gae: bool = True*, *gae: Any = None*, *lr_scheduler: Any = None*, *weight_update_map: dict[str, str] | None = None*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *batch_size: int | None = None*, *gamma: float = 0.99*, *lmbda: float = 0.95*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *done_key: Any = 'done'*, *terminated_key: Any = 'terminated'*, *reward_key: Any = 'reward'*, *episode_reward_key: Any = 'reward'*, *action_key: Any = 'action'*, *observation_key: Any = 'observation'*, *hooks: list[Any] | None = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#A2CTrainerConfig)
+
+Hydra configuration for [`A2CTrainer`](torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer).
+
+Every kwarg accepted by `A2CTrainer.__init__` is exposed as a field here;
+see [`OnPolicyTrainerConfig`](torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig) for the full field list. A2C performs a
+single optimization pass over each collected batch (`num_epochs=1`).

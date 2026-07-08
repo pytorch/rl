@@ -272,7 +272,7 @@ with multi-process collectors. The underlying contract -- how episode
 boundaries are recovered from the stored data -- is documented in
 [Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries).
 
-**Total running time of the script:** (0 minutes 0.079 seconds)
+**Total running time of the script:** (0 minutes 0.078 seconds)
 
 [`Download Jupyter notebook: getting-started-3.ipynb`](../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb)
 

@@ -1517,6 +1517,12 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss">A2CLoss (class in torchrl.objectives)</a>
 </li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.objectives.A2CLossConfig.html#torchrl.trainers.algorithms.configs.objectives.A2CLossConfig">A2CLossConfig (class in torchrl.trainers.algorithms.configs.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer">A2CTrainer (class in torchrl.trainers.algorithms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig">A2CTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer.action_dim">action_dim (torchrl.data.vla.UniformActionTokenizer property)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.AntEnv.html#torchrl.envs.AntEnv.action_key">action_key (torchrl.envs.AntEnv property)</a>
@@ -3744,6 +3750,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.inference_server.RayTransport.html#torchrl.modules.inference_server.RayTransport.client">(torchrl.modules.inference_server.RayTransport method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport.client">(torchrl.modules.inference_server.SharedMemoryTransport method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport.client">(torchrl.modules.inference_server.SlotTransport method)</a>
 </li>
         <li><a href="reference/generated/torchrl.services.Service.html#torchrl.services.Service.client">(torchrl.services.Service method)</a>
@@ -5633,9 +5641,11 @@ document.write(`
         <li><a href="reference/generated/torchrl.modules.inference_server.ThreadingTransport.html#torchrl.modules.inference_server.ThreadingTransport.drain">(torchrl.modules.inference_server.ThreadingTransport method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport.drain_with_timing">drain_with_timing() (torchrl.modules.inference_server.SlotTransport method)</a>
+      <li><a href="reference/generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport.drain_with_timing">drain_with_timing() (torchrl.modules.inference_server.SharedMemoryTransport method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport.drain_with_timing">(torchrl.modules.inference_server.SlotTransport method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.inference_server.ThreadingTransport.html#torchrl.modules.inference_server.ThreadingTransport.drain_with_timing">(torchrl.modules.inference_server.ThreadingTransport method)</a>
 </li>
       </ul></li>
@@ -10933,9 +10943,11 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.data.datasets.load_dataset.html#torchrl.data.datasets.load_dataset">load_dataset() (in module torchrl.data.datasets)</a>
 </li>
-      <li><a href="reference/generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer.load_from_file">load_from_file() (torchrl.trainers.algorithms.CQLTrainer method)</a>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer.load_from_file">load_from_file() (torchrl.trainers.algorithms.A2CTrainer method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer.load_from_file">(torchrl.trainers.algorithms.CQLTrainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer.load_from_file">(torchrl.trainers.algorithms.DDPGTrainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer.load_from_file">(torchrl.trainers.algorithms.DQNTrainer method)</a>
@@ -10944,9 +10956,15 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer.load_from_file">(torchrl.trainers.algorithms.OfflineToOnlineTrainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer.load_from_file">(torchrl.trainers.algorithms.OnPolicyTrainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer.load_from_file">(torchrl.trainers.algorithms.PPOTrainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer.load_from_file">(torchrl.trainers.algorithms.ReinforceTrainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer.load_from_file">(torchrl.trainers.algorithms.SACTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.load_from_file">(torchrl.trainers.algorithms.TD3Trainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.load_from_file">(torchrl.trainers.Trainer method)</a>
 </li>
@@ -11289,6 +11307,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.transforms.URScriptPrimitiveTransform.html#torchrl.envs.transforms.URScriptPrimitiveTransform.low_level_action">(torchrl.envs.transforms.URScriptPrimitiveTransform method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.trainers.LRSchedulerHook.html#torchrl.trainers.LRSchedulerHook">LRSchedulerHook (class in torchrl.trainers)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule">LSTMModule (class in torchrl.modules)</a>
 </li>
   </ul></td>
@@ -13201,6 +13221,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.objectives.OnlineDTLoss.html#torchrl.objectives.OnlineDTLoss">OnlineDTLoss (class in torchrl.objectives)</a>
 </li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer">OnPolicyTrainer (class in torchrl.trainers.algorithms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig">OnPolicyTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction.open_gripper">open_gripper() (torchrl.envs.transforms.RobotMacroAction class method)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.OpenMLEnv.html#torchrl.envs.OpenMLEnv">OpenMLEnv() (in module torchrl.envs)</a>
@@ -14412,6 +14436,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.LogValidationReward.html#torchrl.trainers.LogValidationReward.register">(torchrl.trainers.LogValidationReward method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.LRSchedulerHook.html#torchrl.trainers.LRSchedulerHook.register">(torchrl.trainers.LRSchedulerHook method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.OptimizerHook.html#torchrl.trainers.OptimizerHook.register">(torchrl.trainers.OptimizerHook method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.ReplayBufferTrainer.html#torchrl.trainers.ReplayBufferTrainer.register">(torchrl.trainers.ReplayBufferTrainer method)</a>
@@ -14427,6 +14453,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.trainers.UpdateWeights.html#torchrl.trainers.UpdateWeights.register">(torchrl.trainers.UpdateWeights method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.UTDRHook.html#torchrl.trainers.UTDRHook.register">(torchrl.trainers.UTDRHook method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.ValueEstimatorHook.html#torchrl.trainers.ValueEstimatorHook.register">(torchrl.trainers.ValueEstimatorHook method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.register_backward_hook">register_backward_hook() (torchrl.data.llm.TopKRewardSelector method)</a>
@@ -16277,6 +16305,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.objectives.ReinforceLoss.html#torchrl.objectives.ReinforceLoss">ReinforceLoss (class in torchrl.objectives)</a>
 </li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig.html#torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig">ReinforceLossConfig (class in torchrl.trainers.algorithms.configs.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer">ReinforceTrainer (class in torchrl.trainers.algorithms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig">ReinforceTrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.remote_collectors">remote_collectors (torchrl.collectors.distributed.RayCollector property)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer">RemoteTensorDictReplayBuffer (class in torchrl.data)</a>
@@ -16351,9 +16385,11 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.Hash.html#torchrl.envs.transforms.Hash.reproducible_hash">reproducible_hash() (torchrl.envs.transforms.Hash class method)</a>
 </li>
-      <li><a href="reference/generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer.request_stop">request_stop() (torchrl.trainers.algorithms.CQLTrainer method)</a>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer.request_stop">request_stop() (torchrl.trainers.algorithms.A2CTrainer method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer.request_stop">(torchrl.trainers.algorithms.CQLTrainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer.request_stop">(torchrl.trainers.algorithms.DDPGTrainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer.request_stop">(torchrl.trainers.algorithms.DQNTrainer method)</a>
@@ -16362,9 +16398,15 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer.request_stop">(torchrl.trainers.algorithms.OfflineToOnlineTrainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer.request_stop">(torchrl.trainers.algorithms.OnPolicyTrainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer.request_stop">(torchrl.trainers.algorithms.PPOTrainer method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer.request_stop">(torchrl.trainers.algorithms.ReinforceTrainer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer.request_stop">(torchrl.trainers.algorithms.SACTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.request_stop">(torchrl.trainers.algorithms.TD3Trainer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.request_stop">(torchrl.trainers.Trainer method)</a>
 </li>
@@ -16744,6 +16786,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport.resolve">resolve() (torchrl.modules.inference_server.InferenceTransport method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport.resolve">(torchrl.modules.inference_server.SharedMemoryTransport method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport.resolve">(torchrl.modules.inference_server.SlotTransport method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.inference_server.ThreadingTransport.html#torchrl.modules.inference_server.ThreadingTransport.resolve">(torchrl.modules.inference_server.ThreadingTransport method)</a>
@@ -16752,6 +16796,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport.resolve_exception">resolve_exception() (torchrl.modules.inference_server.InferenceTransport method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport.resolve_exception">(torchrl.modules.inference_server.SharedMemoryTransport method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.inference_server.SlotTransport.html#torchrl.modules.inference_server.SlotTransport.resolve_exception">(torchrl.modules.inference_server.SlotTransport method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.inference_server.ThreadingTransport.html#torchrl.modules.inference_server.ThreadingTransport.resolve_exception">(torchrl.modules.inference_server.ThreadingTransport method)</a>
@@ -18541,6 +18587,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme.shared_transport">(torchrl.weight_update.WeightSyncScheme property)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.inference_server.SharedMemoryTransport.html#torchrl.modules.inference_server.SharedMemoryTransport">SharedMemoryTransport (class in torchrl.modules.inference_server)</a>
+</li>
       <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport">SharedMemTransport (class in torchrl.weight_update)</a>
 </li>
       <li><a href="reference/generated/torchrl.weight_update.SharedMemWeightSyncScheme.html#torchrl.weight_update.SharedMemWeightSyncScheme">SharedMemWeightSyncScheme (class in torchrl.weight_update)</a>
@@ -19564,6 +19612,12 @@ document.write(`
       <li><a href="reference/generated/torchrl.objectives.TD3BCLoss.html#torchrl.objectives.TD3BCLoss">TD3BCLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss">TD3Loss (class in torchrl.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html#torchrl.trainers.algorithms.configs.objectives.TD3LossConfig">TD3LossConfig (class in torchrl.trainers.algorithms.configs.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer">TD3Trainer (class in torchrl.trainers.algorithms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig">TD3TrainerConfig (class in torchrl.trainers.algorithms.configs.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.value.TDLambdaEstimator.html#torchrl.objectives.value.TDLambdaEstimator">TDLambdaEstimator (class in torchrl.objectives.value)</a>
 </li>
@@ -21532,6 +21586,8 @@ document.write(`
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase">ValueEstimatorBase (class in torchrl.objectives.value)</a>
+</li>
+      <li><a href="reference/generated/torchrl.trainers.ValueEstimatorHook.html#torchrl.trainers.ValueEstimatorHook">ValueEstimatorHook (class in torchrl.trainers)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators">ValueEstimators (class in torchrl.objectives)</a>
 </li>

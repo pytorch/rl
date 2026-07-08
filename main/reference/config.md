@@ -417,13 +417,17 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 
 | [`TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TrainerConfig)() | Base configuration class for trainers. |
 | --- | --- |
+| [`OnPolicyTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig)(collector, ...[, ...]) | Base Hydra configuration for on-policy trainers. |
+| [`A2CTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`A2CTrainer`](generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer). |
 | [`PPOTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`PPOTrainer`](generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer). |
+| [`ReinforceTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig)(collector, ...[, ...]) | Hydra configuration for [`ReinforceTrainer`](generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer). |
 | [`SACTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`SACTrainer`](generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer). |
 | [`OfflineToOnlineTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig)(collector, ...) | Hydra configuration for [`OfflineToOnlineTrainer`](generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer). |
 | [`DQNTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`DQNTrainer`](generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer). |
 | [`DDPGTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`DDPGTrainer`](generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer). |
 | [`IQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`IQLTrainer`](generated/torchrl.trainers.algorithms.IQLTrainer.html#torchrl.trainers.algorithms.IQLTrainer). |
 | [`CQLTrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`CQLTrainer`](generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer). |
+| [`TD3TrainerConfig`](generated/torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html#torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig)(collector, total_frames, ...) | Hydra configuration for [`TD3Trainer`](generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer). |
 
 ### Trainer Hook Configurations
 
@@ -440,12 +444,15 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 
 | [`LossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.LossConfig.html#torchrl.trainers.algorithms.configs.objectives.LossConfig)([_partial_]) | A class to configure a loss. |
 | --- | --- |
+| [`A2CLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.A2CLossConfig.html#torchrl.trainers.algorithms.configs.objectives.A2CLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`A2CLoss`](generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss). |
 | [`PPOLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html#torchrl.trainers.algorithms.configs.objectives.PPOLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for the PPO loss family. |
+| [`ReinforceLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig.html#torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig)([_partial_, ...]) | Hydra configuration for [`ReinforceLoss`](generated/torchrl.objectives.ReinforceLoss.html#torchrl.objectives.ReinforceLoss). |
 | [`SACLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.SACLossConfig.html#torchrl.trainers.algorithms.configs.objectives.SACLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`SACLoss`](generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss) (and [`DiscreteSACLoss`](generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss) when `discrete=True`). |
 | [`DQNLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html#torchrl.trainers.algorithms.configs.objectives.DQNLossConfig)([_partial_, value_network, ...]) | Hydra configuration for [`DQNLoss`](generated/torchrl.objectives.DQNLoss.html#torchrl.objectives.DQNLoss). |
 | [`DDPGLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html#torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`DDPGLoss`](generated/torchrl.objectives.DDPGLoss.html#torchrl.objectives.DDPGLoss). |
 | [`IQLLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.IQLLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`IQLLoss`](generated/torchrl.objectives.IQLLoss.html#torchrl.objectives.IQLLoss) (and [`DiscreteIQLLoss`](generated/torchrl.objectives.DiscreteIQLLoss.html#torchrl.objectives.DiscreteIQLLoss) when `discrete=True`). |
 | [`CQLLossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html#torchrl.trainers.algorithms.configs.objectives.CQLLossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`CQLLoss`](generated/torchrl.objectives.CQLLoss.html#torchrl.objectives.CQLLoss). |
+| [`TD3LossConfig`](generated/torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html#torchrl.trainers.algorithms.configs.objectives.TD3LossConfig)([_partial_, actor_network, ...]) | Hydra configuration for [`TD3Loss`](generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss). |
 | [`GAEConfig`](generated/torchrl.trainers.algorithms.configs.objectives.GAEConfig.html#torchrl.trainers.algorithms.configs.objectives.GAEConfig)([_partial_, gamma, lmbda, ...]) | Hydra configuration for [`GAE`](generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE). |
 | [`TargetNetUpdaterConfig`](generated/torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig.html#torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig)(loss_module[, _partial_]) | An abstract class to configure target net updaters. |
 | [`SoftUpdateConfig`](generated/torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig.html#torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig)(loss_module[, _partial_, ...]) | A class for soft update instantiation. |
@@ -512,12 +519,15 @@ cs.store(group="env", name="my_custom", node=MyCustomEnvConfig)
 
 TorchRL currently provides configuration-driven trainers for the following algorithms:
 
+- **A2C** (on-policy): `A2CTrainerConfig`, `A2CLossConfig`
 - **PPO** (on-policy): `PPOTrainerConfig`, `PPOLossConfig`
+- **REINFORCE** (on-policy): `ReinforceTrainerConfig`, `ReinforceLossConfig`
 - **SAC** (off-policy, continuous): `SACTrainerConfig`, `SACLossConfig`
 - **Offline-to-online SAC**: `OfflineToOnlineTrainerConfig`, `SACLossConfig`
 - **DQN** (off-policy, discrete): `DQNTrainerConfig`, `DQNLossConfig`
 - **DDPG** (off-policy, continuous): `DDPGTrainerConfig`, `DDPGLossConfig`
 - **IQL** (offline): `IQLTrainerConfig`, `IQLLossConfig`
 - **CQL** (offline): `CQLTrainerConfig`, `CQLLossConfig`
+- **TD3** (off-policy, continuous): `TD3TrainerConfig`, `TD3LossConfig`
 
 The modular design ensures easy integration of additional algorithms while maintaining backward compatibility.

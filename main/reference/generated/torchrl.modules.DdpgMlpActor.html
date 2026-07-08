@@ -1865,6 +1865,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ThreadingTransport.html">ThreadingTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MPTransport.html">MPTransport</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SharedMemoryTransport.html">SharedMemoryTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.RayTransport.html">RayTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.MonarchTransport.html">MonarchTransport</a></li>
 </ul>
@@ -2023,13 +2024,17 @@ document.write(`
 <li class="toctree-l2 has-children"><a class="reference internal" href="../trainers_basics.html">Trainer Basics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.Trainer.html">Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.TrainerHookBase.html">TrainerHookBase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.OnPolicyTrainer.html">OnPolicyTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.A2CTrainer.html">A2CTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.PPOTrainer.html">PPOTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.ReinforceTrainer.html">ReinforceTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.SACTrainer.html">SACTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.OfflineToOnlineTrainer.html">OfflineToOnlineTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.DQNTrainer.html">DQNTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.DDPGTrainer.html">DDPGTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.IQLTrainer.html">IQLTrainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.CQLTrainer.html">CQLTrainer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.algorithms.TD3Trainer.html">TD3Trainer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.helpers.make_collector_offpolicy.html">make_collector_offpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.helpers.make_collector_onpolicy.html">make_collector_onpolicy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.helpers.make_dqn_loss.html">make_dqn_loss</a></li>
@@ -2066,6 +2071,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.CountFramesLog.html">CountFramesLog</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.EarlyStopping.html">EarlyStopping</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.LogScalar.html">LogScalar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.LRSchedulerHook.html">LRSchedulerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.OptimizerHook.html">OptimizerHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.LogValidationReward.html">LogValidationReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ReplayBufferTrainer.html">ReplayBufferTrainer</a></li>
@@ -2074,6 +2080,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.UpdateWeights.html">UpdateWeights</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.TargetNetUpdaterHook.html">TargetNetUpdaterHook</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.UTDRHook.html">UTDRHook</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.trainers.ValueEstimatorHook.html">ValueEstimatorHook</a></li>
 </ul>
 </details></li>
 </ul>
@@ -2221,13 +2228,17 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html">torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html">torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OnPolicyTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.A2CTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.ReinforceTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.SACTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.OfflineToOnlineTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.DDPGTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.IQLTrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig.html">torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.HookConfig.html">torchrl.trainers.algorithms.configs.hooks.HookConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig.html">torchrl.trainers.algorithms.configs.hooks.BatchSubSamplerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig.html">torchrl.trainers.algorithms.configs.hooks.ClearCudaCacheConfig</a></li>
@@ -2238,12 +2249,15 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig.html">torchrl.trainers.algorithms.configs.hooks.RewardNormalizerConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig.html">torchrl.trainers.algorithms.configs.hooks.SelectKeysConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.LossConfig.html">torchrl.trainers.algorithms.configs.objectives.LossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.A2CLossConfig.html">torchrl.trainers.algorithms.configs.objectives.A2CLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.PPOLossConfig.html">torchrl.trainers.algorithms.configs.objectives.PPOLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig.html">torchrl.trainers.algorithms.configs.objectives.ReinforceLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.SACLossConfig.html">torchrl.trainers.algorithms.configs.objectives.SACLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.DQNLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DQNLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig.html">torchrl.trainers.algorithms.configs.objectives.DDPGLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.IQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.IQLLossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.CQLLossConfig.html">torchrl.trainers.algorithms.configs.objectives.CQLLossConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.TD3LossConfig.html">torchrl.trainers.algorithms.configs.objectives.TD3LossConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.GAEConfig.html">torchrl.trainers.algorithms.configs.objectives.GAEConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig.html">torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig.html">torchrl.trainers.algorithms.configs.objectives.SoftUpdateConfig</a></li>
@@ -2422,7 +2436,7 @@ document.write(`
 <h1>DdpgMlpActor<a class="headerlink" href="#ddpgmlpactor" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.DdpgMlpActor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">DdpgMlpActor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlp_net_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/models/models.html#DdpgMlpActor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.DdpgMlpActor" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.</span></span><span class="sig-name descname"><span class="pre">DdpgMlpActor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlp_net_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/models/models.html#DdpgMlpActor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.DdpgMlpActor" title="Link to this definition">#</a></dt>
 <dd><p>DDPG Actor class.</p>
 <p>Presented in “CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING”,
 <a class="reference external" href="https://arxiv.org/pdf/1509.02971.pdf">https://arxiv.org/pdf/1509.02971.pdf</a></p>
@@ -2445,7 +2459,7 @@ Defaults to</p>
 </pre></div>
 </div>
 </p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device to create the module on.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>torch.device</em></a><em>, </em><em>optional</em>) – device to create the module on.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2471,7 +2485,7 @@ Defaults to</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.modules.DdpgMlpActor.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/models/models.html#DdpgMlpActor.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.DdpgMlpActor.forward" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/models/models.html#DdpgMlpActor.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.DdpgMlpActor.forward" title="Link to this definition">#</a></dt>
 <dd><p>Define the computation performed at every call.</p>
 <p>Should be overridden by all subclasses.</p>
 <div class="admonition note">

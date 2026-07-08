@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.A2CLossConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: A2CLossConfig

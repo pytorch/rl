@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.TD3TrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: TD3TrainerConfig

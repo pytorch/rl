@@ -216,7 +216,7 @@ change the ``collate_fn`` since the default expects numerical data):
 
  .. code-block:: none
 
-    [0, 'a', 'b']
+    ['a', 'b', 0]
 
 
 
@@ -342,12 +342,12 @@ Let us sample from the buffer, and print the data:
     samples tensor([[ 4,  5,  6,  7],
             [ 4,  5,  6,  7],
             [ 4,  5,  6,  7],
-            [ 4,  5,  6,  7],
-            [ 8,  9, 10, 11]]) tensor([[ 5,  6,  7,  8,  9],
+            [ 8,  9, 10, 11],
+            [ 4,  5,  6,  7]]) tensor([[ 5,  6,  7,  8,  9],
             [ 5,  6,  7,  8,  9],
             [ 5,  6,  7,  8,  9],
-            [ 5,  6,  7,  8,  9],
-            [10, 11, 12, 13, 14]])
+            [10, 11, 12, 13, 14],
+            [ 5,  6,  7,  8,  9]])
 
 
 
@@ -390,17 +390,17 @@ We can also customize the storage location on disk:
  .. code-block:: none
 
     The buffer has 3 elements
-    the 'a' tensor is stored in /tmp/tmp1byp500z/a.memmap
-    the ('b', 'c') tensor is stored in /tmp/tmp1byp500z/b/c.memmap
-    samples: a= tensor([[ 4,  5,  6,  7],
-            [ 8,  9, 10, 11],
+    the 'a' tensor is stored in /tmp/tmplzof4dlw/a.memmap
+    the ('b', 'c') tensor is stored in /tmp/tmplzof4dlw/b/c.memmap
+    samples: a= tensor([[ 8,  9, 10, 11],
             [ 4,  5,  6,  7],
             [ 8,  9, 10, 11],
+            [ 0,  1,  2,  3],
             [ 0,  1,  2,  3]]) 
-    ('b', 'c'): tensor([[ 5,  6,  7,  8,  9],
-            [10, 11, 12, 13, 14],
+    ('b', 'c'): tensor([[10, 11, 12, 13, 14],
             [ 5,  6,  7,  8,  9],
             [10, 11, 12, 13, 14],
+            [ 0,  1,  2,  3,  4],
             [ 0,  1,  2,  3,  4]])
 
 
@@ -493,7 +493,7 @@ Let us have a look at these indices:
 
  .. code-block:: none
 
-    tensor([0, 0, 0, 0, 2, 2, 2, 0, 1, 1, 0, 0])
+    tensor([0, 0, 0, 2, 2, 2, 0, 1, 1, 0, 0, 0])
 
 
 
@@ -1790,10 +1790,10 @@ We mark the steps as well.
 
  .. code-block:: none
 
-    episode are grouped tensor([1, 1, 4, 4, 1, 1, 4, 4], dtype=torch.int32)
-    steps are successive tensor([0, 1, 1, 2, 1, 2, 0, 1])
+    episode are grouped tensor([4, 4, 1, 1, 4, 4, 3, 3], dtype=torch.int32)
+    steps are successive tensor([1, 2, 1, 2, 0, 1, 0, 1])
 
-    4627
+    4210
 
 
 
@@ -1888,7 +1888,7 @@ Next steps
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.857 seconds)
+   **Total running time of the script:** (0 minutes 0.849 seconds)
 
 
 .. _sphx_glr_download_tutorials_rb_tutorial.py:

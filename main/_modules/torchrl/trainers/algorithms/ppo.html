@@ -1484,35 +1484,12 @@ document.write(`
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">pathlib</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
-
-<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
-
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
-<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">optim</span>
-
-<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
-
-<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.replay_buffers</span> <span class="kn">import</span> <span class="n">ReplayBuffer</span>
-<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.samplers</span> <span class="kn">import</span> <span class="n">SamplerWithoutReplacement</span>
-<span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
-<span class="kn">from</span> <span class="nn">torchrl.objectives.value.advantages</span> <span class="kn">import</span> <span class="n">GAE</span>
-<span class="kn">from</span> <span class="nn">torchrl.record.loggers</span> <span class="kn">import</span> <span class="n">Logger</span>
-<span class="kn">from</span> <span class="nn">torchrl.trainers.trainers</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">LogScalar</span><span class="p">,</span>
-    <span class="n">ReplayBufferTrainer</span><span class="p">,</span>
-    <span class="n">Trainer</span><span class="p">,</span>
-    <span class="n">UpdateWeights</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.trainers.algorithms.on_policy</span> <span class="kn">import</span> <span class="n">OnPolicyTrainer</span>
 
 
 <div class="viewcode-block" id="PPOTrainer">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer">[docs]</a>
-<span class="k">class</span> <span class="nc">PPOTrainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">PPOTrainer</span><span class="p">(</span><span class="n">OnPolicyTrainer</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;PPO (Proximal Policy Optimization) trainer implementation.</span>
 
 <span class="sd">    See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the</span>
@@ -1523,69 +1500,19 @@ document.write(`
 <span class="sd">        Please report any issues or feedback to help improve this implementation.</span>
 
 <span class="sd">    This trainer implements the PPO algorithm for training reinforcement learning agents.</span>
-<span class="sd">    It extends the base Trainer class with PPO-specific functionality including</span>
-<span class="sd">    policy optimization, value function learning, and entropy regularization.</span>
+<span class="sd">    It extends :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` with PPO-specific</span>
+<span class="sd">    defaults; see that class for the full list of keyword arguments, covering</span>
+<span class="sd">    advantage estimation (GAE), replay-buffer wiring, collector weight</span>
+<span class="sd">    synchronization and logging.</span>
 
 <span class="sd">    PPO typically uses multiple epochs of optimization on the same batch of data.</span>
 <span class="sd">    This trainer defaults to 4 epochs, which is a common choice for PPO implementations.</span>
-
-<span class="sd">    The trainer includes comprehensive logging capabilities for monitoring training progress:</span>
-<span class="sd">    - Training rewards (mean, std, max, total)</span>
-<span class="sd">    - Action statistics (norms)</span>
-<span class="sd">    - Episode completion rates</span>
-<span class="sd">    - Observation statistics (optional)</span>
-
-<span class="sd">    Logging can be configured via constructor parameters to enable/disable specific metrics.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        collector (BaseCollector): The data collector for gathering training data.</span>
-<span class="sd">        total_frames (int): Total number of frames to train for.</span>
-<span class="sd">        frame_skip (int): Frame skip value for the environment.</span>
-<span class="sd">        optim_steps_per_batch (int): Number of optimization steps per batch.</span>
-<span class="sd">        loss_module (LossModule): The loss module for computing policy and value losses.</span>
-<span class="sd">        optimizer (optim.Optimizer, optional): The optimizer for training.</span>
-<span class="sd">        logger (Logger, optional): Logger for tracking training metrics.</span>
-<span class="sd">        clip_grad_norm (bool, optional): Whether to clip gradient norms. Default: True.</span>
-<span class="sd">        clip_norm (float, optional): Maximum gradient norm value.</span>
-<span class="sd">        progress_bar (bool, optional): Whether to show a progress bar. Default: True.</span>
-<span class="sd">        seed (int, optional): Random seed for reproducibility.</span>
-<span class="sd">        save_trainer_interval (int, optional): Interval for saving trainer state. Default: 10000.</span>
-<span class="sd">        log_interval (int, optional): Interval for logging metrics. Default: 10000.</span>
-<span class="sd">        save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state.</span>
-<span class="sd">        num_epochs (int, optional): Number of epochs per batch. Default: 4.</span>
-<span class="sd">        replay_buffer (ReplayBuffer, optional): Replay buffer for storing data.</span>
-<span class="sd">        batch_size (int, optional): Batch size for optimization.</span>
-<span class="sd">        gamma (float, optional): Discount factor for GAE. Default: 0.9.</span>
-<span class="sd">        lmbda (float, optional): Lambda parameter for GAE. Default: 0.99.</span>
-<span class="sd">        enable_logging (bool, optional): Whether to enable logging. Default: True.</span>
-<span class="sd">        log_rewards (bool, optional): Whether to log rewards. Default: True.</span>
-<span class="sd">        log_actions (bool, optional): Whether to log actions. Default: True.</span>
-<span class="sd">        log_observations (bool, optional): Whether to log observations. Default: False.</span>
-<span class="sd">        async_collection (bool, optional): Whether to use async collection. Default: False.</span>
-<span class="sd">        add_gae (bool, optional): Whether to add GAE computation. Default: True.</span>
-<span class="sd">        gae (Callable, optional): Custom GAE module. If None and add_gae is True, a default GAE will be created.</span>
-<span class="sd">        weight_update_map (dict[str, str], optional): Mapping from collector destination paths (keys in</span>
-<span class="sd">            collector&#39;s weight_sync_schemes) to trainer source paths. Required if collector has</span>
-<span class="sd">            weight_sync_schemes configured. Example: {&quot;policy&quot;: &quot;loss_module.actor_network&quot;,</span>
-<span class="sd">            &quot;replay_buffer.transforms[0]&quot;: &quot;loss_module.critic_network&quot;}</span>
-<span class="sd">        log_timings (bool, optional): If True, automatically register a LogTiming hook to log</span>
-<span class="sd">            timing information for all hooks to the logger (e.g., wandb, tensorboard).</span>
-<span class="sd">            Timing metrics will be logged with prefix &quot;time/&quot; (e.g., &quot;time/hook/UpdateWeights&quot;).</span>
-<span class="sd">            Default is False.</span>
-<span class="sd">        done_key (NestedKey, optional): Done key used by GAE, losses, and logging. Default: &quot;done&quot;.</span>
-<span class="sd">        terminated_key (NestedKey, optional): Terminated key used by GAE, losses, and logging.</span>
-<span class="sd">            Default: &quot;terminated&quot;.</span>
-<span class="sd">        reward_key (NestedKey, optional): Reward key used by GAE, losses, and logging. Default: &quot;reward&quot;.</span>
-<span class="sd">        episode_reward_key (NestedKey, optional): Episode reward key used for cumulative reward logging.</span>
-<span class="sd">            Default: &quot;reward&quot;.</span>
-<span class="sd">        action_key (NestedKey, optional): Action key used by losses and logging. Default: &quot;action&quot;.</span>
-<span class="sd">        observation_key (NestedKey, optional): Observation key used for logging. Default: &quot;observation&quot;.</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; # Basic usage with manual configuration</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.trainers.algorithms.ppo import PPOTrainer</span>
 <span class="sd">        &gt;&gt;&gt; from torchrl.trainers.algorithms.configs import PPOTrainerConfig</span>
-<span class="sd">        &gt;&gt;&gt; from hydra import instantiate</span>
+<span class="sd">        &gt;&gt;&gt; from hydra.utils import instantiate</span>
 <span class="sd">        &gt;&gt;&gt; config = PPOTrainerConfig(...)  # Configure with required parameters</span>
 <span class="sd">        &gt;&gt;&gt; trainer = instantiate(config)</span>
 <span class="sd">        &gt;&gt;&gt; trainer.train()</span>
@@ -1593,293 +1520,10 @@ document.write(`
 <span class="sd">    .. note::</span>
 <span class="sd">        This trainer requires a configurable environment setup. See the</span>
 <span class="sd">        :class:`~torchrl.trainers.algorithms.configs` module for configuration options.</span>
-
-<span class="sd">    .. warning::</span>
-<span class="sd">        This is an experimental feature. The API may change in future versions.</span>
-<span class="sd">        We welcome feedback and contributions to help improve this implementation!</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">collector</span><span class="p">:</span> <span class="n">BaseCollector</span><span class="p">,</span>
-        <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">frame_skip</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">optim_steps_per_batch</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">loss_module</span><span class="p">:</span> <span class="n">LossModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">],</span>
-        <span class="n">optimizer</span><span class="p">:</span> <span class="n">optim</span><span class="o">.</span><span class="n">Optimizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">clip_grad_norm</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">clip_norm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">progress_bar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">save_trainer_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
-        <span class="n">log_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10000</span><span class="p">,</span>
-        <span class="n">save_trainer_file</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">num_epochs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
-        <span class="n">replay_buffer</span><span class="p">:</span> <span class="n">ReplayBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.99</span><span class="p">,</span>
-        <span class="n">lmbda</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.95</span><span class="p">,</span>
-        <span class="n">enable_logging</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">log_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">log_actions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">log_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">add_gae</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">gae</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">weight_update_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">log_timings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">auto_log_optim_steps</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span><span class="p">,</span>
-        <span class="n">terminated_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span>
-        <span class="n">reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
-        <span class="n">episode_reward_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
-        <span class="n">action_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span><span class="p">,</span>
-        <span class="n">observation_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;observation&quot;</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;PPOTrainer is an experimental/prototype feature. The API may change in future versions. &quot;</span>
-            <span class="s2">&quot;Please report any issues or feedback to help improve this implementation.&quot;</span><span class="p">,</span>
-            <span class="ne">UserWarning</span><span class="p">,</span>
-            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-            <span class="n">collector</span><span class="o">=</span><span class="n">collector</span><span class="p">,</span>
-            <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
-            <span class="n">frame_skip</span><span class="o">=</span><span class="n">frame_skip</span><span class="p">,</span>
-            <span class="n">optim_steps_per_batch</span><span class="o">=</span><span class="n">optim_steps_per_batch</span><span class="p">,</span>
-            <span class="n">loss_module</span><span class="o">=</span><span class="n">loss_module</span><span class="p">,</span>
-            <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
-            <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
-            <span class="n">clip_grad_norm</span><span class="o">=</span><span class="n">clip_grad_norm</span><span class="p">,</span>
-            <span class="n">clip_norm</span><span class="o">=</span><span class="n">clip_norm</span><span class="p">,</span>
-            <span class="n">progress_bar</span><span class="o">=</span><span class="n">progress_bar</span><span class="p">,</span>
-            <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
-            <span class="n">save_trainer_interval</span><span class="o">=</span><span class="n">save_trainer_interval</span><span class="p">,</span>
-            <span class="n">log_interval</span><span class="o">=</span><span class="n">log_interval</span><span class="p">,</span>
-            <span class="n">save_trainer_file</span><span class="o">=</span><span class="n">save_trainer_file</span><span class="p">,</span>
-            <span class="n">num_epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span>
-            <span class="n">async_collection</span><span class="o">=</span><span class="n">async_collection</span><span class="p">,</span>
-            <span class="n">log_timings</span><span class="o">=</span><span class="n">log_timings</span><span class="p">,</span>
-            <span class="n">auto_log_optim_steps</span><span class="o">=</span><span class="n">auto_log_optim_steps</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="n">async_collection</span>
-
-        <span class="k">if</span> <span class="n">add_gae</span> <span class="ow">and</span> <span class="n">gae</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">gae</span> <span class="o">=</span> <span class="n">GAE</span><span class="p">(</span>
-                <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
-                <span class="n">lmbda</span><span class="o">=</span><span class="n">lmbda</span><span class="p">,</span>
-                <span class="n">value_network</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">critic_network</span><span class="p">,</span>
-                <span class="n">average_gae</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="n">add_gae</span> <span class="ow">and</span> <span class="n">gae</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;gae must not be provided if add_gae is False&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">add_gae</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">gae</span><span class="p">,</span> <span class="s2">&quot;set_keys&quot;</span><span class="p">):</span>
-                <span class="n">gae</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
-                    <span class="n">reward</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
-                    <span class="n">done</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
-                    <span class="n">terminated</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span> <span class="n">gae</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="p">,</span> <span class="s2">&quot;set_keys&quot;</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
-                <span class="n">reward</span><span class="o">=</span><span class="n">reward_key</span><span class="p">,</span>
-                <span class="n">done</span><span class="o">=</span><span class="n">done_key</span><span class="p">,</span>
-                <span class="n">terminated</span><span class="o">=</span><span class="n">terminated_key</span><span class="p">,</span>
-                <span class="n">action</span><span class="o">=</span><span class="n">action_key</span><span class="p">,</span>
-            <span class="p">)</span>
-
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span>
-            <span class="ow">and</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">sampler</span><span class="p">,</span> <span class="n">SamplerWithoutReplacement</span><span class="p">)</span>
-        <span class="p">):</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;Sampler is not a SamplerWithoutReplacement, which is required for PPO.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">rb_trainer</span> <span class="o">=</span> <span class="n">ReplayBufferTrainer</span><span class="p">(</span>
-                <span class="n">replay_buffer</span><span class="p">,</span>
-                <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">flatten_tensordicts</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">memmap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">),</span>
-                <span class="n">iterate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-                <span class="c1"># rb has been extended by the collector</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_epoch&quot;</span><span class="p">,</span> <span class="n">rb_trainer</span><span class="o">.</span><span class="n">extend</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;process_optim_batch&quot;</span><span class="p">,</span> <span class="n">rb_trainer</span><span class="o">.</span><span class="n">sample</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_loss&quot;</span><span class="p">,</span> <span class="n">rb_trainer</span><span class="o">.</span><span class="n">update_priority</span><span class="p">)</span>
-
-        <span class="c1"># Set up weight updates</span>
-        <span class="c1"># Validate weight_update_map if collector has weight_sync_schemes</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="s2">&quot;_weight_sync_schemes&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span>
-        <span class="p">):</span>
-            <span class="k">if</span> <span class="n">weight_update_map</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Collector has weight_sync_schemes configured, but weight_update_map was not provided. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;Please provide a mapping for all destinations: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-
-            <span class="c1"># Validate that all scheme destinations are covered in the map</span>
-            <span class="n">scheme_destinations</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-            <span class="n">map_destinations</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">weight_update_map</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-
-            <span class="k">if</span> <span class="n">scheme_destinations</span> <span class="o">!=</span> <span class="n">map_destinations</span><span class="p">:</span>
-                <span class="n">missing</span> <span class="o">=</span> <span class="n">scheme_destinations</span> <span class="o">-</span> <span class="n">map_destinations</span>
-                <span class="n">extra</span> <span class="o">=</span> <span class="n">map_destinations</span> <span class="o">-</span> <span class="n">scheme_destinations</span>
-                <span class="n">error_msg</span> <span class="o">=</span> <span class="s2">&quot;weight_update_map does not match collector&#39;s weight_sync_schemes.</span><span class="se">\n</span><span class="s2">&quot;</span>
-                <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
-                    <span class="n">error_msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;  Missing destinations: </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
-                <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
-                    <span class="n">error_msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;  Extra destinations: </span><span class="si">{</span><span class="n">extra</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
-
-            <span class="c1"># Use the weight_update_map approach</span>
-            <span class="n">update_weights</span> <span class="o">=</span> <span class="n">UpdateWeights</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span>
-                <span class="mi">1</span><span class="p">,</span>
-                <span class="n">weight_update_map</span><span class="o">=</span><span class="n">weight_update_map</span><span class="p">,</span>
-                <span class="n">trainer</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Fall back to legacy approach for backward compatibility</span>
-            <span class="k">if</span> <span class="n">weight_update_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;weight_update_map was provided but collector has no weight_sync_schemes. &quot;</span>
-                    <span class="s2">&quot;Ignoring weight_update_map and using legacy policy_weights_getter.&quot;</span><span class="p">,</span>
-                    <span class="ne">UserWarning</span><span class="p">,</span>
-                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-                <span class="p">)</span>
-
-            <span class="n">policy_weights_getter</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span>
-                <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_module</span><span class="o">.</span><span class="n">actor_network</span>
-            <span class="p">)</span>
-            <span class="n">update_weights</span> <span class="o">=</span> <span class="n">UpdateWeights</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">collector</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">policy_weights_getter</span><span class="o">=</span><span class="n">policy_weights_getter</span>
-            <span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_steps&quot;</span><span class="p">,</span> <span class="n">update_weights</span><span class="p">)</span>
-
-        <span class="c1"># Store logging configuration</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span> <span class="o">=</span> <span class="n">enable_logging</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span> <span class="o">=</span> <span class="n">log_rewards</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">log_actions</span> <span class="o">=</span> <span class="n">log_actions</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span> <span class="o">=</span> <span class="n">log_observations</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">terminated_key</span> <span class="o">=</span> <span class="n">terminated_key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span> <span class="o">=</span> <span class="n">reward_key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span> <span class="o">=</span> <span class="n">episode_reward_key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">action_key</span> <span class="o">=</span> <span class="n">action_key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span> <span class="o">=</span> <span class="n">observation_key</span>
-
-        <span class="c1"># Set up comprehensive logging for PPO training</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_logging</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_setup_ppo_logging</span><span class="p">()</span>
-
-    <span class="k">def</span> <span class="nf">_setup_ppo_logging</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set up logging hooks for PPO-specific metrics.</span>
-
-<span class="sd">        This method configures logging for common PPO metrics including:</span>
-<span class="sd">        - Training rewards (mean and std)</span>
-<span class="sd">        - Action statistics (norms, entropy)</span>
-<span class="sd">        - Episode completion rates</span>
-<span class="sd">        - Value function statistics</span>
-<span class="sd">        - Advantage statistics</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Always log done states as percentage (episode completion rate)</span>
-        <span class="n">log_done_percentage</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-            <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">),</span>
-            <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;done_percentage&quot;</span><span class="p">,</span>
-            <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># No std for binary values</span>
-            <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_done_percentage</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_done_percentage</span><span class="p">)</span>
-
-        <span class="c1"># Log rewards if enabled</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_rewards</span><span class="p">:</span>
-            <span class="c1"># 1. Log training rewards (most important metric for PPO)</span>
-            <span class="n">log_rewards</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">),</span>
-                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_training&quot;</span><span class="p">,</span>
-                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Show in progress bar</span>
-                <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_rewards</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_rewards</span><span class="p">)</span>
-
-            <span class="c1"># 2. Log maximum reward in batch (for monitoring best performance)</span>
-            <span class="n">log_max_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_key</span><span class="p">),</span>
-                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_max&quot;</span><span class="p">,</span>
-                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;max&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_max_reward</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_max_reward</span><span class="p">)</span>
-
-            <span class="c1"># 3. Log total reward in batch (for monitoring cumulative performance)</span>
-            <span class="n">log_total_reward</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">episode_reward_key</span><span class="p">),</span>
-                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;r_total&quot;</span><span class="p">,</span>
-                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">include_std</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_total_reward</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_total_reward</span><span class="p">)</span>
-
-        <span class="c1"># Log actions if enabled</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_actions</span><span class="p">:</span>
-            <span class="c1"># 4. Log action norms (useful for monitoring policy behavior)</span>
-            <span class="n">log_action_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">action_key</span><span class="p">,</span>
-                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;action_norm&quot;</span><span class="p">,</span>
-                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_action_norm</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_action_norm</span><span class="p">)</span>
-
-        <span class="c1"># Log observations if enabled</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_observations</span><span class="p">:</span>
-            <span class="c1"># 5. Log observation statistics (for monitoring state distributions)</span>
-            <span class="n">log_obs_norm</span> <span class="o">=</span> <span class="n">LogScalar</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_key</span><span class="p">,</span>
-                <span class="n">logname</span><span class="o">=</span><span class="s2">&quot;obs_norm&quot;</span><span class="p">,</span>
-                <span class="n">log_pbar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                <span class="n">include_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;pre_steps_log&quot;</span><span class="p">,</span> <span class="n">log_obs_norm</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_op</span><span class="p">(</span><span class="s2">&quot;post_optim_log&quot;</span><span class="p">,</span> <span class="n">log_obs_norm</span><span class="p">)</span></div>
+    <span class="n">_algo_name</span> <span class="o">=</span> <span class="s2">&quot;PPO&quot;</span>
+    <span class="n">_default_num_epochs</span> <span class="o">=</span> <span class="mi">4</span></div>
 
 </pre></div>
 
@@ -2143,7 +1787,7 @@ document.write(`
        "headline": "torchrl.trainers.algorithms.ppo",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/trainers/algorithms/ppo.html",
-       "articleBody": "Source code for torchrl.trainers.algorithms.ppo # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import pathlib import warnings from collections.abc import Callable from functools import partial from tensordict import TensorDict, TensorDictBase from tensordict.utils import NestedKey from torch import optim from torchrl.collectors import BaseCollector from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement from torchrl.objectives.common import LossModule from torchrl.objectives.value.advantages import GAE from torchrl.record.loggers import Logger from torchrl.trainers.trainers import ( LogScalar, ReplayBufferTrainer, Trainer, UpdateWeights, ) [docs] class PPOTrainer(Trainer): \"\"\"PPO (Proximal Policy Optimization) trainer implementation. See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the Hydra configuration counterpart. .. warning:: This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the PPO algorithm for training reinforcement learning agents. It extends the base Trainer class with PPO-specific functionality including policy optimization, value function learning, and entropy regularization. PPO typically uses multiple epochs of optimization on the same batch of data. This trainer defaults to 4 epochs, which is a common choice for PPO implementations. The trainer includes comprehensive logging capabilities for monitoring training progress: - Training rewards (mean, std, max, total) - Action statistics (norms) - Episode completion rates - Observation statistics (optional) Logging can be configured via constructor parameters to enable/disable specific metrics. Args: collector (BaseCollector): The data collector for gathering training data. total_frames (int): Total number of frames to train for. frame_skip (int): Frame skip value for the environment. optim_steps_per_batch (int): Number of optimization steps per batch. loss_module (LossModule): The loss module for computing policy and value losses. optimizer (optim.Optimizer, optional): The optimizer for training. logger (Logger, optional): Logger for tracking training metrics. clip_grad_norm (bool, optional): Whether to clip gradient norms. Default: True. clip_norm (float, optional): Maximum gradient norm value. progress_bar (bool, optional): Whether to show a progress bar. Default: True. seed (int, optional): Random seed for reproducibility. save_trainer_interval (int, optional): Interval for saving trainer state. Default: 10000. log_interval (int, optional): Interval for logging metrics. Default: 10000. save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. num_epochs (int, optional): Number of epochs per batch. Default: 4. replay_buffer (ReplayBuffer, optional): Replay buffer for storing data. batch_size (int, optional): Batch size for optimization. gamma (float, optional): Discount factor for GAE. Default: 0.9. lmbda (float, optional): Lambda parameter for GAE. Default: 0.99. enable_logging (bool, optional): Whether to enable logging. Default: True. log_rewards (bool, optional): Whether to log rewards. Default: True. log_actions (bool, optional): Whether to log actions. Default: True. log_observations (bool, optional): Whether to log observations. Default: False. async_collection (bool, optional): Whether to use async collection. Default: False. add_gae (bool, optional): Whether to add GAE computation. Default: True. gae (Callable, optional): Custom GAE module. If None and add_gae is True, a default GAE will be created. weight_update_map (dict[str, str], optional): Mapping from collector destination paths (keys in collector\u0027s weight_sync_schemes) to trainer source paths. Required if collector has weight_sync_schemes configured. Example: {\"policy\": \"loss_module.actor_network\", \"replay_buffer.transforms[0]\": \"loss_module.critic_network\"} log_timings (bool, optional): If True, automatically register a LogTiming hook to log timing information for all hooks to the logger (e.g., wandb, tensorboard). Timing metrics will be logged with prefix \"time/\" (e.g., \"time/hook/UpdateWeights\"). Default is False. done_key (NestedKey, optional): Done key used by GAE, losses, and logging. Default: \"done\". terminated_key (NestedKey, optional): Terminated key used by GAE, losses, and logging. Default: \"terminated\". reward_key (NestedKey, optional): Reward key used by GAE, losses, and logging. Default: \"reward\". episode_reward_key (NestedKey, optional): Episode reward key used for cumulative reward logging. Default: \"reward\". action_key (NestedKey, optional): Action key used by losses and logging. Default: \"action\". observation_key (NestedKey, optional): Observation key used for logging. Default: \"observation\". Examples: \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.ppo import PPOTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import PPOTrainerConfig \u003e\u003e\u003e from hydra import instantiate \u003e\u003e\u003e config = PPOTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() .. note:: This trainer requires a configurable environment setup. See the :class:`~torchrl.trainers.algorithms.configs` module for configuration options. .. warning:: This is an experimental feature. The API may change in future versions. We welcome feedback and contributions to help improve this implementation! \"\"\" def __init__( self, *, collector: BaseCollector, total_frames: int, frame_skip: int, optim_steps_per_batch: int, loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase], optimizer: optim.Optimizer | None = None, logger: Logger | None = None, clip_grad_norm: bool = True, clip_norm: float | None = None, progress_bar: bool = True, seed: int | None = None, save_trainer_interval: int = 10000, log_interval: int = 10000, save_trainer_file: str | pathlib.Path | None = None, num_epochs: int = 4, replay_buffer: ReplayBuffer | None = None, batch_size: int | None = None, gamma: float = 0.99, lmbda: float = 0.95, enable_logging: bool = True, log_rewards: bool = True, log_actions: bool = True, log_observations: bool = False, async_collection: bool = False, add_gae: bool = True, gae: Callable[[TensorDictBase], TensorDictBase] | None = None, weight_update_map: dict[str, str] | None = None, log_timings: bool = False, auto_log_optim_steps: bool = True, done_key: NestedKey = \"done\", terminated_key: NestedKey = \"terminated\", reward_key: NestedKey = \"reward\", episode_reward_key: NestedKey = \"reward\", action_key: NestedKey = \"action\", observation_key: NestedKey = \"observation\", ) -\u003e None: warnings.warn( \"PPOTrainer is an experimental/prototype feature. The API may change in future versions. \" \"Please report any issues or feedback to help improve this implementation.\", UserWarning, stacklevel=2, ) super().__init__( collector=collector, total_frames=total_frames, frame_skip=frame_skip, optim_steps_per_batch=optim_steps_per_batch, loss_module=loss_module, optimizer=optimizer, logger=logger, clip_grad_norm=clip_grad_norm, clip_norm=clip_norm, progress_bar=progress_bar, seed=seed, save_trainer_interval=save_trainer_interval, log_interval=log_interval, save_trainer_file=save_trainer_file, num_epochs=num_epochs, async_collection=async_collection, log_timings=log_timings, auto_log_optim_steps=auto_log_optim_steps, ) self.replay_buffer = replay_buffer self.async_collection = async_collection if add_gae and gae is None: gae = GAE( gamma=gamma, lmbda=lmbda, value_network=self.loss_module.critic_network, average_gae=True, ) elif not add_gae and gae is not None: raise ValueError(\"gae must not be provided if add_gae is False\") if add_gae: if hasattr(gae, \"set_keys\"): gae.set_keys( reward=reward_key, done=done_key, terminated=terminated_key, ) self.register_op(\"pre_epoch\", gae) if hasattr(self.loss_module, \"set_keys\"): self.loss_module.set_keys( reward=reward_key, done=done_key, terminated=terminated_key, action=action_key, ) if ( not self.async_collection and replay_buffer is not None and not isinstance(replay_buffer.sampler, SamplerWithoutReplacement) ): warnings.warn( \"Sampler is not a SamplerWithoutReplacement, which is required for PPO.\" ) if replay_buffer is not None: rb_trainer = ReplayBufferTrainer( replay_buffer, batch_size=None, flatten_tensordicts=True, memmap=False, device=getattr(replay_buffer.storage, \"device\", \"cpu\"), iterate=True, ) if not self.async_collection: # rb has been extended by the collector self.register_op(\"pre_epoch\", rb_trainer.extend) self.register_op(\"process_optim_batch\", rb_trainer.sample) self.register_op(\"post_loss\", rb_trainer.update_priority) # Set up weight updates # Validate weight_update_map if collector has weight_sync_schemes if ( hasattr(self.collector, \"_weight_sync_schemes\") and self.collector._weight_sync_schemes ): if weight_update_map is None: raise ValueError( \"Collector has weight_sync_schemes configured, but weight_update_map was not provided. \" f\"Please provide a mapping for all destinations: {list(self.collector._weight_sync_schemes.keys())}\" ) # Validate that all scheme destinations are covered in the map scheme_destinations = set(self.collector._weight_sync_schemes.keys()) map_destinations = set(weight_update_map.keys()) if scheme_destinations != map_destinations: missing = scheme_destinations - map_destinations extra = map_destinations - scheme_destinations error_msg = \"weight_update_map does not match collector\u0027s weight_sync_schemes.\\n\" if missing: error_msg += f\" Missing destinations: {missing}\\n\" if extra: error_msg += f\" Extra destinations: {extra}\\n\" raise ValueError(error_msg) # Use the weight_update_map approach update_weights = UpdateWeights( self.collector, 1, weight_update_map=weight_update_map, trainer=self, ) else: # Fall back to legacy approach for backward compatibility if weight_update_map is not None: warnings.warn( \"weight_update_map was provided but collector has no weight_sync_schemes. \" \"Ignoring weight_update_map and using legacy policy_weights_getter.\", UserWarning, stacklevel=2, ) policy_weights_getter = partial( TensorDict.from_module, self.loss_module.actor_network ) update_weights = UpdateWeights( self.collector, 1, policy_weights_getter=policy_weights_getter ) self.register_op(\"post_steps\", update_weights) # Store logging configuration self.enable_logging = enable_logging self.log_rewards = log_rewards self.log_actions = log_actions self.log_observations = log_observations self.done_key = done_key self.terminated_key = terminated_key self.reward_key = reward_key self.episode_reward_key = episode_reward_key self.action_key = action_key self.observation_key = observation_key # Set up comprehensive logging for PPO training if self.enable_logging: self._setup_ppo_logging() def _setup_ppo_logging(self): \"\"\"Set up logging hooks for PPO-specific metrics. This method configures logging for common PPO metrics including: - Training rewards (mean and std) - Action statistics (norms, entropy) - Episode completion rates - Value function statistics - Advantage statistics \"\"\" # Always log done states as percentage (episode completion rate) log_done_percentage = LogScalar( key=(\"next\", self.done_key), logname=\"done_percentage\", log_pbar=True, include_std=False, # No std for binary values reduction=\"mean\", ) if not self.async_collection: self.register_op(\"pre_steps_log\", log_done_percentage) else: self.register_op(\"post_optim_log\", log_done_percentage) # Log rewards if enabled if self.log_rewards: # 1. Log training rewards (most important metric for PPO) log_rewards = LogScalar( key=(\"next\", self.reward_key), logname=\"r_training\", log_pbar=True, # Show in progress bar include_std=True, reduction=\"mean\", ) if not self.async_collection: self.register_op(\"pre_steps_log\", log_rewards) else: self.register_op(\"post_optim_log\", log_rewards) # 2. Log maximum reward in batch (for monitoring best performance) log_max_reward = LogScalar( key=(\"next\", self.reward_key), logname=\"r_max\", log_pbar=False, include_std=False, reduction=\"max\", ) if not self.async_collection: self.register_op(\"pre_steps_log\", log_max_reward) else: self.register_op(\"post_optim_log\", log_max_reward) # 3. Log total reward in batch (for monitoring cumulative performance) log_total_reward = LogScalar( key=(\"next\", self.episode_reward_key), logname=\"r_total\", log_pbar=False, include_std=False, reduction=\"sum\", ) if not self.async_collection: self.register_op(\"pre_steps_log\", log_total_reward) else: self.register_op(\"post_optim_log\", log_total_reward) # Log actions if enabled if self.log_actions: # 4. Log action norms (useful for monitoring policy behavior) log_action_norm = LogScalar( key=self.action_key, logname=\"action_norm\", log_pbar=False, include_std=True, reduction=\"mean\", ) if not self.async_collection: self.register_op(\"pre_steps_log\", log_action_norm) else: self.register_op(\"post_optim_log\", log_action_norm) # Log observations if enabled if self.log_observations: # 5. Log observation statistics (for monitoring state distributions) log_obs_norm = LogScalar( key=self.observation_key, logname=\"obs_norm\", log_pbar=False, include_std=True, reduction=\"mean\", ) if not self.async_collection: self.register_op(\"pre_steps_log\", log_obs_norm) else: self.register_op(\"post_optim_log\", log_obs_norm)",
+       "articleBody": "Source code for torchrl.trainers.algorithms.ppo # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from torchrl.trainers.algorithms.on_policy import OnPolicyTrainer [docs] class PPOTrainer(OnPolicyTrainer): \"\"\"PPO (Proximal Policy Optimization) trainer implementation. See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the Hydra configuration counterpart. .. warning:: This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the PPO algorithm for training reinforcement learning agents. It extends :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` with PPO-specific defaults; see that class for the full list of keyword arguments, covering advantage estimation (GAE), replay-buffer wiring, collector weight synchronization and logging. PPO typically uses multiple epochs of optimization on the same batch of data. This trainer defaults to 4 epochs, which is a common choice for PPO implementations. Examples: \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.ppo import PPOTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import PPOTrainerConfig \u003e\u003e\u003e from hydra.utils import instantiate \u003e\u003e\u003e config = PPOTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() .. note:: This trainer requires a configurable environment setup. See the :class:`~torchrl.trainers.algorithms.configs` module for configuration options. \"\"\" _algo_name = \"PPO\" _default_num_epochs = 4",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
