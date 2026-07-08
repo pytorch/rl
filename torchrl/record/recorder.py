@@ -93,6 +93,17 @@ class VideoRecorder(ObservationTransform):
 
         >>> env.transform.dump()
 
+    .. note::
+        When recording a batched env (:class:`~torchrl.envs.SerialEnv` or
+        :class:`~torchrl.envs.ParallelEnv`), attach the recorder to the
+        *outer* env, e.g.
+        ``TransformedEnv(ParallelEnv(N, make_env), VideoRecorder(...))``,
+        so that the batch is tiled into a single grid video
+        (``make_grid=True``). Recorders living inside the worker envs of a
+        batched env are not reached by ``dump`` calls issued on the outer
+        env or by collectors and evaluators, and would accumulate frames
+        indefinitely.
+
         The transform can also be used within a dataset to save the video collected. Unlike in the environment case,
         images will come in a batch. The ``skip`` argument will enable to save the images only at specific intervals.
 

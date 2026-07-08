@@ -159,10 +159,14 @@ class Evaluator:
     **Eval video logging**: when the eval env contains a
     :class:`~torchrl.record.VideoRecorder`, each evaluation ends with a
     ``dump(step=...)`` on the env transforms of the collector that ran
-    the rollout (disable with ``dump_video=False``).  With
-    ``backend="process"`` the recorder lives inside the collector worker,
-    so build it in the env factory around a picklable logger client such
-    as :meth:`ProcessLogger.client()
+    the rollout (disable with ``dump_video=False``).  The recorder must
+    be attached to the *outermost* env: recorders nested inside the
+    worker envs of a :class:`~torchrl.envs.SerialEnv` /
+    :class:`~torchrl.envs.ParallelEnv` are not reached by the dump and
+    would accumulate frames indefinitely.  With ``backend="process"``
+    the recorder lives inside the collector worker, so build it in the
+    env factory around a picklable logger client such as
+    :meth:`ProcessLogger.client()
     <torchrl.record.loggers.process.ProcessLogger.client>`::
 
         from torchrl.record import VideoRecorder
