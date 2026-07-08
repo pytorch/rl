@@ -8,6 +8,7 @@ import argparse
 import importlib.util
 import json
 import socket
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -30,6 +31,7 @@ from torchrl.render import (
     load_checkpoint,
     load_render_policy,
     make_render_env,
+    MujocoStateReader,
     parse_nested_key,
     play_mujoco_wasm_trajectory,
     render_policy,
@@ -133,6 +135,19 @@ class TinyRenderEnv(EnvBase):
 
     def render(self):
         return np.full((4, 4, 3), self._count, dtype=np.uint8)
+
+    def get_state(self):
+        return TensorDict(
+            {
+                "qpos": torch.tensor(
+                    [float(self._count), float(self._count + 1)], device=self.device
+                ),
+                "qvel": torch.zeros(2, device=self.device),
+                "time": torch.tensor(float(self._count), device=self.device),
+            },
+            batch_size=[],
+            device=self.device,
+        )
 
     def _pixels(self):
         return torch.full((4, 4, 3), self._count, dtype=torch.uint8, device=self.device)
@@ -286,6 +301,23 @@ class TestRenderPolicy:
 
 
 class TestRenderRollouts:
+    def test_mujoco_state_reader(self):
+        env = SimpleNamespace(
+            data=SimpleNamespace(
+                qpos=np.array([0.0, 1.0]),
+                qvel=np.array([0.5, 0.0]),
+                ctrl=np.array([], dtype=np.float64),
+                time=0.25,
+            )
+        )
+        reader = MujocoStateReader()
+        assert reader.supports(env)
+        state = reader.capture(env)
+        assert torch.equal(state["qpos"], torch.tensor([0.0, 1.0]))
+        assert torch.equal(state["qvel"], torch.tensor([0.5, 0.0]))
+        assert "ctrl" not in state.keys()
+        assert state["time"] == 0.25
+
     def test_make_env_policy_and_collect_rollouts(self, tmp_path):
         ckpt = tmp_path / "policy.pt"
         policy = ZeroPolicy()
@@ -312,6 +344,31 @@ class TestRenderRollouts:
         assert "count" in result.trajectories[0].keys()
         assert "pixels" not in result.trajectories[0].keys(True)
         assert ("next", "pixels") not in result.trajectories[0].keys(True)
+
+    @pytest.mark.parametrize(
+        ("qpos_key", "expected"),
+        [
+            (("simulator", "qpos"), [[0.0, 1.0], [1.0, 2.0]]),
+            (("next", "simulator", "qpos"), [[1.0, 2.0], [2.0, 3.0]]),
+        ],
+    )
+    def test_collect_rollouts_mujoco_state(self, tmp_path, qpos_key, expected):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=5,
+            format="npz",
+            render_backend="null",
+            mujoco_qpos_key=qpos_key,
+            auto_load_policy=False,
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        assert result.trajectories[0].get(qpos_key).tolist() == expected
 
 
 class TestRenderArtifacts:
