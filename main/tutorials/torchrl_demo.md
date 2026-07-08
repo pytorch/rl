@@ -469,11 +469,11 @@ collector.shutdown()
 ```
 
 ```
-Collected batch: torch.Size([200]), reward: -8.68
-Collected batch: torch.Size([200]), reward: -8.09
-Collected batch: torch.Size([200]), reward: -8.60
-Collected batch: torch.Size([200]), reward: -8.75
-Collected batch: torch.Size([200]), reward: -8.25
+Collected batch: torch.Size([200]), reward: -9.29
+Collected batch: torch.Size([200]), reward: -8.40
+Collected batch: torch.Size([200]), reward: -8.78
+Collected batch: torch.Size([200]), reward: -7.95
+Collected batch: torch.Size([200]), reward: -8.52
 ```
 
 For async collection (useful when training takes longer than collecting),
@@ -524,7 +524,7 @@ print("Prioritized sample indices:", info["index"][:5], "...") # First 5 indices
 ```
 
 ```
-Prioritized sample indices: tensor([94, 89, 8, 74, 19]) ...
+Prioritized sample indices: tensor([34, 2, 56, 60, 40]) ...
 ```
 
 ## Loss Functions
@@ -645,10 +645,10 @@ env.close()
 ```
 
 ```
-Step 0: loss=1.009
-Step 5: loss=0.657
-Step 10: loss=0.411
-Step 15: loss=0.261
+Step 0: loss=1.034
+Step 5: loss=0.661
+Step 10: loss=0.368
+Step 15: loss=0.283
 ```
 
 This is a minimal example - a production DQN would include target network
@@ -688,7 +688,7 @@ folder contains production-ready implementations of:
 - [GitHub](https://github.com/pytorch/rl)
 - [Contributing Guide](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md)
 
-**Total running time of the script:** (0 minutes 5.051 seconds)
+**Total running time of the script:** (0 minutes 5.038 seconds)
 
 [`Download Jupyter notebook: torchrl_demo.ipynb`](../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb)
 

@@ -210,7 +210,7 @@ linear head that maps the LSTM output to the action logits. We pick
               in_keys=['features'],
               out_keys=['logits'])
           (2): TensorDictModule(
-              module=<function make_policy.<locals>.<lambda> at 0x7f87fada3560>,
+              module=<function make_policy.<locals>.<lambda> at 0x7f49a53876a0>,
               device=cpu,
               in_keys=['logits'],
               out_keys=['action'])
@@ -630,7 +630,7 @@ context manager.
 
  .. code-block:: none
 
-    Training loss trajectory: [0.4147, 0.4084, 0.4062, 0.4057]
+    Training loss trajectory: [0.4133, 0.4065, 0.4043, 0.4063]
 
 
 
@@ -681,7 +681,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.169 seconds)
+   **Total running time of the script:** (0 minutes 0.171 seconds)
 
 
 .. _sphx_glr_download_tutorials_recurrent_sequence_training.py:
