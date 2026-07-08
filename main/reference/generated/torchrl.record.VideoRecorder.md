@@ -1,6 +1,6 @@
 # VideoRecorder
 
-torchrl.record.VideoRecorder(*logger: Logger | [Service](torchrl.services.Service.html#torchrl.services.Service) | None*, *tag: str | None*, *in_keys: Sequence[NestedKey] | None = None*, *skip: int | None = None*, *center_crop: int | None = None*, *make_grid: bool | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *fps: int | None = None*, ***kwargs*) → None[[source]](../../_modules/torchrl/record/recorder.html#VideoRecorder)
+torchrl.record.VideoRecorder(*logger: Logger | [Service](torchrl.services.Service.html#torchrl.services.Service) | None*, *tag: str | None*, *in_keys: Sequence[NestedKey] | None = None*, *skip: int | None = None*, *center_crop: int | None = None*, *make_grid: bool | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *fps: int | None = None*, *max_frames: int | None = None*, *dump_on_done: bool = False*, ***kwargs*) → None[[source]](../../_modules/torchrl/record/recorder.html#VideoRecorder)
 
 Video Recorder transform.
 
@@ -27,6 +27,16 @@ if not.
 to `in_keys` if not provided.
 - **fps** (*int**,**optional*) - Frames per second of the output video. Defaults to the logger predefined `fps`,
 and overrides it if provided.
+- **max_frames** (*int**,**optional*) - maximum number of frames held in the
+recorder buffer. Once the buffer is full, new frames are
+discarded until `dump()` empties it. Use this to bound
+memory when dumps are infrequent (or could be missed
+altogether). Unbounded by default.
+- **dump_on_done** (*bool**,**optional*) - if `True`, the recorder calls
+`dump()` on its own whenever a step ends the episode, i.e.
+whenever all the `"done"` entries of the root tensordict are
+`True` (for a batched env, this means every sub-env is done
+at the same step). Defaults to `False`.
 - ****kwargs** (*Dict**[**str**,**Any**]**,**optional*) - additional keyword arguments for
 `log_video()`.
 
@@ -63,6 +73,18 @@ which will dispatch the dumps to all its members.
 ```
 >>> env.transform.dump()
 ```
+
+Note
+
+When recording a batched env ([`SerialEnv`](torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv) or
+[`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv)), attach the recorder to the
+*outer* env, e.g.
+`TransformedEnv(ParallelEnv(N, make_env), VideoRecorder(...))`,
+so that the batch is tiled into a single grid video
+(`make_grid=True`). Recorders living inside the worker envs of a
+batched env are not reached by `dump` calls issued on the outer
+env or by collectors and evaluators, and would accumulate frames
+indefinitely.
 
 The transform can also be used within a dataset to save the video collected. Unlike in the environment case,
 images will come in a batch. The `skip` argument will enable to save the images only at specific intervals.

@@ -63,6 +63,38 @@ evaluator = Evaluator(
 env so that per-episode returns are tracked. Without it, the
 evaluator falls back to summing raw rewards over each trajectory.
 
+**Eval video logging**: when the eval env contains a
+[`VideoRecorder`](torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder), each evaluation ends with a
+`dump(step=...)` on the env transforms of the collector that ran
+the rollout (disable with `dump_video=False`). The recorder must
+be attached to the *outermost* env: recorders nested inside the
+worker envs of a [`SerialEnv`](torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv) /
+[`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) are not reached by the dump and
+would accumulate frames indefinitely. With `backend="process"`
+the recorder lives inside the collector worker, so build it in the
+env factory around a picklable logger client such as
+`ProcessLogger.client()`:
+
+```
+from torchrl.record import VideoRecorder
+from torchrl.record.loggers import CSVLogger, ProcessLogger
+
+logger = ProcessLogger(CSVLogger, exp_name="run", log_dir="logs")
+video_client = logger.client()
+
+def make_eval_env():
+ env = make_env()
+ env.append_transform(VideoRecorder(video_client, tag="eval/video"))
+ return env
+
+evaluator = Evaluator(
+ make_eval_env,
+ policy_factory=make_eval_policy,
+ max_steps=1000,
+ backend="process",
+)
+```
+
 Parameters:
 
 - **env** - An [`EnvBase`](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) instance **or** a callable
