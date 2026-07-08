@@ -4,14 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch.nn
-import torch.optim
+import warnings
+from typing import Any
 
+import torch
+import torch.nn
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
+
 from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
     ExplorationType,
+    ObservationNorm,
     RewardSum,
     StepCounter,
     TransformedEnv,
@@ -27,15 +31,99 @@ from torchrl.record import VideoRecorder
 # --------------------------------------------------------------------
 
 
-def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False):
+def make_env(
+    env_name="HalfCheetah-v4",
+    device="cpu",
+    from_pixels: bool = False,
+    *,
+    normalize_observation: bool = True,
+    vecnorm_stats: dict[str, torch.Tensor] | None = None,
+):
     env = GymEnv(env_name, device=device, from_pixels=from_pixels, pixels_only=False)
     env = TransformedEnv(env)
-    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
-    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    if normalize_observation:
+        if vecnorm_stats is not None:
+            env.append_transform(
+                ObservationNorm(
+                    loc=vecnorm_stats["loc"].to(device),
+                    scale=vecnorm_stats["scale"].to(device),
+                    in_keys=["observation"],
+                    out_keys=["observation"],
+                    standard_normal=True,
+                )
+            )
+        else:
+            env.append_transform(
+                VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2)
+            )
+        env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env
+
+
+def get_vecnorm_state(env) -> dict[str, torch.Tensor] | None:
+    """Extracts frozen VecNorm observation statistics for rlrender checkpoints.
+
+    Returns ``None`` when the environment holds no reachable VecNorm transform
+    (e.g. observation normalization is disabled).
+    """
+    transform = getattr(env, "transform", None)
+    if transform is None:
+        return None
+    try:
+        transforms = list(transform)
+    except TypeError:
+        transforms = [transform]
+    for item in transforms:
+        if isinstance(item, VecNorm):
+            loc = item.loc.get("observation", None)
+            scale = item.scale.get("observation", None)
+            if loc is None or scale is None:
+                return None
+            return {
+                "loc": loc.detach().cpu().clone(),
+                "scale": scale.detach().cpu().clone(),
+            }
+    return None
+
+
+def make_render_env(spec: Any):
+    """Builds a MuJoCo environment suitable for ``rlrender``.
+
+    Environment defaults (name, observation normalization, frozen VecNorm
+    statistics) are read from the checkpoint metadata written by
+    ``ppo_mujoco.py`` and can be overridden through ``--env-kwargs``.
+    """
+    checkpoint = (
+        spec.checkpoint if isinstance(getattr(spec, "checkpoint", None), dict) else {}
+    )
+    env_name = spec.env_kwargs.get(
+        "env_name", checkpoint.get("env_name", "InvertedPendulum-v4")
+    )
+    normalize_observation = bool(
+        spec.env_kwargs.get(
+            "normalize_observation", checkpoint.get("normalize_observation", False)
+        )
+    )
+    vecnorm_stats = checkpoint.get("vecnorm")
+    if normalize_observation and vecnorm_stats is None:
+        warnings.warn(
+            "Rendering with normalize_observation=True but the checkpoint does not "
+            "contain VecNorm statistics under 'vecnorm'. Observations will be "
+            "normalized with running statistics initialized for rendering and will not "
+            "match training. Save checkpoints with VecNorm metadata or "
+            "pass normalize_observation=False in --env-kwargs.",
+            stacklevel=2,
+        )
+    return make_env(
+        env_name,
+        device=spec.device,
+        from_pixels=spec.from_pixels,
+        normalize_observation=normalize_observation,
+        vecnorm_stats=vecnorm_stats,
+    )
 
 
 # ====================================================================
@@ -119,10 +207,34 @@ def make_ppo_models_state(proof_environment, device):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, device):
-    proof_environment = make_env(env_name, device=device)
+def make_ppo_models(env_name, device, *, normalize_observation: bool = True):
+    proof_environment = make_env(
+        env_name,
+        device=device,
+        normalize_observation=normalize_observation,
+    )
     actor, critic = make_ppo_models_state(proof_environment, device=device)
     return actor, critic
+
+
+def make_render_policy(spec: Any):
+    """Builds the PPO policy module for ``rlrender`` checkpoint loading."""
+    checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
+    env_name = spec.policy_kwargs.get(
+        "env_name",
+        checkpoint.get("env_name", "InvertedPendulum-v4"),
+    )
+    normalize_observation = bool(
+        spec.policy_kwargs.get(
+            "normalize_observation", checkpoint.get("normalize_observation", False)
+        )
+    )
+    actor, _ = make_ppo_models(
+        env_name,
+        device=spec.device,
+        normalize_observation=normalize_observation,
+    )
+    return actor
 
 
 # ====================================================================

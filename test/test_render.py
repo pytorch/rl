@@ -821,6 +821,153 @@ class TestSotaCheckpointFactories:
         assert frame.ndim == 3
         assert frame.shape[-1] == 3
 
+    @pytest.mark.skipif(
+        importlib.util.find_spec("mujoco") is None,
+        reason="MuJoCo is required for the PPO render factory integration test",
+    )
+    @pytest.mark.skipif(
+        importlib.util.find_spec("gymnasium") is None,
+        reason="A Gymnasium MuJoCo environment with v4/v5 IDs is required",
+    )
+    def test_ppo_inverted_pendulum_checkpoint_render_factories(
+        self, tmp_path, monkeypatch
+    ):
+        OmegaConf = pytest.importorskip("omegaconf").OmegaConf
+        ppo_dir = Path("sota-implementations/ppo").resolve()
+        utils_path = ppo_dir / "utils_mujoco.py"
+        make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
+        checkpoint_path = tmp_path / "ppo_inverted_pendulum.pt"
+        actor, _ = make_ppo_models(
+            "InvertedPendulum-v4",
+            device="cpu",
+            normalize_observation=False,
+        )
+        torch.save(
+            {
+                "model_state_dict": actor.state_dict(),
+                "env_name": "InvertedPendulum-v4",
+                "normalize_observation": False,
+            },
+            checkpoint_path,
+        )
+        config = RenderConfig(
+            ckpt=checkpoint_path,
+            policy=f"{utils_path}:make_render_policy",
+            env=f"{utils_path}:make_render_env",
+            env_kwargs={"env_name": "InvertedPendulum-v4"},
+            max_steps=3,
+            num_trajs=1,
+            format="npz",
+            render_backend="null",
+            out=tmp_path / "ppo_inverted_pendulum.npz",
+            mujoco_qpos_key="qpos",
+            overwrite=True,
+        )
+        env = make_render_env(config)
+        try:
+            policy = load_render_policy(config, env)
+            result = collect_render_rollouts(env, policy, config)
+        finally:
+            env.close()
+        qpos = result.trajectories[0].get("qpos")
+        assert qpos.shape[-1] == 2
+        assert result.metadata["trajectories"][0]["num_steps"] > 0
+
+        monkeypatch.syspath_prepend(str(ppo_dir))
+        save_checkpoint = import_from_string(
+            f"{ppo_dir / 'ppo_mujoco.py'}:_save_checkpoint"
+        )
+        saved_path = tmp_path / "saved_ppo.pt"
+        save_checkpoint(
+            saved_path,
+            cfg=OmegaConf.create(
+                {
+                    "env": {
+                        "env_name": "InvertedPendulum-v4",
+                        "backend": "gym",
+                        "config_overrides": {},
+                        "num_envs": 1,
+                        "batch_mode": "parallel",
+                        "normalize_observation": False,
+                    }
+                }
+            ),
+            model=actor,
+            collected_frames=24,
+            metrics={"eval/reward": 20.0},
+        )
+        saved = torch.load(saved_path, weights_only=False)
+        assert saved["frames"] == 24
+        assert saved["env_backend"] == "gym"
+        assert saved["normalize_observation"] is False
+
+        make_render_policy = import_from_string(f"{utils_path}:make_render_policy")
+        calls = []
+
+        def make_models(env_name, device, **kwargs):
+            calls.append((env_name, device, kwargs))
+            return actor, object()
+
+        monkeypatch.setitem(
+            make_render_policy.__globals__, "make_ppo_models", make_models
+        )
+        policy = make_render_policy(
+            RenderPolicySpec(
+                checkpoint_path,
+                {
+                    "env_name": "InvertedPendulum-v4",
+                    "normalize_observation": False,
+                },
+                None,
+                torch.device("cpu"),
+                None,
+                {
+                    "env_name": "InvertedDoublePendulum-v4",
+                    "normalize_observation": True,
+                },
+                config,
+            )
+        )
+        assert policy is actor
+        assert calls == [
+            (
+                "InvertedDoublePendulum-v4",
+                torch.device("cpu"),
+                {"normalize_observation": True},
+            )
+        ]
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("mujoco") is None,
+        reason="MuJoCo is required for the qpos extraction integration test",
+    )
+    @pytest.mark.skipif(
+        importlib.util.find_spec("gymnasium") is None,
+        reason="A Gymnasium MuJoCo environment with v4/v5 IDs is required",
+    )
+    def test_inverted_double_pendulum_qpos_uses_physics_state(self):
+        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        make_env = import_from_string(f"{utils_path}:make_env")
+        env = make_env(
+            "InvertedDoublePendulum-v4",
+            normalize_observation=False,
+        )
+        reader = MujocoStateReader()
+        try:
+            td = env.reset()
+            expected = torch.as_tensor(
+                env.base_env.unwrapped.data.qpos.copy(),
+            )
+            torch.testing.assert_close(reader.capture(env)["qpos"], expected)
+            td = env.rand_action(td)
+            td = env.step(td)
+            expected = torch.as_tensor(
+                env.base_env.unwrapped.data.qpos.copy(),
+            )
+            torch.testing.assert_close(reader.capture(env)["qpos"], expected)
+        finally:
+            env.close()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
