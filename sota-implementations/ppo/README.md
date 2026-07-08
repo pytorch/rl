@@ -89,6 +89,9 @@ InvertedPendulum checkpoint.
 Render a notebook that opens a live MuJoCo-WASM viewer and plays the saved
 `qpos` trajectory:
 
+`rlrender` records `qpos` through TorchRL's `MujocoStateReader`; the PPO
+environment therefore keeps the same observation keys used for training.
+
 ```bash
 MODEL_PATH="$(uv run --frozen python - <<'PY'
 from pathlib import Path

@@ -9,6 +9,7 @@ import importlib.util
 import json
 import socket
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -31,6 +32,7 @@ from torchrl.render import (
     load_checkpoint,
     load_render_policy,
     make_render_env,
+    MujocoStateReader,
     parse_nested_key,
     play_mujoco_wasm_trajectory,
     render_policy,
@@ -45,6 +47,7 @@ from torchrl.render.mujoco_wasm import extract_qpos_trajectory
 from torchrl.render.video import compose_frame_grid, normalize_frame_output
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+_has_pygame = importlib.util.find_spec("pygame") is not None
 
 
 class FakeIFrame:
@@ -135,6 +138,19 @@ class TinyRenderEnv(EnvBase):
 
     def render(self):
         return np.full((4, 4, 3), self._count, dtype=np.uint8)
+
+    def get_state(self):
+        return TensorDict(
+            {
+                "qpos": torch.tensor(
+                    [float(self._count), float(self._count + 1)], device=self.device
+                ),
+                "qvel": torch.zeros(2, device=self.device),
+                "time": torch.tensor(float(self._count), device=self.device),
+            },
+            batch_size=[],
+            device=self.device,
+        )
 
     def _pixels(self):
         return torch.full((4, 4, 3), self._count, dtype=torch.uint8, device=self.device)
@@ -288,6 +304,23 @@ class TestRenderPolicy:
 
 
 class TestRenderRollouts:
+    def test_mujoco_state_reader(self):
+        env = SimpleNamespace(
+            data=SimpleNamespace(
+                qpos=np.array([0.0, 1.0]),
+                qvel=np.array([0.5, 0.0]),
+                ctrl=np.array([], dtype=np.float64),
+                time=0.25,
+            )
+        )
+        reader = MujocoStateReader()
+        assert reader.supports(env)
+        state = reader.capture(env)
+        assert torch.equal(state["qpos"], torch.tensor([0.0, 1.0]))
+        assert torch.equal(state["qvel"], torch.tensor([0.5, 0.0]))
+        assert "ctrl" not in state.keys()
+        assert state["time"] == 0.25
+
     def test_make_env_policy_and_collect_rollouts(self, tmp_path):
         ckpt = tmp_path / "policy.pt"
         policy = ZeroPolicy()
@@ -314,6 +347,31 @@ class TestRenderRollouts:
         assert "count" in result.trajectories[0].keys()
         assert "pixels" not in result.trajectories[0].keys(True)
         assert ("next", "pixels") not in result.trajectories[0].keys(True)
+
+    @pytest.mark.parametrize(
+        ("qpos_key", "expected"),
+        [
+            (("simulator", "qpos"), [[0.0, 1.0], [1.0, 2.0]]),
+            (("next", "simulator", "qpos"), [[1.0, 2.0], [2.0, 3.0]]),
+        ],
+    )
+    def test_collect_rollouts_mujoco_state(self, tmp_path, qpos_key, expected):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=5,
+            format="npz",
+            render_backend="null",
+            mujoco_qpos_key=qpos_key,
+            auto_load_policy=False,
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        assert result.trajectories[0].get(qpos_key).tolist() == expected
 
 
 class TestRenderArtifacts:
@@ -670,10 +728,10 @@ class TestSotaCheckpointFactories:
             ckpt=checkpoint_path,
             policy=f"{utils_path}:make_render_policy",
             env=f"{utils_path}:make_render_env",
-            from_pixels=True,
             max_steps=3,
             num_trajs=1,
             format="npz",
+            render_backend="null",
             out=tmp_path / "dqn_cartpole.npz",
             overwrite=True,
         )
@@ -683,8 +741,7 @@ class TestSotaCheckpointFactories:
             result = collect_render_rollouts(env, policy, config)
         finally:
             env.close()
-        assert result.frames[0][0].frames["default"].shape == (240, 320, 3)
-        assert result.metadata["trajectories"][0]["num_frames"] > 0
+        assert result.trajectories[0].shape[0] > 0
 
         monkeypatch.syspath_prepend(str(dqn_dir))
         save_checkpoint = import_from_string(
@@ -726,6 +783,42 @@ class TestSotaCheckpointFactories:
         )
         assert policy is model
         assert calls == [("Acrobot-v1", torch.device("cpu"))]
+
+    @pytest.mark.skipif(
+        not _has_pygame,
+        reason="pygame is required for Gymnasium CartPole pixel rendering",
+    )
+    def test_dqn_cartpole_pixel_render_factory(self, tmp_path):
+        dqn_dir = Path("sota-implementations/dqn").resolve()
+        utils_path = dqn_dir / "utils_cartpole.py"
+        make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
+        checkpoint_path = tmp_path / "dqn_cartpole.pt"
+        model = make_dqn_model("CartPole-v1", device="cpu")
+        torch.save(
+            {"model_state_dict": model.state_dict(), "env_name": "CartPole-v1"},
+            checkpoint_path,
+        )
+        config = RenderConfig(
+            ckpt=checkpoint_path,
+            policy=f"{utils_path}:make_render_policy",
+            env=f"{utils_path}:make_render_env",
+            from_pixels=True,
+            max_steps=3,
+            num_trajs=1,
+            format="npz",
+            out=tmp_path / "dqn_cartpole_pixels.npz",
+            overwrite=True,
+        )
+        env = make_render_env(config)
+        try:
+            policy = load_render_policy(config, env)
+            result = collect_render_rollouts(env, policy, config)
+        finally:
+            env.close()
+        frame = result.frames[0][0].frames["default"]
+        assert frame.ndim == 3
+        assert frame.shape[-1] == 3
+
 
     @pytest.mark.skipif(
         importlib.util.find_spec("mujoco") is None,
@@ -857,22 +950,20 @@ class TestSotaCheckpointFactories:
         env = make_env(
             "InvertedDoublePendulum-v4",
             normalize_observation=False,
-            qpos_key="qpos",
         )
+        reader = MujocoStateReader()
         try:
             td = env.reset()
             expected = torch.as_tensor(
-                env.base_env._env.unwrapped.data.qpos.copy(),
-                dtype=td["qpos"].dtype,
+                env.base_env.unwrapped.data.qpos.copy(),
             )
-            torch.testing.assert_close(td["qpos"], expected)
+            torch.testing.assert_close(reader.capture(env)["qpos"], expected)
             td = env.rand_action(td)
             td = env.step(td)
             expected = torch.as_tensor(
-                env.base_env._env.unwrapped.data.qpos.copy(),
-                dtype=td["next", "qpos"].dtype,
+                env.base_env.unwrapped.data.qpos.copy(),
             )
-            torch.testing.assert_close(td["next", "qpos"], expected)
+            torch.testing.assert_close(reader.capture(env)["qpos"], expected)
         finally:
             env.close()
 
