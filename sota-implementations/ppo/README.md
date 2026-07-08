@@ -33,15 +33,15 @@ python ppo_mujoco.py
 The MuJoCo PPO script can write a local checkpoint that is directly loadable by
 `rlrender`. The checkpoint stores the actor state dict, Gymnasium environment
 name, observation-normalization setting, resolved Hydra config, frame count, and
-latest training metrics.
+metrics recorded at checkpoint time.
 
-`InvertedPendulum-v4` is a lightweight MuJoCo task that works well as a first
-MuJoCo-WASM render target. On macOS, pass `optim.device=cpu`; MuJoCo specs use
+`InvertedPendulum-v4` is a lightweight MuJoCo-WASM render target. On macOS,
+pass `optim.device=cpu`; MuJoCo specs use
 `float64`, which is not supported by the MPS backend.
 
 ### Smoke test
 
-Use a small run first to validate checkpointing:
+Use a small run to validate checkpointing:
 
 ```bash
 uv run --frozen python sota-implementations/ppo/ppo_mujoco.py \
@@ -113,8 +113,7 @@ uv run --frozen --extra rendering python -m torchrl.render \
   --overwrite
 ```
 
-Open the notebook with the locked environment to avoid triggering a fresh
-cross-version dependency resolution:
+Open the notebook with the project's locked dependency resolution:
 
 ```bash
 uv run --frozen --extra notebook jupyter-lab /tmp/torchrl_ppo_inverted_pendulum_mujoco_wasm.ipynb

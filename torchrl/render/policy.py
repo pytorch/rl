@@ -75,8 +75,8 @@ def load_render_policy(
         env: Optional environment used to expose specs to the policy factory.
 
     Keyword Args:
-        checkpoint: Checkpoint payload already loaded from ``config.ckpt``.
-            When ``None``, the checkpoint is loaded here.
+        checkpoint: Checkpoint payload supplied by the caller. When ``None``,
+            the payload is loaded from ``config.ckpt``.
         checkpoint_digest: SHA256 digest of the checkpoint file. When ``None``,
             the digest is computed here.
 
