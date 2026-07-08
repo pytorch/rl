@@ -158,7 +158,7 @@ def _mujoco_wasm_cells() -> list[dict[str, Any]]:
             "This notebook includes a generated local browser viewer for the MJCF "
             "scene. The helper functions live in `torchrl.render.mujoco_wasm` so "
             "the notebook stays small and reusable. The playback cell sends a "
-            "saved or live-generated qpos trajectory to the already-displayed iframe."
+            "saved or live-generated qpos trajectory to the live viewer iframe."
         ),
         _code_cell(
             "from torchrl.render.mujoco_wasm import (\n"
@@ -179,7 +179,7 @@ def _mujoco_wasm_cells() -> list[dict[str, Any]]:
             "if qpos_key is None:\n"
             "    raise ValueError('Set --mujoco-qpos-key to play saved rollouts in the WASM viewer.')\n"
             "if not rollouts:\n"
-            "    raise ValueError('No rollouts are available. Run the saved-rollout loading cell or the in-notebook rollout cell first.')\n\n"
+            "    raise ValueError('No rollouts are available. Execute the saved-rollout loading cell or the in-notebook rollout cell.')\n\n"
             "trajectory = extract_qpos_trajectory(rollouts[0], qpos_key=qpos_key)\n"
             "play_mujoco_wasm_trajectory(\n"
             "    trajectory,\n"
@@ -200,7 +200,7 @@ def _live_rollout_cells() -> list[dict[str, Any]]:
     return [
         _markdown_cell(
             "## Generate rollouts in this notebook\n\n"
-            "Run this cell whenever you want fresh trajectories from the checkpoint. "
+            "Run this cell to generate trajectories from the checkpoint. "
             "It constructs the configured environment and policy inside the kernel, "
             "collects rollouts, and replaces the `rollouts` variable used by the "
             "playback cells below."
