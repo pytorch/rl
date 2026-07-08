@@ -2725,6 +2725,18 @@ def _stack_anything(data):  # noqa: F811
     return tree_unflatten(leaves, spec)
 
 
+# implement_for resolves its version dispatch lazily: until the first call,
+# the module attribute is a wrapper that the first invocation replaces with
+# the resolved implementation. Objects that capture the wrapper before that
+# swap (a ReplayBuffer stores it as its collate_fn) then fail to pickle,
+# because pickling a function by reference requires identity with the module
+# attribute. Resolve the dispatch eagerly so the module attribute is final.
+_stack_anything_impl = getattr(_stack_anything, "_impl", None)
+if _stack_anything_impl is not None:
+    _stack_anything_impl._delazify(_stack_anything_impl.func_name)
+del _stack_anything_impl
+
+
 def _collate_id(x):
     return x
 
