@@ -166,6 +166,7 @@ def make_logger(cfg):
         logger_type=cfg.logger.backend,
         logger_name="vla_grpo_logging",
         experiment_name=exp_name,
+        service_backend=_cfg_get(cfg.logger, "service_backend", "direct"),
         wandb_kwargs={
             "mode": cfg.logger.mode,
             "config": dict(cfg),
@@ -984,53 +985,25 @@ def make_collector(
     return collector, server, eval_policy
 
 
-def make_record_env(cfg, tokenizer: ActionTokenizerBase | None, logger, device):
-    """Single-environment eval recorder feeding a torchrl ``VideoRecorder``.
-
-    Built with ``from_pixels=True`` so the base env emits a root ``pixels``
-    frame (``ToyVLAEnv`` renders the tracking scene; ``LiberoEnv`` exposes the
-    camera). A :class:`~torchrl.record.VideoRecorder` transform appended last
-    collects those frames during evaluator rollouts. One environment keeps the
-    video a single clean stream rather than a tiled grid of workers.
-    """
-    env = make_env(
-        cfg,
-        tokenizer,
-        seed=cfg.env.seed + 2,
-        device=device if cfg.env.backend == "toy" else None,
-        eval_mode=True,
-        from_pixels=True,
-        num_envs=1,
-    )
-    recorder = VideoRecorder(
-        logger,
-        tag="eval/video",
-        in_keys=["pixels"],
-        skip=1,
-        # single env -> a single video stream, no torchvision grid needed
-        make_grid=False,
-        fps=cfg.logger.video_fps,
-    )
-    env.append_transform(recorder)
-    return env, recorder
-
-
 def _make_eval_env(
     cfg,
     tokenizer: ActionTokenizerBase | None,
     logger,
     device: torch.device,
 ) -> TransformedEnv:
-    if logger is not None:
-        env, _ = make_record_env(cfg, tokenizer, logger, device)
-        return env
-    return make_env(
+    env = make_env(
         cfg,
         tokenizer,
         seed=cfg.env.seed + 1,
         device=device if cfg.env.backend == "toy" else None,
         eval_mode=True,
+        from_pixels=logger is not None,
     )
+    if logger is not None:
+        env.append_transform(
+            VideoRecorder(logger, tag="eval/video", fps=cfg.logger.video_fps)
+        )
+    return env
 
 
 def _policy_module_factory(policy, *args, **kwargs):
@@ -1069,27 +1042,23 @@ def make_evaluator(
     device: torch.device,
 ) -> Evaluator:
     """Build the TorchRL evaluator used by the VLA GRPO recipe."""
-    record_video = logger is not None and cfg.logger.eval_backend == "thread"
-    if record_video and cfg.env.backend == "libero":
-        task_ids = list(cfg.env.task_ids)
-        if len(task_ids) > 1 and not bool(
-            _cfg_get(cfg.logger, "record_video_single_task", False)
-        ):
-            raise ValueError(
-                "logger.eval_backend='thread' with a logger replaces the eval "
-                "env with a single-env video recorder bound to task "
-                f"{task_ids[0]}, so eval/success_rate would cover 1 of the "
-                f"{len(task_ids)} configured env.task_ids (and "
-                "env.eval_num_envs would be ignored). Set "
-                "logger.record_video_single_task=true to opt in to "
-                "single-task eval video, or keep logger.eval_backend="
-                "'process' for suite-wide evaluation without video."
-            )
+    record_video = logger is not None
+    if (
+        record_video
+        and cfg.logger.eval_backend == "process"
+        and getattr(logger, "service_backend", "direct") == "direct"
+    ):
+        raise ValueError(
+            "logger.eval_backend='process' requires a process- or Ray-backed "
+            "logger so VideoRecorder receives a transferable client. Set "
+            "logger.service_backend='process'."
+        )
+    video_logger = logger.client() if record_video else None
     env_factory = partial(
         _make_eval_env,
         cfg,
         tokenizer,
-        logger if record_video else None,
+        video_logger,
         device,
     )
     return Evaluator(

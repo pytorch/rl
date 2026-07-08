@@ -17,6 +17,7 @@ from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 
 from torchrl.modules.inference_server._transport import InferenceTransport
+from torchrl.services.base import Service
 
 _REMOTE_INTERACTION_TYPE_KEY = "_torchrl_inference_interaction_type"
 # Code stamped when the caller has no active interaction context; keeping the
@@ -206,14 +207,16 @@ class PolicyClientModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        client: Callable[[TensorDictBase], TensorDictBase] | InferenceTransport,
+        client: Callable[[TensorDictBase], TensorDictBase]
+        | InferenceTransport
+        | Service,
         *,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         max_inflight: int | None = None,
     ) -> None:
         super().__init__()
-        if isinstance(client, InferenceTransport):
+        if isinstance(client, (InferenceTransport, Service)):
             client = client.client()
         if max_inflight is not None and max_inflight < 1:
             raise ValueError(

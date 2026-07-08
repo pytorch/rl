@@ -8,6 +8,7 @@ import concurrent.futures
 import importlib.util
 import multiprocessing as mp
 import pickle
+import queue
 import threading
 import time
 
@@ -22,6 +23,15 @@ from tensordict.nn.probabilistic import (
     interaction_type,
     InteractionType,
     set_interaction_type,
+)
+from torchrl._comm import (
+    CommandChannel,
+    Mailbox,
+    MailboxPeerClosedError,
+    MailboxTransportError,
+    MappingRendezvous,
+    SharedBlock,
+    TCPStoreRendezvous,
 )
 
 from torchrl.modules.inference_server import (
@@ -107,6 +117,146 @@ def _make_policy():
 # =============================================================================
 # Tests: core abstractions (Commit 1)
 # =============================================================================
+
+
+def test_mailbox_request_metadata_reply_and_exception():
+    mailbox = Mailbox(queue.Queue(), queue.Queue)
+    client = mailbox.client()
+    success = client.submit("success")
+    failure = client.submit("failure")
+
+    mailbox.wait_for_work(timeout=1.0)
+    payloads, callbacks, submitted_at = mailbox.drain(2)
+    assert payloads == ["success", "failure"]
+    assert all(timestamp is not None for timestamp in submitted_at)
+    mailbox.resolve(callbacks[0], 1)
+    mailbox.reject(callbacks[1], ValueError("remote failure"))
+
+    assert success.result(timeout=1.0) == 1
+    with pytest.raises(ValueError, match="remote failure"):
+        failure.result(timeout=1.0)
+
+
+def test_mailbox_peer_exit_and_transport_errors_are_distinct_from_timeouts():
+    peer_alive = threading.Event()
+    peer_alive.set()
+    mailbox = Mailbox(queue.Queue(), queue.Queue, peer_alive=peer_alive)
+    pending = mailbox.client().submit("pending")
+    peer_alive.clear()
+    with pytest.raises(MailboxPeerClosedError, match="peer closed"):
+        pending.result()
+
+    class _BrokenResponseQueue:
+        def get(self, timeout=None):
+            del timeout
+            raise EOFError("response pipe closed")
+
+    mailbox = Mailbox(queue.Queue(), _BrokenResponseQueue)
+    pending = mailbox.client().submit("pending")
+    with pytest.raises(MailboxTransportError, match="transport failed") as exc_info:
+        pending.result(timeout=1.0)
+    assert isinstance(exc_info.value.__cause__, EOFError)
+
+
+def test_mailbox_reads_a_final_reply_before_reporting_peer_exit():
+    peer_alive = threading.Event()
+    peer_alive.set()
+
+    class _ReplyBeforeExitQueue:
+        def __init__(self):
+            self.item = None
+
+        def get(self, block=True, timeout=None):
+            del timeout
+            if block:
+                self.item = (0, "final reply")
+                peer_alive.clear()
+                raise queue.Empty
+            if self.item is None:
+                raise queue.Empty
+            item = self.item
+            self.item = None
+            return item
+
+    response_queue = _ReplyBeforeExitQueue()
+    mailbox = Mailbox(queue.Queue(), lambda: response_queue, peer_alive=peer_alive)
+    pending = mailbox.client().submit("pending")
+
+    assert pending.result() == "final reply"
+
+
+def test_mailbox_drops_stale_callbacks_without_disrupting_valid_clients():
+    mailbox = Mailbox(queue.Queue(), queue.Queue)
+    assert not mailbox.resolve((123, 0), "stale")
+
+    client = mailbox.client()
+    pending = client.submit("valid")
+    mailbox.wait_for_work(timeout=1.0)
+    payloads, callbacks, _ = mailbox.drain(1)
+    assert payloads == ["valid"]
+    assert mailbox.resolve(callbacks[0], "result")
+    assert pending.result(timeout=1.0) == "result"
+
+
+def test_command_channel_order_timeout_and_close():
+    channel = CommandChannel(Mailbox(queue.Queue(), queue.Queue))
+    client = channel.client()
+    first = client._mailbox_client.submit({"verb": "first", "payload": 1})
+    second = client._mailbox_client.submit({"verb": "second", "payload": 2})
+
+    first_request = channel.receive(timeout=1.0)
+    second_request = channel.receive(timeout=1.0)
+    assert first_request.verb == "first"
+    assert second_request.verb == "second"
+    channel.resolve(first_request, "one")
+    channel.resolve(second_request, "two")
+    assert first.result(timeout=1.0) == "one"
+    assert second.result(timeout=1.0) == "two"
+    assert channel.receive(timeout=0.01) is None
+
+    pending = client._mailbox_client.submit({"verb": "pending", "payload": {}})
+    channel.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        pending.result(timeout=1.0)
+    channel.close()
+
+
+def test_shared_block_and_mapping_rendezvous():
+    value = torch.zeros(2).share_memory_()
+    block = SharedBlock(value)
+    assert block.version == 0
+    assert block.wait(after_version=0, timeout=0.01) is None
+    assert block.publish(torch.ones(2)) == 1
+    shared, version = block.wait(after_version=0, timeout=1.0)
+    assert version == 1
+    torch.testing.assert_close(shared, torch.ones(2))
+
+    rendezvous = MappingRendezvous({})
+    rendezvous.publish("worker", {"rank": 1})
+    assert rendezvous.read("worker") == {"rank": 1}
+    assert rendezvous.wait("worker", timeout=1.0) == {"rank": 1}
+
+
+def test_tcp_store_rendezvous_preserves_custom_wire_encoding():
+    class _Store:
+        def __init__(self):
+            self.data = {}
+
+        def set(self, key, value):
+            self.data[key] = value
+
+        def get(self, key):
+            return self.data[key]
+
+    store = _Store()
+    rendezvous = TCPStoreRendezvous(
+        store,
+        encode=lambda value: b"1" if value else b"0",
+        decode=lambda value: value == b"1",
+    )
+    rendezvous.publish("stateful", True)
+    assert store.data["stateful"] == b"1"
+    assert rendezvous.read("stateful") is True
 
 
 class TestInferenceTransportABC:
@@ -481,6 +631,20 @@ def _echo_client(td):
 
 
 class TestPolicyClientModule:
+    def test_service_owner_is_automatically_restricted_to_client(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4) as server:
+            client = server.client()
+            assert not hasattr(client, "shutdown")
+            remote_policy = PolicyClientModule(
+                server,
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+            result = remote_policy(TensorDict({"observation": torch.randn(4)}))
+        assert result["action"].shape == (2,)
+
     def test_forward_as_tensordict_module(self):
         transport = ThreadingTransport()
         policy = _make_policy()
@@ -1244,6 +1408,20 @@ class TestProcessInferenceServer:
         assert health["process_alive"]
         assert not server.is_alive
 
+    def test_process_server_client(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        with ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            max_batch_size=4,
+            mp_context=ctx,
+        ) as server:
+            client = server.client()
+            assert not hasattr(client, "shutdown")
+            result = client(TensorDict({"observation": torch.ones(1)}))
+        assert result["action"].shape == (1,)
+
     def test_process_server_exception_propagates(self):
         ctx = mp.get_context("spawn")
         transport = MPTransport(ctx=ctx)
@@ -1274,6 +1452,31 @@ class TestProcessInferenceServer:
         with pytest.raises(TimeoutError, match="did not report readiness"):
             server.start()
         assert not server.is_alive
+
+    def test_killed_server_unblocks_waiting_clients(self):
+        """A killed server process makes blocked clients raise promptly.
+
+        Clients created before the server object exist must also observe the
+        liveness flag (MPTransport bakes it into every client), otherwise an
+        untimed wait would block forever on a reply that never comes.
+        """
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            mp_context=ctx,
+        )
+        server.start()
+        try:
+            result = client(TensorDict({"observation": torch.ones(1)}))
+            assert "action" in result.keys()
+            server._process.kill()
+            with pytest.raises(MailboxPeerClosedError, match="peer closed"):
+                client(TensorDict({"observation": torch.ones(1)}))
+        finally:
+            server.shutdown(timeout=1.0)
 
     def test_control_plane_thread_safe(self):
         """Concurrent stats()/health() callers must not steal replies."""
@@ -1511,7 +1714,9 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=20,
             env_backend="threading",
-            server_config=InferenceServerConfig(backend="process", max_batch_size=2),
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=2
+            ),
         )
         total = 0
         for batch in collector:
@@ -1535,7 +1740,7 @@ class TestAsyncBatchedCollector:
 
     def test_invalid_server_backend_raises(self):
         with pytest.raises(ValueError, match="backend"):
-            InferenceServerConfig(backend="not-a-backend")
+            InferenceServerConfig(service_backend="not-a-backend")
 
     def test_server_death_raises_instead_of_hanging(self):
         """Killing the server process surfaces an error in the iterator."""
@@ -1545,17 +1750,28 @@ class TestAsyncBatchedCollector:
             frames_per_batch=10,
             total_frames=-1,
             env_backend="threading",
-            server_config=InferenceServerConfig(backend="process", max_batch_size=2),
+            server_config=InferenceServerConfig(
+                service_backend="process", max_batch_size=2
+            ),
         )
         try:
             iterator = iter(collector)
             next(iterator)
+            workers = list(collector._workers)
             collector._server._process.kill()
+            # Worker errors after a kill are mailbox transport failures,
+            # which _check_worker_result attributes to the dead server
+            # deterministically (no is_alive race).
             with pytest.raises(RuntimeError, match="inference server died"):
                 # A couple of batches may still drain from already-queued
                 # transitions before the watchdog trips.
                 for _ in range(10):
                     next(iterator)
+            # Worker threads blocked on inference must observe the cleared
+            # liveness flag and exit instead of leaking into later tests.
+            for w in workers:
+                w.join(timeout=10.0)
+            assert not any(w.is_alive() for w in workers)
         finally:
             collector.shutdown(timeout=0.5)
 
