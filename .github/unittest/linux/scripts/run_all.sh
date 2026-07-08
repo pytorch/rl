@@ -379,12 +379,19 @@ run_non_distributed_tests() {
   # Test sharding: Split tests into groups for parallel execution.
   # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
   # - Shard 1: test/transforms/ (transform tests)
-  # - Shard 2: test/envs/, test_collectors.py, test/services/ (tests that
-  #   spawn their own worker processes or Ray clusters)
+  # - Shard 2: the process-spawning set (see mp_tests below)
   # - Shard 3: Everything else
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/rb/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
+
+  # Tests that spawn their own worker processes, Ray clusters, or logger
+  # subprocesses. They oversubscribe (and flake) when run alongside a machine
+  # full of xdist workers, so they always run serially. Keep the two lists in
+  # sync: mp_tests is what shard 2 / the serial remainder runs, mp_ignores is
+  # what the parallel invocations exclude.
+  local mp_tests="test/envs test/test_collectors.py test/services test/test_inference_server.py test/test_loggers.py"
+  local mp_ignores="--ignore test/envs --ignore test/test_collectors.py --ignore test/services --ignore test/test_inference_server.py --ignore test/test_loggers.py"
 
   # JSON report output for flaky test tracking
   local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
@@ -436,8 +443,8 @@ run_non_distributed_tests() {
         ${common_args} ${timeout_args}
       ;;
     2)
-      echo "Running shard 2: test/envs/, test_collectors.py and test/services/"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py test/services \
+      echo "Running shard 2: process-spawning tests (${mp_tests})"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args} ${serial_timeout}
@@ -447,9 +454,7 @@ run_non_distributed_tests() {
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
         --ignore test/transforms \
-        --ignore test/envs \
-        --ignore test/test_collectors.py \
-        --ignore test/services \
+        ${mp_ignores} \
         ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
@@ -461,19 +466,17 @@ run_non_distributed_tests() {
         # xdist, then the multiprocessing-heavy set (shard 2's file set)
         # serially. Same union of tests as the single invocation below.
         local mp_status=0
-        echo "Running all tests, parallel bulk (everything but test/envs, test_collectors.py and test/services)"
+        echo "Running all tests, parallel bulk (everything but the process-spawning set)"
         python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
           ${common_ignores} \
-          --ignore test/envs \
-          --ignore test/test_collectors.py \
-          --ignore test/services \
+          ${mp_ignores} \
           ${xdist_args} \
           "${GPU_MARKER_FILTER[@]}" \
           ${json_report_args} \
           ${common_args} ${timeout_args} || mp_status=$?
-        echo "Running all tests, serial remainder (test/envs, test_collectors.py and test/services)"
+        echo "Running all tests, serial remainder (${mp_tests})"
         env -u OMP_NUM_THREADS -u MKL_NUM_THREADS \
-        python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py test/services \
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
           "${GPU_MARKER_FILTER[@]}" \
           --json-report --json-report-file="${json_report_dir}/test-results-shard-${shard}-mp.json" --json-report-indent=2 \
           ${common_args} ${serial_timeout} || mp_status=$?

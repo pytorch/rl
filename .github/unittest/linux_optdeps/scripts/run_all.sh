@@ -177,6 +177,12 @@ export BATCHED_PIPE_TIMEOUT=60
 COMMON_IGNORES="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/llm"
 COMMON_ARGS="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
 
+# Tests that spawn their own worker processes, Ray clusters, or logger
+# subprocesses; they oversubscribe (and flake) next to a machine full of
+# xdist workers, so they always run serially. Keep the two lists in sync.
+MP_TESTS="test/envs test/test_collectors.py test/services test/test_inference_server.py test/test_loggers.py"
+MP_IGNORES="--ignore test/envs --ignore test/test_collectors.py --ignore test/services --ignore test/test_inference_server.py --ignore test/test_loggers.py"
+
 # Track test failures but keep going, so coverage is still combined and
 # uploaded; the script exits with this status at the end.
 EXIT_STATUS=0
@@ -208,25 +214,21 @@ PY
   #    clusters and flake under a fully loaded machine.
   # 3. GPU-marked tests, serial: xdist workers sharing one device could
   #    oversubscribe GPU memory.
-  echo "Running parallel bulk (not gpu, without test/envs, test_collectors.py and test/services)"
+  echo "Running parallel bulk (not gpu, without the process-spawning set)"
   OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     ${COMMON_IGNORES} \
-    --ignore test/envs \
-    --ignore test/test_collectors.py \
-    --ignore test/services \
+    ${MP_IGNORES} \
     -m "not gpu" \
     -n "${TORCHRL_XDIST_WORKERS:-auto}" --dist worksteal \
     ${COMMON_ARGS} --timeout=300 || EXIT_STATUS=$?
-  echo "Running process-spawning tests serially (test/envs, test_collectors.py, test/services)"
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py test/services \
+  echo "Running process-spawning tests serially (${MP_TESTS})"
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${MP_TESTS} \
     ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
   echo "Running gpu-marked tests serially"
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     ${COMMON_IGNORES} \
-    --ignore test/envs \
-    --ignore test/test_collectors.py \
-    --ignore test/services \
+    ${MP_IGNORES} \
     -m gpu \
     ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
   if [ $EXIT_STATUS -ne 0 ]; then
