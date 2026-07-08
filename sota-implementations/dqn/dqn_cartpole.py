@@ -43,7 +43,7 @@ def _save_checkpoint(
         cfg: Hydra training configuration.
         model: DQN policy module.
         collected_frames: Number of training frames collected so far.
-        metrics: Latest scalar metrics.
+        metrics: Scalar metrics recorded at checkpoint time.
 
     Returns:
         The written checkpoint path, or ``None`` when checkpointing is disabled.

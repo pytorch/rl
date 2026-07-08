@@ -848,7 +848,7 @@ class TestSotaCheckpointFactories:
     )
     @pytest.mark.skipif(
         importlib.util.find_spec("gymnasium") is None,
-        reason="A modern Gymnasium MuJoCo environment is required",
+        reason="A Gymnasium MuJoCo environment with v4/v5 IDs is required",
     )
     def test_ppo_inverted_pendulum_checkpoint_render_factories(
         self, tmp_path, monkeypatch
@@ -983,7 +983,7 @@ class TestSotaCheckpointFactories:
     )
     @pytest.mark.skipif(
         importlib.util.find_spec("gymnasium") is None,
-        reason="A modern Gymnasium MuJoCo environment is required",
+        reason="A Gymnasium MuJoCo environment with v4/v5 IDs is required",
     )
     def test_inverted_double_pendulum_qpos_uses_physics_state(self):
         utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
