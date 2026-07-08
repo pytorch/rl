@@ -47,7 +47,16 @@ from .storages import (
     StoreStorage,
     TensorStorage,
 )
-from .utils import Flat2TED, H5Combine, H5Split, Nested2TED, TED2Flat, TED2Nested
+from .utils import (
+    DEFAULT_DONE_KEYS,
+    find_start_stop_traj,
+    Flat2TED,
+    H5Combine,
+    H5Split,
+    Nested2TED,
+    TED2Flat,
+    TED2Nested,
+)
 from .writers import (
     ImmutableDatasetWriter,
     RoundRobinWriter,
@@ -94,6 +103,8 @@ __all__ = [
     "StorageEnsemble",
     "StoreStorage",
     "TensorStorage",
+    "DEFAULT_DONE_KEYS",
+    "find_start_stop_traj",
     "Flat2TED",
     "H5Combine",
     "H5Split",
