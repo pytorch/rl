@@ -52,7 +52,11 @@ jobs:
         with:
           ref: gh-pages
           path: gh-pages
-          fetch-depth: 1
+          # Depth 2 so the tip's parent is present: the deploy step amends the
+          # previous dashboard commit, and amending at the shallow boundary
+          # (depth 1) would create a parentless commit and rewrite the whole
+          # branch history on force-push.
+          fetch-depth: 2
 
       - name: Update CI timing history
         env:
@@ -66,25 +70,44 @@ jobs:
 
       - name: Deploy to GitHub Pages
         run: |
-          mkdir -p gh-pages/ci-timing
-          cp ci-timing-out/data.json gh-pages/ci-timing/
-          cp .github/scripts/ci_timing_dashboard.html gh-pages/ci-timing/index.html
-
           cd gh-pages
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add ci-timing/
-          if git diff --staged --quiet; then
-            echo "No changes to deploy"
-            exit 0
-          fi
-          git commit -m "Update CI timing dashboard - $(date -u +%Y-%m-%d)"
+
+          # Each run overwrites the previous dashboard commit (amend +
+          # force-with-lease) instead of stacking a daily commit, to keep
+          # gh-pages history shallow. When another workflow's commit sits at
+          # the tip, fall back to a regular commit; the scheduled gh-pages
+          # squash reclaims those eventually.
+          deploy() {
+            mkdir -p ci-timing
+            cp ../ci-timing-out/data.json ci-timing/
+            cp ../.github/scripts/ci_timing_dashboard.html ci-timing/index.html
+            git add ci-timing/
+            if git diff --staged --quiet; then
+              echo "No changes to deploy"
+              return 0
+            fi
+            local msg="Update CI timing dashboard - $(date -u +%Y-%m-%d)"
+            local tip_msg
+            tip_msg="$(git log -1 --format=%s)"
+            if [[ "$tip_msg" == "Update CI timing dashboard"* ]] \
+                && git rev-parse -q --verify HEAD^ >/dev/null; then
+              git commit --amend -m "$msg"
+              git push --force-with-lease=refs/heads/gh-pages
+            else
+              git commit -m "$msg"
+              git push
+            fi
+          }
+
           # Other workflows (benchmarks, flaky tracker) also push to gh-pages;
-          # rebase and retry to avoid non-fast-forward failures.
+          # on a lost race, re-sync to the remote tip and retry.
           for i in 1 2 3; do
-            if git push; then
+            if deploy; then
               exit 0
             fi
-            git pull --rebase
+            git fetch --depth 2 origin gh-pages
+            git reset --hard origin/gh-pages
           done
-          git push
+          deploy
