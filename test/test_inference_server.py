@@ -44,6 +44,7 @@ from torchrl.modules.inference_server import (
     PolicyClientModule,
     ProcessInferenceServer,
     RayTransport,
+    SharedMemoryTransport,
     SlotTransport,
     ThreadingTransport,
 )
@@ -1047,6 +1048,289 @@ class TestMPTransport:
             td = TensorDict({"observation": torch.randn(4)})
             with pytest.raises(ValueError, match="mp model error"):
                 client(td)
+
+
+# =============================================================================
+# Tests: SharedMemoryTransport
+# =============================================================================
+
+
+class _Doubler(nn.Module):
+    def forward(self, x):
+        return x * 2.0
+
+
+def _make_shm_specs(obs_size=4, act_size=2, with_version=True):
+    request_spec = TensorDict({"observation": torch.zeros(obs_size)})
+    response = {"action": torch.zeros(act_size)}
+    if with_version:
+        response["policy_version"] = torch.zeros((), dtype=torch.long)
+    return request_spec, TensorDict(response)
+
+
+def _make_doubling_policy():
+    return TensorDictModule(_Doubler(), in_keys=["observation"], out_keys=["action"])
+
+
+def _shm_actor_fn(client, n_requests, result_queue):
+    """Actor that submits known values and checks the doubled response."""
+    for i in range(n_requests):
+        obs = torch.full((4,), float(i + 1))
+        result = client(TensorDict({"observation": obs}))
+        assert torch.allclose(result["action"], obs * 2.0)
+    result_queue.put(True)
+
+
+class TestSharedMemoryTransport:
+    def test_single_request_in_process(self):
+        """A client in the owning process gets a correct result."""
+        request_spec, response_spec = _make_shm_specs()
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=4)
+        client = transport.client()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            td = TensorDict({"observation": torch.randn(4)})
+            result = client(td)
+            assert "action" in result.keys()
+            assert "policy_version" in result.keys()
+            assert result["action"].shape == (2,)
+
+    def test_undeclared_keys_are_dropped(self):
+        """Only spec-declared keys travel through the transport."""
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=2)
+        client = transport.client()
+        with InferenceServer(_make_doubling_policy(), transport, max_batch_size=2):
+            obs = torch.arange(4, dtype=torch.float32)
+            td = TensorDict({"observation": obs, "extra": torch.randn(3)})
+            result = client(td)
+            assert set(result.keys()) == {"action"}
+            assert torch.allclose(result["action"], obs * 2.0)
+
+    def test_missing_declared_key_raises(self):
+        """A request missing a declared key fails fast, before slot use."""
+        request_spec, response_spec = _make_shm_specs()
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+        with pytest.raises(KeyError):
+            client.submit(TensorDict({"wrong_key": torch.zeros(4)}))
+
+    def test_multi_client_concurrent(self):
+        """Concurrent clients each get their own routed results."""
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=8)
+        n_clients = 4
+        clients = [transport.client() for _ in range(n_clients)]
+        errors = []
+
+        def run(idx):
+            try:
+                for i in range(5):
+                    obs = torch.full((4,), float(idx * 10 + i))
+                    result = clients[idx](TensorDict({"observation": obs}))
+                    assert torch.allclose(result["action"], obs * 2.0)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        with InferenceServer(
+            _make_doubling_policy(), transport, max_batch_size=n_clients
+        ):
+            threads = [
+                threading.Thread(target=run, args=(i,)) for i in range(n_clients)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30.0)
+        assert not errors
+
+    def test_out_of_order_result_consumption(self):
+        """Futures can be consumed in any order (response buffering)."""
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=4)
+        client = transport.client()
+        with InferenceServer(_make_doubling_policy(), transport, max_batch_size=4):
+            fut_a = client.submit(TensorDict({"observation": torch.full((4,), 1.0)}))
+            fut_b = client.submit(TensorDict({"observation": torch.full((4,), 2.0)}))
+            result_b = fut_b.result(timeout=10.0)
+            result_a = fut_a.result(timeout=10.0)
+        assert torch.allclose(result_b["action"], torch.full((4,), 4.0))
+        assert torch.allclose(result_a["action"], torch.full((4,), 2.0))
+
+    def test_exception_propagates_and_slot_is_released(self):
+        """Model errors reach the client and free the slot for reuse."""
+
+        def flaky_model(td):
+            if (td["observation"] < 0).any():
+                raise ValueError("shm model error")
+            return td.set("action", td["observation"] * 2.0)
+
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+        with InferenceServer(flaky_model, transport, max_batch_size=1):
+            with pytest.raises(ValueError, match="shm model error"):
+                client(TensorDict({"observation": -torch.ones(4)}))
+            # With a single slot, this only completes if the failed request
+            # released its slot. Run in a thread so a leak fails the test
+            # instead of hanging it.
+            obs = torch.ones(4)
+            done = threading.Event()
+            out = {}
+
+            def resubmit():
+                out["result"] = client(TensorDict({"observation": obs}))
+                done.set()
+
+            t = threading.Thread(target=resubmit, daemon=True)
+            t.start()
+            assert done.wait(timeout=10.0), "slot was not released after exception"
+            assert torch.allclose(out["result"]["action"], obs * 2.0)
+
+    def test_nested_keys(self):
+        """Nested request and response keys round-trip through the slots."""
+        request_spec = TensorDict({"agent": {"observation": torch.zeros(4)}})
+        response_spec = TensorDict({"agent": {"action": torch.zeros(4)}})
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=2)
+        client = transport.client()
+        model = TensorDictModule(
+            _Doubler(),
+            in_keys=[("agent", "observation")],
+            out_keys=[("agent", "action")],
+        )
+        with InferenceServer(model, transport, max_batch_size=2):
+            obs = torch.arange(4, dtype=torch.float32)
+            result = client(TensorDict({"agent": {"observation": obs}}))
+            assert torch.allclose(result["agent", "action"], obs * 2.0)
+
+    def test_slot_backpressure(self):
+        """With all slots in flight, submit blocks until a slot is freed."""
+        request_spec, response_spec = _make_shm_specs(with_version=False)
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+        fut1 = client.submit(TensorDict({"observation": torch.ones(4)}))
+        submitted = threading.Event()
+        futures = {}
+
+        def second_submit():
+            futures["fut2"] = client.submit(
+                TensorDict({"observation": 2 * torch.ones(4)})
+            )
+            submitted.set()
+
+        t = threading.Thread(target=second_submit, daemon=True)
+        t.start()
+        # The only slot is held by the first in-flight request.
+        assert not submitted.wait(timeout=0.5)
+        # Resolve the first request manually (server side).
+        transport.wait_for_work(timeout=5.0)
+        items, callbacks = transport.drain(4)
+        assert len(items) == 1
+        assert torch.allclose(items[0]["observation"], torch.ones(4))
+        transport.resolve(callbacks[0], TensorDict({"action": torch.ones(2)}))
+        assert torch.allclose(fut1.result(timeout=5.0)["action"], torch.ones(2))
+        # Reading the result released the slot: the second submit unblocks.
+        assert submitted.wait(timeout=10.0)
+        transport.wait_for_work(timeout=5.0)
+        items, callbacks = transport.drain(4)
+        assert len(items) == 1
+        assert torch.allclose(items[0]["observation"], 2 * torch.ones(4))
+        transport.resolve(callbacks[0], TensorDict({"action": 2 * torch.ones(2)}))
+        assert torch.allclose(
+            futures["fut2"].result(timeout=5.0)["action"], 2 * torch.ones(2)
+        )
+        t.join(timeout=5.0)
+
+    def test_result_timeout_keeps_slot(self):
+        """A timed-out result() keeps the request in flight and retryable."""
+        request_spec, response_spec = _make_shm_specs(with_version=False)
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+        fut = client.submit(TensorDict({"observation": torch.ones(4)}))
+        with pytest.raises(queue.Empty):
+            fut.result(timeout=0.1)
+        transport.wait_for_work(timeout=5.0)
+        items, callbacks = transport.drain(1)
+        assert len(items) == 1
+        transport.resolve(callbacks[0], TensorDict({"action": torch.ones(2)}))
+        assert torch.allclose(fut.result(timeout=5.0)["action"], torch.ones(2))
+
+    def test_copy_result_false_returns_borrowed_view(self):
+        """copy_result=False returns a view into the shared response slot."""
+        request_spec, response_spec = _make_shm_specs(with_version=False)
+        transport = SharedMemoryTransport(
+            request_spec, response_spec, num_slots=1, copy_result=False
+        )
+        client = transport.client()
+        fut = client.submit(TensorDict({"observation": torch.ones(4)}))
+        transport.wait_for_work(timeout=5.0)
+        items, callbacks = transport.drain(1)
+        transport.resolve(callbacks[0], TensorDict({"action": torch.ones(2)}))
+        result = fut.result(timeout=5.0)
+        assert (
+            result["action"].data_ptr()
+            == transport._response_slots["action"][0].data_ptr()
+        )
+
+    def test_spec_validation(self):
+        """Bad specs are rejected at construction time."""
+        response_spec = TensorDict({"action": torch.zeros(2)})
+        with pytest.raises(TypeError, match="tensor leaves"):
+            SharedMemoryTransport(
+                TensorDict({"instruction": "hello"}), response_spec, num_slots=1
+            )
+        with pytest.raises(ValueError, match="at least one tensor leaf"):
+            SharedMemoryTransport(TensorDict({}), response_spec, num_slots=1)
+        with pytest.raises(ValueError, match="num_slots"):
+            SharedMemoryTransport(
+                TensorDict({"observation": torch.zeros(4)}),
+                response_spec,
+                num_slots=0,
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cuda_input_raises(self):
+        """CUDA tensors are rejected: slots are CPU shared memory only."""
+        request_spec, response_spec = _make_shm_specs()
+        transport = SharedMemoryTransport(request_spec, response_spec, num_slots=1)
+        client = transport.client()
+        with pytest.raises(ValueError, match="CPU tensors"):
+            client.submit(TensorDict({"observation": torch.randn(4, device="cuda")}))
+        with pytest.raises(ValueError, match="CPU shared memory"):
+            SharedMemoryTransport(
+                TensorDict({"observation": torch.zeros(4, device="cuda")}),
+                response_spec,
+                num_slots=1,
+            )
+
+    @pytest.mark.slow
+    def test_cross_process_actors(self):
+        """Spawned child clients submit; the parent server resolves."""
+        ctx = mp.get_context("spawn")
+        request_spec, response_spec = _make_shm_specs(act_size=4, with_version=False)
+        transport = SharedMemoryTransport(
+            request_spec, response_spec, num_slots=8, ctx=ctx
+        )
+        n_actors = 2
+        n_requests = 10
+        result_queue = ctx.Queue()
+        # Create clients before spawning (queues and slots inherited)
+        clients = [transport.client() for _ in range(n_actors)]
+        with InferenceServer(_make_doubling_policy(), transport, max_batch_size=8):
+            procs = []
+            for i in range(n_actors):
+                p = ctx.Process(
+                    target=_shm_actor_fn,
+                    args=(clients[i], n_requests, result_queue),
+                )
+                p.start()
+                procs.append(p)
+            for p in procs:
+                p.join(timeout=60.0)
+                assert p.exitcode == 0
+        for _ in range(n_actors):
+            assert result_queue.get(timeout=1.0) is True
 
 
 # =============================================================================
