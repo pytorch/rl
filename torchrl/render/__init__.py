@@ -7,6 +7,7 @@ from __future__ import annotations
 import torch
 
 from torchrl.render.artifacts import write_render_artifact
+from torchrl.render.backends import MujocoStateReader
 from torchrl.render.checkpoint import (
     checkpoint_hash,
     infer_state_dict,
@@ -54,6 +55,7 @@ __all__ = [
     "EnvBackendName",
     "ExplorationMode",
     "FrameBundle",
+    "MujocoStateReader",
     "NotebookRenderBackendName",
     "RenderBackendName",
     "RenderConfig",
