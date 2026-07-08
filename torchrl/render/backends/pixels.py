@@ -15,7 +15,7 @@ __all__ = ["TensorDictPixelsBackend"]
 
 
 class TensorDictPixelsBackend:
-    """Captures frames from pixel entries already present in a TensorDict.
+    """Captures frames from TensorDict pixel entries.
 
     Examples:
         >>> import torch
