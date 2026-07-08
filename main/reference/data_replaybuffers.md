@@ -39,6 +39,42 @@ buffer.shutdown()
 | [`prefill_replay_buffer`](generated/torchrl.data.prefill_replay_buffer.html#torchrl.data.prefill_replay_buffer)(rb, dataset[, ...]) | Copy samples from an offline dataset into a mutable replay buffer. |
 | --- | --- |
 
+## Trajectory queries
+
+Stored transitions can be regrouped into trajectories and filtered with a
+small query language. `traj` builds predicates over
+trajectory fields, and [`ReplayBuffer.query()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.query) returns the matching
+[`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory) views:
+
+```
+>>> from torchrl.data import traj
+>>> good = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+>>> good[0].observation, good[0].action
+```
+
+Trajectory boundaries are recovered with the same machinery
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) uses, so queries and
+samplers always agree on where trajectories start and stop, including for
+storages that have wrapped around and for multi-dimensional storages
+(`LazyTensorStorage(..., ndim=2)`). Predicates built from
+`traj` report the entries they read through
+[`TrajectoryPredicate.required_keys`](generated/torchrl.data.TrajectoryPredicate.html#torchrl.data.TrajectoryPredicate.required_keys), letting `query()` fetch
+only those entries (and run only the transforms that can affect them) while
+evaluating, instead of materializing the whole buffer content.
+
+[`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory) is a tensorclass: slicing and indexing
+return [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory) instances, and query results of
+different lengths can be assembled into a single ragged batch with
+`lazy_stack()`.
+
+| [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory)(data, *, batch_size[, device, names]) | |
+| --- | --- |
+| [`TrajectoryPredicate`](generated/torchrl.data.TrajectoryPredicate.html#torchrl.data.TrajectoryPredicate)(fn[, description, keys]) | A boolean predicate over a [`Trajectory`](generated/torchrl.data.Trajectory.html#torchrl.data.Trajectory). |
+
+| [`filter_trajectories`](generated/torchrl.data.filter_trajectories.html#torchrl.data.filter_trajectories)(data[, predicate, ...]) | Split `data` into trajectories and keep those matching `predicate`. |
+| --- | --- |
+| [`iter_trajectories`](generated/torchrl.data.iter_trajectories.html#torchrl.data.iter_trajectories)(data[, trajectory_key]) | Iterate over the trajectories stored in a flat batch of transitions. |
+
 ## Composable Replay Buffers
 
 We also give users the ability to compose a replay buffer.

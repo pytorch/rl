@@ -394,6 +394,70 @@ Returns the next item in the replay buffer.
 This method is used to iterate over the replay buffer in contexts where __iter__ is not available,
 such as `RayReplayBuffer`.
 
+query(*predicate: Callable[[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)], bool] | None = None*, ***, *trajectory_key: NestedKey | None = None*) → list[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.query)
+
+Filters the stored trajectories with a query predicate.
+
+Splits the buffer content into trajectories (see
+`iter_trajectories()`) and
+returns those matching the predicate as
+[`Trajectory`](torchrl.data.Trajectory.html#torchrl.data.Trajectory) views.
+
+Parameters:
+
+**predicate** (*Callable**[**[*[*Trajectory*](torchrl.data.Trajectory.html#torchrl.data.Trajectory)*]**,**bool**]**,**optional*) - a
+[`TrajectoryPredicate`](torchrl.data.TrajectoryPredicate.html#torchrl.data.TrajectoryPredicate)
+built from `traj`, or
+any callable mapping a trajectory to a boolean. Defaults to
+None (return all trajectories).
+
+Keyword Arguments:
+
+**trajectory_key** (*NestedKey**,**optional*) - entry holding
+per-transition trajectory ids. Defaults to None
+(auto-detection from `("collector", "traj_ids")`,
+`"traj_ids"`, `"episode"` or the done/terminated/truncated
+flags).
+
+Returns:
+
+A list of matching trajectory views, ordered chronologically
+(oldest trajectory first; for multi-dimensional storages, grouped
+by batch coordinate).
+
+The trajectory boundaries are computed from the stored (untransformed)
+data with the same machinery
+[`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) uses, so
+samplers and queries always agree on where trajectories start and
+stop. This includes storages with `ndim > 1` (e.g.
+`LazyTensorStorage(..., ndim=2)` holding `[B, T]` batches), whose
+trajectories are recovered per batch coordinate.
+
+Predicates built from `traj`
+report the keys they read via
+`required_keys()`;
+evaluation then only fetches those entries from the storage and only
+runs the transforms that can affect them. Matching trajectories are
+extracted in full with the complete transform chain applied, so
+predicates and results see the same values a sampler would produce.
+Opaque callables are evaluated against the fully transformed content.
+
+Note
+
+Once the buffer has wrapped around (it is at capacity and older
+entries have been overwritten), the oldest trajectory may have
+lost its first transitions to overwriting and will appear
+truncated at the front. A trajectory written across the wrap
+point is followed through it and returned whole, in time order.
+
+Examples
+
+```
+>>> from torchrl.data import traj
+>>> good_trajs = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+>>> observations = good_trajs[0].observation
+```
+
 read_all_in_order(*end: int | None = None*) → Any[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.read_all_in_order)
 
 Read storage contents in physical order.
