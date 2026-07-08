@@ -8,31 +8,32 @@ from __future__ import annotations
 from torchrl.trainers.algorithms.on_policy import OnPolicyTrainer
 
 
-class PPOTrainer(OnPolicyTrainer):
-    """PPO (Proximal Policy Optimization) trainer implementation.
+class A2CTrainer(OnPolicyTrainer):
+    """A2C (Advantage Actor-Critic) trainer implementation.
 
-    See also :class:`~torchrl.trainers.algorithms.configs.PPOTrainerConfig` for the
+    See also :class:`~torchrl.trainers.algorithms.configs.A2CTrainerConfig` for the
     Hydra configuration counterpart.
 
     .. warning::
         This is an experimental/prototype feature. The API may change in future versions.
         Please report any issues or feedback to help improve this implementation.
 
-    This trainer implements the PPO algorithm for training reinforcement learning agents.
-    It extends :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` with PPO-specific
+    This trainer implements the A2C algorithm for training reinforcement learning agents.
+    It extends :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` with A2C-specific
     defaults; see that class for the full list of keyword arguments, covering
     advantage estimation (GAE), replay-buffer wiring, collector weight
-    synchronization and logging.
+    synchronization and logging. Entropy regularization is configured on the
+    loss module (see :class:`~torchrl.objectives.A2CLoss`).
 
-    PPO typically uses multiple epochs of optimization on the same batch of data.
-    This trainer defaults to 4 epochs, which is a common choice for PPO implementations.
+    Unlike PPO, A2C performs a single optimization pass over each batch of collected
+    data. This trainer therefore defaults to 1 epoch per batch.
 
     Examples:
         >>> # Basic usage with manual configuration
-        >>> from torchrl.trainers.algorithms.ppo import PPOTrainer
-        >>> from torchrl.trainers.algorithms.configs import PPOTrainerConfig
+        >>> from torchrl.trainers.algorithms.a2c import A2CTrainer
+        >>> from torchrl.trainers.algorithms.configs import A2CTrainerConfig
         >>> from hydra.utils import instantiate
-        >>> config = PPOTrainerConfig(...)  # Configure with required parameters
+        >>> config = A2CTrainerConfig(...)  # Configure with required parameters
         >>> trainer = instantiate(config)
         >>> trainer.train()
 
@@ -41,5 +42,5 @@ class PPOTrainer(OnPolicyTrainer):
         :class:`~torchrl.trainers.algorithms.configs` module for configuration options.
     """
 
-    _algo_name = "PPO"
-    _default_num_epochs = 4
+    _algo_name = "A2C"
+    _default_num_epochs = 1
