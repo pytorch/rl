@@ -50,7 +50,7 @@ def _save_checkpoint(
         cfg: Hydra training configuration.
         model: PPO actor module.
         collected_frames: Number of training frames collected so far.
-        metrics: Latest scalar metrics.
+        metrics: Scalar metrics recorded at checkpoint time.
         train_env: Training environment used to extract frozen VecNorm
             statistics so render environments can reproduce the observation
             normalization seen during training.
