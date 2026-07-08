@@ -203,26 +203,30 @@ PY
   #    thread per worker (N workers on an N-core box otherwise serialize on
   #    thread contention) and the per-test timeout is raised: tests that take
   #    ~60s alone can legitimately exceed 120s on a fully loaded machine.
-  # 2. The multiprocessing-heavy set (test/envs, test_collectors.py), serial.
+  # 2. The process-spawning set (test/envs, test_collectors.py,
+  #    test/services), serial: these spawn their own worker processes or Ray
+  #    clusters and flake under a fully loaded machine.
   # 3. GPU-marked tests, serial: xdist workers sharing one device could
   #    oversubscribe GPU memory.
-  echo "Running parallel bulk (not gpu, without test/envs and test_collectors.py)"
+  echo "Running parallel bulk (not gpu, without test/envs, test_collectors.py and test/services)"
   OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     ${COMMON_IGNORES} \
     --ignore test/envs \
     --ignore test/test_collectors.py \
+    --ignore test/services \
     -m "not gpu" \
     -n "${TORCHRL_XDIST_WORKERS:-auto}" --dist worksteal \
     ${COMMON_ARGS} --timeout=300 || EXIT_STATUS=$?
-  echo "Running multiprocessing-heavy tests serially (test/envs, test_collectors.py)"
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py \
+  echo "Running process-spawning tests serially (test/envs, test_collectors.py, test/services)"
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py test/services \
     ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
   echo "Running gpu-marked tests serially"
   python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
     ${COMMON_IGNORES} \
     --ignore test/envs \
     --ignore test/test_collectors.py \
+    --ignore test/services \
     -m gpu \
     ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
   if [ $EXIT_STATUS -ne 0 ]; then
