@@ -107,6 +107,7 @@
 - [lerobot_columns_to_tensordict](reference/generated/torchrl.data.datasets.lerobot_columns_to_tensordict.md)
 - [load_dataset](reference/generated/torchrl.data.datasets.load_dataset.md)
 - [register_dataset](reference/generated/torchrl.data.datasets.register_dataset.md)
+- [find_start_stop_traj](reference/generated/torchrl.data.find_start_stop_traj.md)
 - [ContentBase](reference/generated/torchrl.data.llm.ContentBase.md)
 - [History](reference/generated/torchrl.data.llm.History.md)
 - [TopKRewardSelector](reference/generated/torchrl.data.llm.TopKRewardSelector.md)

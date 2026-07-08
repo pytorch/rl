@@ -148,6 +148,9 @@ workers may charge the cpu load too much and harm performance.
 a rollout is reached. If no `"truncated"` key is found, an exception is raised.
 Truncated keys can be set through `env.add_truncated_keys`.
 Defaults to `False`.
+See [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
+for when these markers are needed to sample trajectories from a
+replay buffer.
 - **track_policy_version** (*bool**or*[*PolicyVersion*](torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion)*,**optional*) -
 
 if `True`, the collector will track the version of the policy.

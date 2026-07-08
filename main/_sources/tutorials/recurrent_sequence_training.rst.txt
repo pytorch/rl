@@ -210,7 +210,7 @@ linear head that maps the LSTM output to the action logits. We pick
               in_keys=['features'],
               out_keys=['logits'])
           (2): TensorDictModule(
-              module=<function make_policy.<locals>.<lambda> at 0x7f09f05dc400>,
+              module=<function make_policy.<locals>.<lambda> at 0x7fada20676a0>,
               device=cpu,
               in_keys=['logits'],
               out_keys=['action'])
@@ -311,7 +311,7 @@ Run one rollout and look at what comes back. Three things to notice:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 213-233
+.. GENERATED FROM PYTHON SOURCE LINES 213-239
 
 Replay with SliceSampler
 ------------------------
@@ -321,6 +321,12 @@ trajectories from it. :class:`~torchrl.data.replay_buffers.SliceSampler`
 is trajectory-aware: it uses the boundary information already in the
 batch (``("next", "done")`` and the collector-written ``("collector",
 "traj_ids")``) to draw whole sub-trajectories.
+
+.. seealso::
+  :ref:`Trajectory boundaries <ref_traj_boundaries>` documents how the
+  sampler recovers episode boundaries from these markers, including the
+  circular-storage subtleties (wraparound, write cursor) that appear once
+  the buffer is full.
 
 Two design choices in this section:
 
@@ -334,7 +340,7 @@ Two design choices in this section:
    consumers (e.g. mask-aware losses), but the docstring on SliceSampler
    explicitly steers users toward the ragged path when possible.
 
-.. GENERATED FROM PYTHON SOURCE LINES 233-249
+.. GENERATED FROM PYTHON SOURCE LINES 239-255
 
 .. code-block:: Python
 
@@ -368,7 +374,7 @@ Two design choices in this section:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-261
+.. GENERATED FROM PYTHON SOURCE LINES 256-267
 
 What ``is_init`` marks
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -382,7 +388,7 @@ separate signal: when ``pad_output=True`` is used, ``SliceSampler`` writes a
 ``("collector", "mask")`` key for consumers that need to ignore padded
 timesteps.
 
-.. GENERATED FROM PYTHON SOURCE LINES 263-302
+.. GENERATED FROM PYTHON SOURCE LINES 269-308
 
 Sequential mode vs. recurrent mode
 ------------------------------------
@@ -424,7 +430,7 @@ Running the LSTM step-by-step under ``set_recurrent_mode(False)`` and
 running it in a single batch under ``set_recurrent_mode(True)`` produce
 numerically identical outputs. We verify this now on a short sequence.
 
-.. GENERATED FROM PYTHON SOURCE LINES 302-355
+.. GENERATED FROM PYTHON SOURCE LINES 308-361
 
 .. code-block:: Python
 
@@ -496,7 +502,7 @@ numerically identical outputs. We verify this now on a short sequence.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 356-368
+.. GENERATED FROM PYTHON SOURCE LINES 362-374
 
 Why the boundary handling matters: a controlled check
 -----------------------------------------------------
@@ -511,7 +517,7 @@ just that second trajectory.
 If hidden state leaked across the boundary, the noisy first half would
 pollute the second half's outputs and the comparison would fail.
 
-.. GENERATED FROM PYTHON SOURCE LINES 368-418
+.. GENERATED FROM PYTHON SOURCE LINES 374-424
 
 .. code-block:: Python
 
@@ -578,7 +584,7 @@ pollute the second half's outputs and the comparison would fail.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 419-429
+.. GENERATED FROM PYTHON SOURCE LINES 425-435
 
 A tiny gradient-path smoke test
 -------------------------------
@@ -591,7 +597,7 @@ recurrent training job, this block is where you would compute returns or
 advantages and call the objective module, still under the same recurrent
 context manager.
 
-.. GENERATED FROM PYTHON SOURCE LINES 429-450
+.. GENERATED FROM PYTHON SOURCE LINES 435-456
 
 .. code-block:: Python
 
@@ -624,12 +630,12 @@ context manager.
 
  .. code-block:: none
 
-    Training loss trajectory: [0.4143, 0.4072, 0.4072, 0.4059]
+    Training loss trajectory: [0.4136, 0.4081, 0.406, 0.4088]
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 451-469
+.. GENERATED FROM PYTHON SOURCE LINES 457-475
 
 Conclusion
 ----------
@@ -650,7 +656,7 @@ This is the canonical TorchRL pattern for recurrent / sequence-based RL.
 It composes cleanly with every loss module, every advantage estimator,
 and every replay-buffer extension in the library.
 
-.. GENERATED FROM PYTHON SOURCE LINES 471-490
+.. GENERATED FROM PYTHON SOURCE LINES 477-496
 
 Further reading
 ---------------

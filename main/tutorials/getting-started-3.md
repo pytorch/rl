@@ -268,7 +268,9 @@ equivalent to calling `rb.sample()` within a loop!
 see [Complete trajectory collection with trajs_per_batch](../reference/collectors_replay.html#collectors-replay-trajs) -- it shows how to use
 `trajs_per_batch` with a [`SliceSampler`](../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to store
 and sample clean trajectory slices from the replay buffer, especially
-with multi-process collectors.
+with multi-process collectors. The underlying contract -- how episode
+boundaries are recovered from the stored data -- is documented in
+[Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries).
 
 **Total running time of the script:** (0 minutes 0.079 seconds)
 

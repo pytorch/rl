@@ -878,6 +878,13 @@ gc.collect()
 # The sampler cannot detect these invisible boundaries and may draw slices
 # that cross episodes.
 #
+# .. seealso::
+#   :ref:`Trajectory boundaries <ref_traj_boundaries>` spells out the full
+#   contract: which markers (trajectory ids, ``done``/``truncated``/
+#   ``terminated`` flags, the write cursor) the sampler uses to recover
+#   episode boundaries, and why this multi-process case is the one
+#   configuration where the markers alone are not enough.
+#
 # The recommended solution is ``trajs_per_batch``, which makes each worker
 # write only **complete trajectories** to the buffer — see
 # :ref:`the dedicated collector + replay buffer section <collectors_replay_trajs>`

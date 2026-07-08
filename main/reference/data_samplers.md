@@ -2,6 +2,14 @@
 
 Samplers control how data is retrieved from the replay buffer storage.
 
+See also
+
+The trajectory-aware samplers ([`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) and its variants)
+recover episode boundaries from the stored data at sampling time. The
+conventions they rely on -- trajectory ids, end flags, circular-storage
+wraparound and the write cursor -- are documented in
+[Trajectory boundaries](data_layout.html#ref-traj-boundaries).
+
 | [`PrioritizedSampler`](generated/torchrl.data.replay_buffers.PrioritizedSampler.html#torchrl.data.replay_buffers.PrioritizedSampler)(*args, **kwargs) | Prioritized sampler for replay buffer. |
 | --- | --- |
 | [`PrioritizedSliceSampler`](generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html#torchrl.data.replay_buffers.PrioritizedSliceSampler)(*args, **kwargs) | Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling. |

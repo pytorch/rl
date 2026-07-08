@@ -132,6 +132,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Data layout: contiguous trajectories](reference/data_layout.html)
 
 - [Trajectory boundary keys](reference/data_layout.html#trajectory-boundary-keys)
+- [Trajectory boundaries: recovering episodes from storage](reference/data_layout.html#trajectory-boundaries-recovering-episodes-from-storage)
 - [The replay buffer `ndim` arg and why it doesn't multi-process well](reference/data_layout.html#the-replay-buffer-ndim-arg-and-why-it-doesn-t-multi-process-well)
 - [The buffer-to-collector handoff: complete-trajectory writes](reference/data_layout.html#the-buffer-to-collector-handoff-complete-trajectory-writes)
 - [SliceSampler: variable-length contiguous slices](reference/data_layout.html#slicesampler-variable-length-contiguous-slices)

@@ -62,6 +62,16 @@ calls. To collect batches made of complete trajectories only, pass
 `trajs_per_batch` to the collector instead (see
 [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs)).
 
+See also
+
+This function operates on contiguous *rollout batches* (fresh
+collector output). To recover trajectory boundaries from data laid out
+in a replay-buffer storage - where the ring buffer can wrap and the
+write cursor acts as an implicit truncation - use
+[`find_start_stop_traj()`](torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj) instead. Note that the
+padded layout this function produces is discouraged for new code
+unless explicitly needed; see data-layout-split-trajectories.
+
 Examples
 
 ```

@@ -121,6 +121,34 @@ capacity without scanning the full storage on every write. This mode supports
 random sampling. Prefetching, prioritized replay and multidimensional storages
 are rejected explicitly.
 
+### Trajectory boundaries
+
+Replay buffers store steps, not trajectories: components that need
+trajectories ([`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) and its
+variants, trajectory-aware transforms, offline dataset tooling) recover
+episode boundaries at *read time* from markers present in the stored data.
+The full producer/consumer contract -- which markers exist, who writes them,
+how circular storage (wraparound, write cursor) interacts with boundary
+recovery, and its blind spots -- is documented in
+[Trajectory boundaries](data_layout.html#ref-traj-boundaries) on the data-layout page.
+The associated APIs are:
+
+| [`find_start_stop_traj`](generated/torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj)(*[, trajectory, end, ...]) | Recover trajectory boundaries from trajectory ids or end-of-trajectory flags. |
+| --- | --- |
+
+torchrl.data.DEFAULT_DONE_KEYS*= ("done", "truncated", "terminated")*
+
+Canonical end-of-trajectory signal keys in TED format. A step can be
+marked as the last of its trajectory by any of these entries (typically
+read under the `"next"` sub-tensordict); `"done"` is the union of the
+other two, but datasets sometimes carry only a subset of the entries, so
+consumers detecting trajectory ends from flags should use the union of
+all three. Shared default of [`TED2Flat`](generated/torchrl.data.TED2Flat.html#torchrl.data.TED2Flat),
+`TED2Nested`, `MultiStep`
+and `MultiStepTransform`; accepted by
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) through its
+`end_keys` argument.
+
 ### TED-format conversion
 
 The following helpers convert between the TorchRL Episode Data (TED) layout and

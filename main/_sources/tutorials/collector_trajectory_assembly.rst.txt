@@ -68,7 +68,7 @@ Collectors Deep Dive: Trajectory Assembly
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f0a566c00b0>
+    <torch._C.Generator object at 0x7fadfaf70150>
 
 
 
@@ -668,7 +668,7 @@ images), since no memory is spent on padding:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 210-228
+.. GENERATED FROM PYTHON SOURCE LINES 210-232
 
 Storing transitions and sampling trajectory slices
 ---------------------------------------------------
@@ -688,8 +688,12 @@ This is the approach used in the
   storage in more depth, including alternative samplers such as
   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`.
+  :ref:`Trajectory boundaries <ref_traj_boundaries>` documents exactly
+  which markers (``done``/``truncated``/``terminated`` flags, trajectory
+  ids, the write cursor) the sampler uses to recover episode boundaries
+  from the buffer, and its blind spots.
 
-.. GENERATED FROM PYTHON SOURCE LINES 228-240
+.. GENERATED FROM PYTHON SOURCE LINES 232-244
 
 .. code-block:: Python
 
@@ -712,14 +716,14 @@ This is the approach used in the
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 241-245
+.. GENERATED FROM PYTHON SOURCE LINES 245-249
 
 We extend the buffer with the **flat** collector batch (``data``, shape
 ``(200,)``), not with the pre-assembled trajectory tensor.  The
 ``SliceSampler`` reads the ``("next", "done")`` flags in this flat
 storage to figure out where episodes start and stop.
 
-.. GENERATED FROM PYTHON SOURCE LINES 245-253
+.. GENERATED FROM PYTHON SOURCE LINES 249-257
 
 .. code-block:: Python
 
@@ -770,12 +774,12 @@ storage to figure out where episodes start and stop.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 254-256
+.. GENERATED FROM PYTHON SOURCE LINES 258-260
 
 With ``batch_size=32`` and ``slice_len=16`` the sampler must draw
 exactly ``32 // 16 = 2`` contiguous trajectory slices per call:
 
-.. GENERATED FROM PYTHON SOURCE LINES 256-260
+.. GENERATED FROM PYTHON SOURCE LINES 260-264
 
 .. code-block:: Python
 
@@ -796,7 +800,7 @@ exactly ``32 // 16 = 2`` contiguous trajectory slices per call:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 261-280
+.. GENERATED FROM PYTHON SOURCE LINES 265-284
 
 Each sampled batch contains contiguous slices of 16 steps drawn from
 the stored transitions. A typical training loop looks like this:
@@ -818,7 +822,7 @@ the stored transitions. A typical training loop looks like this:
             loss.backward()
             optim.step()
 
-.. GENERATED FROM PYTHON SOURCE LINES 282-290
+.. GENERATED FROM PYTHON SOURCE LINES 286-294
 
 Asynchronous collection with ``collector.start()``
 ---------------------------------------------------
@@ -829,7 +833,7 @@ decouple collection from training entirely using
 background thread and writes flat transitions into the buffer
 continuously while your training loop samples from it.
 
-.. GENERATED FROM PYTHON SOURCE LINES 290-314
+.. GENERATED FROM PYTHON SOURCE LINES 294-318
 
 .. code-block:: Python
 
@@ -864,13 +868,13 @@ continuously while your training loop samples from it.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 315-318
+.. GENERATED FROM PYTHON SOURCE LINES 319-322
 
 The collector is now filling ``rb_async`` in the background with flat
 transitions. The ``SliceSampler`` will carve contiguous 16-step slices
 out of this flat storage, respecting episode boundaries.
 
-.. GENERATED FROM PYTHON SOURCE LINES 318-330
+.. GENERATED FROM PYTHON SOURCE LINES 322-334
 
 .. code-block:: Python
 
@@ -925,11 +929,11 @@ out of this flat storage, respecting episode boundaries.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 331-332
+.. GENERATED FROM PYTHON SOURCE LINES 335-336
 
 When you are done, shut the collector down:
 
-.. GENERATED FROM PYTHON SOURCE LINES 332-335
+.. GENERATED FROM PYTHON SOURCE LINES 336-339
 
 .. code-block:: Python
 
@@ -943,13 +947,13 @@ When you are done, shut the collector down:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 336-339
+.. GENERATED FROM PYTHON SOURCE LINES 340-343
 
 This pattern is especially useful when environment stepping is slow
 (e.g. physics simulators or LLM inference): the training loop never
 idles waiting for new data, and the buffer is always fresh.
 
-.. GENERATED FROM PYTHON SOURCE LINES 341-369
+.. GENERATED FROM PYTHON SOURCE LINES 345-376
 
 Conclusion
 ----------
@@ -978,12 +982,15 @@ Useful next resources
   and replay-buffer workflow.
 * :ref:`Recurrent DQN tutorial <RNN_tuto>` — training a recurrent
   policy where per-episode data is essential.
+* :ref:`Trajectory boundaries <ref_traj_boundaries>` — the contract
+  between collectors, storages and samplers for recovering episode
+  boundaries from a replay buffer.
 * `TorchRL documentation <https://pytorch.org/rl/>`_
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.391 seconds)
+   **Total running time of the script:** (0 minutes 0.375 seconds)
 
 
 .. _sphx_glr_download_tutorials_collector_trajectory_assembly.py:

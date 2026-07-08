@@ -193,7 +193,10 @@ to. Written by [`Collector`](generated/torchrl.collectors.Collector.html#torchrl
 `("collector", "traj_ids")` when `track_traj_ids=True`. Used by
 [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to draw whole trajectories from a
 buffer and by [`split_trajectories()`](generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories) to
-slice a flat batch into per-trajectory chunks.
+slice a flat batch into per-trajectory chunks. See
+[Trajectory boundaries](data_layout.html#ref-traj-boundaries) for how these ids
+and the done/truncated/terminated flags are consumed to recover
+episode boundaries from a replay buffer.
 
 Transform
 

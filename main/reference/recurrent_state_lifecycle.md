@@ -200,7 +200,8 @@ custom replay buffer / transform drops or rewrites the true boundary
 signal), the LSTM has no way to know when a new trajectory has started.
 In that case the hidden state will silently carry forward across episode
 boundaries -- usually the most painful class of recurrent bug to diagnose
-because rewards still look plausible.
+because rewards still look plausible. ([Trajectory boundaries](data_layout.html#ref-traj-boundaries) documents which markers samplers use to recover
+episode boundaries and the cases where a boundary is unrecoverable.)
 
 ## When hidden state resets vs. is carried forward
 

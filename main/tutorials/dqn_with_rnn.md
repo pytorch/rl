@@ -487,6 +487,8 @@ The [collector trajectory assembly tutorial](collector_trajectory_assembly.html#
 explains how `split_trajectories`, `trajs_per_batch`, and
 `SliceSampler` work together in detail, including asynchronous
 collection with [`start()`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.start).
+[Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries) documents how the
+sampler recovers episode boundaries from the stored markers.
 
 Note
 
@@ -564,10 +566,10 @@ for i, _ in enumerate(collector):
 
 ```
 0%| | 0/200 [00:00<?, ?it/s]
- 25%|██▌ | 50/200 [00:00<00:01, 113.60it/s]
- 50%|█████ | 100/200 [00:00<00:00, 118.32it/s]
- 75%|███████▌ | 150/200 [00:01<00:00, 119.88it/s]
-100%|██████████| 200/200 [00:01<00:00, 120.82it/s]
+ 25%|██▌ | 50/200 [00:00<00:01, 116.07it/s]
+ 50%|█████ | 100/200 [00:00<00:00, 119.37it/s]
+ 75%|███████▌ | 150/200 [00:01<00:00, 120.50it/s]
+100%|██████████| 200/200 [00:01<00:00, 120.47it/s]
 ```
 
 Let's plot our results:
@@ -598,7 +600,7 @@ the data
 
 - The TorchRL documentation can be found [here](https://pytorch.org/rl/).
 
-**Total running time of the script:** (0 minutes 6.018 seconds)
+**Total running time of the script:** (0 minutes 5.900 seconds)
 
 [`Download Jupyter notebook: dqn_with_rnn.ipynb`](../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb)
 

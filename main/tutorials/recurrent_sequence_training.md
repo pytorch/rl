@@ -148,7 +148,7 @@ TensorDictSequential(
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7f09f05dc400>,
+ module=<function make_policy.<locals>.<lambda> at 0x7fada20676a0>,
  device=cpu,
  in_keys=['logits'],
  out_keys=['action'])
@@ -227,6 +227,13 @@ trajectories from it. [`SliceSampler`](../reference/generated/torchrl.data.repla
 is trajectory-aware: it uses the boundary information already in the
 batch (`("next", "done")` and the collector-written `("collector",
 "traj_ids")`) to draw whole sub-trajectories.
+
+See also
+
+[Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries) documents how the
+sampler recovers episode boundaries from these markers, including the
+circular-storage subtleties (wraparound, write cursor) that appear once
+the buffer is full.
 
 Two design choices in this section:
 
@@ -472,7 +479,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4143, 0.4072, 0.4072, 0.4059]
+Training loss trajectory: [0.4136, 0.4081, 0.406, 0.4088]
 ```
 
 ## Conclusion

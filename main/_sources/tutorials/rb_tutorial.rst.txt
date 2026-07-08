@@ -390,8 +390,8 @@ We can also customize the storage location on disk:
  .. code-block:: none
 
     The buffer has 3 elements
-    the 'a' tensor is stored in /tmp/tmp7jsey_l7/a.memmap
-    the ('b', 'c') tensor is stored in /tmp/tmp7jsey_l7/b/c.memmap
+    the 'a' tensor is stored in /tmp/tmpqvnvjr_s/a.memmap
+    the ('b', 'c') tensor is stored in /tmp/tmpqvnvjr_s/b/c.memmap
     samples: a= tensor([[ 4,  5,  6,  7],
             [ 8,  9, 10, 11],
             [ 0,  1,  2,  3],
@@ -1793,11 +1793,11 @@ We mark the steps as well.
     episode are grouped tensor([1, 1, 4, 4, 3, 3, 4, 4], dtype=torch.int32)
     steps are successive tensor([1, 2, 0, 1, 0, 1, 0, 1])
 
-    1341
+    4547
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 843-895
+.. GENERATED FROM PYTHON SOURCE LINES 843-902
 
 Storing trajectories from a collector
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1837,6 +1837,13 @@ come from unrelated episodes *without* an intervening ``done`` signal.
 The sampler cannot detect these invisible boundaries and may draw slices
 that cross episodes.
 
+.. seealso::
+  :ref:`Trajectory boundaries <ref_traj_boundaries>` spells out the full
+  contract: which markers (trajectory ids, ``done``/``truncated``/
+  ``terminated`` flags, the write cursor) the sampler uses to recover
+  episode boundaries, and why this multi-process case is the one
+  configuration where the markers alone are not enough.
+
 The recommended solution is ``trajs_per_batch``, which makes each worker
 write only **complete trajectories** to the buffer — see
 :ref:`the dedicated collector + replay buffer section <collectors_replay_trajs>`
@@ -1852,7 +1859,7 @@ for full examples and discussion.
     trajectories cannot fill.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 897-920
+.. GENERATED FROM PYTHON SOURCE LINES 904-927
 
 Conclusion
 ----------
@@ -1881,7 +1888,7 @@ Next steps
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.847 seconds)
+   **Total running time of the script:** (0 minutes 0.834 seconds)
 
 
 .. _sphx_glr_download_tutorials_rb_tutorial.py:

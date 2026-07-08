@@ -61,6 +61,9 @@ with their dual). Used by collectors to decide when to reset, by
 [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) to reconstruct trajectory boundaries
 when no `traj_ids` key is available, and by
 [`split_trajectories()`](generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories) (legacy).
+Datasets sometimes carry only a subset of the three flags; consumers
+that detect trajectory ends from flags should use the union of
+[`DEFAULT_DONE_KEYS`](data_replaybuffers.html#torchrl.data.DEFAULT_DONE_KEYS) rather than `done` alone.
 
 `("next", "terminated")`
 
@@ -78,14 +81,104 @@ classic source of value-estimation bugs.
 `("collector", "traj_ids")`
 
 *Optional integer per-step trajectory identifier.* Written by every
-[`BaseCollector`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) subclass. When present,
+[`BaseCollector`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) subclass by default
+(`track_traj_ids=False` disables it). When present,
 [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) uses this directly instead of
 reconstructing boundaries from `done`. Auto-detected on the first
 sample call when no `traj_key` is passed at construction.
 
 The "1-D contiguous" layout uses these keys *exclusively* -- no shape-based
 padding, no mask. Every primitive in TorchRL that needs to know where
-trajectories start and stop reads them.
+trajectories start and stop reads them. The next section describes how they
+are *consumed* at read time.
+
+## Trajectory boundaries: recovering episodes from storage
+
+A replay-buffer storage holds steps, not trajectories: nothing in the
+storage layer knows where an episode starts or ends. Components that need
+trajectories ([`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) and its
+variants, trajectory-aware transforms, offline dataset tooling) recover the
+boundaries at *read time* from the markers described above. The contract
+between producers and consumers is the following:
+
+- **Collectors stamp trajectory ids** under `("collector", "traj_ids")`
+by default (`track_traj_ids=False` disables it). This is the most
+robust boundary marker: a change of id between two consecutive steps in
+storage order is a boundary, whether or not the episode ended with a
+`done` flag.
+- **End flags mark trajectory ends.** A step can be the last of its
+trajectory because of any of the [`DEFAULT_DONE_KEYS`](data_replaybuffers.html#torchrl.data.DEFAULT_DONE_KEYS)
+entries (`"done"`, `"truncated"`, `"terminated"`, typically read
+under `("next", ...)`). Consumers that reconstruct boundaries from
+flags should use the union of these signals: a dataset that only carries
+`truncated=True` ends would otherwise silently merge consecutive
+episodes. [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) reads a
+single `end_key` (default `("next", "done")`) for backward
+compatibility; pass
+`end_keys=[("next", key) for key in DEFAULT_DONE_KEYS]` to apply the
+union convention.
+- **Collectors can mark batch ends as truncations.** Passing
+`set_truncated=True` to a collector marks the last step of every
+rollout batch as truncated. This introduces artificial trajectory ends,
+but guarantees that batch boundaries are never silently crossed.
+Multi-process collectors warn when a
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) is used and neither
+`trajs_per_batch` nor `set_truncated` is set, because different
+workers' batches interleave in the shared buffer and adjacent frames can
+then belong to different episodes (see [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs)
+for the trade-offs and the recommended `trajs_per_batch` alternative).
+Single-process collectors do not need this: they write batches in
+temporal order, so a batch boundary is not a seam -- the next batch
+continues exactly where the previous one ended, and the only
+mid-trajectory edge is the live write cursor (handled below).
+- **Writers never mutate stored data.** No flag is written into the
+storage when the ring buffer wraps or when a write stops mid-trajectory.
+Instead, samplers resolve the missing boundaries at read time from the
+storage state, as described next.
+
+**Circular-storage semantics.** Once a storage is full it behaves as a ring
+buffer, and its *physical* order (index 0 to N-1) no longer matches the
+*chronological* order in which the steps were written. Boundary recovery --
+implemented by [`find_start_stop_traj()`](generated/torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj), which
+[`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) uses under the hood --
+resolves this as follows:
+
+- The storage's `_last_cursor` records where the last write landed. The
+step under the cursor is the oldest remaining step of a
+partially-overwritten trajectory, so the cursor position is treated as an
+implicit truncation (an end flag is forced there at read time).
+- When the storage is *not* full, the last valid element is always treated
+as a trajectory end (the write head is an implicit truncation).
+- A trajectory with no intervening end flag can span the wrap point of a
+full storage. The recovered `(start, stop, lengths)` indices represent
+this as `start > stop` with `stop` *inclusive*: a trajectory spanning
+rows `[8, 9, 0, 1, 2]` of a 10-row storage has `start=8`, `stop=2`
+and `lengths=5`.
+- If a full storage carries no end marker at all in some batch column, a
+single trajectory ending at the last row is assumed for that column.
+
+Warning
+
+There is one blind spot: if the stored data carries no trajectory ids
+and an episode ended mid-buffer without any end flag set (e.g. data
+collected without `set_truncated` and stripped of its
+`("collector", "traj_ids")` entry), that boundary is unrecoverable --
+the two episodes are indistinguishable from a single longer one, and
+any consumer will merge them. Keep the trajectory ids, or make sure
+every trajectory ends with one of the
+[`DEFAULT_DONE_KEYS`](data_replaybuffers.html#torchrl.data.DEFAULT_DONE_KEYS) flags set.
+
+New components that need trajectory boundaries should call
+[`find_start_stop_traj()`](generated/torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj) rather than reimplement these
+conventions (naive reimplementations typically mishandle the wrap point and
+truncated-only episode ends). Which API to reach for:
+
+| Input / use case | API |
+| --- | --- |
+| Fresh contiguous rollout, needing padded or nested per-trajectory views | [`split_trajectories()`](generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories) (padded output is discouraged unless explicitly needed -- see data-layout-split-trajectories) |
+| Physical replay-storage markers, needing boundary indices / lengths | [`find_start_stop_traj()`](generated/torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj) |
+| Sampling contiguous trajectory slices from a buffer | [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) (and variants) |
+| Collecting only complete trajectories in the first place | `trajs_per_batch` (see [Complete trajectory collection with trajs_per_batch](collectors_replay.html#collectors-replay-trajs)) |
 
 ## The replay buffer `ndim` arg and why it doesn't multi-process well
 

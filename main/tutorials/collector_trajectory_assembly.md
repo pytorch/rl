@@ -36,7 +36,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f0a566c00b0>
+<torch._C.Generator object at 0x7fadfaf70150>
 ```
 
 ## Why collectors return fixed-size chunks
@@ -490,6 +490,10 @@ The [replay buffer tutorial](rb_tutorial.html#tuto-rb-traj) covers trajectory
 storage in more depth, including alternative samplers such as
 [`PrioritizedSliceSampler`](../reference/generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html#torchrl.data.replay_buffers.PrioritizedSliceSampler) and
 [`SliceSamplerWithoutReplacement`](../reference/generated/torchrl.data.replay_buffers.SliceSamplerWithoutReplacement.html#torchrl.data.replay_buffers.SliceSamplerWithoutReplacement).
+[Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries) documents exactly
+which markers (`done`/`truncated`/`terminated` flags, trajectory
+ids, the write cursor) the sampler uses to recover episode boundaries
+from the buffer, and its blind spots.
 
 ```
 from torchrl.data import SliceSampler
@@ -695,9 +699,12 @@ asynchronous collection in a background thread.
 and replay-buffer workflow.
 - [Recurrent DQN tutorial](dqn_with_rnn.html#rnn-tuto) -- training a recurrent
 policy where per-episode data is essential.
+- [Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries) -- the contract
+between collectors, storages and samplers for recovering episode
+boundaries from a replay buffer.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 0.391 seconds)
+**Total running time of the script:** (0 minutes 0.375 seconds)
 
 [`Download Jupyter notebook: collector_trajectory_assembly.ipynb`](../_downloads/a2c17acd7f5b44ec53e851e28c3416ac/collector_trajectory_assembly.ipynb)
 

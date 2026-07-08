@@ -163,6 +163,9 @@ write `("collector", "traj_ids")` in the rollout nor update
 trajectory identifiers at every environment step. This is useful
 when trajectory splitting or trajectory-aware replay sampling is not
 needed. Defaults to `True`.
+The ids are the most robust trajectory-boundary marker for
+replay-buffer consumers; see [the trajectory-boundary
+documentation](../data_layout.html#ref-traj-boundaries) before disabling them.
 - **exploration_type** (*ExplorationType**,**optional*) - interaction mode to be used when
 collecting data. Must be one of `torchrl.envs.utils.ExplorationType.DETERMINISTIC`,
 `torchrl.envs.utils.ExplorationType.RANDOM`, `torchrl.envs.utils.ExplorationType.MODE`
@@ -182,6 +185,9 @@ Default is `False`.
 a rollout is reached. If no `"truncated"` key is found, an exception is raised.
 Truncated keys can be set through `env.add_truncated_keys`.
 Defaults to `False`.
+See [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
+for when these markers are needed to sample trajectories from a
+replay buffer.
 - **use_buffers** (*bool**,**optional*) - if `True`, a buffer will be used to stack the data.
 This isn't compatible with environments with dynamic specs. Defaults to `True`
 for envs without dynamic specs, `False` for others.

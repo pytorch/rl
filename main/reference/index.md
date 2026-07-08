@@ -31,6 +31,7 @@
 - [Data layout: contiguous trajectories](data_layout.html)
 
 - [Trajectory boundary keys](data_layout.html#trajectory-boundary-keys)
+- [Trajectory boundaries: recovering episodes from storage](data_layout.html#trajectory-boundaries-recovering-episodes-from-storage)
 - [The replay buffer `ndim` arg and why it doesn't multi-process well](data_layout.html#the-replay-buffer-ndim-arg-and-why-it-doesn-t-multi-process-well)
 - [The buffer-to-collector handoff: complete-trajectory writes](data_layout.html#the-buffer-to-collector-handoff-complete-trajectory-writes)
 - [SliceSampler: variable-length contiguous slices](data_layout.html#slicesampler-variable-length-contiguous-slices)

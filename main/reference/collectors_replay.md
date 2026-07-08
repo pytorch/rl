@@ -250,6 +250,11 @@ See also
 API, completeness guarantee, and batched-environment behaviour.
 - [`SliceSampler`](generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler) for configuring sub-sequence sampling
 from the buffer.
+- [Trajectory boundaries](data_layout.html#ref-traj-boundaries) for the contract the
+sampler relies on: which markers delimit trajectories in storage, how
+boundaries are recovered at read time
+([`find_start_stop_traj()`](generated/torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj)), and the blind spot when
+neither ids nor end flags are present.
 - The trajectory batching section in the
 single-node collector docs for the non-replay-buffer usage
 (padded `(trajs, max_len)` batches, or flat unpadded batches with

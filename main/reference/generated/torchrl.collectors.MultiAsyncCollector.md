@@ -274,6 +274,11 @@ interoperability with the rest of the library.
 a rollout is reached. If no `"truncated"` key is found, an exception is raised.
 Truncated keys can be set through `env.add_truncated_keys`.
 Defaults to `False`.
+With a multi-process collector writing to a shared replay buffer,
+this marks the worker-batch seams that would otherwise be
+invisible to a [`SliceSampler`](torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler);
+see [the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
+and [Complete trajectory collection with trajs_per_batch](../collectors_replay.html#collectors-replay-trajs) for the trade-offs.
 - **trajs_per_batch** (*int**,**optional*) -
 
 When set together with `replay_buffer`,

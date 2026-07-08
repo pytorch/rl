@@ -30,8 +30,27 @@ with `slice_len`.
 - **slice_len** (*int*) - the length of the slices to be sampled. The batch-size
 must be greater or equal to the `slice_len` argument and divisible
 by it. Exclusive with `num_slices`.
-- **end_key** (*NestedKey**,**optional*) - the key indicating the end of a
+- **end_key** (*NestedKey**,**optional*) -
+
+the key indicating the end of a
 trajectory (or episode). Defaults to `("next", "done")`.
+Exclusive with `end_keys`.
+
+Note
+
+A single `end_key` misses trajectories whose end is
+marked by another flag only (e.g. datasets carrying
+`truncated=True` ends without an aggregate `done` entry
+- those get silently merged with the next trajectory). Pass
+`end_keys` to apply the
+[`DEFAULT_DONE_KEYS`](../data_replaybuffers.html#torchrl.data.DEFAULT_DONE_KEYS) union convention.
+- **end_keys** (*sequence**of**NestedKey**,**optional*) - a sequence of keys whose
+entries are OR-ed together to build the end-of-trajectory signal.
+Keys absent from the storage are skipped (at least one must be
+present). Use
+`[("next", key) for key in DEFAULT_DONE_KEYS]` to union
+`done`, `truncated` and `terminated`. Exclusive with
+`end_key`. Defaults to `None` (use `end_key`).
 - **traj_key** (*NestedKey**,**optional*) - the key indicating the trajectories.
 Defaults to `"episode"` (commonly used across datasets in TorchRL).
 - **ends** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - a 1d boolean tensor containing the end of run signals.
@@ -180,3 +199,10 @@ tensor([[ 4, 5, 6, 7, 8],
 tensor([[0., 0., 0., 0., 0.],
  [1., 1., 1., 1., 1.]])
 ```
+
+See also
+
+Trajectory boundaries are recovered at sampling time with
+[`find_start_stop_traj()`](torchrl.data.find_start_stop_traj.html#torchrl.data.find_start_stop_traj); see
+[the trajectory-boundary documentation](../data_layout.html#ref-traj-boundaries)
+for the conventions collectors, storages and samplers follow.

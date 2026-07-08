@@ -13,7 +13,8 @@ Defaults to "shift".
 - **is_full_key** (*NestedKey**,**optional*) - the key where the is_full attribute will be written.
 Defaults to "is_full".
 - **done_keys** (*Tuple**[**NestedKey**]**,**optional*) - a tuple of nested keys indicating the done entries.
-Defaults to ("done", "truncated", "terminated")
+Defaults to [`DEFAULT_DONE_KEYS`](../data_replaybuffers.html#torchrl.data.DEFAULT_DONE_KEYS), i.e.
+`("done", "truncated", "terminated")`.
 - **reward_keys** (*Tuple**[**NestedKey**]**,**optional*) - a tuple of nested keys indicating the reward entries.
 Defaults to ("reward",)
 
