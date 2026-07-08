@@ -47,6 +47,7 @@ from torchrl.modules.inference_server import (
     SlotTransport,
     ThreadingTransport,
 )
+from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._monarch import MonarchTransport
 
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -601,6 +602,118 @@ class TestInferenceServerCore:
             result = client(TensorDict({"observation": torch.randn(4)}, device="cpu"))
         assert result["action"].device.type == "cpu"
         assert next(policy.parameters()).device.type == "cuda"
+
+
+class TestDeviceResolution:
+    """Unit tests for the shared device-precedence resolution.
+
+    ``_resolve_device_config`` is the single source of truth for the device
+    precedence rules shared by the inference servers, AsyncBatchedCollector
+    and the regular collectors (issue #3943).
+    """
+
+    def test_device_aliases_policy_device_only(self):
+        resolved = _resolve_device_config(device="cpu")
+        assert resolved.policy_device == torch.device("cpu")
+        assert resolved.output_device is None
+        assert resolved.env_device is None
+        assert resolved.storing_device is None
+
+    def test_explicit_policy_device_wins_over_device(self):
+        resolved = _resolve_device_config(device="meta", policy_device="cpu")
+        assert resolved.policy_device == torch.device("cpu")
+
+    def test_output_device_falls_back_to_env_device(self):
+        resolved = _resolve_device_config(env_device="cpu")
+        assert resolved.output_device == torch.device("cpu")
+        resolved = _resolve_device_config(env_device="cpu", output_device="meta")
+        assert resolved.output_device == torch.device("meta")
+
+    def test_config_passthrough(self):
+        config = InferenceDeviceConfig(
+            policy_device="cpu",
+            output_device="meta",
+            env_device="cpu",
+            storing_device="cpu",
+        )
+        resolved = _resolve_device_config(config)
+        assert resolved.policy_device == torch.device("cpu")
+        assert resolved.output_device == torch.device("meta")
+        assert resolved.env_device == torch.device("cpu")
+        assert resolved.storing_device == torch.device("cpu")
+
+    def test_device_config_exclusive_with_every_loose_kwarg(self):
+        for kwarg in (
+            "device",
+            "policy_device",
+            "output_device",
+            "env_device",
+            "storing_device",
+        ):
+            with pytest.raises(ValueError, match=f"mutually exclusive.*{kwarg}"):
+                _resolve_device_config(InferenceDeviceConfig(), **{kwarg: "cpu"})
+
+    def test_storing_device_rejected_when_disallowed(self):
+        with pytest.raises(ValueError, match="storing_device is a collector-level"):
+            _resolve_device_config(
+                InferenceDeviceConfig(storing_device="cpu"),
+                allow_storing_device=False,
+            )
+        with pytest.raises(ValueError, match="storing_device is a collector-level"):
+            _resolve_device_config(storing_device="cpu", allow_storing_device=False)
+
+    def test_collector_defaults_device_fills_all(self):
+        resolved = _resolve_device_config(device="cpu", collector_defaults=True)
+        assert resolved.policy_device == torch.device("cpu")
+        assert resolved.env_device == torch.device("cpu")
+        assert resolved.storing_device == torch.device("cpu")
+
+    def test_collector_defaults_storing_falls_back_to_shared_device(self):
+        resolved = _resolve_device_config(
+            policy_device="cpu", env_device="cpu", collector_defaults=True
+        )
+        assert resolved.storing_device == torch.device("cpu")
+        resolved = _resolve_device_config(
+            policy_device="meta", env_device="cpu", collector_defaults=True
+        )
+        assert resolved.storing_device is None
+
+    def test_collector_defaults_make_ordinal(self):
+        # Device objects can be built without the backend being available, so
+        # this runs on CPU-only CI as well.
+        resolved = _resolve_device_config(device="mps", collector_defaults=True)
+        assert resolved.policy_device == torch.device("mps", 0)
+        assert resolved.env_device == torch.device("mps", 0)
+        assert resolved.storing_device == torch.device("mps", 0)
+
+    def test_integer_device_zero_is_not_dropped(self):
+        # ``torch.device(0)`` is falsy-adjacent (int 0); the resolution must
+        # treat it as an explicit device, not as unset.
+        resolved = _resolve_device_config(storing_device=0, collector_defaults=True)
+        assert resolved.storing_device == torch.device(0)
+
+    def test_collector_get_devices_delegates(self):
+        storing, policy, env = Collector._get_devices(
+            storing_device=None,
+            policy_device=None,
+            env_device=None,
+            device="cpu",
+        )
+        assert storing == policy == env == torch.device("cpu")
+        storing, policy, env = Collector._get_devices(
+            storing_device=None,
+            policy_device="cpu",
+            env_device="cpu",
+            device=None,
+        )
+        assert storing == torch.device("cpu")
+        storing, policy, env = Collector._get_devices(
+            storing_device=None,
+            policy_device=None,
+            env_device=None,
+            device=None,
+        )
+        assert storing is None and policy is None and env is None
 
 
 class TestInferenceClient:
@@ -1343,7 +1456,7 @@ class TestWeightSyncIntegration:
 # AsyncBatchedCollector tests
 # ---------------------------------------------------------------------------
 
-from torchrl.collectors import AsyncBatchedCollector
+from torchrl.collectors import AsyncBatchedCollector, Collector
 from torchrl.testing.mocking_classes import CountingEnv
 
 

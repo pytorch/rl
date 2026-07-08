@@ -17,7 +17,6 @@ from torch import nn
 from torchrl import compile_with_warmup
 from torchrl._utils import (
     _ends_with,
-    _make_ordinal_device,
     _maybe_record_function,
     _maybe_record_function_decorator,
     _replace_last,
@@ -49,6 +48,7 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
+from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -1381,19 +1381,14 @@ class Collector(BaseCollector):
         env_device: torch.device,
         device: torch.device,
     ):
-        device = _make_ordinal_device(torch.device(device) if device else device)
-        storing_device = _make_ordinal_device(
-            torch.device(storing_device) if storing_device else device
+        resolved = _resolve_device_config(
+            device=device,
+            policy_device=policy_device,
+            env_device=env_device,
+            storing_device=storing_device,
+            collector_defaults=True,
         )
-        policy_device = _make_ordinal_device(
-            torch.device(policy_device) if policy_device else device
-        )
-        env_device = _make_ordinal_device(
-            torch.device(env_device) if env_device else device
-        )
-        if storing_device is None and (env_device == policy_device):
-            storing_device = env_device
-        return storing_device, policy_device, env_device
+        return resolved.storing_device, resolved.policy_device, resolved.env_device
 
     # for RPC
     def next(self):

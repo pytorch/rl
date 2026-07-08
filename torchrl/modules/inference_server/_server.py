@@ -29,6 +29,7 @@ from torchrl.modules.inference_server._client import (
     _REMOTE_INTERACTION_TYPE_KEY,
 )
 from torchrl.modules.inference_server._config import (
+    _resolve_device_config,
     InferenceDeviceConfig,
     InferenceServerConfig,
 )
@@ -225,40 +226,22 @@ class InferenceServer:
             collect_stats = _server_defaults.collect_stats
         if stats_window_size is None:
             stats_window_size = _server_defaults.stats_window_size
-        if device_config is not None:
-            if (
-                device is not None
-                or policy_device is not None
-                or output_device is not None
-            ):
-                raise ValueError(
-                    "device_config is mutually exclusive with device, "
-                    "policy_device, and output_device."
-                )
-            if device_config.storing_device is not None:
-                raise ValueError(
-                    "storing_device is a collector-level setting that the "
-                    "server does not consume. The server only uses "
-                    "policy_device and output_device (with env_device as a "
-                    "fallback for output_device). Pass storing_device to the "
-                    "collector instead."
-                )
-            policy_device = device_config.policy_device
-            output_device = device_config.server_output_device()
+        _devices = _resolve_device_config(
+            device_config,
+            device=device,
+            policy_device=policy_device,
+            output_device=output_device,
+            allow_storing_device=False,
+        )
         self.model = model
         self.transport = transport
         self.max_batch_size = max_batch_size
         self.min_batch_size = min_batch_size
         self.timeout = timeout
         self.collate_fn = collate_fn if collate_fn is not None else _default_collate
-        policy_device = device if policy_device is None else policy_device
-        self.policy_device = (
-            torch.device(policy_device) if policy_device is not None else None
-        )
+        self.policy_device = _devices.policy_device
         self.device = self.policy_device
-        self.output_device = (
-            torch.device(output_device) if output_device is not None else None
-        )
+        self.output_device = _devices.output_device
         self.weight_sync = weight_sync
         self._weight_sync_model_id = weight_sync_model_id
         self._policy_version = int(policy_version)
@@ -844,26 +827,13 @@ class ProcessInferenceServer:
             collect_stats = _server_defaults.collect_stats
         if stats_window_size is None:
             stats_window_size = _server_defaults.stats_window_size
-        if device_config is not None:
-            if (
-                device is not None
-                or policy_device is not None
-                or output_device is not None
-            ):
-                raise ValueError(
-                    "device_config is mutually exclusive with device, "
-                    "policy_device, and output_device."
-                )
-            if device_config.storing_device is not None:
-                raise ValueError(
-                    "storing_device is a collector-level setting that the "
-                    "server does not consume. The server only uses "
-                    "policy_device and output_device (with env_device as a "
-                    "fallback for output_device). Pass storing_device to the "
-                    "collector instead."
-                )
-            policy_device = device_config.policy_device
-            output_device = device_config.server_output_device()
+        _devices = _resolve_device_config(
+            device_config,
+            device=device,
+            policy_device=policy_device,
+            output_device=output_device,
+            allow_storing_device=False,
+        )
         self.policy_factory = policy_factory
         self.transport = transport
         self.startup_timeout = startup_timeout
@@ -902,9 +872,10 @@ class ProcessInferenceServer:
             "min_batch_size": min_batch_size,
             "timeout": timeout,
             "collate_fn": collate_fn,
-            "device": device,
-            "policy_device": policy_device,
-            "output_device": output_device,
+            # Devices are pre-resolved here; the child server's own resolution
+            # is a no-op on these values.
+            "policy_device": _devices.policy_device,
+            "output_device": _devices.output_device,
             "collect_stats": collect_stats,
             "stats_window_size": stats_window_size,
             "weight_sync": weight_sync,

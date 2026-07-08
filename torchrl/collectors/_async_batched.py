@@ -26,6 +26,7 @@ from torchrl.modules.inference_server import (
     ProcessInferenceServer,
     ThreadingTransport,
 )
+from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._transport import InferenceTransport
 
 _ENV_IDX_KEY = "env_index"
@@ -309,22 +310,11 @@ class AsyncBatchedCollector(BaseCollector):
             min_batch_size = _server_defaults.min_batch_size
         if server_timeout is None:
             server_timeout = _server_defaults.timeout
-        if device_config is not None:
-            if device is not None:
-                raise ValueError("device_config is mutually exclusive with device.")
-            policy_device = device_config.policy_device
-            output_device = device_config.server_output_device()
-            env_device = device_config.env_device
-            storing_device = device_config.storing_device
-        else:
-            policy_device = device
-            output_device = None
-            env_device = None
-            storing_device = None
-        self._env_device = torch.device(env_device) if env_device is not None else None
-        self._storing_device = (
-            torch.device(storing_device) if storing_device is not None else None
-        )
+        _devices = _resolve_device_config(device_config, device=device)
+        policy_device = _devices.policy_device
+        output_device = _devices.output_device
+        self._env_device = _devices.env_device
+        self._storing_device = _devices.storing_device
 
         # ---- resolve policy ---------------------------------------------------
         self._policy_factory = policy_factory
