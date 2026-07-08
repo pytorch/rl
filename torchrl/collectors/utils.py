@@ -26,6 +26,8 @@ from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
 
+from torchrl._utils import DEFAULT_DONE_KEYS
+
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
     "update_policy_weights_ will be a no-op. Consider passing a local/weight_updater object "
@@ -144,7 +146,9 @@ def split_trajectories(
         collector output). To recover trajectory boundaries from data laid out
         in a replay-buffer storage -- where the ring buffer can wrap and the
         write cursor acts as an implicit truncation -- use
-        :func:`~torchrl.data.find_start_stop_traj` instead.
+        :func:`~torchrl.data.find_start_stop_traj` instead. Note that the
+        padded layout this function produces is discouraged for new code
+        unless explicitly needed; see :ref:`data-layout-split-trajectories`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -464,8 +468,8 @@ def _map_weight(
 
 def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
     """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
-    for key in (("next", "done"), ("next", "terminated"), ("next", "truncated")):
-        signal = chunk.get(key, None)
+    for leaf in DEFAULT_DONE_KEYS:
+        signal = chunk.get(("next", leaf), None)
         if signal is not None and signal[-1].any().item():
             return True
     return False

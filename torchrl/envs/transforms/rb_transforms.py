@@ -10,9 +10,8 @@ from collections.abc import Callable, Sequence
 import torch
 from tensordict import NestedKey, TensorDictBase
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import DEFAULT_DONE_KEYS, logger as torchrl_logger
 from torchrl.data.postprocs.postprocs import _multi_step_func
-from torchrl.data.replay_buffers.utils import DEFAULT_DONE_KEYS
 from torchrl.envs.transforms.transforms import Transform
 
 

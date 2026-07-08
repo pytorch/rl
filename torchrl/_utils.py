@@ -1002,6 +1002,18 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+# Canonical end-of-trajectory signal keys in TED (TorchRL Episode Data)
+# format. A step can be marked as the last of its trajectory by any of these
+# entries (typically read under the "next" sub-tensordict); "done" is the
+# union of the other two, but datasets sometimes carry only a subset of the
+# entries, so consumers detecting trajectory ends from flags should use the
+# union of all three. Defined here (rather than in the replay-buffer layer)
+# so that envs and collectors can share it without importing replay-buffer
+# utilities; re-exported as torchrl.data.DEFAULT_DONE_KEYS, which is the
+# public path. Documented in the "Trajectory boundaries" section of the docs.
+DEFAULT_DONE_KEYS: tuple[NestedKey, ...] = ("done", "truncated", "terminated")
+
+
 def _ends_with(key, match):
     if isinstance(key, str):
         return key == match

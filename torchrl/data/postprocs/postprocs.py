@@ -11,7 +11,7 @@ from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import expand_right
 from torch import nn
 
-from torchrl.data.replay_buffers.utils import DEFAULT_DONE_KEYS
+from torchrl._utils import DEFAULT_DONE_KEYS
 
 
 def _get_reward(

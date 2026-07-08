@@ -219,6 +219,9 @@ class Collector(BaseCollector):
             trajectory identifiers at every environment step. This is useful
             when trajectory splitting or trajectory-aware replay sampling is not
             needed. Defaults to ``True``.
+            The ids are the most robust trajectory-boundary marker for
+            replay-buffer consumers; see :ref:`the trajectory-boundary
+            documentation <ref_traj_boundaries>` before disabling them.
         exploration_type (ExplorationType, optional): interaction mode to be used when
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``

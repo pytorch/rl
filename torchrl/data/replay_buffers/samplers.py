@@ -9,6 +9,7 @@ import textwrap
 import warnings
 from abc import ABC, ABCMeta, abstractmethod
 from collections import OrderedDict
+from collections.abc import Sequence
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
@@ -18,16 +19,16 @@ import numpy as np
 import torch
 from pyvers import implement_for
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDict
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
 from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import (
     _auto_device,
+    _derive_end_flags,
     _end_to_start_stop,
     _is_int,
-    find_start_stop_traj,
     unravel_index,
 )
 
@@ -1581,6 +1582,21 @@ class SliceSampler(Sampler):
             by it. Exclusive with ``num_slices``.
         end_key (NestedKey, optional): the key indicating the end of a
             trajectory (or episode). Defaults to ``("next", "done")``.
+            Exclusive with ``end_keys``.
+
+            .. note:: A single ``end_key`` misses trajectories whose end is
+                marked by another flag only (e.g. datasets carrying
+                ``truncated=True`` ends without an aggregate ``done`` entry
+                -- those get silently merged with the next trajectory). Pass
+                ``end_keys`` to apply the
+                :data:`~torchrl.data.DEFAULT_DONE_KEYS` union convention.
+        end_keys (sequence of NestedKey, optional): a sequence of keys whose
+            entries are OR-ed together to build the end-of-trajectory signal.
+            Keys absent from the storage are skipped (at least one must be
+            present). Use
+            ``[("next", key) for key in DEFAULT_DONE_KEYS]`` to union
+            ``done``, ``truncated`` and ``terminated``. Exclusive with
+            ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
@@ -1873,6 +1889,7 @@ class SliceSampler(Sampler):
         num_slices: int | None = None,
         slice_len: int | None = None,
         end_key: NestedKey | None = None,
+        end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
@@ -1886,7 +1903,18 @@ class SliceSampler(Sampler):
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
+        if end_keys is not None and end_key is not None:
+            raise RuntimeError(
+                "`end_key` and `end_keys` are exclusive arguments: pass the "
+                "single boundary key through `end_key`, or the sequence of "
+                "keys to be OR-ed together through `end_keys`."
+            )
         self.end_key = end_key
+        self.end_keys = (
+            tuple(unravel_key(key) for key in end_keys)
+            if end_keys is not None
+            else None
+        )
         self.traj_key = traj_key
         self.truncated_key = truncated_key
         self.cache_values = cache_values
@@ -1914,9 +1942,9 @@ class SliceSampler(Sampler):
         self.span = span
 
         if trajectories is not None:
-            if traj_key is not None or end_key:
+            if traj_key is not None or end_key or end_keys:
                 raise RuntimeError(
-                    "`trajectories` and `end_key` or `traj_key` are exclusive arguments."
+                    "`trajectories` and `end_key`, `end_keys` or `traj_key` are exclusive arguments."
                 )
             if ends is not None:
                 raise RuntimeError("trajectories and ends are exclusive arguments.")
@@ -1931,9 +1959,9 @@ class SliceSampler(Sampler):
             self._cache["stop-and-length"] = vals
 
         elif ends is not None:
-            if traj_key is not None or end_key:
+            if traj_key is not None or end_key or end_keys:
                 raise RuntimeError(
-                    "`ends` and `end_key` or `traj_key` are exclusive arguments."
+                    "`ends` and `end_key`, `end_keys` or `traj_key` are exclusive arguments."
                 )
             if trajectories is not None:
                 raise RuntimeError("trajectories and ends are exclusive arguments.")
@@ -1948,7 +1976,7 @@ class SliceSampler(Sampler):
             if traj_key is not None:
                 self._fetch_traj = True
                 self._traj_key_auto = False
-            elif end_key is not None:
+            elif end_key is not None or end_keys is not None:
                 self._fetch_traj = False
                 self._traj_key_auto = False
             else:
@@ -1956,7 +1984,7 @@ class SliceSampler(Sampler):
                 # Prefer ("collector", "traj_ids") (written by collectors) over "episode".
                 self._fetch_traj = True
                 self._traj_key_auto = True
-            if end_key is None:
+            if end_key is None and end_keys is None:
                 end_key = ("next", "done")
             self.end_key = end_key
             self.traj_key = traj_key  # may be None when _traj_key_auto=True
@@ -2003,6 +2031,7 @@ class SliceSampler(Sampler):
             f"{self.__class__.__name__}(num_slices={self.num_slices}, "
             f"slice_len={self.slice_len}, "
             f"end_key={self.end_key}, "
+            f"end_keys={getattr(self, 'end_keys', None)}, "
             f"traj_key={self.traj_key}, "
             f"truncated_key={self.truncated_key}, "
             f"strict_length={self.strict_length}, "
@@ -2012,15 +2041,14 @@ class SliceSampler(Sampler):
     def _find_start_stop_traj(
         self, *, trajectory=None, end=None, at_capacity: bool, cursor=None
     ):
-        # Thin wrapper around the shared module-level utility; kept as a
-        # method so that the GPU device configured on the sampler is applied.
-        return find_start_stop_traj(
-            trajectory=trajectory,
-            end=end,
-            at_capacity=at_capacity,
-            cursor=cursor,
-            device=self._gpu_device,
+        # Thin wrapper around the shared module-level utilities (see
+        # torchrl.data.find_start_stop_traj). Kept as a method, dispatching
+        # through self._end_to_start_stop, so that subclasses overriding
+        # either hook keep working and the sampler's GPU device is applied.
+        end, length = _derive_end_flags(
+            trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
         )
+        return self._end_to_start_stop(end=end, length=length)
 
     def _end_to_start_stop(self, end, length):
         return _end_to_start_stop(end=end, length=length, device=self._gpu_device)
@@ -2174,13 +2202,16 @@ class SliceSampler(Sampler):
 
         else:
             try:
-                try:
-                    done = storage[:][self.end_key]
-                except Exception:
-                    raise RuntimeError(
-                        "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
-                    )
-                done = done.squeeze()
+                if self.end_keys is not None:
+                    done = self._end_signal_from_keys(storage)
+                else:
+                    try:
+                        done = storage[:][self.end_key]
+                    except Exception:
+                        raise RuntimeError(
+                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+                        )
+                    done = done.squeeze()
                 vals = self._find_start_stop_traj(
                     end=done[: len(storage)],
                     at_capacity=storage._is_full,
@@ -2192,8 +2223,38 @@ class SliceSampler(Sampler):
             except KeyError:
                 if fallback:
                     self._fetch_traj = True
+                    if self.traj_key is None:
+                        # No trajectory key was configured either: probe the
+                        # storage for the usual candidates on the retry.
+                        self._traj_key_auto = True
                     return self._get_stop_and_length(storage, fallback=False)
                 raise
+
+    def _end_signal_from_keys(self, storage) -> torch.Tensor:
+        """Union (logical OR) of all ``end_keys`` entries present in the storage.
+
+        Missing keys are skipped; if none of the keys is present a
+        ``KeyError`` is raised so that :meth:`_get_stop_and_length` can fall
+        back to trajectory-id-based recovery.
+        """
+        try:
+            data = storage[:]
+        except Exception:
+            raise RuntimeError(
+                "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+            )
+        done = None
+        for key in self.end_keys:
+            val = data.get(key, default=None)
+            if val is None:
+                continue
+            val = val.squeeze()
+            done = val if done is None else done | val
+        if done is None:
+            raise KeyError(
+                f"None of the end_keys {self.end_keys} could be found in the storage."
+            )
+        return done
 
     def _adjusted_batch_size(self, batch_size):
         if self.num_slices is not None:
@@ -2614,6 +2675,21 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             by it. Exclusive with ``num_slices``.
         end_key (NestedKey, optional): the key indicating the end of a
             trajectory (or episode). Defaults to ``("next", "done")``.
+            Exclusive with ``end_keys``.
+
+            .. note:: A single ``end_key`` misses trajectories whose end is
+                marked by another flag only (e.g. datasets carrying
+                ``truncated=True`` ends without an aggregate ``done`` entry
+                -- those get silently merged with the next trajectory). Pass
+                ``end_keys`` to apply the
+                :data:`~torchrl.data.DEFAULT_DONE_KEYS` union convention.
+        end_keys (sequence of NestedKey, optional): a sequence of keys whose
+            entries are OR-ed together to build the end-of-trajectory signal.
+            Keys absent from the storage are skipped (at least one must be
+            present). Use
+            ``[("next", key) for key in DEFAULT_DONE_KEYS]`` to union
+            ``done``, ``truncated`` and ``terminated``. Exclusive with
+            ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
@@ -2768,6 +2844,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         slice_len: int | None = None,
         drop_last: bool = False,
         end_key: NestedKey | None = None,
+        end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
@@ -2782,6 +2859,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             num_slices=num_slices,
             slice_len=slice_len,
             end_key=end_key,
+            end_keys=end_keys,
             traj_key=traj_key,
             cache_values=True,
             truncated_key=truncated_key,
@@ -2938,6 +3016,21 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             by it. Exclusive with ``num_slices``.
         end_key (NestedKey, optional): the key indicating the end of a
             trajectory (or episode). Defaults to ``("next", "done")``.
+            Exclusive with ``end_keys``.
+
+            .. note:: A single ``end_key`` misses trajectories whose end is
+                marked by another flag only (e.g. datasets carrying
+                ``truncated=True`` ends without an aggregate ``done`` entry
+                -- those get silently merged with the next trajectory). Pass
+                ``end_keys`` to apply the
+                :data:`~torchrl.data.DEFAULT_DONE_KEYS` union convention.
+        end_keys (sequence of NestedKey, optional): a sequence of keys whose
+            entries are OR-ed together to build the end-of-trajectory signal.
+            Keys absent from the storage are skipped (at least one must be
+            present). Use
+            ``[("next", key) for key in DEFAULT_DONE_KEYS]`` to union
+            ``done``, ``truncated`` and ``terminated``. Exclusive with
+            ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
@@ -3055,6 +3148,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         num_slices: int | None = None,
         slice_len: int | None = None,
         end_key: NestedKey | None = None,
+        end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
@@ -3070,6 +3164,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             num_slices=num_slices,
             slice_len=slice_len,
             end_key=end_key,
+            end_keys=end_keys,
             traj_key=traj_key,
             cache_values=cache_values,
             truncated_key=truncated_key,

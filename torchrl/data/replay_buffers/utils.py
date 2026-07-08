@@ -20,7 +20,6 @@ import torch
 from tensordict import (
     lazy_stack,
     MemoryMappedTensor,
-    NestedKey,
     NonTensorData,
     TensorDict,
     TensorDictBase,
@@ -29,7 +28,11 @@ from tensordict import (
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_unflatten
-from torchrl._utils import implement_for, logger as torchrl_logger
+
+# DEFAULT_DONE_KEYS lives in torchrl._utils (dependency-light so envs and
+# collectors can share it) and is re-exported here and as
+# torchrl.data.DEFAULT_DONE_KEYS, the public path.
+from torchrl._utils import DEFAULT_DONE_KEYS, implement_for, logger as torchrl_logger
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
@@ -121,17 +124,6 @@ def _is_int(index):
     return False
 
 
-# Canonical end-of-trajectory signal keys in TED (TorchRL Episode Data)
-# format. A step can be marked as the last of its trajectory by any of these
-# entries (typically read under the "next" sub-tensordict); "done" is the
-# union of the other two, but datasets sometimes carry only a subset of the
-# entries, so consumers detecting trajectory ends from flags should use the
-# union of all three. Shared default of TED2Flat, TED2Nested, MultiStep and
-# MultiStepTransform; documented in the "Trajectory boundaries" section of
-# docs/source/reference/data_replaybuffers.rst.
-DEFAULT_DONE_KEYS: tuple[NestedKey, ...] = ("done", "truncated", "terminated")
-
-
 def find_start_stop_traj(
     *,
     trajectory: torch.Tensor | None = None,
@@ -213,10 +205,39 @@ def find_start_stop_traj(
         ``[B, T]`` layout. This function instead operates on *storage-order*
         data and returns indices, leaving the data untouched.
     """
+    end, length = _derive_end_flags(
+        trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
+    )
+    return _end_to_start_stop(end=end, length=length, device=device)
+
+
+def _derive_end_flags(
+    *,
+    trajectory: torch.Tensor | None = None,
+    end: torch.Tensor | None = None,
+    at_capacity: bool,
+    cursor: int | torch.Tensor | range | None = None,
+) -> tuple[torch.Tensor, int]:
+    """Preprocessing stage of :func:`find_start_stop_traj`.
+
+    Turns trajectory ids or raw end flags into a fully-marked ``[T, *B]``
+    boolean end tensor (every trajectory has at least one end flag, the
+    cursor and partial-storage implicit truncations are applied) and returns
+    it together with the time length ``T``.
+    """
     if (trajectory is None) == (end is None):
         raise TypeError(
             "Exactly one of `trajectory` and `end` must be provided, got "
             f"trajectory={trajectory} and end={end}."
+        )
+    signal = trajectory if trajectory is not None else end
+    if signal.ndim == 0:
+        raise RuntimeError(
+            "Expected the end-of-trajectory signal to be at least 1-dimensional."
+        )
+    if signal.shape[0] == 0:
+        raise RuntimeError(
+            "Cannot recover trajectory boundaries from an empty (T=0) input."
         )
     if trajectory is not None:
         # slower
@@ -231,7 +252,10 @@ def find_start_stop_traj(
         # faster
         end = trajectory[:-1] != trajectory[1:]
         if not at_capacity:
-            end = torch.cat([end, torch.ones_like(end[:1])], 0)
+            # ones_like(trajectory[:1]) rather than ones_like(end[:1]): for a
+            # single-step (T=1) input the diff above is empty, and the last
+            # valid row must still be marked as an end.
+            end = torch.cat([end, torch.ones_like(trajectory[:1], dtype=torch.bool)], 0)
         else:
             end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
         length = trajectory.shape[0]
@@ -241,15 +265,19 @@ def find_start_stop_traj(
         if not at_capacity:
             end = end.clone()
             end[length - 1] = True
-    ndim = end.ndim
 
     if at_capacity:
         # we must have at least one end by traj to individuate trajectories
         # so if no end can be found we set it manually
         if cursor is not None:
             if isinstance(cursor, torch.Tensor):
+                cursor = cursor.reshape(-1)
+                if not cursor.numel():
+                    raise RuntimeError("cursor must not be an empty tensor.")
                 cursor = cursor[-1].item()
             elif isinstance(cursor, range):
+                if not len(cursor):
+                    raise RuntimeError("cursor must not be an empty range.")
                 cursor = cursor[-1]
             if not _is_int(cursor):
                 raise RuntimeError(
@@ -265,11 +293,7 @@ def find_start_stop_traj(
             mask = ~end.any(0, True)
             mask = torch.cat([torch.zeros_like(end[:-1]), mask])
             end = torch.masked_fill(mask, end, 1)
-    if ndim == 0:
-        raise RuntimeError(
-            "Expected the end-of-trajectory signal to be at least 1-dimensional."
-        )
-    return _end_to_start_stop(end=end, length=length, device=device)
+    return end, length
 
 
 def _end_to_start_stop(
@@ -810,7 +834,15 @@ class Flat2TED:
 
 
 class TED2Nested(TED2Flat):
-    """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
+    """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory.
+
+    .. seealso::
+
+        Trajectory lengths are recovered with
+        :func:`~torchrl.data.find_start_stop_traj`; see :ref:`the
+        trajectory-boundary documentation <ref_traj_boundaries>` for the
+        conventions this class relies on.
+    """
 
     _shift: int | None = None
     _is_full: bool | None = None
@@ -839,14 +871,11 @@ class TED2Nested(TED2Flat):
         # else:
         done.view(storage_shape)[..., -1] = True
 
-        ntraj = done.sum()
-
-        nz = done.nonzero(as_tuple=True)[0]
-        traj_lengths = torch.cat([nz[:1] + 1, nz.diff()])
-        # if not is_full:
-        #     traj_lengths = torch.cat(
-        #         [traj_lengths, (done.shape[0] - traj_lengths.sum()).unsqueeze(0)]
-        #     )
+        # The ring has been linearized by TED2Flat and the final boundary of
+        # every row was forced above, so the flat end flags fully delimit the
+        # trajectories.
+        _, _, traj_lengths = find_start_stop_traj(end=done, at_capacity=False)
+        ntraj = traj_lengths.numel()
 
         keys_to_expand, keys_to_keep = zip(
             *[

@@ -117,6 +117,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -142,6 +143,7 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -161,6 +163,7 @@ class SliceSamplerConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None

@@ -2018,19 +2018,55 @@ class TestFindStartStopTraj:
         assert stop.squeeze(-1).tolist() == [2, 4, 7]
         assert lengths.tolist() == [5, 2, 3]
 
-    @pytest.mark.parametrize("cursor_type", ["int", "tensor", "range"])
+    @pytest.mark.parametrize("cursor_type", ["int", "tensor", "scalar_tensor", "range"])
     def test_cursor_types(self, cursor_type):
         end = torch.zeros(10, dtype=torch.bool)
         end[2] = end[7] = True
         cursor = {
             "int": 4,
             "tensor": torch.tensor([2, 3, 4]),
+            "scalar_tensor": torch.tensor(4),
             "range": range(2, 5),
         }[cursor_type]
         start, stop, lengths = find_start_stop_traj(
             end=end, at_capacity=True, cursor=cursor
         )
         assert stop.squeeze(-1).tolist() == [2, 4, 7]
+
+    @pytest.mark.parametrize(
+        "cursor",
+        [torch.tensor([], dtype=torch.long), range(0)],
+        ids=["tensor", "range"],
+    )
+    def test_empty_cursor_raises(self, cursor):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = True
+        with pytest.raises(RuntimeError, match="cursor must not be"):
+            find_start_stop_traj(end=end, at_capacity=True, cursor=cursor)
+
+    @pytest.mark.parametrize("at_capacity", [True, False])
+    def test_single_step_trajectory(self, at_capacity):
+        # A T=1 input holds exactly one (single-step) trajectory.
+        trajectory = torch.tensor([3])
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=at_capacity
+        )
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [0]
+        assert lengths.tolist() == [1]
+        end = torch.zeros(1, dtype=torch.bool)
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=at_capacity)
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [0]
+        assert lengths.tolist() == [1]
+
+    def test_empty_input_raises(self):
+        with pytest.raises(RuntimeError, match="empty"):
+            find_start_stop_traj(
+                trajectory=torch.zeros(0, dtype=torch.long), at_capacity=False
+            )
+        with pytest.raises(RuntimeError, match="empty"):
+            find_start_stop_traj(end=torch.zeros(0, dtype=torch.bool), at_capacity=True)
 
     def test_trajectory_ids_match_end_flags(self):
         # The same boundaries expressed as trajectory ids: id changes at
@@ -2129,6 +2165,91 @@ class TestFindStartStopTraj:
         assert DEFAULT_DONE_KEYS == ("done", "truncated", "terminated")
         # TED2Flat consumes the shared constant as its default.
         assert TED2Flat().done_keys == set(DEFAULT_DONE_KEYS)
+
+    def test_subclass_end_to_start_stop_override(self):
+        # SliceSampler._find_start_stop_traj dispatches through
+        # self._end_to_start_stop so that subclasses overriding it keep
+        # affecting boundary recovery.
+        calls = []
+
+        class MySampler(SliceSampler):
+            def _end_to_start_stop(self, end, length):
+                calls.append(length)
+                return super()._end_to_start_stop(end, length)
+
+        sampler = MySampler(num_slices=2)
+        trajectory = torch.tensor([0, 0, 1, 1, 1])
+        sampler._find_start_stop_traj(trajectory=trajectory, at_capacity=False)
+        assert calls == [5]
+
+    def test_end_keys_union(self):
+        # Boundaries marked only by `truncated`: a single default end_key
+        # (("next", "done")) misses them, the end_keys union recovers them.
+        truncated = torch.zeros(10, 1, dtype=torch.bool)
+        truncated[4] = truncated[9] = True
+        td = TensorDict(
+            {
+                "obs": torch.arange(10),
+                ("next", "done"): torch.zeros(10, 1, dtype=torch.bool),
+                ("next", "truncated"): truncated,
+            },
+            [10],
+        )
+        end_keys = [("next", key) for key in DEFAULT_DONE_KEYS]
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=2, end_keys=end_keys),
+        )
+        rb.extend(td)
+        start, stop, lengths = rb._sampler._get_stop_and_length(rb._storage)
+        assert stop.squeeze(-1).tolist() == [4, 9]
+        assert lengths.tolist() == [5, 5]
+
+        # slices never cross the truncated boundary at index 4
+        for _ in range(20):
+            sample = rb.sample(4)
+            obs = sample["obs"].view(-1, 2)
+            assert (obs[:, 1] == obs[:, 0] + 1).all()
+            assert (obs[:, 0] != 4).all()
+
+        # the documented hazard: with the default single end_key the two
+        # trajectories are silently merged
+        rb_single = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=2),
+        )
+        rb_single.extend(td)
+        _, stop_single, _ = rb_single._sampler._get_stop_and_length(rb_single._storage)
+        assert stop_single.squeeze(-1).tolist() == [9]
+
+    def test_end_keys_exclusive_with_end_key(self):
+        with pytest.raises(RuntimeError, match="exclusive"):
+            SliceSampler(
+                slice_len=2,
+                end_key=("next", "done"),
+                end_keys=[("next", "done"), ("next", "truncated")],
+            )
+
+    def test_end_keys_all_missing_falls_back(self):
+        # None of the end_keys present, but trajectory ids are: the sampler
+        # falls back to trajectory-id-based recovery.
+        td = TensorDict(
+            {
+                "obs": torch.arange(10),
+                "episode": torch.tensor([0, 0, 0, 0, 0, 1, 1, 1, 1, 1]),
+            },
+            [10],
+        )
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(
+                slice_len=2, end_keys=[("next", "done"), ("next", "truncated")]
+            ),
+        )
+        rb.extend(td)
+        start, stop, lengths = rb._sampler._get_stop_and_length(rb._storage)
+        assert stop.squeeze(-1).tolist() == [4, 9]
 
 
 if __name__ == "__main__":
