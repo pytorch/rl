@@ -121,7 +121,7 @@ def _mujoco_wasm_cells() -> list[dict[str, Any]]:
             "This notebook includes a generated local browser viewer for the MJCF "
             "scene. The helper functions live in `torchrl.render.mujoco_wasm` so "
             "the notebook stays small and reusable. The playback cell sends the "
-            "saved qpos trajectory to the already-displayed iframe."
+            "saved qpos trajectory to the live viewer iframe."
         ),
         _code_cell(
             "from torchrl.render.mujoco_wasm import (\n"

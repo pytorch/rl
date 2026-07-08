@@ -31,14 +31,14 @@ python dqn_atari.py
 
 ## Rendering a CartPole checkpoint with `rlrender`
 
-The CartPole DQN script can now write a local checkpoint that is directly
+The CartPole DQN script writes a local checkpoint that is directly
 loadable by `rlrender`. The checkpoint stores the policy state dict, the Gym
-environment name, the resolved Hydra config, the frame count, and the latest
-training metrics.
+environment name, the resolved Hydra config, the frame count, and the metrics
+recorded at checkpoint time.
 
 ### Smoke test
 
-Use a tiny run first to validate checkpointing and rendering:
+Use a tiny run to validate checkpointing and rendering:
 
 ```bash
 uv run --frozen python sota-implementations/dqn/dqn_cartpole.py \
@@ -113,8 +113,7 @@ uv run --frozen --extra rendering python -m torchrl.render \
   --overwrite
 ```
 
-Open the notebook with the locked environment to avoid triggering a fresh
-cross-version dependency resolution:
+Open the notebook with the project's locked dependency resolution:
 
 ```bash
 uv run --frozen --extra notebook jupyter-lab /tmp/torchrl_dqn_cartpole_render.ipynb

@@ -249,7 +249,7 @@ def play_mujoco_wasm_trajectory(
         timeout: Seconds to wait before raising ``TimeoutError``.
         viewer_dir: Optional generated viewer directory. When provided, the
             trajectory is written under the viewer's ``public/`` directory and a
-            new iframe is displayed with an autoplay URL. This avoids relying on
+            viewer iframe is displayed with an autoplay URL. This avoids relying on
             notebook JavaScript outputs in JupyterLab.
 
     Returns:
@@ -608,7 +608,7 @@ def _post_message_javascript(
     const frame = [...document.querySelectorAll('iframe')]
       .find((candidate) => candidate.src.startsWith(viewerOrigin));
     if (!frame || !frame.contentWindow) {{
-      throw new Error('MuJoCo WASM viewer iframe not found; display it first.');
+      throw new Error('MuJoCo WASM viewer iframe not found; display the viewer before sending data.');
     }}
     if (requestId && callbackUrl) {{
       const onMessage = (event) => {{
@@ -1111,7 +1111,7 @@ function parseViewerMessage(value) {
 }
 
 function applyQposMessage(message) {
-  if (!mujoco || !model || !data) return {ok: false, error: "MuJoCo model is not ready yet"};
+  if (!mujoco || !model || !data) return {ok: false, error: "MuJoCo model is unavailable"};
   try {
     const qpos = normalizeQposVector(message.qpos, message.degrees);
     cancelActiveTrajectory("trajectory interrupted by qpos command");
@@ -1130,12 +1130,12 @@ function applyQposMessage(message) {
 }
 
 function applyTrajectoryMessage(message, responseTarget) {
-  if (!mujoco || !model || !data) return {ok: false, error: "MuJoCo model is not ready yet"};
+  if (!mujoco || !model || !data) return {ok: false, error: "MuJoCo model is unavailable"};
   try {
     if (!Array.isArray(message.qpos) || message.qpos.length === 0) throw new Error("qpos trajectory must be a non-empty array");
     const waypoints = message.qpos.map((waypoint) => normalizeQposVector(waypoint, message.degrees));
     const dtMs = trajectoryDtMs(message);
-    cancelActiveTrajectory("trajectory replaced by a new trajectory");
+    cancelActiveTrajectory("trajectory replaced by another trajectory");
     paused = true;
     updatePauseButton();
     autoSweepInput.checked = false;
