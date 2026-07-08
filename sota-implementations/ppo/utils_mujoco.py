@@ -191,8 +191,8 @@ def make_render_env(spec: Any):
         warnings.warn(
             "Rendering with normalize_observation=True but the checkpoint does not "
             "contain VecNorm statistics under 'vecnorm'. Observations will be "
-            "normalized with freshly initialized running statistics and will not "
-            "match training. Save checkpoints with the updated training script or "
+            "normalized with running statistics initialized for rendering and will not "
+            "match training. Save checkpoints with VecNorm metadata or "
             "pass normalize_observation=False in --env-kwargs.",
             stacklevel=2,
         )
