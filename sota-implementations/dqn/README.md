@@ -79,9 +79,8 @@ uv run --frozen python sota-implementations/dqn/dqn_cartpole.py \
 This default-scale command is intended to produce a visible training curve and
 a solved CartPole checkpoint.
 
-The default Gymnasium CartPole RGB renderer requires the optional `pygame`
-dependency. To avoid making `pygame` a hard dependency, the render environment
-factory below draws a lightweight CartPole RGB frame from the observation state.
+The Gymnasium CartPole RGB renderer uses the optional `pygame` dependency,
+which is included in TorchRL's `rendering` extra.
 
 Render an MP4 from the checkpoint:
 

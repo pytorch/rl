@@ -121,6 +121,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # MuJoCo WASM sidecar viewer when ``--notebook-render-backend mujoco-wasm``,
 # ``--mujoco-model-path``, and ``--mujoco-qpos-key`` are provided. The generated
 # notebook imports the MuJoCo WASM display and playback helpers from TorchRL
-# rather than embedding one-off helper code in the notebook itself. For API
-# details, see :ref:`ref_render` and the recorder utilities in
+# rather than embedding one-off helper code in the notebook itself. MuJoCo qpos
+# capture uses :class:`~torchrl.render.backends.MujocoStateReader`, keeping
+# simulator state separate from policy observations. For API details, see
+# :ref:`ref_render` and the recorder utilities in
 # :ref:`Environment-Recorders`.
