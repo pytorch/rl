@@ -10,11 +10,8 @@ from typing import Any, Literal
 
 import torch
 import torch.nn
-from tensordict import TensorDictBase
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 
-from tensordict.utils import NestedKey
-from torchrl.data import Unbounded
 from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
@@ -22,7 +19,6 @@ from torchrl.envs import (
     ObservationNorm,
     RewardSum,
     StepCounter,
-    Transform,
     TransformedEnv,
     VecNorm,
 )
@@ -41,14 +37,6 @@ _MujocoPlaygroundEnv: type | None = None
 # --------------------------------------------------------------------
 
 
-_MUJOCO_QPOS_DIMS = {
-    "InvertedPendulum-v4": 2,
-    "InvertedPendulum-v5": 2,
-    "InvertedDoublePendulum-v4": 3,
-    "InvertedDoublePendulum-v5": 3,
-}
-
-
 def make_env(
     env_name="HalfCheetah-v4",
     device="cpu",
@@ -59,7 +47,6 @@ def make_env(
     normalize_observation: bool = True,
     vecnorm_stats: dict[str, torch.Tensor] | None = None,
     max_episode_steps: int | None = None,
-    qpos_key: NestedKey | None = None,
 ):
     if backend == "gym":
         env = GymEnv(
@@ -88,15 +75,6 @@ def make_env(
             "Expected 'gym' or 'mujoco_playground'."
         )
     env = TransformedEnv(env)
-    # The qpos transform must run before observation normalization so saved
-    # qpos values are raw joint positions rather than whitened observations.
-    if qpos_key is not None:
-        env.append_transform(
-            _MujocoQposTransform(
-                qpos_dim=_qpos_dim(env_name),
-                out_key=qpos_key,
-            )
-        )
     if normalize_observation:
         if vecnorm_stats is not None:
             env.append_transform(
@@ -167,9 +145,7 @@ def make_render_env(spec: Any):
 
     Environment defaults (name, backend, observation normalization, frozen
     VecNorm statistics) are read from the checkpoint metadata written by
-    ``ppo_mujoco.py`` and can be overridden through ``--env-kwargs``. qpos
-    extraction for MuJoCo-WASM playback is enabled automatically for the env
-    names listed in ``_MUJOCO_QPOS_DIMS``.
+    ``ppo_mujoco.py`` and can be overridden through ``--env-kwargs``.
     """
     checkpoint = (
         spec.checkpoint if isinstance(getattr(spec, "checkpoint", None), dict) else {}
@@ -196,10 +172,6 @@ def make_render_env(spec: Any):
             "pass normalize_observation=False in --env-kwargs.",
             stacklevel=2,
         )
-    default_qpos_key = (
-        "qpos" if backend == "gym" and env_name in _MUJOCO_QPOS_DIMS else None
-    )
-    qpos_key = spec.env_kwargs.get("qpos_key", default_qpos_key)
     max_episode_steps = spec.env_kwargs.get(
         "max_episode_steps", checkpoint.get("max_episode_steps")
     )
@@ -212,7 +184,6 @@ def make_render_env(spec: Any):
         normalize_observation=normalize_observation,
         vecnorm_stats=vecnorm_stats,
         max_episode_steps=max_episode_steps,
-        qpos_key=qpos_key,
     )
 
 
@@ -346,51 +317,6 @@ def make_render_policy(spec: Any):
         max_episode_steps=max_episode_steps,
     )
     return actor
-
-
-class _MujocoQposTransform(Transform):
-    def __init__(
-        self,
-        *,
-        qpos_dim: int,
-        in_key: NestedKey = "observation",
-        out_key: NestedKey = "qpos",
-    ) -> None:
-        super().__init__(in_keys=[in_key], out_keys=[out_key])
-        self.qpos_dim = qpos_dim
-
-    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
-        data = self.parent.base_env._env.unwrapped.data
-        return torch.as_tensor(
-            data.qpos.copy(),
-            dtype=observation.dtype,
-            device=observation.device,
-        )
-
-    def _reset(
-        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
-    ) -> TensorDictBase:
-        return self._call(tensordict_reset)
-
-    def transform_observation_spec(self, observation_spec):
-        observation_spec = observation_spec.clone()
-        source_spec = observation_spec[self.in_keys[0]]
-        observation_spec[self.out_keys[0]] = Unbounded(
-            shape=(*source_spec.shape[:-1], self.qpos_dim),
-            dtype=source_spec.dtype,
-            device=source_spec.device,
-        )
-        return observation_spec
-
-
-def _qpos_dim(env_name: str) -> int:
-    try:
-        return _MUJOCO_QPOS_DIMS[env_name]
-    except KeyError as err:
-        raise ValueError(
-            f"MuJoCo-WASM qpos extraction is not configured for {env_name!r}. "
-            "Pass a supported env_name or extend _MUJOCO_QPOS_DIMS."
-        ) from err
 
 
 # ====================================================================
