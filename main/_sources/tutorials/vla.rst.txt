@@ -179,7 +179,7 @@ transforms, behavior cloning, chunked execution, RL fine-tuning.
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7fadfaf70150>
+    <torch._C.Generator object at 0x7fbdc27f00b0>
 
 
 
@@ -250,7 +250,7 @@ therefore looks like this:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 175-218
+.. GENERATED FROM PYTHON SOURCE LINES 175-219
 
 Action chunking and normalization
 ----------------------------------
@@ -259,8 +259,9 @@ Action chunking and normalization
 tensor ``[*B, T, action_dim]`` into the chunked training target
 ``("vla_action", "chunk")`` ``[*B, T, H, action_dim]`` (plus an
 ``action_is_pad`` mask): for every step ``t`` it gathers the next ``H``
-actions. This is the training target of modern chunked VLA policies (ACT,
-OpenVLA-OFT, pi0).
+actions, stopping (padding and masking) at the trajectory boundaries when
+the sampled window carries its done state. This is the training target of
+modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
 
 Chunks mean different things on the two sides of the pipeline, and keeping
 the two pictures apart avoids a classic confusion::
@@ -296,7 +297,7 @@ re-planning via ``replan_interval`` and reset handling via ``is_init``) and
 :class:`~torchrl.envs.transforms.MultiAction` (which re-times the env
 instead, stepping it once per chunk action) realize that open-loop trace.
 
-.. GENERATED FROM PYTHON SOURCE LINES 218-226
+.. GENERATED FROM PYTHON SOURCE LINES 219-227
 
 .. code-block:: Python
 
@@ -321,7 +322,7 @@ instead, stepping it once per chunk action) realize that open-loop trace.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 227-236
+.. GENERATED FROM PYTHON SOURCE LINES 228-237
 
 :class:`~torchrl.envs.transforms.ActionScaling` handles action normalization.
 With explicit statistics (``loc``/``scale``, or the
@@ -333,7 +334,7 @@ through ``extend``, which applies the inverse) and denormalizes the policy's
 predicted actions when attached to an environment (or explicitly via
 :meth:`~torchrl.envs.transforms.ActionScaling.denormalize`).
 
-.. GENERATED FROM PYTHON SOURCE LINES 236-241
+.. GENERATED FROM PYTHON SOURCE LINES 237-242
 
 .. code-block:: Python
 
@@ -358,7 +359,7 @@ predicted actions when attached to an environment (or explicitly via
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 242-250
+.. GENERATED FROM PYTHON SOURCE LINES 243-251
 
 A reference policy
 ------------------
@@ -369,7 +370,7 @@ policies; :class:`~torchrl.modules.vla.TinyVLA` is a small reference policy
 action head) for tutorials and tests. With a continuous head it predicts an
 action chunk.
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-256
+.. GENERATED FROM PYTHON SOURCE LINES 251-257
 
 .. code-block:: Python
 
@@ -392,7 +393,7 @@ action chunk.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 257-265
+.. GENERATED FROM PYTHON SOURCE LINES 258-266
 
 Behavior cloning
 ----------------
@@ -403,7 +404,7 @@ extra horizon dim) and the ``pad_mask`` key excludes padded chunk steps from
 the loss. Here we overfit a tiny synthetic dataset to confirm the policy
 learns.
 
-.. GENERATED FROM PYTHON SOURCE LINES 265-285
+.. GENERATED FROM PYTHON SOURCE LINES 266-286
 
 .. code-block:: Python
 
@@ -434,11 +435,11 @@ learns.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 286-287
+.. GENERATED FROM PYTHON SOURCE LINES 287-288
 
 The behavior-cloning loss drops sharply as the policy fits the expert chunks:
 
-.. GENERATED FROM PYTHON SOURCE LINES 287-290
+.. GENERATED FROM PYTHON SOURCE LINES 288-291
 
 .. code-block:: Python
 
@@ -458,7 +459,7 @@ The behavior-cloning loss drops sharply as the policy fits the expert chunks:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 291-314
+.. GENERATED FROM PYTHON SOURCE LINES 292-315
 
 Chunked inference
 -----------------
@@ -484,7 +485,7 @@ for wrapping your own robot in :class:`~torchrl.envs.EnvBase`). Its specs
 tell us exactly what it consumes and produces: camera image (``uint8``) and
 proprioceptive state under ``observation``, the instruction at the root.
 
-.. GENERATED FROM PYTHON SOURCE LINES 314-325
+.. GENERATED FROM PYTHON SOURCE LINES 315-326
 
 .. code-block:: Python
 
@@ -542,12 +543,12 @@ proprioceptive state under ``observation``, the instruction at the root.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 326-328
+.. GENERATED FROM PYTHON SOURCE LINES 327-329
 
 The action interface is a single continuous action per step (the wrapper
 lives on the policy side, so the env specs are untouched):
 
-.. GENERATED FROM PYTHON SOURCE LINES 328-331
+.. GENERATED FROM PYTHON SOURCE LINES 329-332
 
 .. code-block:: Python
 
@@ -574,13 +575,13 @@ lives on the policy side, so the env specs are untouched):
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 332-335
+.. GENERATED FROM PYTHON SOURCE LINES 333-336
 
 The wrapper auto-discovers the policy's ``("vla_action", "chunk")`` output
 and serves the base env's ``"action"`` key from it. ``InitTracker`` provides
 the ``is_init`` flag the wrapper uses to re-plan on resets.
 
-.. GENERATED FROM PYTHON SOURCE LINES 335-342
+.. GENERATED FROM PYTHON SOURCE LINES 336-343
 
 .. code-block:: Python
 
@@ -598,14 +599,14 @@ the ``is_init`` flag the wrapper uses to re-plan on resets.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 343-347
+.. GENERATED FROM PYTHON SOURCE LINES 344-348
 
 A plain :meth:`~torchrl.envs.EnvBase.rollout` runs the interaction loop. The
 executed per-step actions are recorded under ``action``. The wrapper counter
 shows the receding-horizon cadence: with ``replan_interval=2`` it serves two
 actions from the cache, then re-plans.
 
-.. GENERATED FROM PYTHON SOURCE LINES 347-351
+.. GENERATED FROM PYTHON SOURCE LINES 348-352
 
 .. code-block:: Python
 
@@ -626,7 +627,7 @@ actions from the cache, then re-plans.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 352-354
+.. GENERATED FROM PYTHON SOURCE LINES 353-355
 
 .. code-block:: Python
 
@@ -645,12 +646,12 @@ actions from the cache, then re-plans.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 355-357
+.. GENERATED FROM PYTHON SOURCE LINES 356-358
 
 The env's state echo confirms that the executed cadence matches what the
 wrapper served from its cache:
 
-.. GENERATED FROM PYTHON SOURCE LINES 357-361
+.. GENERATED FROM PYTHON SOURCE LINES 358-362
 
 .. code-block:: Python
 
@@ -671,7 +672,7 @@ wrapper served from its cache:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 362-375
+.. GENERATED FROM PYTHON SOURCE LINES 363-376
 
 RL fine-tuning
 --------------
@@ -687,7 +688,7 @@ We first roll out the token policy to obtain action tokens and their
 behavior-policy log-probabilities, attach a (here synthetic) advantage, then
 take one optimization step.
 
-.. GENERATED FROM PYTHON SOURCE LINES 375-409
+.. GENERATED FROM PYTHON SOURCE LINES 376-410
 
 .. code-block:: Python
 
@@ -732,7 +733,7 @@ take one optimization step.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 410-434
+.. GENERATED FROM PYTHON SOURCE LINES 411-435
 
 Conclusion
 ----------
@@ -762,7 +763,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.384 seconds)
+   **Total running time of the script:** (0 minutes 0.390 seconds)
 
 
 .. _sphx_glr_download_tutorials_vla.py:

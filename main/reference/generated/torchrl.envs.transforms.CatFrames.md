@@ -1,6 +1,6 @@
 # CatFrames
 
-*class*torchrl.envs.transforms.CatFrames(*N: int*, *dim: int*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *padding='same'*, *padding_value=0*, *as_inverse=False*, *reset_key: NestedKey | None = None*, *done_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CatFrames)
+*class*torchrl.envs.transforms.CatFrames(*N: int*, *dim: int*, *in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *padding='same'*, *padding_value=0*, *as_inverse=False*, *reset_key: NestedKey | None = None*, *done_key: NestedKey | None = None*, *future: bool = False*, *mask_key: NestedKey | None = None*)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CatFrames)
 
 Concatenates successive observation frames into a single tensor.
 
@@ -34,6 +34,31 @@ only reset key of the parent environment (if it has only one)
 and raises an exception otherwise.
 - **done_key** (*NestedKey**,**optional*) - the done key to be used as partial
 done indicator. Must be unique. If not provided, defaults to `"done"`.
+- **future** (*bool**,**optional*) -
+
+if `True`, each step's window gathers the
+`N` *upcoming* frames `[t, t + 1, ..., t + N - 1]` instead of
+the `N` most recent ones `[t - N + 1, ..., t]`. With
+`padding="same"` the slots that run past the end of the
+trajectory repeat the last in-trajectory frame. Forward-looking
+windows require the full trajectory, so this mode is only
+available offline (replay buffer / data pipelines): attaching the
+transform to an environment raises a `RuntimeError` on the step
+path. Defaults to `False`.
+
+New in version 0.14.
+- **mask_key** (*NestedKey**,**optional*) -
+
+if provided, the offline (forward /
+unfolding) path also writes a boolean mask of shape
+`[*batch, time, N]` flagging, for each window, the slots that
+were fabricated by padding (`True` = padded slot, either out of
+the trajectory or out of the sampled window). This is the
+convention of the `action_is_pad` entry of chunked-action
+datasets. The mask is not available on the online (env step)
+path. Defaults to `None` (no mask is written).
+
+New in version 0.14.
 
 Examples
 

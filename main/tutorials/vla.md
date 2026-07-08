@@ -134,7 +134,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7fadfaf70150>
+<torch._C.Generator object at 0x7fbdc27f00b0>
 ```
 
 ## The canonical VLA schema
@@ -193,8 +193,9 @@ TensorDict(
 tensor `[*B, T, action_dim]` into the chunked training target
 `("vla_action", "chunk")` `[*B, T, H, action_dim]` (plus an
 `action_is_pad` mask): for every step `t` it gathers the next `H`
-actions. This is the training target of modern chunked VLA policies (ACT,
-OpenVLA-OFT, pi0).
+actions, stopping (padding and masking) at the trajectory boundaries when
+the sampled window carries its done state. This is the training target of
+modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
 
 Chunks mean different things on the two sides of the pipeline, and keeping
 the two pictures apart avoids a classic confusion:
@@ -530,7 +531,7 @@ swap [`TinyVLA`](../reference/generated/torchrl.modules.vla.TinyVLA.html#torchrl
 - SimpleVLA-RL (GRPO fine-tuning): [https://arxiv.org/abs/2509.09674](https://arxiv.org/abs/2509.09674)
 - The [VLA reference documentation](../reference/vla.html#ref-vla).
 
-**Total running time of the script:** (0 minutes 0.384 seconds)
+**Total running time of the script:** (0 minutes 0.390 seconds)
 
 [`Download Jupyter notebook: vla.ipynb`](../_downloads/4f2ab836eee1cdeaf65dd37f30e821be/vla.ipynb)
 

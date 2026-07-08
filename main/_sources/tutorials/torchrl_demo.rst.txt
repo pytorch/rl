@@ -669,11 +669,11 @@ synchronously - it waits for a batch to be ready before returning:
 
  .. code-block:: none
 
-    Collected batch: torch.Size([200]), reward: -8.38
-    Collected batch: torch.Size([200]), reward: -8.91
-    Collected batch: torch.Size([200]), reward: -8.91
-    Collected batch: torch.Size([200]), reward: -8.90
-    Collected batch: torch.Size([200]), reward: -7.78
+    Collected batch: torch.Size([200]), reward: -9.28
+    Collected batch: torch.Size([200]), reward: -8.69
+    Collected batch: torch.Size([200]), reward: -8.46
+    Collected batch: torch.Size([200]), reward: -9.11
+    Collected batch: torch.Size([200]), reward: -9.06
 
 
 
@@ -753,7 +753,7 @@ variants), use :class:`~torchrl.data.PrioritizedReplayBuffer`:
 
  .. code-block:: none
 
-    Prioritized sample indices: tensor([50, 61, 28, 12,  4]) ...
+    Prioritized sample indices: tensor([86, 11, 45, 69, 48]) ...
 
 
 
@@ -916,10 +916,10 @@ training loop. We'll train a simple DQN agent on CartPole:
 
  .. code-block:: none
 
-    Step 0: loss=0.956
-    Step 5: loss=0.667
-    Step 10: loss=0.424
-    Step 15: loss=0.233
+    Step 0: loss=1.011
+    Step 5: loss=0.648
+    Step 10: loss=0.411
+    Step 15: loss=0.301
 
 
 
@@ -968,7 +968,7 @@ folder contains production-ready implementations of:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.066 seconds)
+   **Total running time of the script:** (0 minutes 5.037 seconds)
 
 
 .. _sphx_glr_download_tutorials_torchrl_demo.py:

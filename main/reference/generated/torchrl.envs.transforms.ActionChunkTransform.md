@@ -1,6 +1,6 @@
 # ActionChunkTransform
 
-*class*torchrl.envs.transforms.ActionChunkTransform(*chunk_size: int*, ***, *action_key: NestedKey = 'action'*, *chunk_key: NestedKey = ('vla_action', 'chunk')*, *pad_key: NestedKey = 'action_is_pad'*, *time_dim: int = -2*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionChunkTransform)
+*class*torchrl.envs.transforms.ActionChunkTransform(*chunk_size: int*, ***, *action_key: NestedKey = 'action'*, *chunk_key: NestedKey = ('vla_action', 'chunk')*, *pad_key: NestedKey = 'action_is_pad'*, *time_dim: int = -2*, *done_key: NestedKey | None = 'done'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionChunkTransform)
 
 Build fixed-length action chunks from a trajectory window.
 
@@ -13,6 +13,18 @@ corresponding training target `("vla_action", "chunk")` of shape
 actions `a[t], a[t+1], ..., a[t+H-1]` - together with a boolean
 `action_is_pad` mask `[*B, T, H]` marking the steps that ran past the
 end of the window (and were filled by repeating the last available action).
+
+Internally this is a recipe over the generic transforms (the same pattern
+as [`R3MTransform`](torchrl.envs.transforms.R3MTransform.html#torchrl.envs.transforms.R3MTransform)): an
+[`UnsqueezeTransform`](torchrl.envs.transforms.UnsqueezeTransform.html#torchrl.envs.transforms.UnsqueezeTransform) opens the chunk dim
+and a forward-looking [`CatFrames`](torchrl.envs.transforms.CatFrames.html#torchrl.envs.transforms.CatFrames)
+(`future=True, padding="same", mask_key=...`) does the windowing, so
+chunking shares one sliding-window implementation with frame stacking.
+
+Changed in version 0.14: `ActionChunkTransform` is now a [`Compose`](torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose)
+recipe over [`CatFrames`](torchrl.envs.transforms.CatFrames.html#torchrl.envs.transforms.CatFrames). The output is
+unchanged, and additionally chunks become *boundary-aware* when the
+sampled data carries its done state (see `done_key`).
 
 Note
 
@@ -41,7 +53,11 @@ tensor must be shaped `[*B, T, action_dim]` and each row along
 `time_dim` must be a single contiguous trajectory window. Chunks are
 built independently per row and never cross a row boundary; the downstream
 chunked behavior-cloning loss masks the padded steps out using
-`action_is_pad`.
+`action_is_pad`. When the input additionally carries its done state at
+`("next", done_key)`, chunks are also cut at the trajectory boundaries
+*inside* a row: the steps past a done are padded (repeating the last
+in-trajectory action) and flagged in `action_is_pad`, exactly like the
+end of the window.
 
 Note
 
@@ -69,6 +85,18 @@ Defaults to `("vla_action", "chunk")`.
 Defaults to `"action_is_pad"`.
 - **time_dim** (*int*) - the time dimension of the action tensor (the action
 dimension must come right after it). Defaults to `-2`.
+- **done_key** (*NestedKey**or**None*) -
+
+the leaf done key: when the input
+tensordict has a `("next", done_key)` entry (shaped like the
+action without its trailing `action_dim`, with or without a
+trailing singleton), chunks do not cross the trajectory boundaries
+it marks. When the entry is absent, each row is treated as a
+single contiguous trajectory (the pre-0.14 behavior). Pass
+`None` to ignore the done state altogether.
+Defaults to `"done"`.
+
+New in version 0.14.
 
 Examples
 
@@ -93,6 +121,22 @@ tensor([[False, False, False],
  [False, False, False],
  [False, False, True],
  [False, True, True]])
+>>> # when the window carries its done state, chunks are also cut at
+>>> # the trajectory boundary inside the window (here after step 1)
+>>> td = TensorDict(
+... {
+... "action": torch.arange(4).view(1, 4, 1).float(),
+... ("next", "done"): torch.tensor(
+... [False, True, False, False]
+... ).view(1, 4, 1),
+... },
+... batch_size=[1, 4],
+... )
+>>> t(td)["vla_action", "chunk"][0, :, :, 0]
+tensor([[0., 1., 1.],
+ [1., 1., 1.],
+ [2., 3., 3.],
+ [3., 3., 3.]])
 >>> # on a replay buffer: extend with raw [T, action_dim] trajectory
 >>> # windows (stored as-is), the chunks are built on the sample path
 >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -142,3 +186,28 @@ Examples
 >>> env = env.append_transform(t) # works within envs
 >>> t(TensorDict(a=0)) # Works offline too.
 ```
+
+transform_input_spec(*input_spec: [Composite](torchrl.data.Composite.html#torchrl.data.Composite)*) → [Composite](torchrl.data.Composite.html#torchrl.data.Composite)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionChunkTransform.transform_input_spec)
+
+Transforms the input spec such that the resulting spec matches transform mapping.
+
+Parameters:
+
+**input_spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)) - spec before the transform
+
+Returns:
+
+expected spec after the transform
+
+transform_output_spec(*output_spec: [Composite](torchrl.data.Composite.html#torchrl.data.Composite)*) → [Composite](torchrl.data.Composite.html#torchrl.data.Composite)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionChunkTransform.transform_output_spec)
+
+Transforms the output spec such that the resulting spec matches transform mapping.
+
+This method should generally be left untouched. Changes should be implemented using
+`transform_observation_spec()`, `transform_reward_spec()` and `transform_full_done_spec()`.
+:param output_spec: spec before the transform
+:type output_spec: TensorSpec
+
+Returns:
+
+expected spec after the transform
