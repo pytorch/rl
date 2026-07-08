@@ -94,7 +94,7 @@ def write_mujoco_wasm_viewer(
 
     manifest = {
         "scene_file": model_path.name,
-        "files": sorted({str(path.relative_to(scene_dir)) for path in copied}),
+        "files": sorted({path.relative_to(scene_dir).as_posix() for path in copied}),
     }
     (scene_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
