@@ -16,6 +16,7 @@ from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.render.backends import (
     EnvRenderBackend,
+    MujocoStateReader,
     NullRenderBackend,
     TensorDictPixelsBackend,
 )
@@ -95,7 +96,10 @@ def _collect_env_base_trajectory(
     trajectory_index: int,
 ) -> tuple[TensorDictBase, list[FrameBundle]]:
     frames: list[FrameBundle] = []
-    capture = _frame_recorder(backends, env, config, frames, trajectory_index)
+    states: list[TensorDictBase] = []
+    capture = _trajectory_recorder(
+        backends, env, config, frames, states, trajectory_index
+    )
     reset_td = env.reset()
     capture(reset_td)
     with torch.no_grad(), set_exploration_type(exploration):
@@ -113,6 +117,7 @@ def _collect_env_base_trajectory(
     # rollout() never invokes the callback on the final step, so the terminal
     # state is captured from the last step's "next" entry here.
     capture(rollout[..., -1])
+    rollout = _attach_mujoco_state(rollout, states, config, time_dim=env.ndim)
     return rollout, frames
 
 
@@ -127,7 +132,10 @@ def _collect_duck_typed_trajectory(
     trajectory_index: int,
 ) -> tuple[TensorDictBase, list[FrameBundle]]:
     frames: list[FrameBundle] = []
-    capture = _frame_recorder(backends, env, config, frames, trajectory_index)
+    states: list[TensorDictBase] = []
+    capture = _trajectory_recorder(
+        backends, env, config, frames, states, trajectory_index
+    )
     td = _reset_env(env)
     capture(td)
     trajectory_steps: list[TensorDictBase] = []
@@ -142,17 +150,23 @@ def _collect_duck_typed_trajectory(
         td = _step_mdp(next_td)
     if not trajectory_steps:
         raise RuntimeError("Environment produced an empty rollout.")
-    return torch.stack(trajectory_steps, 0), frames
+    trajectory = torch.stack(trajectory_steps, 0)
+    trajectory = _attach_mujoco_state(trajectory, states, config, time_dim=0)
+    return trajectory, frames
 
 
-def _frame_recorder(
+def _trajectory_recorder(
     backends: list[Any],
     env: Any,
     config: RenderConfig,
     frames: list[FrameBundle],
+    states: list[TensorDictBase],
     trajectory_index: int,
 ) -> Callable[[TensorDictBase], None]:
+    state_reader = MujocoStateReader() if config.mujoco_qpos_key is not None else None
+
     def capture(tensordict: TensorDictBase) -> None:
+        nonlocal state_reader
         frame = _capture_frame(
             backends,
             env,
@@ -163,8 +177,44 @@ def _frame_recorder(
         )
         if frame is not None:
             frames.append(frame)
+        if state_reader is not None:
+            try:
+                state = state_reader.capture(env)
+            except (KeyError, NotImplementedError, TypeError):
+                if states:
+                    raise RuntimeError(
+                        "MuJoCo state became unavailable during rollout collection."
+                    )
+                state_reader = None
+            else:
+                states.append(state)
 
     return capture
+
+
+def _attach_mujoco_state(
+    trajectory: TensorDictBase,
+    states: list[TensorDictBase],
+    config: RenderConfig,
+    *,
+    time_dim: int,
+) -> TensorDictBase:
+    key = config.mujoco_qpos_key
+    if key is None or not states:
+        return trajectory
+    if trajectory.get(key, None) is not None:
+        return trajectory
+    expected_states = trajectory.shape[time_dim] + 1
+    if len(states) != expected_states:
+        raise RuntimeError(
+            "MuJoCo state capture is not aligned with the rollout: expected "
+            f"{expected_states} states, got {len(states)}."
+        )
+    nested_key = key if isinstance(key, tuple) else (key,)
+    snapshots = states[1:] if nested_key[0] == "next" else states[:-1]
+    qpos = torch.stack([state.get("qpos") for state in snapshots], dim=time_dim)
+    trajectory.set(key, qpos)
+    return trajectory
 
 
 def _make_backends(config: RenderConfig):
