@@ -7,12 +7,15 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import socket
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
 import torchrl.render as render_module
 import torchrl.render.artifacts as artifacts_module
+import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
@@ -22,21 +25,56 @@ from torchrl.render import (
     call_with_supported_kwargs,
     checkpoint_hash,
     collect_render_rollouts,
+    display_mujoco_wasm_viewer,
     import_from_string,
     infer_state_dict,
     load_checkpoint,
     load_render_policy,
     make_render_env,
+    MujocoStateReader,
     parse_nested_key,
+    play_mujoco_wasm_trajectory,
     render_policy,
     RenderConfig,
     TensorDictPolicyAdapter,
+    write_mujoco_wasm_viewer,
     write_render_artifact,
 )
 from torchrl.render.cli import build_parser, config_from_args, main as cli_main
+from torchrl.render.mujoco_wasm import extract_qpos_trajectory
 from torchrl.render.video import compose_frame_grid, normalize_frame_output
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+
+
+class FakeIFrame:
+    def __init__(self, src, width=None, height=None):
+        self.src = src
+        self.width = width
+        self.height = height
+
+
+class FakeDisplayModule:
+    IFrame = FakeIFrame
+
+    def __init__(self):
+        self.objects = []
+
+    def display(self, obj):
+        self.objects.append(obj)
+
+
+class FakeProcess:
+    def __init__(self, return_code=None):
+        self.args = ["fake-vite"]
+        self.return_code = return_code
+        self.terminated = False
+
+    def poll(self):
+        return self.return_code
+
+    def terminate(self):
+        self.terminated = True
 
 
 class TinyRenderEnv(EnvBase):
@@ -97,6 +135,19 @@ class TinyRenderEnv(EnvBase):
 
     def render(self):
         return np.full((4, 4, 3), self._count, dtype=np.uint8)
+
+    def get_state(self):
+        return TensorDict(
+            {
+                "qpos": torch.tensor(
+                    [float(self._count), float(self._count + 1)], device=self.device
+                ),
+                "qvel": torch.zeros(2, device=self.device),
+                "time": torch.tensor(float(self._count), device=self.device),
+            },
+            batch_size=[],
+            device=self.device,
+        )
 
     def _pixels(self):
         return torch.full((4, 4, 3), self._count, dtype=torch.uint8, device=self.device)
@@ -190,6 +241,38 @@ class TestRenderCLI:
         assert exc_info.value.code == 2
         assert "Missing required rlrender option --policy" in capsys.readouterr().err
 
+    def test_config_from_args_accepts_mujoco_wasm_notebook_options(self, tmp_path):
+        model = tmp_path / "scene.xml"
+        asset_dir = tmp_path / "assets"
+        args = build_parser().parse_args(
+            [
+                "--ckpt",
+                str(tmp_path / "policy.pt"),
+                "--policy",
+                "project.policy:make_policy",
+                "--env",
+                "project.env:make_env",
+                "--format",
+                "ipynb",
+                "--notebook-render-backend",
+                "mujoco-wasm",
+                "--mujoco-model-path",
+                str(model),
+                "--mujoco-asset-paths",
+                str(asset_dir),
+                "--mujoco-qpos-key",
+                "next.qpos",
+                "--notebook-viewer-port",
+                "5180",
+            ]
+        )
+        config = config_from_args(args)
+        assert config.notebook_render_backend == "mujoco_wasm"
+        assert config.mujoco_model_path == model
+        assert config.mujoco_asset_paths == [asset_dir]
+        assert config.mujoco_qpos_key == ("next", "qpos")
+        assert config.notebook_viewer_port == 5180
+
 
 class TestRenderCheckpoint:
     def test_checkpoint_helpers(self, tmp_path):
@@ -218,6 +301,23 @@ class TestRenderPolicy:
 
 
 class TestRenderRollouts:
+    def test_mujoco_state_reader(self):
+        env = SimpleNamespace(
+            data=SimpleNamespace(
+                qpos=np.array([0.0, 1.0]),
+                qvel=np.array([0.5, 0.0]),
+                ctrl=np.array([], dtype=np.float64),
+                time=0.25,
+            )
+        )
+        reader = MujocoStateReader()
+        assert reader.supports(env)
+        state = reader.capture(env)
+        assert torch.equal(state["qpos"], torch.tensor([0.0, 1.0]))
+        assert torch.equal(state["qvel"], torch.tensor([0.5, 0.0]))
+        assert "ctrl" not in state.keys()
+        assert state["time"] == 0.25
+
     def test_make_env_policy_and_collect_rollouts(self, tmp_path):
         ckpt = tmp_path / "policy.pt"
         policy = ZeroPolicy()
@@ -244,6 +344,31 @@ class TestRenderRollouts:
         assert "count" in result.trajectories[0].keys()
         assert "pixels" not in result.trajectories[0].keys(True)
         assert ("next", "pixels") not in result.trajectories[0].keys(True)
+
+    @pytest.mark.parametrize(
+        ("qpos_key", "expected"),
+        [
+            (("simulator", "qpos"), [[0.0, 1.0], [1.0, 2.0]]),
+            (("next", "simulator", "qpos"), [[1.0, 2.0], [2.0, 3.0]]),
+        ],
+    )
+    def test_collect_rollouts_mujoco_state(self, tmp_path, qpos_key, expected):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=5,
+            format="npz",
+            render_backend="null",
+            mujoco_qpos_key=qpos_key,
+            auto_load_policy=False,
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        assert result.trajectories[0].get(qpos_key).tolist() == expected
 
 
 class TestRenderArtifacts:
@@ -391,6 +516,197 @@ class TestRenderVideo:
             [frames["default"], np.ones((4, 4, 3), dtype=np.uint8)]
         )
         assert grid.shape == (4, 8, 3)
+
+
+class TestMujocoWasm:
+    def test_mujoco_wasm_viewer_assets_and_notebook_cells(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        scene_dir = tmp_path / "scene"
+        scene_dir.mkdir()
+        model_path = scene_dir / "scene.xml"
+        model_path.write_text("<mujoco/>", encoding="utf-8")
+        robot_path = scene_dir / "robot.xml"
+        robot_path.write_text("<mujoco/>", encoding="utf-8")
+        asset_dir = scene_dir / "assets"
+        asset_dir.mkdir()
+        mesh_path = asset_dir / "mesh.obj"
+        mesh_path.write_text("# mesh\n", encoding="utf-8")
+
+        viewer_dir = write_mujoco_wasm_viewer(tmp_path / "viewer", model_path)
+        manifest = json.loads(
+            (viewer_dir / "public" / "scene" / "manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert manifest["scene_file"] == "scene.xml"
+        assert "robot.xml" in manifest["files"]
+        assert "assets/mesh.obj" in manifest["files"]
+        assert (viewer_dir / "src" / "main.js").exists()
+        package_json = json.loads((viewer_dir / "package.json").read_text())
+        assert "strictPort" not in package_json["scripts"]["dev"]
+        viewer_js = (viewer_dir / "src" / "main.js").read_text()
+        assert "playTrajectoryFromUrl" in viewer_js
+
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            format="ipynb",
+            out=tmp_path / "wasm_report.ipynb",
+            auto_load_policy=False,
+            overwrite=True,
+            notebook_render_backend="mujoco_wasm",
+            mujoco_model_path=model_path,
+            mujoco_qpos_key="qpos",
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        written = write_render_artifact(result, config)
+        notebook = json.loads(written.artifact_path.read_text(encoding="utf-8"))
+        source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+        assert "torchrl.render.mujoco_wasm" in source
+        assert "display_mujoco_wasm_viewer" in source
+        assert "torchrl_mujoco_wasm_port" in source
+        assert "viewer_dir=viewer_dir" not in source
+        assert "    wait=True,\n" in source
+        metadata = json.loads((tmp_path / "wasm_report" / "metadata.json").read_text())
+        assert metadata["mujoco_wasm"]["viewer_dir"] == "mujoco_wasm"
+
+    def test_display_mujoco_wasm_viewer_falls_back_from_busy_port(
+        self, monkeypatch, tmp_path
+    ):
+        display_module = FakeDisplayModule()
+        process = FakeProcess()
+        starts = []
+        monkeypatch.setattr(
+            mujoco_wasm_module, "_ipython_display_module", lambda: display_module
+        )
+        monkeypatch.setattr(mujoco_wasm_module, "_find_package_manager", lambda: "npm")
+        waits = []
+        monkeypatch.setattr(
+            mujoco_wasm_module,
+            "_wait_for_viewer_server",
+            lambda process, host, port, timeout: waits.append(
+                (process, host, port, timeout)
+            ),
+        )
+        monkeypatch.setattr(
+            mujoco_wasm_module,
+            "_start_vite",
+            lambda manager, viewer_dir, host, port: starts.append(
+                (manager, viewer_dir, host, port)
+            )
+            or process,
+        )
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            busy_port = int(server.getsockname()[1])
+            returned = display_mujoco_wasm_viewer(
+                tmp_path, port=busy_port, install=False
+            )
+        assert returned is process
+        assert starts[0][3] != busy_port
+        assert waits == [(process, "127.0.0.1", starts[0][3], 20.0)]
+        assert process.torchrl_mujoco_wasm_port == starts[0][3]
+        assert display_module.objects[0].src == process.torchrl_mujoco_wasm_origin
+
+    def test_mujoco_wasm_viewer_startup_failure_raises(self, monkeypatch, tmp_path):
+        display_module = FakeDisplayModule()
+        process = FakeProcess(return_code=1)
+        monkeypatch.setattr(
+            mujoco_wasm_module, "_ipython_display_module", lambda: display_module
+        )
+        monkeypatch.setattr(mujoco_wasm_module, "_find_package_manager", lambda: "npm")
+        monkeypatch.setattr(
+            mujoco_wasm_module,
+            "_start_vite",
+            lambda manager, viewer_dir, host, port: process,
+        )
+        with pytest.raises(RuntimeError, match="exited before it was ready"):
+            display_mujoco_wasm_viewer(
+                tmp_path,
+                port=0,
+                install=False,
+                startup_timeout=0.1,
+            )
+        assert process.terminated is True
+        assert display_module.objects == []
+
+    def test_play_mujoco_wasm_trajectory_autoplay_writes_public_asset(
+        self, monkeypatch, tmp_path
+    ):
+        display_module = FakeDisplayModule()
+        monkeypatch.setattr(
+            mujoco_wasm_module, "_ipython_display_module", lambda: display_module
+        )
+        info = play_mujoco_wasm_trajectory(
+            [[0.0], [1.0]],
+            fps=12.0,
+            port=5181,
+            viewer_dir=tmp_path / "viewer",
+        )
+        trajectory_files = list(
+            (tmp_path / "viewer" / "public" / "trajectories").glob("trajectory_*.json")
+        )
+        assert len(trajectory_files) == 1
+        payload = json.loads(trajectory_files[0].read_text())
+        assert payload["qpos"] == [[0.0], [1.0]]
+        assert payload["fps"] == 12.0
+        assert info["ok"] is True
+        assert info["trajectory_path"] == str(trajectory_files[0])
+        assert info["viewer_url"].startswith("http://127.0.0.1:5181/?")
+        assert display_module.objects[0].src == info["viewer_url"]
+
+        with pytest.raises(ValueError, match="fps must be positive"):
+            play_mujoco_wasm_trajectory([[0.0]], fps=0)
+        with pytest.raises(ValueError, match="same length"):
+            play_mujoco_wasm_trajectory([[0.0], [0.0, 1.0]])
+
+    def test_send_mujoco_wasm_qpos(self, monkeypatch):
+        calls = []
+        acknowledgement = {"ok": True}
+
+        def send(payload, **kwargs):
+            calls.append((payload, kwargs))
+            return acknowledgement
+
+        monkeypatch.setattr(mujoco_wasm_module, "_send_viewer_message", send)
+        result = mujoco_wasm_module.send_mujoco_wasm_qpos(
+            [1.0, 2.0],
+            viewer_origin="http://127.0.0.1:5178/",
+            degrees=True,
+            pause=False,
+            wait=True,
+            timeout=3.0,
+        )
+        assert result is acknowledgement
+        assert calls == [
+            (
+                {
+                    "type": "torchrl:mujoco_wasm:setQpos",
+                    "qpos": [1.0, 2.0],
+                    "degrees": True,
+                    "pause": False,
+                },
+                {
+                    "viewer_origin": "http://127.0.0.1:5178",
+                    "wait": True,
+                    "wait_for": "torchrl:mujoco_wasm:qposApplied",
+                    "timeout": 3.0,
+                },
+            )
+        ]
+
+    def test_extract_qpos_trajectory(self):
+        rollout = TensorDict({"qpos": torch.arange(6).reshape(2, 3)}, batch_size=[2])
+        assert extract_qpos_trajectory(rollout, "qpos") == [
+            [0.0, 1.0, 2.0],
+            [3.0, 4.0, 5.0],
+        ]
 
 
 if __name__ == "__main__":

@@ -63,6 +63,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env-device", help="Environment device.")
     parser.add_argument("--render-backend", choices=["auto", "pixels", "env", "null"])
     parser.add_argument(
+        "--notebook-render-backend",
+        choices=["auto", "static", "mujoco_wasm", "mujoco-wasm"],
+        help=(
+            "Notebook-only render helper. Use mujoco_wasm to generate a browser "
+            "MuJoCo viewer sidecar for saved qpos rollouts."
+        ),
+    )
+    parser.add_argument(
         "--env-backend",
         choices=[
             "auto",
@@ -160,6 +168,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-overwrite", dest="overwrite", action="store_false")
     parser.add_argument("--video-codec", help="Codec name forwarded to torchcodec.")
     parser.add_argument(
+        "--mujoco-model-path",
+        help="MJCF/XML model copied into MuJoCo WASM notebook artifacts.",
+    )
+    parser.add_argument(
+        "--mujoco-asset-paths",
+        action="append",
+        help=(
+            "Additional MuJoCo asset file or directory for WASM notebooks. "
+            "May be passed more than once."
+        ),
+    )
+    parser.add_argument(
+        "--mujoco-qpos-key",
+        help="TensorDict key containing qpos trajectories for WASM playback.",
+    )
+    parser.add_argument(
+        "--notebook-viewer-port",
+        type=int,
+        help="Localhost port used by generated MuJoCo WASM notebook viewer.",
+    )
+    parser.add_argument(
         "--dry-run",
         dest="dry_run",
         action="store_true",
@@ -194,7 +223,14 @@ def config_from_args(args: argparse.Namespace) -> RenderConfig:
         data["env_kwargs"] = _load_mapping_or_inline(data["env_kwargs"])
     if "policy_kwargs" in data and isinstance(data["policy_kwargs"], str):
         data["policy_kwargs"] = _load_mapping_or_inline(data["policy_kwargs"])
-    for key in ("obs_key", "action_key", "done_key", "reward_key", "pixel_key"):
+    for key in (
+        "obs_key",
+        "action_key",
+        "done_key",
+        "reward_key",
+        "pixel_key",
+        "mujoco_qpos_key",
+    ):
         if key in data:
             data[key] = parse_nested_key(data[key])
     if "format" not in data or data["format"] is None:

@@ -11,6 +11,21 @@ policy and environment factories, loads a local checkpoint, collects one or more
 rollouts, captures RGB frames from TensorDict pixels or ``env.render()``, and
 writes a reproducible artifact.
 
+Notebook artifacts can also include an optional MuJoCo WASM sidecar viewer. In
+that mode, the notebook imports helper functions from ``torchrl.render`` to
+start a local Vite viewer, load an MJCF scene in browser-side MuJoCo, and stream
+saved qpos trajectories into the live iframe. When the environment exposes
+native MuJoCo state or wraps a Gymnasium MuJoCo environment,
+:class:`~torchrl.render.backends.MujocoStateReader` records qpos directly from
+the simulator rather than deriving it from policy observations. The generated
+notebook should stay thin: reusable display, playback, and acknowledgement
+helpers live in TorchRL rather than being copied into each notebook.
+
+The MuJoCo WASM viewer requires Node.js and either ``npm`` or ``pnpm``. The
+viewer installs the generated Vite project's pinned JavaScript dependencies
+when ``node_modules`` is absent, which requires network access. The generated
+``node_modules`` directory is reused when present.
+
 Factories can be addressed as ``module.submodule:callable`` or as a local file
 path such as ``/path/to/render_factories.py:make_env``. The base TorchRL package
 does not install video or image encoders for this feature. Use the optional
@@ -44,6 +59,11 @@ Core API
     add_step_counter
     seed_env
     normalize_env
+    write_mujoco_wasm_viewer
+    display_mujoco_wasm_viewer
+    send_mujoco_wasm_qpos
+    play_mujoco_wasm_trajectory
+    extract_qpos_trajectory
 
 Configuration and results
 -------------------------
@@ -69,6 +89,7 @@ Backends
     :template: rl_template.rst
 
     RenderBackend
+    MujocoStateReader
     TensorDictPixelsBackend
     EnvRenderBackend
     NullRenderBackend

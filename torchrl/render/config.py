@@ -17,6 +17,7 @@ from tensordict import NestedKey, TensorDictBase
 RenderFormat = Literal["ipynb", "mp4", "gif", "frames", "npz", "jsonl"]
 CameraLayout = Literal["single", "grid", "horizontal", "vertical", "separate"]
 RenderBackendName = Literal["auto", "pixels", "env", "null"]
+NotebookRenderBackendName = Literal["auto", "static", "mujoco_wasm", "mujoco-wasm"]
 EnvBackendName = Literal[
     "auto", "torchrl", "gym", "gymnasium", "mujoco", "dm_control", "isaaclab"
 ]
@@ -27,6 +28,7 @@ __all__ = [
     "EnvBackendName",
     "ExplorationMode",
     "FrameBundle",
+    "NotebookRenderBackendName",
     "RenderBackendName",
     "RenderConfig",
     "RenderEnvSpec",
@@ -78,6 +80,7 @@ class RenderConfig:
     policy_device: torch.device | str | None = None
     env_device: torch.device | str | None = None
     render_backend: RenderBackendName = "auto"
+    notebook_render_backend: NotebookRenderBackendName = "auto"
     env_backend: EnvBackendName = "auto"
     env_kwargs: dict[str, Any] = field(default_factory=dict)
     policy_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -102,6 +105,10 @@ class RenderConfig:
     metadata: str | Path | None = None
     overwrite: bool = False
     video_codec: str | None = None
+    mujoco_model_path: str | Path | None = None
+    mujoco_asset_paths: list[str | Path] = field(default_factory=list)
+    mujoco_qpos_key: NestedKey | None = None
+    notebook_viewer_port: int = 5178
     dry_run: bool = False
     validate_only: bool = False
 
@@ -137,6 +144,18 @@ class RenderConfig:
                 self.exploration_mode,
                 {"deterministic", "mode", "mean", "random"},
             )
+        if self.notebook_render_backend == "mujoco-wasm":
+            self.notebook_render_backend = "mujoco_wasm"
+        _validate_choice(
+            "notebook_render_backend",
+            self.notebook_render_backend,
+            {"auto", "static", "mujoco_wasm"},
+        )
+        if self.mujoco_model_path is not None:
+            self.mujoco_model_path = Path(self.mujoco_model_path)
+        if isinstance(self.mujoco_asset_paths, str):
+            self.mujoco_asset_paths = _split_csv(self.mujoco_asset_paths)
+        self.mujoco_asset_paths = [Path(path) for path in self.mujoco_asset_paths]
         self.device = torch.device(self.device)
         if self.policy_device is not None:
             self.policy_device = torch.device(self.policy_device)
@@ -147,6 +166,8 @@ class RenderConfig:
         self.done_key = parse_nested_key(self.done_key)
         self.reward_key = parse_nested_key(self.reward_key)
         self.pixel_key = parse_nested_key(self.pixel_key)
+        if self.mujoco_qpos_key is not None:
+            self.mujoco_qpos_key = parse_nested_key(self.mujoco_qpos_key)
         if isinstance(self.camera, str):
             self.camera = _split_csv(self.camera)
         if not self.camera:
@@ -157,6 +178,10 @@ class RenderConfig:
             raise ValueError(f"max_steps must be >= 1, got {self.max_steps}.")
         if self.fps <= 0:
             raise ValueError(f"fps must be positive, got {self.fps}.")
+        if self.notebook_viewer_port < 1:
+            raise ValueError(
+                f"notebook_viewer_port must be positive, got {self.notebook_viewer_port}."
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """Returns a JSON-serializable dictionary representation."""
@@ -164,14 +189,25 @@ class RenderConfig:
         for key in ("ckpt", "out", "frame_dir", "artifact_dir", "metadata"):
             if data[key] is not None:
                 data[key] = str(data[key])
+        if data["mujoco_model_path"] is not None:
+            data["mujoco_model_path"] = str(data["mujoco_model_path"])
+        data["mujoco_asset_paths"] = [str(path) for path in data["mujoco_asset_paths"]]
         for key in ("device", "policy_device", "env_device"):
             if data[key] is not None:
                 data[key] = str(data[key])
         for key in ("policy", "env"):
             if not isinstance(data[key], str):
                 data[key] = _callable_name(data[key])
-        for key in ("obs_key", "action_key", "done_key", "reward_key", "pixel_key"):
-            data[key] = key_to_string(data[key])
+        for key in (
+            "obs_key",
+            "action_key",
+            "done_key",
+            "reward_key",
+            "pixel_key",
+            "mujoco_qpos_key",
+        ):
+            if data[key] is not None:
+                data[key] = key_to_string(data[key])
         return data
 
     def to_json(self, **kwargs: Any) -> str:
