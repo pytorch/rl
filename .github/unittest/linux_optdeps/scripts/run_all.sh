@@ -19,19 +19,20 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y --no-install-recommends tzdata
   dpkg-reconfigure -f noninteractive tzdata || true
 
-  apt-get upgrade -y
-  apt-get install -y vim git wget cmake
-
-  apt-get install -y libglfw3 libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
+  # Single install pass, no recommends: a blanket `apt-get upgrade` /
+  # `dist-upgrade` of the throwaway container costs minutes per job and
+  # provides nothing the tests need.
+  apt-get install -y --no-install-recommends \
+    vim git wget cmake \
+    libglfw3 libosmesa6 libglew-dev \
+    libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
-    # solves version `GLIBCXX_3.4.29' not found for tensorboard
-#    apt-get install -y gcc-4.9
-    apt-get upgrade -y libstdc++6
-    apt-get dist-upgrade -y
+    # solves version `GLIBCXX_3.4.29' not found for tensorboard; upgrade
+    # libstdc++6 specifically instead of dist-upgrading the whole image.
+    apt-get install -y --only-upgrade libstdc++6
   else
-    apt-get install -y g++ gcc
+    apt-get install -y --no-install-recommends g++ gcc
   fi
 
 fi
@@ -173,11 +174,65 @@ export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
 export BATCHED_PIPE_TIMEOUT=60
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-  --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
-  --ignore test/test_distributed.py \
-  --ignore test/llm \
-  --timeout=120 --mp_fork_if_no_cuda
+COMMON_IGNORES="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/llm"
+COMMON_ARGS="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
+
+# Track test failures but keep going, so coverage is still combined and
+# uploaded; the script exits with this status at the end.
+EXIT_STATUS=0
+
+if [ "${TORCHRL_XDIST:-1}" = "1" ]; then
+  # Coverage for pytest-xdist workers: execnet workers are plain
+  # subprocesses, not multiprocessing children, so coverage's
+  # concurrency=multiprocessing does not see them. The .pth calls
+  # coverage.process_startup(), a no-op unless COVERAGE_PROCESS_START is set
+  # (coverage_run_parallel.py exports it for its subprocess tree).
+  python - <<'PY'
+import sysconfig
+from pathlib import Path
+
+pth = Path(sysconfig.get_paths()["purelib"]) / "coverage_process_startup.pth"
+pth.write_text("import coverage; coverage.process_startup()\n")
+print(f"Wrote {pth}")
+PY
+
+  # Three invocations covering the same union of tests as the single serial
+  # run below, without overlap:
+  # 1. Parallel bulk under pytest-xdist: everything that neither requires the
+  #    GPU nor spawns its own worker processes. OMP/MKL are pinned to one
+  #    thread per worker (N workers on an N-core box otherwise serialize on
+  #    thread contention) and the per-test timeout is raised: tests that take
+  #    ~60s alone can legitimately exceed 120s on a fully loaded machine.
+  # 2. The multiprocessing-heavy set (test/envs, test_collectors.py), serial.
+  # 3. GPU-marked tests, serial: xdist workers sharing one device could
+  #    oversubscribe GPU memory.
+  echo "Running parallel bulk (not gpu, without test/envs and test_collectors.py)"
+  OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+    ${COMMON_IGNORES} \
+    --ignore test/envs \
+    --ignore test/test_collectors.py \
+    -m "not gpu" \
+    -n "${TORCHRL_XDIST_WORKERS:-auto}" --dist worksteal \
+    ${COMMON_ARGS} --timeout=300 || EXIT_STATUS=$?
+  echo "Running multiprocessing-heavy tests serially (test/envs, test_collectors.py)"
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py \
+    ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
+  echo "Running gpu-marked tests serially"
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+    ${COMMON_IGNORES} \
+    --ignore test/envs \
+    --ignore test/test_collectors.py \
+    -m gpu \
+    ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
+  if [ $EXIT_STATUS -ne 0 ]; then
+    echo "Some tests failed with exit status $EXIT_STATUS"
+  fi
+else
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+    ${COMMON_IGNORES} \
+    ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
+fi
 
 coverage combine -q
 coverage xml -i
@@ -190,3 +245,6 @@ cp coverage.xml artifacts-to-be-uploaded/ || true
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# Exit with failure if any tests failed
+exit $EXIT_STATUS

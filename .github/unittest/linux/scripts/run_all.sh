@@ -17,23 +17,25 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y --no-install-recommends tzdata
   dpkg-reconfigure -f noninteractive tzdata || true
 
-  apt-get upgrade -y
-  apt-get install -y vim git wget cmake curl python3-dev
-
-  # SDL2 and freetype needed for building pygame from source (Python 3.14+)
-  apt-get install -y libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev
-  apt-get install -y libfreetype6-dev pkg-config
-
-  apt-get install -y libglfw3 libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg \
+  # Single install pass, no recommends: a blanket `apt-get upgrade` /
+  # `dist-upgrade` of the throwaway container costs minutes per job and
+  # provides nothing the tests need.
+  # SDL2 and freetype are needed for building pygame from source (Python 3.14+).
+  apt-get install -y --no-install-recommends \
+    vim git wget cmake curl python3-dev \
+    libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev \
+    libfreetype6-dev pkg-config \
+    libglfw3 libosmesa6 libglew-dev \
+    libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libavdevice-dev libavfilter-dev
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
-    apt-get upgrade -y libstdc++6
-    apt-get dist-upgrade -y
+    # torch wheels need a recent GLIBCXX; upgrade libstdc++6 specifically
+    # instead of dist-upgrading the whole image.
+    apt-get install -y --only-upgrade libstdc++6
   else
-    apt-get install -y g++ gcc
+    apt-get install -y --no-install-recommends g++ gcc
   fi
 fi
 
@@ -327,6 +329,20 @@ fi
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
+# Coverage for pytest-xdist workers: execnet workers are plain subprocesses,
+# not multiprocessing children, so coverage's concurrency=multiprocessing does
+# not see them. The standard recipe is a .pth file calling
+# coverage.process_startup(), which is a no-op unless COVERAGE_PROCESS_START
+# is set (coverage_run_parallel.py exports it for its subprocess tree).
+python - <<'PY'
+import sysconfig
+from pathlib import Path
+
+pth = Path(sysconfig.get_paths()["purelib"]) / "coverage_process_startup.pth"
+pth.write_text("import coverage; coverage.process_startup()\n")
+print(f"Wrote {pth}")
+PY
+
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
@@ -364,37 +380,66 @@ run_non_distributed_tests() {
   # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
   # - Shard 1: test/transforms/ (transform tests)
   # - Shard 2: test/envs/, test_collectors.py (multiprocessing-heavy)
-  # - Shard 3: Everything else (can use pytest-xdist for parallelism)
+  # - Shard 3: Everything else
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/rb/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
-  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
-  
+  local common_args="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
+
   # JSON report output for flaky test tracking
   local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
   local json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-shard-${shard}.json --json-report-indent=2"
-  
-  # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
-  # Set TORCHRL_XDIST=0 to disable parallel execution
+
+  # pytest-xdist parallelism (set TORCHRL_XDIST=0 to disable).
+  #
+  # The multiprocessing-heavy tests (shard 2: test/envs, test_collectors.py)
+  # spawn their own worker processes and stay serial. Everything else is
+  # parallelism-friendly:
+  # - shard 3 has run under xdist for months,
+  # - shard 1 (transforms) and the "all" bulk are enabled on CPU runners only:
+  #   on GPU runners many concurrent workers can oversubscribe device memory.
+  #
+  # --dist worksteal (no xdist_group marks in the suite, so loadgroup gave us
+  # nothing) balances the long tail: a few 60s+ tests among thousands of
+  # millisecond tests.
+  #
+  # Each xdist invocation pins OMP/MKL to one thread per worker: with N
+  # workers on an N-core runner, letting every torch op fan out to all cores
+  # makes the workers serialize on thread contention instead of scaling.
+  # The per-test timeout is raised for xdist runs: tests that take ~60s alone
+  # can legitimately exceed 120s on a fully loaded machine.
+  local xdist_enabled=0
+  if [ "${TORCHRL_XDIST:-1}" = "1" ]; then
+    case "${shard}" in
+      3) xdist_enabled=1 ;;
+      1|all|"") if [ "${CU_VERSION:-}" == cpu ]; then xdist_enabled=1; fi ;;
+    esac
+  fi
   local xdist_args=""
-  if [ "${TORCHRL_XDIST:-1}" = "1" ] && [ "${shard}" = "3" ]; then
-    xdist_args="-n auto --dist loadgroup"
-    echo "Using pytest-xdist for parallel execution"
+  local serial_timeout="--timeout=120"
+  local timeout_args="${serial_timeout}"
+  if [ "${xdist_enabled}" = "1" ]; then
+    xdist_args="-n ${TORCHRL_XDIST_WORKERS:-auto} --dist worksteal"
+    timeout_args="--timeout=300"
+    export OMP_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    echo "Using pytest-xdist for parallel execution (${xdist_args})"
   fi
 
   case "${shard}" in
     1)
       echo "Running shard 1: test/transforms/ only"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/transforms \
+        ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${timeout_args}
       ;;
     2)
       echo "Running shard 2: test/envs/ and test_collectors.py"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${serial_timeout}
       ;;
     3)
       echo "Running shard 3: All other tests"
@@ -406,15 +451,37 @@ run_non_distributed_tests() {
         ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${timeout_args}
       ;;
     all|"")
+      if [ "${xdist_enabled}" = "1" ]; then
+        # Split the unsharded run in two: the parallelism-friendly bulk under
+        # xdist, then the multiprocessing-heavy set (shard 2's file set)
+        # serially. Same union of tests as the single invocation below.
+        local mp_status=0
+        echo "Running all tests, parallel bulk (everything but test/envs and test_collectors.py)"
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+          ${common_ignores} \
+          --ignore test/envs \
+          --ignore test/test_collectors.py \
+          ${xdist_args} \
+          "${GPU_MARKER_FILTER[@]}" \
+          ${json_report_args} \
+          ${common_args} ${timeout_args} || mp_status=$?
+        echo "Running all tests, serial remainder (test/envs and test_collectors.py)"
+        env -u OMP_NUM_THREADS -u MKL_NUM_THREADS \
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py \
+          "${GPU_MARKER_FILTER[@]}" \
+          --json-report --json-report-file="${json_report_dir}/test-results-shard-${shard}-mp.json" --json-report-indent=2 \
+          ${common_args} ${serial_timeout} || mp_status=$?
+        return ${mp_status}
+      fi
       echo "Running all tests (no sharding)"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${serial_timeout}
       ;;
     *)
       echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
