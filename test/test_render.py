@@ -20,7 +20,7 @@ import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
-from torchrl.envs import EnvBase, set_gym_backend
+from torchrl.envs import EnvBase, set_gym_backend, StepCounter
 from torchrl.record.loggers.common import _has_torchcodec
 from torchrl.render import (
     call_with_supported_kwargs,
@@ -1004,6 +1004,7 @@ class TestSotaCheckpointFactories:
                         "num_envs": 1,
                         "batch_mode": "parallel",
                         "normalize_observation": False,
+                        "max_episode_steps": 7,
                     }
                 }
             ),
@@ -1015,6 +1016,15 @@ class TestSotaCheckpointFactories:
         assert saved["frames"] == 24
         assert saved["env_backend"] == "gym"
         assert saved["normalize_observation"] is False
+        assert saved["max_episode_steps"] == 7
+        render_env = make_render_env(config, checkpoint=saved)
+        try:
+            step_counters = [
+                item for item in render_env.transform if isinstance(item, StepCounter)
+            ]
+            assert step_counters and step_counters[0].max_steps == 7
+        finally:
+            render_env.close()
 
         make_render_policy = import_from_string(f"{utils_path}:make_render_policy")
         calls = []
@@ -1031,14 +1041,18 @@ class TestSotaCheckpointFactories:
                 checkpoint_path,
                 {
                     "env_name": "InvertedPendulum-v4",
+                    "env_backend": "gym",
                     "normalize_observation": False,
                 },
                 None,
                 torch.device("cpu"),
                 None,
                 {
-                    "env_name": "InvertedDoublePendulum-v4",
+                    "env_name": "PandaPickCube",
+                    "backend": "mujoco_playground",
+                    "config_overrides": {"impl": "jax"},
                     "normalize_observation": True,
+                    "max_episode_steps": 13,
                 },
                 config,
             )
@@ -1046,9 +1060,14 @@ class TestSotaCheckpointFactories:
         assert policy is actor
         assert calls == [
             (
-                "InvertedDoublePendulum-v4",
+                "PandaPickCube",
                 torch.device("cpu"),
-                {"normalize_observation": True},
+                {
+                    "backend": "mujoco_playground",
+                    "config_overrides": {"impl": "jax"},
+                    "normalize_observation": True,
+                    "max_episode_steps": 13,
+                },
             )
         ]
 
@@ -1082,6 +1101,43 @@ class TestSotaCheckpointFactories:
             torch.testing.assert_close(reader.capture(env)["qpos"], expected)
         finally:
             env.close()
+
+    def test_mujoco_playground_ppo_factory(self, monkeypatch):
+        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        make_env = import_from_string(f"{utils_path}:make_env")
+        module_globals = make_env.__globals__
+
+        class FakeMujocoPlaygroundEnv:
+            def __init__(self, env_name, **kwargs):
+                self.env_name = env_name
+                self.kwargs = kwargs
+
+        class FakeTransformedEnv:
+            def __init__(self, env):
+                self.base_env = env
+                self.transforms = []
+
+            def append_transform(self, transform):
+                self.transforms.append(transform)
+
+        monkeypatch.setitem(module_globals, "_has_mujoco_playground", True)
+        monkeypatch.setitem(
+            module_globals, "_MujocoPlaygroundEnv", FakeMujocoPlaygroundEnv
+        )
+        monkeypatch.setitem(module_globals, "TransformedEnv", FakeTransformedEnv)
+        monkeypatch.setitem(
+            module_globals, "_observation_dtype", lambda env: torch.float32
+        )
+
+        env = make_env(
+            "PandaPickCube",
+            backend="mujoco_playground",
+            config_overrides={"impl": "jax"},
+            normalize_observation=False,
+        )
+        assert env.base_env.env_name == "PandaPickCube"
+        assert env.base_env.kwargs["config_overrides"] == {"impl": "jax"}
+        assert len(env.transforms) == 2
 
 
 if __name__ == "__main__":

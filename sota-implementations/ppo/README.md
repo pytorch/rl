@@ -28,6 +28,68 @@ You can execute the PPO algorithm on MuJoCo environments by running the followin
 python ppo_mujoco.py
 ``` 
 
+## MuJoCo Playground Franka/Panda example
+
+The MuJoCo PPO script can also use the optional TorchRL MuJoCo Playground
+wrapper. This makes it possible to run PPO against MJX-backed manipulation
+tasks such as `PandaPickCube` from the Franka Emika Panda task suite.
+
+Install the optional dependencies through the dedicated extra and select the
+MuJoCo Playground backend from Hydra:
+
+```bash
+uv run --frozen --extra mujoco_playground python sota-implementations/ppo/ppo_mujoco.py \
+  env.backend=mujoco_playground \
+  env.env_name=PandaPickCube \
+  +env.config_overrides.impl=jax \
+  env.normalize_observation=false \
+  env.max_episode_steps=150 \
+  optim.device=cpu \
+  logger.backend=null \
+  collector.total_frames=512 \
+  collector.frames_per_batch=128 \
+  loss.mini_batch_size=32 \
+  loss.ppo_epochs=2 \
+  logger.test_interval=256 \
+  logger.num_test_episodes=1 \
+  checkpoint.path=/tmp/torchrl_ppo_panda_pick_smoke.pt
+```
+
+MuJoCo model assets are downloaded when absent, and the MJX step function is
+JIT-compiled according to the JAX compilation cache. On local CPU runs, the JAX
+implementation is the most portable choice for this task; if the default
+backend selects Warp and fails during MJX model construction, keep the
+`+env.config_overrides.impl=jax` override.
+
+A longer local validation command is:
+
+```bash
+uv run --frozen --extra mujoco_playground python sota-implementations/ppo/ppo_mujoco.py \
+  env.backend=mujoco_playground \
+  env.env_name=PandaPickCube \
+  +env.config_overrides.impl=jax \
+  env.normalize_observation=false \
+  env.max_episode_steps=150 \
+  optim.device=cpu \
+  logger.backend=null \
+  logger.test_interval=1024 \
+  logger.num_test_episodes=2 \
+  collector.total_frames=4096 \
+  collector.frames_per_batch=256 \
+  loss.mini_batch_size=64 \
+  loss.ppo_epochs=4 \
+  checkpoint.path=/tmp/torchrl_ppo_panda_pick.pt \
+  checkpoint.interval=1024
+```
+
+This run is intended as a functional training/checkpointing check for a richer
+manipulation environment rather than a solved-policy benchmark. The checkpoint
+contains the MuJoCo Playground backend name and resolved config overrides, so
+`utils_mujoco.py:make_render_policy` can reconstruct the same policy
+architecture from the checkpoint metadata. Pixel video rendering is unavailable
+for this backend because the MuJoCo Playground wrapper does not support
+`from_pixels=True`.
+
 ## Rendering an InvertedPendulum checkpoint with MuJoCo-WASM
 
 The MuJoCo PPO script can write a local checkpoint that is directly loadable by

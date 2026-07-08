@@ -60,9 +60,13 @@ def _save_checkpoint(
     """
     env_metadata = {
         "env_name": cfg.env.env_name,
-        "env_backend": cfg.env.get("backend", "gym"),
+        "env_backend": cfg.env.backend,
+        "env_config_overrides": _to_container(cfg.env.config_overrides),
         "normalize_observation": bool(cfg.env.normalize_observation),
         "vecnorm": get_vecnorm_state(train_env) if train_env is not None else None,
+        "max_episode_steps": int(cfg.env.max_episode_steps)
+        if cfg.env.get("max_episode_steps")
+        else None,
     }
     return save_render_checkpoint(
         path,
@@ -72,6 +76,23 @@ def _save_checkpoint(
         metrics=metrics,
         config=OmegaConf.to_container(cfg, resolve=True),
     )
+
+
+def _to_container(value: object) -> object:
+    if value is None:
+        return None
+    return OmegaConf.to_container(value, resolve=True)
+
+
+def _make_env_kwargs(cfg: DictConfig) -> dict[str, object]:
+    return {
+        "backend": cfg.env.backend,
+        "config_overrides": _to_container(cfg.env.config_overrides),
+        "normalize_observation": cfg.env.normalize_observation,
+        "max_episode_steps": int(cfg.env.max_episode_steps)
+        if cfg.env.max_episode_steps
+        else None,
+    }
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -96,18 +117,20 @@ def main(cfg: DictConfig):
             else:
                 compile_mode = "reduce-overhead"
 
+    env_kwargs = _make_env_kwargs(cfg)
+
     # Create models (check utils_mujoco.py)
     actor, critic = make_ppo_models(
         cfg.env.env_name,
         device=device,
-        normalize_observation=cfg.env.normalize_observation,
+        **env_kwargs,
     )
 
     # Create collector
     train_env = make_env(
         cfg.env.env_name,
         device,
-        normalize_observation=cfg.env.normalize_observation,
+        **env_kwargs,
     )
     collector = Collector(
         create_env_fn=train_env,
@@ -186,7 +209,7 @@ def main(cfg: DictConfig):
         cfg.env.env_name,
         device,
         from_pixels=logger_video,
-        normalize_observation=cfg.env.normalize_observation,
+        **env_kwargs,
     )
     if logger_video:
         test_env = test_env.append_transform(
@@ -244,6 +267,7 @@ def main(cfg: DictConfig):
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
     cfg_logger_test_interval = cfg.logger.test_interval
     cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
+    cfg_env_max_episode_steps = int(cfg.env.max_episode_steps or 10_000_000)
     losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
     checkpoint_path = cfg.checkpoint.path
     checkpoint_interval = int(cfg.checkpoint.interval or 0)
@@ -325,7 +349,10 @@ def main(cfg: DictConfig):
             if (i >= 1 and prev_test_frame < cur_test_frame) or final:
                 actor.eval()
                 test_rewards = eval_model(
-                    actor, test_env, num_episodes=cfg_logger_num_test_episodes
+                    actor,
+                    test_env,
+                    num_episodes=cfg_logger_num_test_episodes,
+                    max_steps=cfg_env_max_episode_steps,
                 )
                 metrics_to_log.update(
                     {
