@@ -686,6 +686,11 @@ class TestDeviceResolution:
         assert resolved.env_device == torch.device("mps", 0)
         assert resolved.storing_device == torch.device("mps", 0)
 
+    @pytest.mark.gpu
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(),
+        reason="torch.device(0) cannot be constructed without an accelerator",
+    )
     def test_integer_device_zero_is_not_dropped(self):
         # ``torch.device(0)`` is falsy-adjacent (int 0); the resolution must
         # treat it as an explicit device, not as unset.
