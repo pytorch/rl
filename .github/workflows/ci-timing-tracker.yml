@@ -1,0 +1,90 @@
+name: CI Timing Tracker
+
+on:
+  schedule:
+    # Run daily at 6:45 UTC, after the nightly test workflows. Concurrent
+    # pushes to gh-pages (benchmarks, flaky tracker) are handled by
+    # rebase-and-retry in the deploy step.
+    - cron: '45 6 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Lookback window in days (use ~190 to backfill history)'
+        required: false
+        default: '4'
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ci-timing-tracker
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  LOOKBACK_DAYS: ${{ inputs.days || '4' }}
+
+jobs:
+  track-ci-timing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+          fetch-depth: 1
+
+      - name: Update CI timing history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/track_ci_timing.py \
+            --days "$LOOKBACK_DAYS" \
+            --history gh-pages/ci-timing/data.json \
+            --output-dir ci-timing-out
+
+      - name: Deploy to GitHub Pages
+        run: |
+          mkdir -p gh-pages/ci-timing
+          cp ci-timing-out/data.json gh-pages/ci-timing/
+          cp .github/scripts/ci_timing_dashboard.html gh-pages/ci-timing/index.html
+
+          cd gh-pages
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add ci-timing/
+          if git diff --staged --quiet; then
+            echo "No changes to deploy"
+            exit 0
+          fi
+          git commit -m "Update CI timing dashboard - $(date -u +%Y-%m-%d)"
+          # Other workflows (benchmarks, flaky tracker) also push to gh-pages;
+          # rebase and retry to avoid non-fast-forward failures.
+          for i in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            git pull --rebase
+          done
+          git push
