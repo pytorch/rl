@@ -19,9 +19,9 @@ thin: reusable display, playback, and acknowledgement helpers live in TorchRL
 rather than being copied into each notebook.
 
 The MuJoCo WASM viewer requires Node.js and either ``npm`` or ``pnpm``. The
-first viewer launch installs the generated Vite project's pinned JavaScript
-dependencies and therefore requires network access. Subsequent launches reuse
-the generated ``node_modules`` directory.
+viewer installs the generated Vite project's pinned JavaScript dependencies
+when ``node_modules`` is absent, which requires network access. The generated
+``node_modules`` directory is reused when present.
 
 Factories can be addressed as ``module.submodule:callable`` or as a local file
 path such as ``/path/to/render_factories.py:make_env``. The base TorchRL package
