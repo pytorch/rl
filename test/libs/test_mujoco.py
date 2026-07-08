@@ -1091,6 +1091,39 @@ class TestMujoco:
         assert rgb.shape == torch.Size([n, 24, 24, 3])
         assert rgb.dtype == torch.uint8
 
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_render_every(self, backend):
+        """``render_every=k`` reuses the cached frame on off-cadence steps
+        and renders fresh on resets and every k-th step."""
+        n = 1 if backend == "mujoco" else 2
+        env = SatelliteEnv(
+            num_cmgs=4,
+            num_envs=n,
+            seed=0,
+            backend=backend,
+            from_pixels=True,
+            render_width=32,
+            render_height=32,
+            render_every=3,
+        )
+        td = env.reset()
+        first = td["pixels"]
+        # Steps 1 and 2 reuse the reset frame (same tensor object).
+        for _ in range(2):
+            td = env.step(env.full_action_spec.zero())
+            assert td["next", "pixels"] is first
+        # Step 3 renders fresh.
+        td = env.step(env.full_action_spec.zero())
+        assert td["next", "pixels"] is not first
+        # A reset always renders fresh.
+        before_reset = env._last_pixels
+        td = env.reset()
+        assert td["pixels"] is not before_reset
+
+    def test_render_every_validation(self):
+        with pytest.raises(ValueError, match="render_every"):
+            SatelliteEnv(num_cmgs=4, num_envs=1, seed=0, render_every=0)
+
     @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
     def test_cube_bowl_specs_and_rollout(self):
         env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)

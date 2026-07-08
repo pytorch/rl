@@ -129,11 +129,18 @@ jobs:
         # 12. Build doc
         export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
         export BATCHED_PIPE_TIMEOUT=180
+        # Reduced tutorial workloads in CI (fewer rollouts, smaller renders);
+        # see the TUTORIAL_FAST blocks in tutorials/sphinx-tutorials/.
+        export TORCHRL_TUTORIALS_FAST=1
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
         cd ..
+
+        # 13. Per-example time budget: fail loudly when a tutorial regresses
+        # the build (a single tutorial once tripled it, unnoticed for weeks).
+        python .github/scripts/check_tutorial_time_budget.py docs/source/tutorials/sg_execution_times.rst
 
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
         echo $(ls "${RUNNER_ARTIFACT_DIR}")

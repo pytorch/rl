@@ -209,6 +209,13 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             Requires ``from_pixels=True``.
         render_width: pixel observation width used when ``from_pixels=True``.
         render_height: pixel observation height used when ``from_pixels=True``.
+        render_every: render a fresh frame every ``render_every`` steps and
+            reuse the previous frame in between; resets always render fresh.
+            Rendering often dominates step cost, so consumers that subsample
+            frames anyway (e.g. :class:`~torchrl.record.VideoRecorder` with
+            ``skip``) should set this to the same stride instead of paying
+            for frames that are dropped. Defaults to ``1`` (render every
+            step).
         camera_id: MuJoCo camera id used for pixel observations and by
             :meth:`render` when no camera override is provided.
 
@@ -259,6 +266,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         pixels_only: bool = False,
         render_width: int = 64,
         render_height: int = 64,
+        render_every: int = 1,
         camera_id: int = 0,
     ) -> None:
         super().__init__(device=device, batch_size=torch.Size([num_envs]))
@@ -278,6 +286,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             raise ValueError("pixels_only=True requires from_pixels=True.")
         self.render_width = int(render_width)
         self.render_height = int(render_height)
+        self.render_every = int(render_every)
+        if self.render_every < 1:
+            raise ValueError(f"render_every must be >= 1, got {render_every}.")
+        self._last_pixels: torch.Tensor | None = None
+        self._render_counter = 0
         self.camera_id = int(camera_id)
 
         xml_string = self._load_xml(xml_path)
@@ -465,18 +478,37 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     # Spec construction
     # ------------------------------------------------------------------
 
+    def _render_pixels(self) -> torch.Tensor:
+        """Render the pixel observation, honoring ``render_every``.
+
+        Off-cadence steps return the previous frame unchanged (the cached
+        tensor is replaced, never mutated in place, so handing it out
+        repeatedly is safe). ``_reset`` clears the cache so the first frame
+        of an episode is always fresh.
+        """
+        last = self._last_pixels
+        if (
+            self.render_every <= 1
+            or last is None
+            or last.shape[0] != self.num_envs
+            or self._render_counter % self.render_every == 0
+        ):
+            last = self._backend.render(
+                camera_id=self.camera_id,
+                width=self.render_width,
+                height=self.render_height,
+                background=self.RENDER_BACKGROUND,
+            )
+            self._last_pixels = last
+        return last
+
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         """Assemble the obs dict, including ``pixels`` when ``from_pixels``."""
         out: dict[str, torch.Tensor] = {}
         if not self.pixels_only:
             out["observation"] = self._make_obs(state)
         if self.from_pixels:
-            out["pixels"] = self._backend.render(
-                camera_id=self.camera_id,
-                width=self.render_width,
-                height=self.render_height,
-                background=self.RENDER_BACKGROUND,
-            )
+            out["pixels"] = self._render_pixels()
         return out
 
     def _make_specs(self) -> None:
@@ -682,6 +714,10 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             )
             self._on_reset_mask(reset_mask, tensordict)
 
+        # Force a fresh render on the first frame of the episode.
+        self._render_counter = 0
+        self._last_pixels = None
+
         state = self._state_td()
         obs = self._build_obs_dict(state)
         zero_flag = torch.zeros(self.num_envs, 1, dtype=torch.bool, device=self.device)
@@ -724,6 +760,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         self._backend.step(ctrl, self.frame_skip)
         next_state = self._state_td()
         self._step_count += 1
+        self._render_counter += 1
 
         reward = self._compute_reward(state, action, next_state).to(self.dtype)
         if reward.ndim == 1:
