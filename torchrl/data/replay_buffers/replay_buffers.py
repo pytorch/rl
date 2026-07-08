@@ -26,7 +26,7 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 from functools import partial, wraps
-from typing import TYPE_CHECKING, TypeVar
+from typing import Literal, TYPE_CHECKING, TypeVar
 
 from tensordict import (
     is_tensor_collection,
@@ -51,7 +51,12 @@ except ImportError:
         return tree_flat
 
 
-from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
+from torchrl._utils import (
+    _RayServiceMetaClass,
+    accept_remote_rref_udf_invocation,
+    rl_warnings,
+)
+from torchrl.data.replay_buffers.query import _query_source, Trajectory
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -117,8 +122,10 @@ def _maybe_delay_init(func):
     return wrapper
 
 
-class ReplayBuffer:
+class ReplayBuffer(metaclass=_RayServiceMetaClass):
     """A generic, composable replay buffer class.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.ReplayBufferConfig`.
 
     Keyword Args:
         storage (Storage, Callable[[], Storage], optional): the storage to be used.
@@ -214,6 +221,10 @@ class ReplayBuffer:
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        service_backend (str): deployment backend, either ``"direct"`` or
+            ``"ray"``. Defaults to ``"direct"``.
+        service_backend_options (dict, optional): Ray initialization options.
+            Accepted keys are ``ray_init_config`` and ``remote_config``.
 
     Examples:
         >>> import torch
@@ -284,6 +295,36 @@ class ReplayBuffer:
 
     """
 
+    @classmethod
+    def _ServiceClass(
+        cls,
+        service_backend,
+        *args,
+        service_backend_options=None,
+        **kwargs,
+    ):
+        if service_backend != "ray":
+            raise ValueError(
+                "ReplayBuffer supports service_backend='direct' or 'ray', "
+                f"not {service_backend!r}."
+            )
+        from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
+
+        options = dict(service_backend_options or {})
+        ray_init_config = options.pop("ray_init_config", None)
+        remote_config = options.pop("remote_config", None)
+        if options:
+            raise TypeError(
+                f"Unexpected Ray replay-buffer service options: {sorted(options)}"
+            )
+        return RayReplayBuffer(
+            *args,
+            replay_buffer_cls=cls,
+            ray_init_config=ray_init_config,
+            remote_config=remote_config,
+            **kwargs,
+        )
+
     def __init__(
         self,
         *,
@@ -306,7 +347,10 @@ class ReplayBuffer:
         shared: bool = False,
         compilable: bool | None = None,
         delayed_init: bool | None = None,
+        service_backend: Literal["direct", "ray"] = "direct",
+        service_backend_options: dict[str, Any] | None = None,
     ) -> None:
+        del service_backend, service_backend_options
         if consume_after_n_samples is not None:
             if isinstance(consume_after_n_samples, bool) or not isinstance(
                 consume_after_n_samples, INT_CLASSES
@@ -318,6 +362,7 @@ class ReplayBuffer:
 
         self._delayed_init = delayed_init
         self._initialized = False
+        self._service_shutdown = False
 
         # Store init parameters for potential delayed initialization
         self._init_storage = storage
@@ -469,6 +514,31 @@ class ReplayBuffer:
     def initialized(self) -> bool:
         """Whether the replay buffer has been initialized."""
         return self._initialized
+
+    def start(self) -> Self:
+        """Return this already-started direct replay buffer."""
+        if self._service_shutdown:
+            raise RuntimeError("A shut down replay buffer cannot be restarted.")
+        return self
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether this direct replay buffer remains available."""
+        return not self._service_shutdown
+
+    @property
+    def service_backend(self) -> str:
+        """The canonical deployment backend for this replay buffer."""
+        return "direct"
+
+    def client(self) -> Self:
+        """Return ``self`` for the zero-overhead direct backend."""
+        return self
+
+    def shutdown(self, timeout: float | None = None) -> None:
+        """Mark this direct replay-buffer owner as shut down."""
+        del timeout
+        self._service_shutdown = True
 
     def _initialize_prioritized_sampler(self) -> None:
         """Initialize priority trees for existing data when using PrioritizedSampler.
@@ -1365,6 +1435,105 @@ class ReplayBuffer:
         return result[0]
 
     @_maybe_delay_init
+    def query(
+        self,
+        predicate: Callable[[Trajectory], bool] | None = None,
+        *,
+        trajectory_key: NestedKey | None = None,
+    ) -> list[Trajectory]:
+        """Filters the stored trajectories with a query predicate.
+
+        Splits the buffer content into trajectories (see
+        :func:`~torchrl.data.replay_buffers.query.iter_trajectories`) and
+        returns those matching the predicate as
+        :class:`~torchrl.data.replay_buffers.query.Trajectory` views.
+
+        Args:
+            predicate (Callable[[Trajectory], bool], optional): a
+                :class:`~torchrl.data.replay_buffers.query.TrajectoryPredicate`
+                built from :data:`~torchrl.data.replay_buffers.query.traj`, or
+                any callable mapping a trajectory to a boolean. Defaults to
+                None (return all trajectories).
+
+        Keyword Args:
+            trajectory_key (NestedKey, optional): entry holding
+                per-transition trajectory ids. Defaults to None
+                (auto-detection from ``("collector", "traj_ids")``,
+                ``"traj_ids"``, ``"episode"`` or the done/terminated/truncated
+                flags).
+
+        Returns:
+            A list of matching trajectory views, ordered chronologically
+            (oldest trajectory first; for multi-dimensional storages, grouped
+            by batch coordinate).
+
+        The trajectory boundaries are computed from the stored (untransformed)
+        data with the same machinery
+        :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` uses, so
+        samplers and queries always agree on where trajectories start and
+        stop. This includes storages with ``ndim > 1`` (e.g.
+        ``LazyTensorStorage(..., ndim=2)`` holding ``[B, T]`` batches), whose
+        trajectories are recovered per batch coordinate.
+
+        Predicates built from :data:`~torchrl.data.replay_buffers.query.traj`
+        report the keys they read via
+        :meth:`~torchrl.data.replay_buffers.query.TrajectoryPredicate.required_keys`;
+        evaluation then only fetches those entries from the storage and only
+        runs the transforms that can affect them. Matching trajectories are
+        extracted in full with the complete transform chain applied, so
+        predicates and results see the same values a sampler would produce.
+        Opaque callables are evaluated against the fully transformed content.
+
+        .. note::
+            Once the buffer has wrapped around (it is at capacity and older
+            entries have been overwritten), the oldest trajectory may have
+            lost its first transitions to overwriting and will appear
+            truncated at the front. A trajectory written across the wrap
+            point is followed through it and returned whole, in time order.
+
+        Examples:
+            >>> from torchrl.data import traj
+            >>> good_trajs = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+            >>> observations = good_trajs[0].observation
+        """
+        storage = self._storage
+        if not len(storage):
+            return []
+        with self._replay_lock:
+            source = storage[:]
+        if isinstance(source, (list, tuple)):
+            if not source:
+                return []
+            if not all(is_tensor_collection(item) for item in source):
+                raise TypeError(
+                    "ReplayBuffer.query requires a tensordict-backed storage, "
+                    f"got items of type {type(source[0])}."
+                )
+            if any(item.batch_dims for item in source):
+                raise TypeError(
+                    "ReplayBuffer.query on a list-based storage expects "
+                    "single-transition (scalar) items."
+                )
+            source = LazyStackedTensorDict.lazy_stack(list(source))
+        elif not is_tensor_collection(source):
+            raise TypeError(
+                "ReplayBuffer.query requires a tensordict-backed storage, "
+                f"got content of type {type(source)}."
+            )
+        if self._transform is not None and len(self._transform):
+            transforms = list(self._transform.transforms)
+        else:
+            transforms = []
+        return _query_source(
+            source,
+            transforms=transforms,
+            predicate=predicate,
+            trajectory_key=trajectory_key,
+            at_capacity=bool(storage._is_full),
+            cursor=getattr(storage, "_last_cursor", None),
+        )
+
+    @_maybe_delay_init
     def mark_update(self, index: int | torch.Tensor) -> None:
         self._sampler.mark_update(index, storage=self._storage)
 
@@ -1840,6 +2009,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 class TensorDictReplayBuffer(ReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.TensorDictReplayBufferConfig`.
 
     Keyword Args:
         storage (Storage, Callable[[], Storage], optional): the storage to be used.

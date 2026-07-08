@@ -87,6 +87,9 @@ pipeline) and they live alongside the other transforms, documented in full on th
 - :class:`~torchrl.envs.transforms.ActionChunkTransform` -- build fixed-length
   action chunks (``[*B, T, H, action_dim]``) and a padding mask from a sampled
   trajectory window, the standard training target for chunked VLA policies.
+  Internally a thin recipe over a forward-looking
+  :class:`~torchrl.envs.transforms.CatFrames`; when the window carries its
+  done state, chunks stop (pad and mask) at the trajectory boundaries.
 - :class:`~torchrl.envs.transforms.ActionScaling` -- affine action
   normalization; built with the
   :meth:`~torchrl.envs.transforms.ActionScaling.from_metadata` /

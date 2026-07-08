@@ -17,7 +17,13 @@ from tensordict import TensorDict
 
 from torchrl._utils import _replace_last
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
+from torchrl.data import (
+    DEFAULT_DONE_KEYS,
+    find_start_stop_traj,
+    TED2Flat,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
@@ -1150,41 +1156,49 @@ class TestSamplers:
             assert found_traj_0
 
     @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
-    def test_prb_update_max_priority(self, max_priority_within_buffer):
+    @pytest.mark.parametrize("alpha", [1.0, 0.6])
+    def test_prb_update_max_priority(self, max_priority_within_buffer, alpha):
+        # alpha < 1 makes raw and transformed priorities numerically distinct,
+        # so these assertions pin that _max_priority stays in the RAW domain
+        # while the sum-tree holds (p + eps) ** alpha.
         rb = ReplayBuffer(
             storage=LazyTensorStorage(11),
             sampler=PrioritizedSampler(
                 max_capacity=11,
-                alpha=1.0,
+                alpha=alpha,
                 beta=1.0,
                 max_priority_within_buffer=max_priority_within_buffer,
             ),
         )
+        eps = rb.sampler._eps
         for data in torch.arange(20):
             idx = rb.add(data)
             rb.update_priority(idx, 21 - data)
-            if data <= 10:
-                # The max is always going to be the first value
-                assert rb.sampler._max_priority[0] == 21
-                assert rb.sampler._max_priority[1] == 0
-            elif not max_priority_within_buffer:
-                # The max is the historical max, which was at idx 0
-                assert rb.sampler._max_priority[0] == 21
+            if data <= 10 or not max_priority_within_buffer:
+                # The max is (or remains, historically) the first value
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
                 assert rb.sampler._max_priority[1] == 0
             else:
-                # the max is the current max. Find it and compare
+                # the max is the current max: the oldest item still in the buffer
+                expected_raw = float(31 - data)
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(
+                    expected_raw, rel=1e-4
+                )
+                assert rb.sampler._max_priority[1] == data - 10
                 sumtree = torch.as_tensor(
                     [rb.sampler._sum_tree[i] for i in range(rb.sampler._max_capacity)]
                 )
-                assert rb.sampler._max_priority[0] == sumtree.max()
-                assert rb.sampler._max_priority[1] == sumtree.argmax()
+                assert float(sumtree.max()) == pytest.approx(
+                    (expected_raw + eps) ** alpha, rel=1e-4
+                )
+                assert sumtree.argmax() == data - 10
         idx = rb.extend(torch.arange(10))
         rb.update_priority(idx, 12)
         if max_priority_within_buffer:
-            assert rb.sampler._max_priority[0] == 12
+            assert float(rb.sampler._max_priority[0]) == pytest.approx(12, rel=1e-4)
             assert rb.sampler._max_priority[1] == 0
         else:
-            assert rb.sampler._max_priority[0] == 21
+            assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
             assert rb.sampler._max_priority[1] == 0
 
     @pytest.mark.skipif(
@@ -1991,6 +2005,259 @@ def test_prioritized_parameter_scheduler(
         )
         rb.sample(20)
         scheduler.step()
+
+
+class TestFindStartStopTraj:
+    """Tests for the shared trajectory-boundary recovery utility.
+
+    ``find_start_stop_traj`` is the module-level extraction of
+    ``SliceSampler._find_start_stop_traj``; these tests pin down its contract
+    (wraparound, cursor-as-implicit-truncation, time-first layout) and its
+    equivalence with the sampler's method.
+    """
+
+    def test_end_flags_wraparound_cursor(self):
+        # Full circular storage, ends at rows 2 and 7, write cursor at row 4:
+        # the trajectory starting at row 8 spans the wrap point down to row 2.
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
+
+    @pytest.mark.parametrize("cursor_type", ["int", "tensor", "scalar_tensor", "range"])
+    def test_cursor_types(self, cursor_type):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        cursor = {
+            "int": 4,
+            "tensor": torch.tensor([2, 3, 4]),
+            "scalar_tensor": torch.tensor(4),
+            "range": range(2, 5),
+        }[cursor_type]
+        start, stop, lengths = find_start_stop_traj(
+            end=end, at_capacity=True, cursor=cursor
+        )
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+
+    @pytest.mark.parametrize(
+        "cursor",
+        [torch.tensor([], dtype=torch.long), range(0)],
+        ids=["tensor", "range"],
+    )
+    def test_empty_cursor_raises(self, cursor):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = True
+        with pytest.raises(RuntimeError, match="cursor must not be"):
+            find_start_stop_traj(end=end, at_capacity=True, cursor=cursor)
+
+    @pytest.mark.parametrize("at_capacity", [True, False])
+    def test_single_step_trajectory(self, at_capacity):
+        # A T=1 input holds exactly one (single-step) trajectory.
+        trajectory = torch.tensor([3])
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=at_capacity
+        )
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [0]
+        assert lengths.tolist() == [1]
+        end = torch.zeros(1, dtype=torch.bool)
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=at_capacity)
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [0]
+        assert lengths.tolist() == [1]
+
+    def test_empty_input_raises(self):
+        with pytest.raises(RuntimeError, match="empty"):
+            find_start_stop_traj(
+                trajectory=torch.zeros(0, dtype=torch.long), at_capacity=False
+            )
+        with pytest.raises(RuntimeError, match="empty"):
+            find_start_stop_traj(end=torch.zeros(0, dtype=torch.bool), at_capacity=True)
+
+    def test_trajectory_ids_match_end_flags(self):
+        # The same boundaries expressed as trajectory ids: id changes at
+        # rows 2->3, 4->5 and 7->8; ids wrap seamlessly at the storage edge.
+        trajectory = torch.tensor([5, 5, 5, 0, 0, 1, 1, 1, 5, 5])
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=True
+        )
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
+
+    def test_not_at_capacity_forces_last_end(self):
+        # When the storage is not full, the last valid element is always an
+        # end (the write head is an implicit truncation) and the input is not
+        # mutated.
+        end = torch.zeros(6, dtype=torch.bool)
+        end[2] = True
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=False)
+        assert start.squeeze(-1).tolist() == [0, 3]
+        assert stop.squeeze(-1).tolist() == [2, 5]
+        assert lengths.tolist() == [3, 3]
+        assert not end[5], "input end flags must not be mutated"
+
+    def test_at_capacity_no_end_flag(self):
+        # A full storage without any end flag holds a single trajectory that
+        # is forced to end at the last row.
+        end = torch.zeros(4, dtype=torch.bool)
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True)
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [3]
+        assert lengths.tolist() == [4]
+
+    def test_multidim_time_first(self):
+        # [T, B] layout: time along dim 0, one column per batch element.
+        # Boundary rows are [time_idx, batch_idx], grouped by batch.
+        trajectory = torch.tensor(
+            [
+                [0, 3],
+                [0, 3],
+                [1, 3],
+                [1, 4],
+                [1, 4],
+            ]
+        )
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=False
+        )
+        assert start.tolist() == [[0, 0], [2, 0], [0, 1], [3, 1]]
+        assert stop.tolist() == [[1, 0], [4, 0], [2, 1], [4, 1]]
+        assert lengths.tolist() == [2, 3, 3, 2]
+
+    def test_exclusive_args(self):
+        end = torch.zeros(4, dtype=torch.bool)
+        trajectory = torch.zeros(4)
+        with pytest.raises(TypeError, match="Exactly one"):
+            find_start_stop_traj(at_capacity=True)
+        with pytest.raises(TypeError, match="Exactly one"):
+            find_start_stop_traj(trajectory=trajectory, end=end, at_capacity=True)
+
+    @pytest.mark.parametrize("use_traj", [True, False])
+    @pytest.mark.parametrize("at_capacity", [True, False])
+    def test_matches_slice_sampler(self, use_traj, at_capacity):
+        # SliceSampler._find_start_stop_traj must behave exactly like the
+        # module-level function it delegates to.
+        torch.manual_seed(0)
+        trajectory = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2, 2, 0])
+        end = torch.zeros(10, dtype=torch.bool)
+        end[[2, 4, 8]] = True
+        sampler = SliceSampler(num_slices=2)
+        if use_traj:
+            kwargs = {"trajectory": trajectory}
+        else:
+            kwargs = {"end": end}
+        expected = find_start_stop_traj(at_capacity=at_capacity, **kwargs)
+        result = sampler._find_start_stop_traj(at_capacity=at_capacity, **kwargs)
+        for r, e in zip(result, expected):
+            assert (r == e).all()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_device_kwarg(self):
+        # The computation device is a scratch device: results come back on
+        # the input's device.
+        end = torch.zeros(10, dtype=torch.bool)
+        end[[2, 7]] = True
+        ref = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        out = find_start_stop_traj(
+            end=end, at_capacity=True, cursor=4, device=torch.device("cuda:0")
+        )
+        for r, o in zip(ref, out):
+            assert o.device == end.device
+            assert (r == o).all()
+
+    def test_default_done_keys_constant(self):
+        assert DEFAULT_DONE_KEYS == ("done", "truncated", "terminated")
+        # TED2Flat consumes the shared constant as its default.
+        assert TED2Flat().done_keys == set(DEFAULT_DONE_KEYS)
+
+    def test_subclass_end_to_start_stop_override(self):
+        # SliceSampler._find_start_stop_traj dispatches through
+        # self._end_to_start_stop so that subclasses overriding it keep
+        # affecting boundary recovery.
+        calls = []
+
+        class MySampler(SliceSampler):
+            def _end_to_start_stop(self, end, length):
+                calls.append(length)
+                return super()._end_to_start_stop(end, length)
+
+        sampler = MySampler(num_slices=2)
+        trajectory = torch.tensor([0, 0, 1, 1, 1])
+        sampler._find_start_stop_traj(trajectory=trajectory, at_capacity=False)
+        assert calls == [5]
+
+    def test_end_keys_union(self):
+        # Boundaries marked only by `truncated`: a single default end_key
+        # (("next", "done")) misses them, the end_keys union recovers them.
+        truncated = torch.zeros(10, 1, dtype=torch.bool)
+        truncated[4] = truncated[9] = True
+        td = TensorDict(
+            {
+                "obs": torch.arange(10),
+                ("next", "done"): torch.zeros(10, 1, dtype=torch.bool),
+                ("next", "truncated"): truncated,
+            },
+            [10],
+        )
+        end_keys = [("next", key) for key in DEFAULT_DONE_KEYS]
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=2, end_keys=end_keys),
+        )
+        rb.extend(td)
+        start, stop, lengths = rb._sampler._get_stop_and_length(rb._storage)
+        assert stop.squeeze(-1).tolist() == [4, 9]
+        assert lengths.tolist() == [5, 5]
+
+        # slices never cross the truncated boundary at index 4
+        for _ in range(20):
+            sample = rb.sample(4)
+            obs = sample["obs"].view(-1, 2)
+            assert (obs[:, 1] == obs[:, 0] + 1).all()
+            assert (obs[:, 0] != 4).all()
+
+        # the documented hazard: with the default single end_key the two
+        # trajectories are silently merged
+        rb_single = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=2),
+        )
+        rb_single.extend(td)
+        _, stop_single, _ = rb_single._sampler._get_stop_and_length(rb_single._storage)
+        assert stop_single.squeeze(-1).tolist() == [9]
+
+    def test_end_keys_exclusive_with_end_key(self):
+        with pytest.raises(RuntimeError, match="exclusive"):
+            SliceSampler(
+                slice_len=2,
+                end_key=("next", "done"),
+                end_keys=[("next", "done"), ("next", "truncated")],
+            )
+
+    def test_end_keys_all_missing_falls_back(self):
+        # None of the end_keys present, but trajectory ids are: the sampler
+        # falls back to trajectory-id-based recovery.
+        td = TensorDict(
+            {
+                "obs": torch.arange(10),
+                "episode": torch.tensor([0, 0, 0, 0, 0, 1, 1, 1, 1, 1]),
+            },
+            [10],
+        )
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(
+                slice_len=2, end_keys=[("next", "done"), ("next", "truncated")]
+            ),
+        )
+        rb.extend(td)
+        start, stop, lengths = rb._sampler._get_stop_and_length(rb._storage)
+        assert stop.squeeze(-1).tolist() == [4, 9]
 
 
 if __name__ == "__main__":

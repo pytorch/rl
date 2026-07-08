@@ -11,7 +11,9 @@ API Reference
     llms
     modules
     objectives
+    render
     services
+    services_workflow
     trainers
     utils
     vla

@@ -7,6 +7,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import OrderedDict
+from functools import partial
+from pathlib import Path
 
 import pytest
 import torch
@@ -21,7 +23,13 @@ from torchrl.collectors._evaluator import (
 )
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.transforms import Compose, RewardSum, StepCounter, VecNormV2
+from torchrl.envs.transforms import (
+    Compose,
+    RewardSum,
+    StepCounter,
+    Transform,
+    VecNormV2,
+)
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -40,6 +48,20 @@ def _make_policy(env=None):
         in_keys=["observation"],
         out_keys=["action"],
     )
+
+
+class _DumpStep(Transform):
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+    def dump(self, suffix=None, step=None) -> None:
+        del suffix
+        Path(self.path).write_text(str(step))
+
+
+def _make_dump_env(path: str):
+    return TransformedEnv(_make_env(), Compose(_DumpStep(path)))
 
 
 class TestEvaluatorSync:
@@ -602,6 +624,21 @@ class TestEvaluatorProcess:
         try:
             metrics = evaluator.evaluate(step=456)
             assert metrics["eval/step"] == 456
+        finally:
+            evaluator.shutdown()
+
+    def test_dump_video_dispatches_compose_dump_in_worker(self, tmp_path):
+        dump_path = tmp_path / "dump-step"
+        evaluator = Evaluator(
+            partial(_make_dump_env, str(dump_path)),
+            policy_factory=_make_policy,
+            max_steps=50,
+            dump_video=True,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=456)
+            assert dump_path.read_text() == "456"
         finally:
             evaluator.shutdown()
 

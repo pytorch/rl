@@ -136,9 +136,14 @@ from torchrl.testing.mocking_classes import (
 from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
+    DistributedWeightSyncScheme,
     MultiProcessWeightSyncScheme,
+    NoWeightSyncScheme,
+    RayWeightSyncScheme,
+    RPCWeightSyncScheme,
     SharedMemTransport,
     SharedMemWeightSyncScheme,
+    WeightSyncScheme,
 )
 
 # torch.set_default_dtype(torch.double)
@@ -148,6 +153,36 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+@pytest.mark.parametrize(
+    ("backend", "scheme_cls"),
+    [
+        ("none", NoWeightSyncScheme),
+        ("direct", NoWeightSyncScheme),
+        ("shared", SharedMemWeightSyncScheme),
+        ("thread", SharedMemWeightSyncScheme),
+        ("process", MultiProcessWeightSyncScheme),
+        ("multiprocessing", MultiProcessWeightSyncScheme),
+        ("distributed", DistributedWeightSyncScheme),
+        ("rpc", RPCWeightSyncScheme),
+        ("ray", RayWeightSyncScheme),
+    ],
+)
+def test_weight_sync_scheme_from_backend(backend, scheme_cls):
+    scheme = WeightSyncScheme.from_backend(backend)
+    assert isinstance(scheme, scheme_cls)
+
+
+def test_weight_sync_scheme_from_backend_forwards_kwargs():
+    scheme = WeightSyncScheme.from_backend("shared", sync=False)
+    assert isinstance(scheme, SharedMemWeightSyncScheme)
+    assert not scheme.sync
+
+
+def test_weight_sync_scheme_from_backend_rejects_unknown():
+    with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
+        WeightSyncScheme.from_backend("unknown")
 
 
 def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:

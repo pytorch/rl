@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections import deque, OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from typing import Literal
@@ -13,6 +14,7 @@ from typing import Literal
 import torch
 from tensordict import lazy_stack, NestedKey, TensorDictBase
 
+from torchrl._comm import MailboxTransportError
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
@@ -294,10 +296,10 @@ class AsyncBatchedCollector(BaseCollector):
         _server_defaults = (
             server_config if server_config is not None else InferenceServerConfig()
         )
-        server_backend = _server_defaults.backend
+        server_backend = _server_defaults.service_backend
         if server_backend == "process" and policy_factory is None:
             raise TypeError(
-                "InferenceServerConfig(backend='process') requires "
+                "InferenceServerConfig(service_backend='process') requires "
                 "policy_factory so the policy can be constructed inside the "
                 "server process."
             )
@@ -352,7 +354,7 @@ class AsyncBatchedCollector(BaseCollector):
         if server_backend == "process":
             if policy_backend not in (None, "multiprocessing"):
                 raise ValueError(
-                    "InferenceServerConfig(backend='process') requires "
+                    "InferenceServerConfig(service_backend='process') requires "
                     "policy_backend=None or 'multiprocessing'."
                 )
             effective_policy_backend = "multiprocessing"
@@ -492,7 +494,7 @@ class AsyncBatchedCollector(BaseCollector):
     def policy(self) -> Callable:
         """The policy passed to the inference server.
 
-        With ``InferenceServerConfig(backend="process")`` the policy only exists inside the
+        With ``InferenceServerConfig(service_backend="process")`` the policy only exists inside the
         server process, so this returns the ``policy_factory`` instead.
         """
         if self._policy is not None:
@@ -515,21 +517,37 @@ class AsyncBatchedCollector(BaseCollector):
     # Rollout: drain the result queue
     # ------------------------------------------------------------------
 
+    _SERVER_DEATH_GRACE_S = 2.0
+
     def _check_worker_result(self, item):
         """Re-raise exceptions propagated from coordinator threads.
 
         Worker threads may observe a dying server before the liveness
-        watchdog does (their transport read errors out first); attribute the
-        failure to the server in that case so the caller gets a
-        deterministic error regardless of which path wins the race.
+        watchdog does: their transport read errors out first, and process
+        teardown is asynchronous, so a killed server can still report alive
+        for a moment. Mailbox transport failures identify a dead peer by
+        construction and are attributed to the server immediately; other
+        worker errors give liveness a short grace window so the failure is
+        attributed to the dead server whenever that is the actual cause.
         """
         if isinstance(item, BaseException):
-            if not self._server.is_alive:
+            if isinstance(item, MailboxTransportError):
                 raise RuntimeError(
                     "The inference server died while the collector was "
                     "waiting for transitions. Check the server process "
                     "logs (e.g. OOM kills or exceptions in the policy)."
                 ) from item
+            deadline = time.monotonic() + self._SERVER_DEATH_GRACE_S
+            while True:
+                if not self._server.is_alive:
+                    raise RuntimeError(
+                        "The inference server died while the collector was "
+                        "waiting for transitions. Check the server process "
+                        "logs (e.g. OOM kills or exceptions in the policy)."
+                    ) from item
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.1)
             raise RuntimeError(
                 "A collector worker thread raised an exception."
             ) from item

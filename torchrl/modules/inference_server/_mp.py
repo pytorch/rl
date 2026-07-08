@@ -49,6 +49,14 @@ class MPTransport(QueueBasedTransport):
         else:
             self._request_queue = self._manager.Queue()
             self._response_queues = self._manager.dict()
+        # Server-liveness flag baked into every client. It starts set
+        # (optimistically alive) and is cleared by a process-backed server
+        # owner when the server process exits, so blocked clients raise
+        # MailboxPeerClosedError instead of waiting forever on a reply that
+        # will never come.
+        peer_alive = self._ctx.Event()
+        peer_alive.set()
+        self._set_peer_alive(peer_alive)
 
     def _make_response_queue(self) -> mp.Queue:
         if self._manager is not None:

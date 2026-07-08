@@ -28,3 +28,92 @@ You can execute the DQN algorithm on Atari environments by running the following
 ```bash
 python dqn_atari.py
 ```
+
+## Rendering a CartPole checkpoint with `rlrender`
+
+The CartPole DQN script writes a local checkpoint that is directly
+loadable by `rlrender`. The checkpoint stores the policy state dict, the Gym
+environment name, the resolved Hydra config, the frame count, and the metrics
+recorded at checkpoint time.
+
+### Smoke test
+
+Use a tiny run to validate checkpointing and rendering:
+
+```bash
+uv run --frozen python sota-implementations/dqn/dqn_cartpole.py \
+  logger.backend=null \
+  collector.total_frames=400 \
+  collector.frames_per_batch=100 \
+  collector.init_random_frames=100 \
+  collector.annealing_frames=400 \
+  loss.num_updates=1 \
+  buffer.batch_size=32 \
+  logger.test_interval=200 \
+  logger.num_test_episodes=1 \
+  checkpoint.path=/tmp/torchrl_dqn_cartpole_smoke.pt
+```
+
+### Training run with W&B
+
+Set ``WANDB_API_KEY`` in the environment and leave ``logger.backend=wandb``
+enabled for an online W&B run:
+
+```bash
+uv run --frozen python sota-implementations/dqn/dqn_cartpole.py \
+  logger.backend=wandb \
+  logger.project_name=torchrl_rlrender \
+  logger.group_name=dqn_cartpole_rlrender \
+  collector.total_frames=500100 \
+  collector.frames_per_batch=1000 \
+  collector.init_random_frames=10000 \
+  collector.annealing_frames=250000 \
+  loss.num_updates=100 \
+  buffer.batch_size=128 \
+  logger.test_interval=25000 \
+  logger.num_test_episodes=5 \
+  checkpoint.path=/tmp/torchrl_dqn_cartpole.pt \
+  checkpoint.interval=50000
+```
+
+This default-scale command is intended to produce a visible training curve and
+a solved CartPole checkpoint.
+
+The Gymnasium CartPole RGB renderer uses the optional `pygame` dependency,
+which is included in TorchRL's `rendering` extra.
+
+Render an MP4 from the checkpoint:
+
+```bash
+uv run --frozen --extra rendering python -m torchrl.render \
+  --ckpt /tmp/torchrl_dqn_cartpole.pt \
+  --policy sota-implementations/dqn/utils_cartpole.py:make_render_policy \
+  --env sota-implementations/dqn/utils_cartpole.py:make_render_env \
+  --from-pixels \
+  --max-steps 500 \
+  --num-trajs 1 \
+  --format mp4 \
+  --out /tmp/torchrl_dqn_cartpole.mp4 \
+  --overwrite
+```
+
+Render an inspection notebook from the same checkpoint:
+
+```bash
+uv run --frozen --extra rendering python -m torchrl.render \
+  --ckpt /tmp/torchrl_dqn_cartpole.pt \
+  --policy sota-implementations/dqn/utils_cartpole.py:make_render_policy \
+  --env sota-implementations/dqn/utils_cartpole.py:make_render_env \
+  --from-pixels \
+  --max-steps 500 \
+  --num-trajs 1 \
+  --format ipynb \
+  --out /tmp/torchrl_dqn_cartpole_render.ipynb \
+  --overwrite
+```
+
+Open the notebook with the project's locked dependency resolution:
+
+```bash
+uv run --frozen --extra notebook jupyter-lab /tmp/torchrl_dqn_cartpole_render.ipynb
+```

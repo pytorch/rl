@@ -256,6 +256,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            With a multi-process collector writing to a shared replay buffer,
+            this marks the worker-batch seams that would otherwise be
+            invisible to a :class:`~torchrl.data.replay_buffers.SliceSampler`;
+            see :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            and :ref:`collectors_replay_trajs` for the trade-offs.
         trajs_per_batch (int, optional): When set together with ``replay_buffer``,
             trajectory assembly is delegated to each worker's inner
             :class:`~torchrl.collectors.Collector`.  Each worker calls
@@ -982,6 +987,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Warn when a SliceSampler is used without trajs_per_batch: workers
         # write batches independently so adjacent frames in the buffer can
         # come from different episodes without an intervening done signal.
+        # This hazard is specific to multi-process collectors: a single
+        # Collector writes batches in temporal order, so consecutive batches
+        # are contiguous continuations of the same trajectories and the only
+        # mid-trajectory edge is the live write cursor, which SliceSampler
+        # already resolves at read time (see the trajectory-boundary section
+        # of the replay-buffer docs).
         from torchrl.data.replay_buffers.samplers import SliceSampler
 
         if (

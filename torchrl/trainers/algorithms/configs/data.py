@@ -6,11 +6,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
-
 from torchrl.trainers.algorithms.configs.common import ConfigBase
+
+if TYPE_CHECKING:
+    _ReplayServiceBackend = Literal["direct", "ray"]
+else:
+    # OmegaConf structured configs resolve this alias at runtime and do not
+    # support Literal on all TorchRL-supported versions.
+    _ReplayServiceBackend = str
 
 
 @dataclass
@@ -117,6 +123,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -142,6 +149,7 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -161,6 +169,7 @@ class SliceSamplerConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -332,6 +341,8 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None
+    service_backend: _ReplayServiceBackend = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Post-initialization hook for TensorDict replay buffer configurations."""
@@ -362,3 +373,5 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None
+    service_backend: _ReplayServiceBackend = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)

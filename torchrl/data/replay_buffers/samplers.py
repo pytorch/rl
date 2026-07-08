@@ -9,6 +9,7 @@ import textwrap
 import warnings
 from abc import ABC, ABCMeta, abstractmethod
 from collections import OrderedDict
+from collections.abc import Sequence
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
@@ -18,12 +19,18 @@ import numpy as np
 import torch
 from pyvers import implement_for
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDict
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
 from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
-from torchrl.data.replay_buffers.utils import _auto_device, _is_int, unravel_index
+from torchrl.data.replay_buffers.utils import (
+    _auto_device,
+    _derive_end_flags,
+    _end_to_start_stop,
+    _is_int,
+    unravel_index,
+)
 
 try:
     from torchrl._torchrl import (
@@ -1053,6 +1060,7 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
+        self._warned_alpha_change = False
         self._device = torch.device(device) if device is not None else None
         self._init()
         if rl_warnings() and SumSegmentTreeFp32 is None:
@@ -1076,10 +1084,39 @@ class PrioritizedSampler(Sampler):
 
     @property
     def alpha(self):
+        """The priority exponent.
+
+        .. note:: Changing ``alpha`` on a sampler that already holds priorities
+          (e.g. when annealing it with a
+          :class:`~torchrl.data.replay_buffers.scheduler.ParameterScheduler`)
+          does not re-transform the ``(p + eps) ** alpha`` values already
+          written to the sum/min trees: old and new exponents mix until every
+          entry's priority is updated again.
+        """
         return self._alpha
 
     @alpha.setter
     def alpha(self, value):
+        if value < 0:
+            raise ValueError(
+                f"alpha must be greater or equal than 0, got alpha={value}"
+            )
+        if (
+            value != self._alpha
+            and self._max_priority_within_buffer
+            and not self._warned_alpha_change
+            and self._max_priority[0] is not None
+        ):
+            self._warned_alpha_change = True
+            warnings.warn(
+                "Changing alpha on a PrioritizedSampler with "
+                "max_priority_within_buffer=True does not re-transform the "
+                "(p + eps) ** alpha values already stored in the sum/min trees, "
+                "and the max-priority recomputation inverts tree values with the "
+                "new alpha. Large changes to alpha can corrupt the tracked max "
+                "priority until the corresponding entries are updated again. "
+                "This warning is emitted once per sampler."
+            )
         self._alpha = value
 
     @property
@@ -1229,13 +1266,19 @@ class PrioritizedSampler(Sampler):
             self._max_priority = None
 
     @property
-    def default_priority(self) -> float:
+    def default_priority(self) -> float | torch.Tensor:
+        # Return the RAW max priority. Every consumer feeds this value back through
+        # ``update_priority``, which applies the ``(p + eps) ** alpha`` transform
+        # exactly once. Returning an already-transformed value here caused new items
+        # to be transformed twice (``((p + eps) ** alpha + eps) ** alpha``), which
+        # systematically under-prioritized them (for ``alpha < 1``) and broke PER's
+        # "new experience is sampled at least once" guarantee.
         mp = self._max_priority[0]
         if mp is None:
-            mp = 1
+            mp = 1.0
         if isinstance(mp, torch.Tensor):
             mp = mp.to(self.device)
-        return (mp + self._eps) ** self._alpha
+        return mp
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
         self._maybe_init_from_storage(storage)
@@ -1422,6 +1465,14 @@ class PrioritizedSampler(Sampler):
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
         if self._max_priority_within_buffer and cur_max_priority_index is not None:
+            if self._alpha == 0:
+                # With alpha == 0 the tree stores (p + eps) ** 0 == 1 for every
+                # entry, so the raw priorities of untouched entries cannot be
+                # recovered from it. Keep the raw max tracked above instead of
+                # storing a transformed value in ``_max_priority``; sampling is
+                # uniform in this regime, so a stale max only matters if alpha
+                # is raised later (see the ``alpha`` setter).
+                return
             if tree_device.type == "cuda":
                 all_indices = torch.arange(
                     self._max_capacity, dtype=torch.long, device=tree_device
@@ -1433,6 +1484,11 @@ class PrioritizedSampler(Sampler):
                 ).max(0)
             else:
                 return
+            # ``maxval`` is read from the sum-tree, which stores (p + eps) ** alpha.
+            # Convert it back to the raw priority so ``_max_priority`` is always the
+            # raw max, matching the non-recomputed path and what ``default_priority``
+            # expects (it re-applies the alpha transform once via ``update_priority``).
+            maxval = (maxval ** (1.0 / self._alpha) - self._eps).clamp_min(0)
             self._max_priority = (maxval, maxidx)
 
     def mark_update(
@@ -1575,6 +1631,21 @@ class SliceSampler(Sampler):
             by it. Exclusive with ``num_slices``.
         end_key (NestedKey, optional): the key indicating the end of a
             trajectory (or episode). Defaults to ``("next", "done")``.
+            Exclusive with ``end_keys``.
+
+            .. note:: A single ``end_key`` misses trajectories whose end is
+                marked by another flag only (e.g. datasets carrying
+                ``truncated=True`` ends without an aggregate ``done`` entry
+                -- those get silently merged with the next trajectory). Pass
+                ``end_keys`` to apply the
+                :data:`~torchrl.data.DEFAULT_DONE_KEYS` union convention.
+        end_keys (sequence of NestedKey, optional): a sequence of keys whose
+            entries are OR-ed together to build the end-of-trajectory signal.
+            Keys absent from the storage are skipped (at least one must be
+            present). Use
+            ``[("next", key) for key in DEFAULT_DONE_KEYS]`` to union
+            ``done``, ``truncated`` and ``terminated``. Exclusive with
+            ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
@@ -1847,6 +1918,15 @@ class SliceSampler(Sampler):
                 [22],
                 [ 8]])
 
+    .. seealso::
+
+        Trajectory boundaries are recovered at sampling time with
+        :func:`~torchrl.data.find_start_stop_traj`, which documents how
+        trajectory ids, end flags, the write cursor and the storage capacity
+        interact. See also :ref:`the trajectory-boundary documentation
+        <ref_traj_boundaries>` for the conventions collectors, storages and
+        samplers follow.
+
     """
 
     # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
@@ -1858,6 +1938,7 @@ class SliceSampler(Sampler):
         num_slices: int | None = None,
         slice_len: int | None = None,
         end_key: NestedKey | None = None,
+        end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
@@ -1871,7 +1952,18 @@ class SliceSampler(Sampler):
     ):
         self.num_slices = num_slices
         self.slice_len = slice_len
+        if end_keys is not None and end_key is not None:
+            raise RuntimeError(
+                "`end_key` and `end_keys` are exclusive arguments: pass the "
+                "single boundary key through `end_key`, or the sequence of "
+                "keys to be OR-ed together through `end_keys`."
+            )
         self.end_key = end_key
+        self.end_keys = (
+            tuple(unravel_key(key) for key in end_keys)
+            if end_keys is not None
+            else None
+        )
         self.traj_key = traj_key
         self.truncated_key = truncated_key
         self.cache_values = cache_values
@@ -1899,9 +1991,9 @@ class SliceSampler(Sampler):
         self.span = span
 
         if trajectories is not None:
-            if traj_key is not None or end_key:
+            if traj_key is not None or end_key or end_keys:
                 raise RuntimeError(
-                    "`trajectories` and `end_key` or `traj_key` are exclusive arguments."
+                    "`trajectories` and `end_key`, `end_keys` or `traj_key` are exclusive arguments."
                 )
             if ends is not None:
                 raise RuntimeError("trajectories and ends are exclusive arguments.")
@@ -1916,9 +2008,9 @@ class SliceSampler(Sampler):
             self._cache["stop-and-length"] = vals
 
         elif ends is not None:
-            if traj_key is not None or end_key:
+            if traj_key is not None or end_key or end_keys:
                 raise RuntimeError(
-                    "`ends` and `end_key` or `traj_key` are exclusive arguments."
+                    "`ends` and `end_key`, `end_keys` or `traj_key` are exclusive arguments."
                 )
             if trajectories is not None:
                 raise RuntimeError("trajectories and ends are exclusive arguments.")
@@ -1933,7 +2025,7 @@ class SliceSampler(Sampler):
             if traj_key is not None:
                 self._fetch_traj = True
                 self._traj_key_auto = False
-            elif end_key is not None:
+            elif end_key is not None or end_keys is not None:
                 self._fetch_traj = False
                 self._traj_key_auto = False
             else:
@@ -1941,7 +2033,7 @@ class SliceSampler(Sampler):
                 # Prefer ("collector", "traj_ids") (written by collectors) over "episode".
                 self._fetch_traj = True
                 self._traj_key_auto = True
-            if end_key is None:
+            if end_key is None and end_keys is None:
                 end_key = ("next", "done")
             self.end_key = end_key
             self.traj_key = traj_key  # may be None when _traj_key_auto=True
@@ -1988,6 +2080,7 @@ class SliceSampler(Sampler):
             f"{self.__class__.__name__}(num_slices={self.num_slices}, "
             f"slice_len={self.slice_len}, "
             f"end_key={self.end_key}, "
+            f"end_keys={getattr(self, 'end_keys', None)}, "
             f"traj_key={self.traj_key}, "
             f"truncated_key={self.truncated_key}, "
             f"strict_length={self.strict_length}, "
@@ -1997,95 +2090,17 @@ class SliceSampler(Sampler):
     def _find_start_stop_traj(
         self, *, trajectory=None, end=None, at_capacity: bool, cursor=None
     ):
-        if trajectory is not None:
-            # slower
-            # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
-            # stop_idx = stop_idx.cumsum(0) - 1
-
-            # even slower
-            # t = trajectory.unsqueeze(0)
-            # w = torch.tensor([1, -1], dtype=torch.int).view(1, 1, 2)
-            # stop_idx = torch.conv1d(t, w).nonzero()
-
-            # faster
-            end = trajectory[:-1] != trajectory[1:]
-            if not at_capacity:
-                end = torch.cat([end, torch.ones_like(end[:1])], 0)
-            else:
-                end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
-            length = trajectory.shape[0]
-        else:
-            # We presume that not done at the end means that the traj spans across end and beginning of storage
-            length = end.shape[0]
-            if not at_capacity:
-                end = end.clone()
-                end[length - 1] = True
-        ndim = end.ndim
-
-        if at_capacity:
-            # we must have at least one end by traj to individuate trajectories
-            # so if no end can be found we set it manually
-            if cursor is not None:
-                if isinstance(cursor, torch.Tensor):
-                    cursor = cursor[-1].item()
-                elif isinstance(cursor, range):
-                    cursor = cursor[-1]
-                if not _is_int(cursor):
-                    raise RuntimeError(
-                        "cursor should be an integer or a 1d tensor or a range."
-                    )
-                end = torch.index_fill(
-                    end,
-                    index=torch.tensor(cursor, device=end.device, dtype=torch.long),
-                    dim=0,
-                    value=1,
-                )
-            if not end.any(0).all():
-                mask = ~end.any(0, True)
-                mask = torch.cat([torch.zeros_like(end[:-1]), mask])
-                end = torch.masked_fill(mask, end, 1)
-        if ndim == 0:
-            raise RuntimeError(
-                "Expected the end-of-trajectory signal to be at least 1-dimensional."
-            )
-        return self._end_to_start_stop(length=length, end=end)
+        # Thin wrapper around the shared module-level utilities (see
+        # torchrl.data.find_start_stop_traj). Kept as a method, dispatching
+        # through self._end_to_start_stop, so that subclasses overriding
+        # either hook keep working and the sampler's GPU device is applied.
+        end, length = _derive_end_flags(
+            trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
+        )
+        return self._end_to_start_stop(end=end, length=length)
 
     def _end_to_start_stop(self, end, length):
-        device = None
-        if self.use_gpu:
-            gpu_device = self._gpu_device
-            if end.device != gpu_device:
-                device = end.device
-                end = end.to(self._gpu_device)
-        # Using transpose ensures the start and stop are sorted the same way
-        stop_idx = end.transpose(0, -1).nonzero()
-        stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
-        # First build the start indices as the stop + 1, we'll shift it later
-        start_idx = stop_idx.clone()
-        start_idx[:, 0] += 1
-        start_idx[:, 0] %= end.shape[0]
-        # shift start: to do this, we check when the non-first dim indices are identical
-        # and get a mask like [False, True, True, False, True, ...] where False means
-        # that there's a switch from one dim to another (ie, a switch from one element of the batch
-        # to another). We roll this one step along the time dimension and these two
-        # masks provide us with the indices of the permutation matrix we need
-        # to apply to start_idx.
-        if start_idx.shape[0] > 1:
-            start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
-            m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
-            m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
-            start_idx_replace = torch.empty_like(start_idx)
-            start_idx_replace[m1] = start_idx[m2]
-            start_idx_replace[~m1] = start_idx[~m2]
-            start_idx = start_idx_replace
-        else:
-            # In this case we have only one start and stop has already been set
-            pass
-        lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        lengths[lengths <= 0] = lengths[lengths <= 0] + length
-        if device is not None:
-            return start_idx.to(device), stop_idx.to(device), lengths.to(device)
-        return start_idx, stop_idx, lengths
+        return _end_to_start_stop(end=end, length=length, device=self._gpu_device)
 
     def _start_to_end(self, st: torch.Tensor, length: int):
 
@@ -2236,13 +2251,16 @@ class SliceSampler(Sampler):
 
         else:
             try:
-                try:
-                    done = storage[:][self.end_key]
-                except Exception:
-                    raise RuntimeError(
-                        "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
-                    )
-                done = done.squeeze()
+                if self.end_keys is not None:
+                    done = self._end_signal_from_keys(storage)
+                else:
+                    try:
+                        done = storage[:][self.end_key]
+                    except Exception:
+                        raise RuntimeError(
+                            "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+                        )
+                    done = done.squeeze()
                 vals = self._find_start_stop_traj(
                     end=done[: len(storage)],
                     at_capacity=storage._is_full,
@@ -2254,8 +2272,38 @@ class SliceSampler(Sampler):
             except KeyError:
                 if fallback:
                     self._fetch_traj = True
+                    if self.traj_key is None:
+                        # No trajectory key was configured either: probe the
+                        # storage for the usual candidates on the retry.
+                        self._traj_key_auto = True
                     return self._get_stop_and_length(storage, fallback=False)
                 raise
+
+    def _end_signal_from_keys(self, storage) -> torch.Tensor:
+        """Union (logical OR) of all ``end_keys`` entries present in the storage.
+
+        Missing keys are skipped; if none of the keys is present a
+        ``KeyError`` is raised so that :meth:`_get_stop_and_length` can fall
+        back to trajectory-id-based recovery.
+        """
+        try:
+            data = storage[:]
+        except Exception:
+            raise RuntimeError(
+                "Could not get a tensordict out of the storage, which is required for SliceSampler to compute the trajectories."
+            )
+        done = None
+        for key in self.end_keys:
+            val = data.get(key, default=None)
+            if val is None:
+                continue
+            val = val.squeeze()
+            done = val if done is None else done | val
+        if done is None:
+            raise KeyError(
+                f"None of the end_keys {self.end_keys} could be found in the storage."
+            )
+        return done
 
     def _adjusted_batch_size(self, batch_size):
         if self.num_slices is not None:
@@ -2676,6 +2724,21 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             by it. Exclusive with ``num_slices``.
         end_key (NestedKey, optional): the key indicating the end of a
             trajectory (or episode). Defaults to ``("next", "done")``.
+            Exclusive with ``end_keys``.
+
+            .. note:: A single ``end_key`` misses trajectories whose end is
+                marked by another flag only (e.g. datasets carrying
+                ``truncated=True`` ends without an aggregate ``done`` entry
+                -- those get silently merged with the next trajectory). Pass
+                ``end_keys`` to apply the
+                :data:`~torchrl.data.DEFAULT_DONE_KEYS` union convention.
+        end_keys (sequence of NestedKey, optional): a sequence of keys whose
+            entries are OR-ed together to build the end-of-trajectory signal.
+            Keys absent from the storage are skipped (at least one must be
+            present). Use
+            ``[("next", key) for key in DEFAULT_DONE_KEYS]`` to union
+            ``done``, ``truncated`` and ``terminated``. Exclusive with
+            ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
@@ -2814,6 +2877,13 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         tensor([[0., 0., 0., 0., 0.],
                 [1., 1., 1., 1., 1.]])
 
+    .. seealso::
+
+        Trajectory boundaries are recovered at sampling time with
+        :func:`~torchrl.data.find_start_stop_traj`; see
+        :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+        for the conventions collectors, storages and samplers follow.
+
     """
 
     def __init__(
@@ -2823,6 +2893,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         slice_len: int | None = None,
         drop_last: bool = False,
         end_key: NestedKey | None = None,
+        end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
@@ -2837,6 +2908,7 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
             num_slices=num_slices,
             slice_len=slice_len,
             end_key=end_key,
+            end_keys=end_keys,
             traj_key=traj_key,
             cache_values=True,
             truncated_key=truncated_key,
@@ -2993,6 +3065,21 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             by it. Exclusive with ``num_slices``.
         end_key (NestedKey, optional): the key indicating the end of a
             trajectory (or episode). Defaults to ``("next", "done")``.
+            Exclusive with ``end_keys``.
+
+            .. note:: A single ``end_key`` misses trajectories whose end is
+                marked by another flag only (e.g. datasets carrying
+                ``truncated=True`` ends without an aggregate ``done`` entry
+                -- those get silently merged with the next trajectory). Pass
+                ``end_keys`` to apply the
+                :data:`~torchrl.data.DEFAULT_DONE_KEYS` union convention.
+        end_keys (sequence of NestedKey, optional): a sequence of keys whose
+            entries are OR-ed together to build the end-of-trajectory signal.
+            Keys absent from the storage are skipped (at least one must be
+            present). Use
+            ``[("next", key) for key in DEFAULT_DONE_KEYS]`` to union
+            ``done``, ``truncated`` and ``terminated``. Exclusive with
+            ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
@@ -3088,6 +3175,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         steps [1, 2, 0, 1, 0, 1]
         >>> print("weight", info["priority_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
+
+    .. seealso::
+
+        Trajectory boundaries are recovered at sampling time with
+        :func:`~torchrl.data.find_start_stop_traj`; see
+        :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+        for the conventions collectors, storages and samplers follow.
+
     """
 
     def __init__(
@@ -3102,6 +3197,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         num_slices: int | None = None,
         slice_len: int | None = None,
         end_key: NestedKey | None = None,
+        end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
@@ -3117,6 +3213,7 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             num_slices=num_slices,
             slice_len=slice_len,
             end_key=end_key,
+            end_keys=end_keys,
             traj_key=traj_key,
             cache_values=cache_values,
             truncated_key=truncated_key,

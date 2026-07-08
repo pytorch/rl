@@ -394,6 +394,8 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 #   explains how ``split_trajectories``, ``trajs_per_batch``, and
 #   ``SliceSampler`` work together in detail, including asynchronous
 #   collection with :meth:`~torchrl.collectors.Collector.start`.
+#   :ref:`Trajectory boundaries <ref_traj_boundaries>` documents how the
+#   sampler recovers episode boundaries from the stored markers.
 #
 # .. note::
 #   For the sake of efficiency, we're only running a few thousands iterations
