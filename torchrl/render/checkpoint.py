@@ -34,8 +34,8 @@ def save_render_checkpoint(
 ) -> Path | None:
     """Writes a checkpoint in the layout expected by rlrender factories.
 
-    The model weights are stored under ``"model_state_dict"`` (the first key
-    probed by :func:`infer_state_dict`) and ``env_metadata`` entries are merged
+    The model weights are stored under the canonical ``"model_state_dict"`` key
+    probed by :func:`infer_state_dict`, and ``env_metadata`` entries are merged
     at the top level of the payload so environment and policy factories can
     rebuild the training setup. Conventional environment metadata keys used by
     the sota-implementations factories are ``"env_name"``, ``"env_backend"``,
@@ -49,7 +49,7 @@ def save_render_checkpoint(
         model: Module exposing ``state_dict()``, or a ready state-dict mapping.
         env_metadata: Environment metadata merged into the payload.
         frames: Number of training frames collected so far.
-        metrics: Latest scalar metrics.
+        metrics: Scalar metrics recorded at checkpoint time.
         config: JSON-serializable training configuration.
         extra: Additional payload entries merged last.
 
