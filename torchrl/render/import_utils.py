@@ -30,7 +30,7 @@ def import_from_string(spec: str) -> Any:
             "Import specs must have the form 'module.submodule:object', "
             f"got {spec!r}."
         )
-    module_name, attr_path = spec.split(":", 1)
+    module_name, attr_path = spec.rsplit(":", 1)
     if not module_name or not attr_path:
         raise ValueError(
             "Import specs must have the form 'module.submodule:object', "
