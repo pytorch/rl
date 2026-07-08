@@ -3,6 +3,8 @@ env:
   env_name: HalfCheetah-v4
   backend: gym
   config_overrides: {}
+  num_envs: 1
+  batch_mode: parallel
   normalize_observation: True
   max_episode_steps: null
 

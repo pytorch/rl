@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
 import importlib.util
 import warnings
 from typing import Any, Literal
@@ -17,6 +18,7 @@ from torchrl.envs import (
     DoubleToFloat,
     ExplorationType,
     ObservationNorm,
+    ParallelEnv,
     RewardSum,
     StepCounter,
     TransformedEnv,
@@ -29,6 +31,7 @@ from torchrl.record import VideoRecorder
 _has_mujoco_playground = importlib.util.find_spec("mujoco_playground") is not None
 
 _EnvBackend = Literal["gym", "mujoco_playground"]
+_EnvBatchMode = Literal["parallel", "vmap"]
 _MujocoPlaygroundEnv: type | None = None
 
 
@@ -44,13 +47,28 @@ def make_env(
     *,
     backend: _EnvBackend = "gym",
     config_overrides: dict[str, Any] | None = None,
+    num_envs: int = 1,
+    batch_mode: _EnvBatchMode = "parallel",
     normalize_observation: bool = True,
     vecnorm_stats: dict[str, torch.Tensor] | None = None,
     max_episode_steps: int | None = None,
 ):
+    if num_envs < 1:
+        raise ValueError(f"num_envs must be greater than zero, got {num_envs}.")
     if backend == "gym":
+        if num_envs != 1:
+            raise ValueError(
+                "env.num_envs is only supported for env.backend=mujoco_playground."
+            )
         env = GymEnv(
             env_name, device=device, from_pixels=from_pixels, pixels_only=False
+        )
+        return _add_ppo_transforms(
+            env,
+            device=device,
+            normalize_observation=normalize_observation,
+            vecnorm_stats=vecnorm_stats,
+            max_episode_steps=max_episode_steps,
         )
     elif backend == "mujoco_playground":
         if not _has_mujoco_playground:
@@ -62,18 +80,65 @@ def make_env(
             raise ValueError(
                 "from_pixels=True is not supported for MuJoCo Playground PPO envs."
             )
-        MujocoPlaygroundEnv = _get_mujoco_playground_env()
-
-        env = MujocoPlaygroundEnv(
-            env_name,
-            device=device,
-            config_overrides=config_overrides,
-        )
+        if batch_mode == "parallel":
+            make_scalar_env = functools.partial(
+                _make_mujoco_playground_env,
+                env_name=env_name,
+                device=device,
+                config_overrides=config_overrides,
+                num_envs=1,
+            )
+            if num_envs == 1:
+                env = make_scalar_env()
+            else:
+                env = ParallelEnv(
+                    num_envs,
+                    make_scalar_env,
+                    device=device,
+                    serial_for_single=True,
+                )
+            return _add_ppo_transforms(
+                env,
+                device=device,
+                normalize_observation=normalize_observation,
+                vecnorm_stats=vecnorm_stats,
+                max_episode_steps=max_episode_steps,
+            )
+        elif batch_mode == "vmap":
+            env = _make_mujoco_playground_env(
+                env_name=env_name,
+                device=device,
+                config_overrides=config_overrides,
+                num_envs=num_envs,
+            )
+            return _add_ppo_transforms(
+                env,
+                device=device,
+                normalize_observation=normalize_observation,
+                vecnorm_stats=vecnorm_stats,
+                max_episode_steps=max_episode_steps,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported MuJoCo Playground batch_mode {batch_mode!r}. "
+                "Expected 'parallel' or 'vmap'."
+            )
     else:
         raise ValueError(
             f"Unsupported PPO MuJoCo backend {backend!r}. "
             "Expected 'gym' or 'mujoco_playground'."
         )
+    raise RuntimeError("Unreachable PPO environment construction branch.")
+
+
+def _add_ppo_transforms(
+    env,
+    *,
+    device="cpu",
+    normalize_observation: bool,
+    vecnorm_stats: dict[str, torch.Tensor] | None = None,
+    max_episode_steps: int | None = None,
+):
     env = TransformedEnv(env)
     if normalize_observation:
         if vecnorm_stats is not None:
@@ -124,6 +189,26 @@ def get_vecnorm_state(env) -> dict[str, torch.Tensor] | None:
     return None
 
 
+def _make_mujoco_playground_env(
+    *,
+    env_name: str,
+    device,
+    config_overrides: dict[str, Any] | None,
+    num_envs: int,
+):
+    MujocoPlaygroundEnv = _get_mujoco_playground_env()
+    env_kwargs = {}
+    if num_envs != 1:
+        env_kwargs["batch_size"] = [num_envs]
+
+    return MujocoPlaygroundEnv(
+        env_name,
+        device=device,
+        config_overrides=config_overrides,
+        **env_kwargs,
+    )
+
+
 def _observation_dtype(env) -> torch.dtype | None:
     try:
         return env.observation_spec["observation"].dtype
@@ -157,6 +242,8 @@ def make_render_env(spec: Any):
     config_overrides = spec.env_kwargs.get(
         "config_overrides", checkpoint.get("env_config_overrides")
     )
+    num_envs = int(spec.env_kwargs.get("num_envs", 1))
+    batch_mode = spec.env_kwargs.get("batch_mode", "parallel")
     normalize_observation = bool(
         spec.env_kwargs.get(
             "normalize_observation", checkpoint.get("normalize_observation", False)
@@ -181,6 +268,8 @@ def make_render_env(spec: Any):
         from_pixels=spec.from_pixels,
         backend=backend,
         config_overrides=config_overrides,
+        num_envs=num_envs,
+        batch_mode=batch_mode,
         normalize_observation=normalize_observation,
         vecnorm_stats=vecnorm_stats,
         max_episode_steps=max_episode_steps,
@@ -274,6 +363,8 @@ def make_ppo_models(
     *,
     backend: _EnvBackend = "gym",
     config_overrides: dict[str, Any] | None = None,
+    num_envs: int = 1,
+    batch_mode: _EnvBatchMode = "parallel",
     normalize_observation: bool = True,
     max_episode_steps: int | None = None,
 ):
@@ -282,10 +373,16 @@ def make_ppo_models(
         device=device,
         backend=backend,
         config_overrides=config_overrides,
+        num_envs=1,
+        batch_mode="parallel",
         normalize_observation=normalize_observation,
         max_episode_steps=max_episode_steps,
     )
-    actor, critic = make_ppo_models_state(proof_environment, device=device)
+    try:
+        actor, critic = make_ppo_models_state(proof_environment, device=device)
+    finally:
+        if not proof_environment.is_closed:
+            proof_environment.close()
     return actor, critic
 
 
@@ -296,14 +393,16 @@ def make_render_policy(spec: Any):
         "env_name",
         checkpoint.get("env_name", "InvertedPendulum-v4"),
     )
+    backend = spec.policy_kwargs.get("backend", checkpoint.get("env_backend", "gym"))
+    config_overrides = spec.policy_kwargs.get(
+        "config_overrides", checkpoint.get("env_config_overrides")
+    )
+    num_envs = int(spec.policy_kwargs.get("num_envs", 1))
+    batch_mode = spec.policy_kwargs.get("batch_mode", "parallel")
     normalize_observation = bool(
         spec.policy_kwargs.get(
             "normalize_observation", checkpoint.get("normalize_observation", False)
         )
-    )
-    backend = spec.policy_kwargs.get("backend", checkpoint.get("env_backend", "gym"))
-    config_overrides = spec.policy_kwargs.get(
-        "config_overrides", checkpoint.get("env_config_overrides")
     )
     max_episode_steps = spec.policy_kwargs.get(
         "max_episode_steps", checkpoint.get("max_episode_steps")
@@ -313,6 +412,8 @@ def make_render_policy(spec: Any):
         device=spec.device,
         backend=backend,
         config_overrides=config_overrides,
+        num_envs=num_envs,
+        batch_mode=batch_mode,
         normalize_observation=normalize_observation,
         max_episode_steps=max_episode_steps,
     )

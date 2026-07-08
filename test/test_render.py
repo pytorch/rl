@@ -20,7 +20,7 @@ import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
-from torchrl.envs import EnvBase, set_gym_backend, StepCounter
+from torchrl.envs import EnvBase, ObservationNorm, set_gym_backend, StepCounter, VecNorm
 from torchrl.record.loggers.common import _has_torchcodec
 from torchrl.render import (
     call_with_supported_kwargs,
@@ -37,7 +37,9 @@ from torchrl.render import (
     play_mujoco_wasm_trajectory,
     render_policy,
     RenderConfig,
+    RenderEnvSpec,
     RenderPolicySpec,
+    save_render_checkpoint,
     TensorDictPolicyAdapter,
     write_mujoco_wasm_viewer,
     write_render_artifact,
@@ -289,6 +291,25 @@ class TestRenderCLI:
         assert config.mujoco_qpos_key == ("next", "qpos")
         assert config.notebook_viewer_port == 5180
 
+    def test_cli_dry_run_from_config_file(self, tmp_path, capsys):
+        config_path = tmp_path / "render_config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "ckpt": str(tmp_path / "missing_policy.pt"),
+                    "policy": "missing_module:make_policy",
+                    "env": "missing_module:make_env",
+                    "max_steps": 1,
+                    "dry_run": True,
+                }
+            ),
+            encoding="utf-8",
+        )
+        # A clobbered dry_run would run the full render and fail on the missing
+        # checkpoint and factories with exit code 2.
+        assert cli_main(["--config", str(config_path)]) == 0
+        assert '"dry_run": true' in capsys.readouterr().out
+
 
 class TestRenderCheckpoint:
     def test_checkpoint_helpers(self, tmp_path):
@@ -300,6 +321,25 @@ class TestRenderCheckpoint:
         assert infer_state_dict(payload)["bias"].item() == 1
         with pytest.raises(ValueError, match="Only local checkpoint"):
             load_checkpoint("https://example.com/policy.pt")
+
+    def test_save_render_checkpoint(self, tmp_path):
+        module = torch.nn.Linear(2, 2)
+        assert save_render_checkpoint(None, module) is None
+        assert save_render_checkpoint("", module) is None
+        path = save_render_checkpoint(
+            tmp_path / "checkpoints" / "policy.pt",
+            module,
+            env_metadata={"env_name": "CartPole-v1", "vecnorm": None},
+            frames=7,
+            metrics={"eval/reward": 1.0},
+            config={"env": {"env_name": "CartPole-v1"}},
+        )
+        payload = load_checkpoint(path)
+        assert payload["env_name"] == "CartPole-v1"
+        assert payload["vecnorm"] is None
+        assert payload["frames"] == 7
+        assert payload["metrics"] == {"eval/reward": 1.0}
+        assert infer_state_dict(payload)["weight"].shape == (2, 2)
 
 
 class TestRenderPolicy:
@@ -360,6 +400,29 @@ class TestRenderRollouts:
         assert "count" in result.trajectories[0].keys()
         assert "pixels" not in result.trajectories[0].keys(True)
         assert ("next", "pixels") not in result.trajectories[0].keys(True)
+
+    def test_collect_rollouts_frame_alignment(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=5,
+            format="jsonl",
+            auto_load_policy=False,
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        frames = result.frames[0]
+        # TinyRenderEnv terminates after two steps; frames span the initial state
+        # through the terminal state.
+        assert result.trajectories[0].shape[-1] == 2
+        assert len(frames) == 3
+        assert int(frames[0].frames["default"][0, 0, 0]) == 0
+        assert int(frames[1].frames["default"][0, 0, 0]) == 1
+        assert int(frames[-1].frames["default"][0, 0, 0]) == 2
 
     @pytest.mark.parametrize(
         ("qpos_key", "expected"),
@@ -522,6 +585,27 @@ class TestRenderArtifacts:
         )
         result = render_policy(config)
         assert result.artifact_path.exists()
+
+    @pytest.mark.skipif(not _has_pil, reason="Pillow is required for GIF artifacts")
+    def test_gif_camera_layout_separate(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            num_trajs=2,
+            format="gif",
+            out=tmp_path / "render.gif",
+            camera_layout="separate",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        result = render_policy(config)
+        names = sorted(path.name for path in result.frame_paths)
+        assert names == ["render_traj_000_default.gif", "render_traj_001_default.gif"]
+        assert all((tmp_path / name).exists() for name in names)
 
 
 class TestRenderVideo:
@@ -821,11 +905,17 @@ class TestMujocoWasm:
         ]
 
     def test_extract_qpos_trajectory(self):
+        expected = [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]]
         rollout = TensorDict({"qpos": torch.arange(6).reshape(2, 3)}, batch_size=[2])
-        assert extract_qpos_trajectory(rollout, "qpos") == [
-            [0.0, 1.0, 2.0],
-            [3.0, 4.0, 5.0],
-        ]
+        assert extract_qpos_trajectory(rollout, "qpos") == expected
+        # qpos lookup accepts both root and "next"-prefixed spellings.
+        assert extract_qpos_trajectory(rollout, "next.qpos") == expected
+        nested = TensorDict(
+            {"next": {"qpos": torch.arange(6).reshape(2, 3)}}, batch_size=[2]
+        )
+        assert extract_qpos_trajectory(nested, "qpos") == expected
+        with pytest.raises(KeyError, match="not found"):
+            extract_qpos_trajectory(rollout, "missing_qpos")
 
 
 class TestSotaCheckpointFactories:
@@ -1065,6 +1155,8 @@ class TestSotaCheckpointFactories:
                 {
                     "backend": "mujoco_playground",
                     "config_overrides": {"impl": "jax"},
+                    "num_envs": 1,
+                    "batch_mode": "parallel",
                     "normalize_observation": True,
                     "max_episode_steps": 13,
                 },
@@ -1138,6 +1230,174 @@ class TestSotaCheckpointFactories:
         assert env.base_env.env_name == "PandaPickCube"
         assert env.base_env.kwargs["config_overrides"] == {"impl": "jax"}
         assert len(env.transforms) == 2
+
+    def test_mujoco_playground_ppo_batch_modes(self, monkeypatch):
+        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        make_env = import_from_string(f"{utils_path}:make_env")
+        module_globals = make_env.__globals__
+
+        class FakeMujocoPlaygroundEnv:
+            def __init__(self, env_name, **kwargs):
+                self.env_name = env_name
+                self.kwargs = kwargs
+
+        class FakeParallelEnv:
+            def __init__(self, num_workers, create_env_fn, **kwargs):
+                self.num_workers = num_workers
+                self.create_env_fn = create_env_fn
+                self.kwargs = kwargs
+
+        class FakeTransformedEnv:
+            def __init__(self, env):
+                self.base_env = env
+                self.transforms = []
+
+            def append_transform(self, transform):
+                self.transforms.append(transform)
+
+        monkeypatch.setitem(module_globals, "_has_mujoco_playground", True)
+        monkeypatch.setitem(
+            module_globals, "_MujocoPlaygroundEnv", FakeMujocoPlaygroundEnv
+        )
+        monkeypatch.setitem(module_globals, "ParallelEnv", FakeParallelEnv)
+        monkeypatch.setitem(module_globals, "TransformedEnv", FakeTransformedEnv)
+        monkeypatch.setitem(
+            module_globals, "_observation_dtype", lambda env: torch.float32
+        )
+
+        vmapped = make_env(
+            "PandaPickCube",
+            backend="mujoco_playground",
+            num_envs=4,
+            batch_mode="vmap",
+            normalize_observation=False,
+        )
+        assert vmapped.base_env.env_name == "PandaPickCube"
+        assert vmapped.base_env.kwargs["batch_size"] == [4]
+        assert len(vmapped.transforms) == 2
+
+        parallel = make_env(
+            "PandaPickCube",
+            backend="mujoco_playground",
+            num_envs=3,
+            batch_mode="parallel",
+            normalize_observation=False,
+        )
+        assert parallel.base_env.num_workers == 3
+        assert parallel.base_env.kwargs["serial_for_single"] is True
+        assert parallel.base_env.create_env_fn().env_name == "PandaPickCube"
+        assert len(parallel.transforms) == 2
+
+    def test_mujoco_playground_ppo_uses_scalar_proof_and_eval_envs(self, monkeypatch):
+        OmegaConf = pytest.importorskip("omegaconf").OmegaConf
+        ppo_dir = Path("sota-implementations/ppo").resolve()
+        utils_path = ppo_dir / "utils_mujoco.py"
+        make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
+        module_globals = make_ppo_models.__globals__
+        calls = []
+
+        class FakeProofEnv:
+            is_closed = False
+
+            def close(self):
+                self.is_closed = True
+
+        proof_env = FakeProofEnv()
+
+        def make_fake_env(*args, **kwargs):
+            calls.append((args, kwargs))
+            return proof_env
+
+        monkeypatch.setitem(module_globals, "make_env", make_fake_env)
+        monkeypatch.setitem(
+            module_globals,
+            "make_ppo_models_state",
+            lambda env, device: ("actor", "critic"),
+        )
+        actor, critic = make_ppo_models(
+            "PandaPickCube",
+            "cpu",
+            backend="mujoco_playground",
+            num_envs=32,
+            batch_mode="vmap",
+        )
+        assert (actor, critic) == ("actor", "critic")
+        assert calls[0][1]["num_envs"] == 1
+        assert calls[0][1]["batch_mode"] == "parallel"
+        assert proof_env.is_closed is True
+
+        monkeypatch.syspath_prepend(str(ppo_dir))
+        make_eval_env_kwargs = import_from_string(
+            f"{ppo_dir / 'ppo_mujoco.py'}:_make_eval_env_kwargs"
+        )
+        cfg = OmegaConf.create(
+            {
+                "env": {
+                    "backend": "mujoco_playground",
+                    "config_overrides": {},
+                    "num_envs": 32,
+                    "batch_mode": "vmap",
+                    "normalize_observation": False,
+                }
+            }
+        )
+        assert make_eval_env_kwargs(cfg)["num_envs"] == 1
+        assert make_eval_env_kwargs(cfg)["batch_mode"] == "parallel"
+
+    def test_ppo_vecnorm_checkpoint_roundtrip(self, tmp_path):
+        utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+        ppo_make_env = import_from_string(f"{utils_path}:make_env")
+        get_vecnorm_state = import_from_string(f"{utils_path}:get_vecnorm_state")
+        train_env = ppo_make_env("CartPole-v1", normalize_observation=True)
+        try:
+            train_env.rollout(4)
+            stats = get_vecnorm_state(train_env)
+        finally:
+            train_env.close()
+        assert set(stats) == {"loc", "scale"}
+        frozen_env = ppo_make_env(
+            "CartPole-v1",
+            normalize_observation=True,
+            vecnorm_stats=stats,
+            max_episode_steps=7,
+        )
+        try:
+            transforms = list(frozen_env.transform)
+            assert any(isinstance(item, ObservationNorm) for item in transforms)
+            assert not any(isinstance(item, VecNorm) for item in transforms)
+            step_counters = [
+                item for item in transforms if isinstance(item, StepCounter)
+            ]
+            assert step_counters and step_counters[0].max_steps == 7
+        finally:
+            frozen_env.close()
+
+        make_render_env_fn = import_from_string(f"{utils_path}:make_render_env")
+        config = RenderConfig(
+            ckpt=tmp_path / "policy.pt",
+            policy="missing_module:make_policy",
+            env=f"{utils_path}:make_render_env",
+            max_steps=2,
+            env_kwargs={"env_name": "CartPole-v1"},
+        )
+        spec = RenderEnvSpec.from_config(
+            config,
+            checkpoint={
+                "env_name": "CartPole-v1",
+                "normalize_observation": True,
+                "vecnorm": None,
+                "max_episode_steps": 7,
+            },
+        )
+        with pytest.warns(UserWarning, match="VecNorm statistics"):
+            env = make_render_env_fn(spec)
+        try:
+            step_counters = [
+                item for item in env.transform if isinstance(item, StepCounter)
+            ]
+            assert step_counters and step_counters[0].max_steps == 7
+        finally:
+            env.close()
 
 
 if __name__ == "__main__":

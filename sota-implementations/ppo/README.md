@@ -42,6 +42,8 @@ uv run --frozen --extra mujoco_playground python sota-implementations/ppo/ppo_mu
   env.backend=mujoco_playground \
   env.env_name=PandaPickCube \
   +env.config_overrides.impl=jax \
+  env.num_envs=1 \
+  env.batch_mode=parallel \
   env.normalize_observation=false \
   env.max_episode_steps=150 \
   optim.device=cpu \
@@ -68,6 +70,8 @@ uv run --frozen --extra mujoco_playground python sota-implementations/ppo/ppo_mu
   env.backend=mujoco_playground \
   env.env_name=PandaPickCube \
   +env.config_overrides.impl=jax \
+  env.num_envs=1 \
+  env.batch_mode=parallel \
   env.normalize_observation=false \
   env.max_episode_steps=150 \
   optim.device=cpu \
@@ -89,6 +93,63 @@ contains the MuJoCo Playground backend name and resolved config overrides, so
 architecture from the checkpoint metadata. Pixel video rendering is unavailable
 for this backend because the MuJoCo Playground wrapper does not support
 `from_pixels=True`.
+
+MuJoCo Playground supports two multi-environment paths:
+
+- `env.batch_mode=parallel` creates one scalar MuJoCo Playground environment per
+  TorchRL `ParallelEnv` worker. This is the simple CPU path.
+- `env.batch_mode=vmap` creates one batched MuJoCo Playground environment with
+  `batch_size=[env.num_envs]`. The MuJoCo Playground wrapper internally uses
+  JAX `vmap` and `jit` for this path, which is the path to benchmark on GPU/TPU.
+
+For the simple worker-parallel path, increase `env.num_envs` while keeping
+`env.batch_mode=parallel`:
+
+```bash
+uv run --frozen --extra mujoco_playground python sota-implementations/ppo/ppo_mujoco.py \
+  env.backend=mujoco_playground \
+  env.env_name=PandaPickCube \
+  +env.config_overrides.impl=jax \
+  env.num_envs=4 \
+  env.batch_mode=parallel \
+  env.normalize_observation=false \
+  env.max_episode_steps=150 \
+  optim.device=cpu \
+  logger.backend=null \
+  logger.test_interval=8192 \
+  logger.num_test_episodes=1 \
+  collector.total_frames=8192 \
+  collector.frames_per_batch=1024 \
+  loss.mini_batch_size=256 \
+  loss.ppo_epochs=2 \
+  checkpoint.path=/tmp/torchrl_ppo_panda_pick_parallel.pt
+```
+
+For the in-process vmap/JIT path, set `env.batch_mode=vmap`:
+
+```bash
+uv run --frozen --extra mujoco_playground python sota-implementations/ppo/ppo_mujoco.py \
+  env.backend=mujoco_playground \
+  env.env_name=PandaPickCube \
+  +env.config_overrides.impl=jax \
+  env.num_envs=16 \
+  env.batch_mode=vmap \
+  env.normalize_observation=false \
+  env.max_episode_steps=150 \
+  optim.device=cpu \
+  logger.backend=null \
+  logger.test_interval=8192 \
+  logger.num_test_episodes=1 \
+  collector.total_frames=8192 \
+  collector.frames_per_batch=1024 \
+  loss.mini_batch_size=256 \
+  loss.ppo_epochs=2 \
+  checkpoint.path=/tmp/torchrl_ppo_panda_pick_batched.pt
+```
+
+On local CPU runs, benchmark both settings before scaling a long job. The scalar
+`env.num_envs=1` setup can be faster than the vmap path because XLA compile,
+MJX stepping, and DLPack transfer overheads are machine dependent.
 
 ## Rendering an InvertedPendulum checkpoint with MuJoCo-WASM
 
