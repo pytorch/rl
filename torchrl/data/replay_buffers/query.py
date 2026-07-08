@@ -14,14 +14,15 @@ import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
 from tensordict.utils import unravel_key
 
-from torchrl.data.replay_buffers.samplers import _find_start_stop_traj
+from torchrl._utils import DEFAULT_DONE_KEYS
+from torchrl.data.replay_buffers.utils import find_start_stop_traj
 
 _DEFAULT_TRAJECTORY_KEYS = (("collector", "traj_ids"), "traj_ids", "episode")
 # TED convention: a trajectory ends when any of done / terminated / truncated
 # is set, so all present end signals within a group are OR-ed together.
 _END_KEY_GROUPS = (
-    (("next", "done"), ("next", "terminated"), ("next", "truncated")),
-    ("done", "terminated", "truncated"),
+    tuple(("next", key) for key in DEFAULT_DONE_KEYS),
+    tuple(DEFAULT_DONE_KEYS),
 )
 
 
@@ -497,12 +498,12 @@ def _trajectory_boundaries(
     """Computes ``(start_idx, stop_idx, lengths)`` for the trajectories in ``source``.
 
     Boundary recovery is delegated to
-    :func:`~torchrl.data.replay_buffers.samplers._find_start_stop_traj`, the
-    same machinery :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+    :func:`~torchrl.data.find_start_stop_traj`, the same machinery
+    :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
     uses, so samplers and queries always agree on trajectory boundaries.
     """
     kind, signal = _boundary_signal(source, trajectory_key)
-    return _find_start_stop_traj(
+    return find_start_stop_traj(
         trajectory=signal if kind == "trajectory" else None,
         end=signal if kind == "end" else None,
         at_capacity=at_capacity,

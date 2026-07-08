@@ -225,6 +225,10 @@ print(traj_data_cat["next", "done"].squeeze(-1))
 #   storage in more depth, including alternative samplers such as
 #   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
 #   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`.
+#   :ref:`Trajectory boundaries <ref_traj_boundaries>` documents exactly
+#   which markers (``done``/``truncated``/``terminated`` flags, trajectory
+#   ids, the write cursor) the sampler uses to recover episode boundaries
+#   from the buffer, and its blind spots.
 
 from torchrl.data import SliceSampler
 
@@ -365,6 +369,9 @@ collector_async.async_shutdown()
 #   and replay-buffer workflow.
 # * :ref:`Recurrent DQN tutorial <RNN_tuto>` — training a recurrent
 #   policy where per-episode data is essential.
+# * :ref:`Trajectory boundaries <ref_traj_boundaries>` — the contract
+#   between collectors, storages and samplers for recovering episode
+#   boundaries from a replay buffer.
 # * `TorchRL documentation <https://pytorch.org/rl/>`_
 
 # sphinx_gallery_start_ignore

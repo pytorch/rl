@@ -230,7 +230,9 @@ print(set(data.keys(True, True)) - set(compact_data.keys(True, True)))
 # not require :class:`~torchrl.data.SliceSampler` — but
 # :class:`~torchrl.data.SliceSampler` is the natural pairing because
 # adjacent positions inside a slice are also adjacent in trajectory
-# time.
+# time. (These are the same trajectory markers every boundary-aware
+# component relies on — see
+# :ref:`Trajectory boundaries <ref_traj_boundaries>`.)
 
 rb = ReplayBuffer(
     storage=LazyTensorStorage(200),
