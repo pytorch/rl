@@ -51,14 +51,15 @@ except ImportError:
         return tree_flat
 
 
-from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
+from torchrl._utils import (
+    _RayServiceMetaClass,
+    accept_remote_rref_udf_invocation,
+    rl_warnings,
+)
 from torchrl.data.replay_buffers.query import (
     _chronological,
     filter_trajectories,
     Trajectory,
-    _RayServiceMetaClass,
-    accept_remote_rref_udf_invocation,
-    rl_warnings,
 )
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
