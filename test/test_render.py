@@ -16,7 +16,6 @@ import torch
 import torchrl.render as render_module
 import torchrl.render.artifacts as artifacts_module
 import torchrl.render.mujoco_wasm as mujoco_wasm_module
-from omegaconf import OmegaConf
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
@@ -657,6 +656,7 @@ class TestMujocoWasm:
 
 class TestSotaCheckpointFactories:
     def test_dqn_cartpole_checkpoint_render_factories(self, tmp_path, monkeypatch):
+        OmegaConf = pytest.importorskip("omegaconf").OmegaConf
         dqn_dir = Path("sota-implementations/dqn").resolve()
         utils_path = dqn_dir / "utils_cartpole.py"
         make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
