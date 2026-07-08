@@ -1598,6 +1598,153 @@ class PrioritizedSampler(Sampler):
             self._min_tree[i] = elt
 
 
+def _end_to_start_stop(
+    end: torch.Tensor, length: int, gpu_device: torch.device | None = None
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Converts an end-of-trajectory mask into start/stop coordinates and lengths.
+
+    Args:
+        end (torch.Tensor): a boolean mask of shape ``[T]`` or ``[T, *B]``
+            (time-first) where ``True`` marks the last element of a
+            trajectory.
+        length (int): the length of the time dimension.
+        gpu_device (torch.device, optional): if provided, the boundary
+            computation is offloaded to this device. Defaults to ``None``.
+
+    Returns:
+        A ``(start_idx, stop_idx, lengths)`` tuple. ``start_idx`` and
+        ``stop_idx`` are ``[N, ndim]`` integer tensors laid out like
+        ``nonzero()`` results: column ``0`` holds time indices and the
+        remaining columns hold batch coordinates. ``lengths`` is a ``[N]``
+        tensor. A trajectory that spans the storage wrap point has
+        ``stop < start`` along the time column; its length accounts for the
+        wrap.
+    """
+    device = None
+    if gpu_device is not None:
+        if end.device != gpu_device:
+            device = end.device
+            end = end.to(gpu_device)
+    # Using transpose ensures the start and stop are sorted the same way
+    stop_idx = end.transpose(0, -1).nonzero()
+    stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
+    # First build the start indices as the stop + 1, we'll shift it later
+    start_idx = stop_idx.clone()
+    start_idx[:, 0] += 1
+    start_idx[:, 0] %= end.shape[0]
+    # shift start: to do this, we check when the non-first dim indices are identical
+    # and get a mask like [False, True, True, False, True, ...] where False means
+    # that there's a switch from one dim to another (ie, a switch from one element of the batch
+    # to another). We roll this one step along the time dimension and these two
+    # masks provide us with the indices of the permutation matrix we need
+    # to apply to start_idx.
+    if start_idx.shape[0] > 1:
+        start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
+        m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
+        m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
+        start_idx_replace = torch.empty_like(start_idx)
+        start_idx_replace[m1] = start_idx[m2]
+        start_idx_replace[~m1] = start_idx[~m2]
+        start_idx = start_idx_replace
+    else:
+        # In this case we have only one start and stop has already been set
+        pass
+    lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
+    lengths[lengths <= 0] = lengths[lengths <= 0] + length
+    if device is not None:
+        return start_idx.to(device), stop_idx.to(device), lengths.to(device)
+    return start_idx, stop_idx, lengths
+
+
+def _find_start_stop_traj(
+    *,
+    trajectory: torch.Tensor | None = None,
+    end: torch.Tensor | None = None,
+    at_capacity: bool,
+    cursor=None,
+    gpu_device: torch.device | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Recovers trajectory boundaries from flat (time-first) storage signals.
+
+    This is the single source of truth for trajectory recovery shared by
+    :class:`SliceSampler` and the trajectory query helpers in
+    :mod:`torchrl.data.replay_buffers.query`, so samplers and queries can
+    never disagree about where trajectories start and stop.
+
+    Args:
+        trajectory (torch.Tensor, optional): per-element trajectory ids of
+            shape ``[T]`` or ``[T, *B]`` (time-first). Exclusive with
+            ``end``.
+        end (torch.Tensor, optional): boolean end-of-trajectory mask of the
+            same layout. Exclusive with ``trajectory``.
+        at_capacity (bool): whether the storage has wrapped around. When
+            ``True``, a trajectory whose id continues from the last element
+            to the first is followed through the wrap point, and the write
+            ``cursor`` acts as an implicit truncation. When ``False``, the
+            last valid element is forced to be a trajectory end.
+        cursor (int, torch.Tensor or range, optional): the last write
+            position in the storage. Only used when ``at_capacity=True``.
+        gpu_device (torch.device, optional): if provided, the boundary
+            computation is offloaded to this device. Defaults to ``None``.
+
+    Returns:
+        A ``(start_idx, stop_idx, lengths)`` tuple, see
+        :func:`_end_to_start_stop`.
+    """
+    if trajectory is not None:
+        # slower
+        # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
+        # stop_idx = stop_idx.cumsum(0) - 1
+
+        # even slower
+        # t = trajectory.unsqueeze(0)
+        # w = torch.tensor([1, -1], dtype=torch.int).view(1, 1, 2)
+        # stop_idx = torch.conv1d(t, w).nonzero()
+
+        # faster
+        end = trajectory[:-1] != trajectory[1:]
+        if not at_capacity:
+            end = torch.cat([end, torch.ones_like(end[:1])], 0)
+        else:
+            end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
+        length = trajectory.shape[0]
+    else:
+        # We presume that not done at the end means that the traj spans across end and beginning of storage
+        length = end.shape[0]
+        if not at_capacity:
+            end = end.clone()
+            end[length - 1] = True
+    ndim = end.ndim
+
+    if at_capacity:
+        # we must have at least one end by traj to individuate trajectories
+        # so if no end can be found we set it manually
+        if cursor is not None:
+            if isinstance(cursor, torch.Tensor):
+                cursor = cursor[-1].item()
+            elif isinstance(cursor, range):
+                cursor = cursor[-1]
+            if not _is_int(cursor):
+                raise RuntimeError(
+                    "cursor should be an integer or a 1d tensor or a range."
+                )
+            end = torch.index_fill(
+                end,
+                index=torch.tensor(cursor, device=end.device, dtype=torch.long),
+                dim=0,
+                value=1,
+            )
+        if not end.any(0).all():
+            mask = ~end.any(0, True)
+            mask = torch.cat([torch.zeros_like(end[:-1]), mask])
+            end = torch.masked_fill(mask, end, 1)
+    if ndim == 0:
+        raise RuntimeError(
+            "Expected the end-of-trajectory signal to be at least 1-dimensional."
+        )
+    return _end_to_start_stop(end=end, length=length, gpu_device=gpu_device)
+
+
 class SliceSampler(Sampler):
     """Samples slices of data along the first dimension, given start and stop signals.
 
@@ -2046,95 +2193,20 @@ class SliceSampler(Sampler):
     def _find_start_stop_traj(
         self, *, trajectory=None, end=None, at_capacity: bool, cursor=None
     ):
-        if trajectory is not None:
-            # slower
-            # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
-            # stop_idx = stop_idx.cumsum(0) - 1
-
-            # even slower
-            # t = trajectory.unsqueeze(0)
-            # w = torch.tensor([1, -1], dtype=torch.int).view(1, 1, 2)
-            # stop_idx = torch.conv1d(t, w).nonzero()
-
-            # faster
-            end = trajectory[:-1] != trajectory[1:]
-            if not at_capacity:
-                end = torch.cat([end, torch.ones_like(end[:1])], 0)
-            else:
-                end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
-            length = trajectory.shape[0]
-        else:
-            # We presume that not done at the end means that the traj spans across end and beginning of storage
-            length = end.shape[0]
-            if not at_capacity:
-                end = end.clone()
-                end[length - 1] = True
-        ndim = end.ndim
-
-        if at_capacity:
-            # we must have at least one end by traj to individuate trajectories
-            # so if no end can be found we set it manually
-            if cursor is not None:
-                if isinstance(cursor, torch.Tensor):
-                    cursor = cursor[-1].item()
-                elif isinstance(cursor, range):
-                    cursor = cursor[-1]
-                if not _is_int(cursor):
-                    raise RuntimeError(
-                        "cursor should be an integer or a 1d tensor or a range."
-                    )
-                end = torch.index_fill(
-                    end,
-                    index=torch.tensor(cursor, device=end.device, dtype=torch.long),
-                    dim=0,
-                    value=1,
-                )
-            if not end.any(0).all():
-                mask = ~end.any(0, True)
-                mask = torch.cat([torch.zeros_like(end[:-1]), mask])
-                end = torch.masked_fill(mask, end, 1)
-        if ndim == 0:
-            raise RuntimeError(
-                "Expected the end-of-trajectory signal to be at least 1-dimensional."
-            )
-        return self._end_to_start_stop(length=length, end=end)
+        return _find_start_stop_traj(
+            trajectory=trajectory,
+            end=end,
+            at_capacity=at_capacity,
+            cursor=cursor,
+            gpu_device=self._gpu_device if self.use_gpu else None,
+        )
 
     def _end_to_start_stop(self, end, length):
-        device = None
-        if self.use_gpu:
-            gpu_device = self._gpu_device
-            if end.device != gpu_device:
-                device = end.device
-                end = end.to(self._gpu_device)
-        # Using transpose ensures the start and stop are sorted the same way
-        stop_idx = end.transpose(0, -1).nonzero()
-        stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
-        # First build the start indices as the stop + 1, we'll shift it later
-        start_idx = stop_idx.clone()
-        start_idx[:, 0] += 1
-        start_idx[:, 0] %= end.shape[0]
-        # shift start: to do this, we check when the non-first dim indices are identical
-        # and get a mask like [False, True, True, False, True, ...] where False means
-        # that there's a switch from one dim to another (ie, a switch from one element of the batch
-        # to another). We roll this one step along the time dimension and these two
-        # masks provide us with the indices of the permutation matrix we need
-        # to apply to start_idx.
-        if start_idx.shape[0] > 1:
-            start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
-            m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
-            m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
-            start_idx_replace = torch.empty_like(start_idx)
-            start_idx_replace[m1] = start_idx[m2]
-            start_idx_replace[~m1] = start_idx[~m2]
-            start_idx = start_idx_replace
-        else:
-            # In this case we have only one start and stop has already been set
-            pass
-        lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
-        lengths[lengths <= 0] = lengths[lengths <= 0] + length
-        if device is not None:
-            return start_idx.to(device), stop_idx.to(device), lengths.to(device)
-        return start_idx, stop_idx, lengths
+        return _end_to_start_stop(
+            end=end,
+            length=length,
+            gpu_device=self._gpu_device if self.use_gpu else None,
+        )
 
     def _start_to_end(self, st: torch.Tensor, length: int):
 
