@@ -11,6 +11,7 @@ We provide examples to train the following algorithms:
 - [Impala](impala/)
 - [PPO](../sota-implementations/ppo/)
 - [REDQ](redq/redq.py)
+- [RND (PPO + Random Network Distillation)](rnd/rnd_mujoco.py)
 - [SAC](sac/sac.py)
 - [TD3](../sota-implementations/td3/td3.py)
 - [Various multiagent examples](multiagent/)

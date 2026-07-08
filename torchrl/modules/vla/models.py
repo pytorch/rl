@@ -9,11 +9,21 @@ import hashlib
 
 import torch
 from tensordict import TensorDictBase
+from tensordict.nn import InteractionType
 from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.vla import ActionTokenizerBase
 from torchrl.modules.models.models import ConvNet, MLP
-from torchrl.modules.vla.common import ActionHead, SamplingMode, VLAWrapperBase
+
+from torchrl.modules.vla.common import (
+    ActionHead,
+    InputMode,
+    LogProbsMode,
+    OutputMode,
+    SamplingMode,
+    VLAWrapperBase,
+)
 
 __all__ = ["TinyVLA"]
 
@@ -49,9 +59,18 @@ class TinyVLA(VLAWrapperBase):
         text_vocab (int): size of the hashed instruction embedding table.
             Defaults to ``256``.
         text_dim (int): instruction-embedding dimension. Defaults to ``32``.
-        mode (str): ``"greedy"`` or ``"sample"`` (token head). Defaults to
-            ``"greedy"``.
+        default_interaction_type (InteractionType): token-head readout when no
+            exploration context is active (``RANDOM`` samples, else argmax);
+            the forward otherwise follows the ambient
+            :func:`~torchrl.envs.utils.exploration_type`. Defaults to
+            ``InteractionType.DETERMINISTIC``. See
+            :class:`~torchrl.modules.vla.VLAWrapperBase`.
+        mode (str, optional): backward-compatible alias for
+            ``default_interaction_type``. Defaults to ``None``.
         device (DEVICE_TYPING, optional): device to move the parameters to.
+        return_vla_action_container (bool): whether to write the structured
+            VLAAction container in addition to its TensorDict fields. Defaults
+            to ``True``.
 
     Examples:
         >>> import torch
@@ -68,7 +87,7 @@ class TinyVLA(VLAWrapperBase):
         ...     },
         ...     batch_size=[2],
         ... )
-        >>> policy(td)["action_chunk"].shape
+        >>> policy(td)["vla_action", "chunk"].shape
         torch.Size([2, 4, 7])
     """
 
@@ -83,8 +102,19 @@ class TinyVLA(VLAWrapperBase):
         hidden_dim: int = 128,
         text_vocab: int = 256,
         text_dim: int = 32,
-        mode: SamplingMode = "greedy",
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
+        log_probs_mode: LogProbsMode = "sequence",
+        mode: SamplingMode | None = None,
         device: DEVICE_TYPING | None = None,
+        input_mode: InputMode = "canonical",
+        output_mode: OutputMode | None = None,
+        return_vla_action_container: bool = True,
+        action_tokenizer: ActionTokenizerBase | None = None,
+        return_log_probs: bool | None = None,
+        return_logits: bool = False,
+        logits_only: bool = False,
+        inplace: bool | str | None = True,
+        num_samples: int | None = None,
     ) -> None:
         super().__init__(
             action_dim=action_dim,
@@ -92,7 +122,19 @@ class TinyVLA(VLAWrapperBase):
             action_head=action_head,
             vocab_size=vocab_size,
             use_state=use_state,
+            input_mode=input_mode,
+            output_mode=output_mode,
+            return_vla_action_container=return_vla_action_container,
+            action_tokenizer=action_tokenizer,
+            default_interaction_type=default_interaction_type,
+            log_probs_mode=log_probs_mode,
+            return_log_probs=return_log_probs,
+            return_logits=return_logits,
+            logits_only=logits_only,
+            inplace=inplace,
+            num_samples=num_samples,
             mode=mode,
+            device=device,
         )
         self.hidden_dim = int(hidden_dim)
         self.text_vocab = int(text_vocab)
@@ -120,29 +162,44 @@ class TinyVLA(VLAWrapperBase):
         ]
         return torch.tensor(indices, dtype=torch.long, device=device)
 
+    def _flatten_instruction_strings(self, data) -> list[str]:
+        if isinstance(data, str):
+            return [data]
+        if isinstance(data, list):
+            result = []
+            for item in data:
+                result.extend(self._flatten_instruction_strings(item))
+            return result
+        return [str(data)]
+
     def _instruction_strings(self, tensordict: TensorDictBase, batch: int) -> list[str]:
-        instruction = tensordict.get(self.tensor_keys.instruction)
+        instruction = self._get_instruction(tensordict)
         data = getattr(instruction, "tolist", lambda: instruction)()
         if isinstance(data, str):
             data = [data] * batch
-        elif not isinstance(data, list):
-            data = [str(data)] * batch
+        else:
+            data = self._flatten_instruction_strings(data)
+            if len(data) == 1 and batch != 1:
+                data = data * batch
         return data
 
     def _features(self, tensordict: TensorDictBase) -> torch.Tensor:
-        image = tensordict.get(self.tensor_keys.image)
+        image = self._get_image(tensordict)
         if image.dtype == torch.uint8:
             image = image.float() / 255.0
         else:
             image = image.float()
-        batch = image.shape[0]
-        feats = [self.image_encoder(image)]
+        batch_shape = image.shape[:-3]
+        batch = int(torch.tensor(batch_shape).prod().item())
+        image = image.reshape(batch, *image.shape[-3:])
+        feats = [self.image_encoder(image).reshape(*batch_shape, -1)]
         if self.use_state:
-            feats.append(
-                self.state_encoder(tensordict.get(self.tensor_keys.state).float())
-            )
+            state = self._get_state(tensordict).float()
+            state = state.reshape(batch, state.shape[-1])
+            feats.append(self.state_encoder(state).reshape(*batch_shape, -1))
         strings = self._instruction_strings(tensordict, batch)
-        feats.append(self.text_embedding(self._hash_text(strings, image.device)))
+        text = self.text_embedding(self._hash_text(strings, image.device))
+        feats.append(text.reshape(*batch_shape, -1))
         return self.trunk(torch.cat(feats, dim=-1))
 
     def _predict(self, tensordict: TensorDictBase) -> torch.Tensor:

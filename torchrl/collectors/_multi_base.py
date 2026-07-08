@@ -8,7 +8,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -34,7 +34,11 @@ from torchrl.collectors._constants import (
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _make_meta_policy_cm, _TrajectoryPool
+from torchrl.collectors.utils import (
+    _make_meta_policy_cm,
+    _TrajectoryPool,
+    _validate_traj_format,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -260,10 +264,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             last step has ``("next", "done") == True``) to the shared replay
             buffer as flat 1-D sequences — no padding, no accumulation.
 
-            When set *without* ``replay_buffer``, each worker assembles
-            trajectories and the multi-collector yields zero-padded batches
-            of shape ``(trajs_per_batch, max_traj_len)`` with a
-            ``("collector", "mask")`` boolean field.
+            When set *without* ``replay_buffer``, the multi-collector
+            assembles trajectories from the worker batches and yields
+            zero-padded batches of shape ``(trajs_per_batch, max_traj_len)``
+            with a ``("collector", "mask")`` boolean field, or flat unpadded
+            concatenations with ``traj_format="cat"``.
 
             Both the iteration pattern (``for data in collector``) and the
             async ``start()`` pattern are supported.
@@ -273,6 +278,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and replay-buffer
             storage contract.
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set without a ``replay_buffer``:
+            ``"padded"`` for zero-padded
+            ``(trajs_per_batch, max_traj_len)`` stacks with a
+            ``("collector", "mask")`` entry, ``"cat"`` for flat unpadded
+            concatenations along time (trajectories delimited by
+            ``("next", "done")`` and ``("collector", "traj_ids")``).
+            Replay-buffer writes are always flat. Raises if set without
+            ``trajs_per_batch``. Defaults to ``None``, which currently
+            resolves to ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -440,6 +457,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
@@ -450,6 +468,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -1050,6 +1071,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             )
         if getattr(storage, "shared_init", False):
             return
+        storage_device = getattr(storage, "device", None)
+        if (
+            storage_device is not None
+            and storage_device != "auto"
+            and torch.device(storage_device).type != "cpu"
+        ):
+            warnings.warn(
+                f"Worker-initialized replay buffers store data in a CPU "
+                f"memory-mapped tensordict; the storage device "
+                f"({storage_device}) cannot be honored and will be reset to "
+                f"'cpu' at initialization time."
+            )
         storage.shared_init = True
         storage._init_lock = mp.Lock()
         storage._init_event = mp.Event()
@@ -1941,6 +1974,9 @@ also that the state dict is synchronised across processes if needed."""
 
         """
         _check_for_faulty_process(self.procs)
+        # drop parent-level trajectory-assembly state (trajs_per_batch
+        # without a replay buffer assembles trajectories on this process)
+        self._flush_trajectory_assembly()
 
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]

@@ -7,8 +7,10 @@ robot-dataset metadata container and the action tokenizers."""
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 
+import numpy as np
 import pytest
 import torch
 from tensordict import NonTensorData, TensorDict
@@ -17,10 +19,19 @@ from torchrl.data.vla import (
     ACTION_KEY,
     ActionTokenizerBase,
     INSTRUCTION_KEY,
+    OpenVLAImagePreprocessor,
     RobotDatasetMetadata,
     UniformActionTokenizer,
     validate_vla_tensordict,
+    VLAAction,
+    VLAImages,
+    VLAObservation,
+    VocabTailActionTokenizer,
 )
+
+_has_pil = importlib.util.find_spec("PIL") is not None
+_has_tensorflow = importlib.util.find_spec("tensorflow") is not None
+_has_torchvision = importlib.util.find_spec("torchvision") is not None
 
 
 def _make_vla_td(batch=2, action_dim=7, *, with_instruction=True, finite=True):
@@ -239,6 +250,87 @@ class TestVLASchema:
         )
 
 
+class TestVLAContainers:
+    def test_action_container(self):
+        action = VLAAction(
+            chunk=torch.zeros(2, 4, 7),
+            tokens=torch.zeros(2, 4, 7, dtype=torch.long),
+            batch_size=[2],
+        )
+        assert action.chunk.shape == torch.Size([2, 4, 7])
+        assert action.tokens.dtype == torch.long
+
+    def test_observation_container(self):
+        images = VLAImages(
+            image=torch.zeros(2, 3, 16, 16, dtype=torch.uint8), batch_size=[2]
+        )
+        obs = VLAObservation(
+            images=images,
+            state=torch.zeros(2, 5),
+            instruction=["pick", "place"],
+            batch_size=[2],
+        )
+        assert obs.images.image.shape == torch.Size([2, 3, 16, 16])
+        assert obs.state.shape == torch.Size([2, 5])
+
+
+class TestOpenVLAImagePreprocessor:
+    @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
+    def test_pil_backend_shapes(self):
+        proc = OpenVLAImagePreprocessor(size=32, backend="pil", center_crop=True)
+        images = torch.randint(0, 256, (2, 3, 24, 40), dtype=torch.uint8)
+        out = proc(images)
+        assert out.shape == torch.Size([2, 3, 32, 32])
+        assert out.dtype == torch.uint8
+
+    @pytest.mark.skipif(
+        not (_has_pil and _has_torchvision), reason="Pillow/torchvision not found"
+    )
+    def test_torchvision_backend_matches_reference_shape(self):
+        images = torch.randint(0, 256, (2, 3, 24, 40), dtype=torch.uint8)
+        pil = OpenVLAImagePreprocessor(size=32, backend="pil", center_crop=False)
+        tv = OpenVLAImagePreprocessor(size=32, backend="torchvision", center_crop=False)
+        ref = pil(images)
+        fast = tv(images)
+        fast_again = tv(images)
+        assert fast.shape == fast_again.shape == ref.shape == torch.Size([2, 3, 32, 32])
+        assert fast.dtype == fast_again.dtype == ref.dtype == torch.uint8
+        assert (fast.float() - ref.float()).abs().mean() < 25.0
+
+    @pytest.mark.skipif(not _has_tensorflow, reason="TensorFlow not found")
+    def test_tensorflow_reference_backend(self):
+        proc = OpenVLAImagePreprocessor(size=32, backend="tensorflow", center_crop=True)
+        images = torch.arange(3 * 24 * 40, dtype=torch.int64).reshape(1, 3, 24, 40)
+        images = images.remainder(256).to(torch.uint8)
+        first = proc(images)
+        second = proc(images)
+        assert first.shape == torch.Size([1, 3, 32, 32])
+        assert first.dtype == torch.uint8
+        torch.testing.assert_close(first, second)
+
+    @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
+    def test_normalization(self):
+        proc = OpenVLAImagePreprocessor(
+            size=16, backend="pil", mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+        )
+        out = proc(torch.zeros(3, 16, 16, dtype=torch.uint8))
+        assert out.shape == torch.Size([3, 16, 16])
+        assert out.dtype == torch.float32
+
+    @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
+    def test_fused_backbone_normalization(self):
+        proc = OpenVLAImagePreprocessor(
+            size=16,
+            backend="pil",
+            mean=[[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]],
+            std=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+        )
+        out = proc(torch.zeros(3, 16, 16, dtype=torch.uint8))
+        assert out.shape == torch.Size([6, 16, 16])
+        torch.testing.assert_close(out[:3], torch.zeros_like(out[:3]))
+        torch.testing.assert_close(out[3:], -torch.ones_like(out[3:]))
+
+
 class TestActionTokenizer:
     def test_encode_values(self):
         tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
@@ -298,6 +390,175 @@ class TestActionTokenizer:
         meta = RobotDatasetMetadata("bridge", action_dim=2)
         with pytest.raises(ValueError, match="no action bounds"):
             UniformActionTokenizer.from_metadata(meta, num_bins=128)
+
+
+class TestVocabTailActionTokenizer:
+    def test_matches_openvla_reference(self):
+        # oracle: the OpenVLA ActionTokenizer formulas (numpy), see
+        # https://github.com/openvla/openvla/blob/main/prismatic/vla/action_tokenizer.py
+        vocab, n_bins = 32000, 256
+        tok = VocabTailActionTokenizer(n_bins, full_vocab_size=vocab)
+        bins = tok.bins.numpy()
+        centers = (bins[:-1] + bins[1:]) / 2.0
+        actions = torch.linspace(-1.3, 1.3, 1001)
+        ref_tokens = vocab - np.digitize(np.clip(actions.numpy(), -1.0, 1.0), bins)
+        tokens = tok.encode(actions)
+        assert (tokens.numpy() == ref_tokens).all()
+        ref_decoded = centers[np.clip(vocab - ref_tokens - 1, 0, centers.shape[0] - 1)]
+        torch.testing.assert_close(
+            tok.decode(tokens), torch.as_tensor(ref_decoded, dtype=torch.float32)
+        )
+
+    def test_window_vs_full_convention(self):
+        vocab, n_bins = 32000, 256
+        window = VocabTailActionTokenizer(n_bins)
+        full = VocabTailActionTokenizer(n_bins, full_vocab_size=vocab)
+        actions = torch.linspace(-1.0, 1.0, 257)
+        window_tokens = window.encode(actions)
+        full_tokens = full.encode(actions)
+        assert (full_tokens == window_tokens + vocab - n_bins).all()
+        assert window_tokens.min() >= 0
+        assert window_tokens.max() < n_bins
+        torch.testing.assert_close(
+            window.decode(window_tokens), full.decode(full_tokens)
+        )
+
+    def test_roundtrip_tolerance(self):
+        tok = VocabTailActionTokenizer(256)
+        actions = torch.empty(1000).uniform_(-1.0, 1.0)
+        recon = tok.decode(tok.encode(actions))
+        bin_width = 2.0 / 255
+        assert (recon - actions).abs().max() <= bin_width / 2 + 1e-5
+
+    def test_norm_stats_unnormalization(self):
+        # masked dims roundtrip through the q01/q99 affine map; unmasked
+        # (gripper) dims pass through in [-1, 1]
+        norm_low = torch.tensor([-0.5, 0.0, -1.0])
+        norm_high = torch.tensor([0.5, 2.0, -1.0 + 2.0])
+        mask = torch.tensor([True, True, False])
+        tok = VocabTailActionTokenizer(
+            256, norm_low=norm_low, norm_high=norm_high, norm_mask=mask
+        )
+        actions = torch.tensor([[-0.25, 1.5, 1.0], [0.4, 0.1, -1.0]])
+        recon = tok.decode(tok.encode(actions))
+        scale = (norm_high - norm_low) / 255
+        assert (recon[:, :2] - actions[:, :2]).abs().max() <= scale.max() / 2 + 1e-5
+        # gripper dim decodes near the un-normalized [-1, 1] poles
+        assert (recon[:, 2] - actions[:, 2]).abs().max() <= 2.0 / 255 + 1e-5
+
+    def test_cpu_decode_matches_openvla_numpy_reference_exactly(self):
+        norm_low = [-0.7454732114076613, -0.6616071462631226]
+        norm_high = [0.9375, 0.8758928775787354]
+        tok = VocabTailActionTokenizer(
+            256,
+            full_vocab_size=32064,
+            norm_low=norm_low,
+            norm_high=norm_high,
+            norm_mask=torch.ones(2, dtype=torch.bool),
+        )
+        tokens = torch.tensor([[32063, 31936], [31808, 32000]])
+        bins = np.linspace(-1.0, 1.0, 256)
+        centers = (bins[:-1] + bins[1:]) / 2.0
+        indices = np.clip(32064 - tokens.numpy() - 1, 0, len(centers) - 1)
+        normalized = centers[indices]
+        expected = 0.5 * (normalized + 1.0) * (
+            np.asarray(norm_high) - np.asarray(norm_low) + 1e-8
+        ) + np.asarray(norm_low)
+        decoded = tok.decode(tokens)
+        # the affine runs in NumPy float64 for reference parity, then the
+        # result is cast back to the tokenizer's float32 working dtype
+        assert decoded.dtype == torch.float32
+        np.testing.assert_array_equal(decoded.numpy(), expected.astype(np.float32))
+
+    def test_decode_norm_stats_output_dtype_and_device(self):
+        # the NumPy float64 detour must not leak float64 (or a device change)
+        # into the returned action chunk
+        norm_low = torch.tensor([-0.5, 0.0])
+        norm_high = torch.tensor([0.5, 2.0])
+        tok = VocabTailActionTokenizer(256, norm_low=norm_low, norm_high=norm_high)
+        tokens = tok.encode(torch.tensor([[0.1, 1.0], [-0.2, 0.5]]))
+        decoded = tok.decode(tokens)
+        assert decoded.dtype == torch.float32
+        assert decoded.device == tokens.device
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_decode_norm_stats_cuda(self):
+        norm_low = torch.tensor([-0.5, 0.0])
+        norm_high = torch.tensor([0.5, 2.0])
+        tok = VocabTailActionTokenizer(
+            256, norm_low=norm_low, norm_high=norm_high
+        ).cuda()
+        actions = torch.tensor([[0.1, 1.0], [-0.2, 0.5]], device="cuda")
+        tokens = tok.encode(actions)
+        assert tokens.device.type == "cuda"
+        decoded = tok.decode(tokens)
+        assert decoded.device.type == "cuda"
+        assert decoded.dtype == torch.float32
+        ref = VocabTailActionTokenizer(256, norm_low=norm_low, norm_high=norm_high)
+        torch.testing.assert_close(decoded.cpu(), ref.decode(tokens.cpu()))
+
+    def test_from_norm_stats(self):
+        norm_stats = {
+            "libero_spatial_no_noops": {
+                "action": {
+                    "q01": [-0.5] * 7,
+                    "q99": [0.5] * 7,
+                    "mask": [True] * 6 + [False],
+                }
+            }
+        }
+        tok = VocabTailActionTokenizer.from_norm_stats(
+            norm_stats, "libero_spatial_no_noops", full_vocab_size=32000
+        )
+        assert tok.vocab_size == 32000
+        assert tok.norm_mask.tolist() == [True] * 6 + [False]
+        with pytest.raises(KeyError, match="unnorm_key"):
+            VocabTailActionTokenizer.from_norm_stats(norm_stats, "bad_key")
+
+    def test_gripper_binarize_threshold(self):
+        # Unmasked OpenVLA gripper dims are already decoded in the normalized
+        # [-1, 1] convention; SimpleVLA-RL signs that value before inverting
+        # for LIBERO.
+        norm_low = torch.tensor([0.0])
+        norm_high = torch.tensor([1.0])
+        mask = torch.tensor([False])
+        base = VocabTailActionTokenizer(
+            256, norm_low=norm_low, norm_high=norm_high, norm_mask=mask
+        )
+        tok = VocabTailActionTokenizer(
+            256,
+            norm_low=norm_low,
+            norm_high=norm_high,
+            norm_mask=mask,
+            gripper_binarize=True,
+            gripper_binarize_threshold=0.0,
+            gripper_invert=True,
+        )
+        tokens = base.encode(torch.tensor([[-0.25], [0.25]]))
+        decoded = tok.decode(tokens)
+        torch.testing.assert_close(
+            decoded, torch.tensor([[1.0], [-1.0]], dtype=decoded.dtype)
+        )
+
+    def test_validation(self):
+        with pytest.raises(ValueError, match="num_bins"):
+            VocabTailActionTokenizer(1)
+        with pytest.raises(ValueError, match="full_vocab_size"):
+            VocabTailActionTokenizer(256, full_vocab_size=128)
+        with pytest.raises(ValueError, match="together"):
+            VocabTailActionTokenizer(256, norm_low=torch.zeros(3))
+
+    def test_chunk_shapes(self):
+        tok = VocabTailActionTokenizer(256)
+        actions = torch.empty(2, 4, 8, 7).uniform_(-1.0, 1.0)
+        tokens = tok.encode(actions)
+        assert tokens.shape == actions.shape
+        assert tokens.dtype == torch.long
+        assert tok.decode(tokens).shape == actions.shape
+
+    def test_is_base_subclass(self):
+        assert issubclass(VocabTailActionTokenizer, ActionTokenizerBase)
 
 
 if __name__ == "__main__":

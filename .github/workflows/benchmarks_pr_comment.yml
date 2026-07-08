@@ -10,7 +10,10 @@ permissions:
   actions: read
   contents: read
   issues: write
-  pull-requests: read
+  # Creating an issue comment on a *pull request* requires pull-requests
+  # write for the app-scoped GITHUB_TOKEN (issues write only covers actual
+  # issues); with read the final POST in comment_pr_benchmarks.py 403s.
+  pull-requests: write
 
 jobs:
   benchmark-comment:

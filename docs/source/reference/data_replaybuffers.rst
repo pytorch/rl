@@ -9,17 +9,47 @@ widely used replay buffers:
 Core Replay Buffer Classes
 --------------------------
 
+Replay buffers use ``service_backend="direct"`` by default, where
+``buffer.client() is buffer``. ``service_backend="ray"`` constructs a
+:class:`RayReplayBuffer` owner and ``client()`` returns the restricted,
+picklable handle intended for collector workers. Only the owner can shut down
+the actor.
+
+.. code-block:: python
+
+    from functools import partial
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+    buffer = ReplayBuffer(
+        storage=partial(LazyTensorStorage, 1000),
+        service_backend="ray",
+        service_backend_options={"remote_config": {"num_cpus": 1}},
+    )
+    worker_buffer = buffer.client()
+    buffer.shutdown()
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
 
     ReplayBuffer
+    OfflineToOnlineReplayBuffer
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
     RayReplayBuffer
     RemoteTensorDictReplayBuffer
+
+
+Offline-to-online helpers
+-------------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    prefill_replay_buffer
 
 Composable Replay Buffers
 -------------------------
@@ -70,6 +100,40 @@ storage entries.
     >>> data["target"] = data["obs"] + 1
     >>> rb.write_all(data)
     >>> assert (rb[:] == data).all()
+
+Consuming replay buffers
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Replay buffers can consume items as they are sampled by passing
+``consume_after_n_samples``. This is useful in online loops where a collector
+keeps writing new data while the trainer should avoid reusing old samples after
+they have contributed to an update.
+
+    >>> import torch
+    >>> from torchrl.data import ListStorage, ReplayBuffer
+    >>> rb = ReplayBuffer(
+    ...     storage=ListStorage(8),
+    ...     batch_size=2,
+    ...     consume_after_n_samples=1,
+    ... )
+    >>> rb.extend([torch.tensor(i) for i in range(3)])
+    tensor([0, 1, 2])
+    >>> batch = rb.sample()
+    >>> assert len(batch) == 2
+    >>> assert len(rb) == 1
+    >>> rb.extend([torch.tensor(3), torch.tensor(4)])
+    tensor([3, 4])
+    >>> assert len(rb) == 3
+
+The consumed entries remain in physical storage until they are overwritten, but
+they are removed from the sampleable set and are not returned by future calls to
+:meth:`~torchrl.data.ReplayBuffer.sample`. New writes reuse consumed slots before
+falling back to the writer's normal cursor, so consumed data behaves as freed
+capacity without scanning the full storage on every write. This mode supports
+1-dimensional ``ListStorage``,
+``TensorStorage``, ``LazyTensorStorage`` and ``LazyMemmapStorage`` with uniform
+random sampling. Prefetching, prioritized replay and multidimensional storages
+are rejected explicitly.
 
 TED-format conversion
 ~~~~~~~~~~~~~~~~~~~~~

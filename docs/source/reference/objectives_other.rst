@@ -20,6 +20,7 @@ Additional loss modules for specialized algorithms.
     DreamerValueLoss
     WorldModelLoss
     ExponentialQuadraticCost
+    RNDLoss
 
 DreamerV3
 ---------

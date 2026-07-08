@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from copy import copy
 from enum import IntEnum
 from textwrap import indent
-from typing import Any, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
@@ -680,6 +680,26 @@ class MultiAction(Transform):
     .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended
         after, it will be called once per macro-step.
 
+    .. note:: Extra entries written by the policy alongside the actions (e.g. the action tokens and
+        log-probabilities of a token-head policy) are left untouched on the root tensordict and therefore
+        ride along on the outer (macro-step) transition: each outer step of a rollout carries the policy
+        outputs of the chunk decided at that step.
+
+    .. note:: When a done state fires inside the chunk (with ``stack_rewards=True``), the reward stack of
+        that outer step holds the executed steps' rewards followed by a single zero-filled slot for the
+        skipped remainder of the chunk. Its length therefore differs from a full chunk's, and stacking
+        such outer steps in a rollout yields a lazy stack with ragged reward entries. If the per-chunk
+        reward is computed from the outer transition anyway (e.g. with
+        :class:`~torchrl.envs.transforms.SuccessReward` appended after this transform), pass
+        ``stack_rewards=False`` to keep the outer transition dense and uniform.
+
+    .. note:: Skipping the remaining steps after a done state relies on the ``"_step"`` partial-step
+        entry. Single (unbatched) environments and batched environments
+        (:class:`~torchrl.envs.SerialEnv` / :class:`~torchrl.envs.ParallelEnv`) handle it natively; for a
+        batch-locked vectorized environment, the base environment's ``_step`` is trusted to honor the
+        mask itself (see :meth:`~torchrl.envs.EnvBase.step`) and environments that ignore it will keep
+        stepping every sub-environment until the end of the chunk.
+
     Keyword Args:
         dim (int, optional): the stack dimension with respect to the tensordict ``ndim`` attribute.
             Must be greater than 0. Defaults to ``1`` (the first dimension after the batch-dims).
@@ -689,6 +709,14 @@ class MultiAction(Transform):
         stack_observations (bool, optional): if ``True``, each step's observation will be stack in the output tensordict.
             If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The
             stack dimension is the same as the action stack dimension. Defaults to ``False``.
+        action_key (NestedKey, optional): the one-step action key consumed by
+            the base environment. Defaults to the parent environment action key.
+        chunk_key (NestedKey, optional): the policy-facing key that holds the
+            stacked actions. Defaults to ``action_key`` for backward
+            compatibility. Set this to values such as
+            ``("vla_action", "chunk")`` when a chunk policy should act through
+            :class:`MultiAction` without re-keying its output. See also
+            :meth:`from_vla`.
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionChunkTransform` -- when
         the stacked actions are a chunk policy's *prediction* (overlapping
@@ -705,11 +733,38 @@ class MultiAction(Transform):
         dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,
+        action_key: NestedKey | None = None,
+        chunk_key: NestedKey | None = None,
     ):
-        super().__init__()
+        if action_key is None and chunk_key is not None:
+            action_key = "action"
+        if action_key is not None and chunk_key is None:
+            chunk_key = action_key
+        in_keys_inv = None if action_key is None else [action_key]
+        out_keys_inv = None if chunk_key is None else [chunk_key]
+        super().__init__(in_keys_inv=in_keys_inv, out_keys_inv=out_keys_inv)
         self.stack_rewards = stack_rewards
         self.stack_observations = stack_observations
         self.dim = dim
+
+    @classmethod
+    def from_vla(cls, *, action_key: NestedKey = ACTION_KEY, **kwargs) -> MultiAction:
+        """Build a :class:`MultiAction` that consumes the default VLA chunk key.
+
+        Args:
+            action_key (NestedKey): the one-step action key consumed by the base
+                environment. Defaults to ``"action"``.
+
+        Keyword Args:
+            Additional :class:`MultiAction` keyword arguments.
+
+        Examples:
+            >>> from torchrl.envs.transforms import MultiAction
+            >>> transform = MultiAction.from_vla(stack_rewards=False)
+            >>> transform.out_keys_inv
+            [('vla_action', 'chunk')]
+        """
+        return cls(action_key=action_key, chunk_key=ACTION_CHUNK_KEY, **kwargs)
 
     def _stack_tds(self, td_list, next_tensordict, keys):
         td = torch.stack(td_list + [next_tensordict.select(*keys)], -1)
@@ -745,8 +800,25 @@ class MultiAction(Transform):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Get the actions
         parent = self.parent
-        action_keys = parent.action_keys
-        actions = tensordict.select(*action_keys)
+        action_keys = self.in_keys_inv or parent.action_keys
+        chunk_keys = self.out_keys_inv or action_keys
+        if len(action_keys) != len(chunk_keys):
+            raise ValueError(
+                "action_key and chunk_key lists must have the same length, got "
+                f"{len(action_keys)} and {len(chunk_keys)}."
+            )
+        actions = tensordict.empty()
+        for action_key, chunk_key in zip(action_keys, chunk_keys):
+            action = tensordict.get(chunk_key, None)
+            if action is None:
+                raise KeyError(
+                    f"{type(self).__name__} expected stacked actions at key "
+                    f"{chunk_key!r} before env.step, but the key was missing. "
+                    "For VLA policies, use MultiAction.from_vla() or pass "
+                    "chunk_key=('vla_action', 'chunk'). Available keys are "
+                    f"{list(tensordict.keys(True, True))}."
+                )
+            actions.set(action_key, action)
         actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + self.dim)
         actions = actions.unbind(-1)
         td = tensordict
@@ -802,6 +874,17 @@ class MultiAction(Transform):
                     if global_idx is None:
                         global_idx = idx.clone()
                         td_out = td
+                        # td_out's root reward/observation tensors alias the
+                        # entries just appended to the stacks: de-alias them so
+                        # the masked writes into td_out below do not corrupt
+                        # the stacked history
+                        keys = []
+                        if self.stack_rewards:
+                            keys += list(self.parent.reward_keys)
+                        if self.stack_observations:
+                            keys += list(self.parent.observation_keys)
+                        for key in keys:
+                            td_out.set(key, td_out.get(key).clone())
                     else:
                         td_out[global_idx] = td
                         global_idx = torch.masked_scatter(global_idx, global_idx, idx)
@@ -813,9 +896,25 @@ class MultiAction(Transform):
             if (self.stack_rewards or self.stack_observations) and not td_out.get(
                 "_step", torch.ones((), dtype=torch.bool)
             ).any():
+                if self.stack_rewards:
+                    # the final outer step is skipped for every env (done fired
+                    # inside the chunk): its slot in the reward stack would
+                    # otherwise carry the stale reward of the last executed
+                    # step - zero it, matching the zero-fill of the other
+                    # skipped slots
+                    for key in self.parent.reward_keys:
+                        td_out.set(key, torch.zeros_like(td_out.get(key)))
                 td_out = self._step(None, td_out)
         else:
             td_out[global_idx] = td.replace(actions[-1][global_idx])
+            if self.stack_rewards:
+                # zero the trailing reward slot of the envs that finished
+                # early: their final outer step is skipped, so it would
+                # otherwise carry the stale reward of their last executed step
+                for key in self.parent.reward_keys:
+                    reward = td_out.get(key).clone()
+                    reward[~global_idx] = 0
+                    td_out.set(key, reward)
             if self.stack_rewards or self.stack_observations:
                 td_out = self._step(None, td_out)
                 if self.stack_rewards:
@@ -836,15 +935,27 @@ class MultiAction(Transform):
             raise KeyError(
                 f"{type(self).__name__} requires an action spec to be present."
             )
-        for _ in range(self.dim):
-            action_spec = action_spec.unsqueeze(input_spec.ndim)
-        # Make the dim dynamic
-        action_spec = action_spec.expand(
-            tuple(
-                d if i != (input_spec.ndim + self.dim - 1) else -1
-                for i, d in enumerate(action_spec.shape)
+        action_keys = self.in_keys_inv or list(action_spec.keys(True, True))
+        chunk_keys = self.out_keys_inv or action_keys
+        if len(action_keys) != len(chunk_keys):
+            raise ValueError(
+                "action_key and chunk_key lists must have the same length, got "
+                f"{len(action_keys)} and {len(chunk_keys)}."
             )
-        )
+        for action_key, chunk_key in zip(action_keys, chunk_keys):
+            leaf_spec = action_spec[action_key]
+            for _ in range(self.dim):
+                leaf_spec = leaf_spec.unsqueeze(input_spec.ndim)
+            # Make the dim dynamic
+            leaf_spec = leaf_spec.expand(
+                tuple(
+                    d if i != (input_spec.ndim + self.dim - 1) else -1
+                    for i, d in enumerate(leaf_spec.shape)
+                )
+            )
+            action_spec[chunk_key] = leaf_spec
+            if chunk_key != action_key:
+                del action_spec[action_key]
         input_spec["full_action_spec"] = action_spec
         return input_spec
 
@@ -1705,7 +1816,7 @@ class ActionChunkTransform(Compose):
     OpenVLA-OFT, pi0, SmolVLA): instead of predicting a single action, the
     policy predicts a short horizon ``H`` of future actions. This transform
     turns a per-step action tensor ``[*B, T, action_dim]`` into the
-    corresponding training target ``action_chunk`` of shape
+    corresponding training target ``("vla_action", "chunk")`` of shape
     ``[*B, T, H, action_dim]`` -- for each time step ``t`` it gathers the
     actions ``a[t], a[t+1], ..., a[t+H-1]`` -- together with a boolean
     ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
@@ -1773,7 +1884,7 @@ class ActionChunkTransform(Compose):
         action_key (NestedKey): the per-step action to read.
             Defaults to ``"action"``.
         chunk_key (NestedKey): where to write the action chunk.
-            Defaults to ``"action_chunk"``.
+            Defaults to ``("vla_action", "chunk")``.
         pad_key (NestedKey): where to write the padding mask.
             Defaults to ``"action_is_pad"``.
         time_dim (int): the time dimension of the action tensor (the action
@@ -1800,7 +1911,7 @@ class ActionChunkTransform(Compose):
         ...     {"action": torch.arange(4).view(1, 4, 1).float()}, batch_size=[1, 4]
         ... )
         >>> td = t(td)
-        >>> td["action_chunk"][0, :, :, 0]
+        >>> td["vla_action", "chunk"][0, :, :, 0]
         tensor([[0., 1., 2.],
                 [1., 2., 3.],
                 [2., 3., 3.],
@@ -1821,7 +1932,7 @@ class ActionChunkTransform(Compose):
         ...     },
         ...     batch_size=[1, 4],
         ... )
-        >>> t(td)["action_chunk"][0, :, :, 0]
+        >>> t(td)["vla_action", "chunk"][0, :, :, 0]
         tensor([[0., 1., 1.],
                 [1., 1., 1.],
                 [2., 3., 3.],
@@ -1838,7 +1949,7 @@ class ActionChunkTransform(Compose):
         ...     {"action": torch.randn(8, 4, 1)}, batch_size=[8]
         ... )  # 8 trajectory windows of T=4 steps each
         >>> indices = rb.extend(windows)
-        >>> rb.sample()["action_chunk"].shape  # [batch, T, chunk_size, action_dim]
+        >>> rb.sample()["vla_action", "chunk"].shape  # [batch, T, chunk_size, action_dim]
         torch.Size([2, 4, 3, 1])
     """
 
@@ -1999,24 +2110,32 @@ class ActionTokenizerTransform(Transform):
     Like any TorchRL transform it plugs onto a replay buffer or an environment
     interchangeably:
 
-    - **forward** (``encode``): maps the continuous action (or action chunk) at
-      ``in_key`` to discrete token ids at ``out_key`` -- e.g. building the token
-      training target for an autoregressive (RT-2 / OpenVLA-style) token VLA on
-      the replay-buffer sample path.
-    - **inverse** (``decode``): maps token ids at ``out_key`` back to a continuous
-      action at ``in_key`` -- e.g. decoding the tokens a token-head policy emits,
-      on the environment action-input path, before the base env consumes them.
-      On a replay buffer the inverse is a no-op when the token entry is
-      absent, so extending with raw (untokenized) data is safe; attached to an
-      environment, missing tokens on the step path raise instead.
+    - **forward encode mode** (``mode="encode"``, the default): maps the
+      continuous action (or action chunk) at ``in_key`` to discrete token ids at
+      ``out_key`` -- e.g. building the token training target for an
+      autoregressive (RT-2 / OpenVLA-style) token VLA on the replay-buffer
+      sample path.
+    - **inverse encode mode**: maps token ids at ``out_key`` back to a
+      continuous action at ``in_key`` -- e.g. decoding the tokens a token-head
+      policy emits, on the environment action-input path, before the base env
+      consumes them.
+    - **forward decode mode** (``mode="decode"``): maps token ids at
+      ``out_key`` to continuous actions at ``in_key``. This is useful on the
+      policy side, for instance as a module after a token VLA policy in a
+      :class:`~tensordict.nn.TensorDictSequential`, so CPU environments can
+      receive decoded actions without owning tokenizer buffers.
 
-    When attached to an environment, the policy-facing action spec is rewritten
-    to a :class:`~torchrl.data.Categorical` over the tokenizer's vocabulary, so
-    the env advertises the token interface the policy is expected to produce
-    (the decoded continuous action is consumed by the base env internally).
-    Using the same tokenizer instance on the replay buffer (encode) and on the
-    env (decode) guarantees that training targets and execution share the exact
-    same binning.
+    On a replay buffer the inverse is a no-op when the token entry is absent,
+    so extending with raw (untokenized) data is safe; attached to an
+    environment, missing tokens on the step path raise instead.
+
+    When attached to an environment in encode mode, the policy-facing action
+    spec is rewritten to a :class:`~torchrl.data.Categorical` over the
+    tokenizer's vocabulary, so the env advertises the token interface the
+    policy is expected to produce (the decoded continuous action is consumed by
+    the base env internally). Using the same tokenizer instance on the replay
+    buffer (encode) and on the env (decode through the inverse path) guarantees
+    that training targets and execution share the exact same binning.
 
     Args:
         tokenizer (ActionTokenizerBase): the tokenizer to apply.
@@ -2024,7 +2143,11 @@ class ActionTokenizerTransform(Transform):
     Keyword Args:
         in_key (NestedKey): the continuous action. Defaults to ``"action"``.
         out_key (NestedKey): the discrete token ids. Defaults to
-            ``"action_tokens"``.
+            ``("vla_action", "tokens")``. Pass ``"action_tokens"`` for the
+            flat compatibility key.
+        mode (str, optional): ``"encode"`` makes :meth:`forward` encode
+            actions into tokens and :meth:`inv` decode tokens into actions.
+            ``"decode"`` swaps these directions. Defaults to ``"encode"``.
 
     Examples:
         >>> import torch
@@ -2034,11 +2157,16 @@ class ActionTokenizerTransform(Transform):
         >>> tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
         >>> t = ActionTokenizerTransform(tok)
         >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
-        >>> td["action_tokens"]
+        >>> td["vla_action", "tokens"]
         tensor([[  0, 128, 255]])
         >>> # the inverse decodes tokens back to a continuous action
-        >>> back = t.inv(TensorDict({"action_tokens": td["action_tokens"]}, batch_size=[1]))
+        >>> back = t.inv(TensorDict({("vla_action", "tokens"): td["vla_action", "tokens"]}, batch_size=[1]))
         >>> back["action"].shape
+        torch.Size([1, 3])
+        >>> # policy-side decode: token policy -> decoded continuous action
+        >>> decode = ActionTokenizerTransform(tok, mode="decode")
+        >>> policy_td = TensorDict({("vla_action", "tokens"): td["vla_action", "tokens"]}, batch_size=[1])
+        >>> decode(policy_td)["action"].shape
         torch.Size([1, 3])
         >>> # on a replay buffer: raw actions written through extend are stored
         >>> # as-is and tokenized on the sample path
@@ -2051,7 +2179,7 @@ class ActionTokenizerTransform(Transform):
         >>> indices = rb.extend(
         ...     TensorDict({"action": torch.rand(8, 3) * 2 - 1}, batch_size=[8])
         ... )
-        >>> rb.sample()["action_tokens"].shape
+        >>> rb.sample()["vla_action", "tokens"].shape
         torch.Size([2, 3])
         >>> # on an environment: the policy-facing action spec becomes the token
         >>> # interface, and emitted tokens are decoded before the base env
@@ -2059,9 +2187,9 @@ class ActionTokenizerTransform(Transform):
         >>> from torchrl.envs import GymEnv, TransformedEnv
         >>> tok_env = UniformActionTokenizer(256, low=-2.0, high=2.0)  # Pendulum bounds
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), ActionTokenizerTransform(tok_env))
-        >>> env.full_action_spec["action_tokens"].shape
+        >>> env.full_action_spec["vla_action", "tokens"].shape
         torch.Size([1])
-        >>> env.rollout(2)["action_tokens"].dtype
+        >>> env.rollout(2)["vla_action", "tokens"].dtype
         torch.int64
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionDiscretizer` -- the
@@ -2080,46 +2208,82 @@ class ActionTokenizerTransform(Transform):
         *,
         in_key: NestedKey = ACTION_KEY,
         out_key: NestedKey = ACTION_TOKENS_KEY,
+        mode: Literal["encode", "decode"] = "encode",
     ) -> None:
         if not isinstance(tokenizer, ActionTokenizerBase):
             raise TypeError(
                 f"tokenizer must be an ActionTokenizerBase, got {type(tokenizer)}."
             )
+        if mode not in ("encode", "decode"):
+            raise ValueError(f"mode must be either 'encode' or 'decode', got {mode!r}.")
+        action_key = unravel_key(in_key)
+        token_key = unravel_key(out_key)
         # ``forward`` is fully overridden (encode in_key -> out_key on the data
         # path), so no forward keys are declared: the token entry only exists
         # on the data path, never in the env's output specs. The inverse
         # direction reads ``out_keys_inv`` (the tokens) and writes
         # ``in_keys_inv`` (the action passed to the base env).
+        if mode == "encode":
+            in_keys = []
+            out_keys = []
+            in_keys_inv = [action_key]
+            out_keys_inv = [token_key]
+        else:
+            in_keys = [token_key]
+            out_keys = [action_key]
+            in_keys_inv = [token_key]
+            out_keys_inv = [action_key]
         super().__init__(
-            in_keys=[],
-            out_keys=[],
-            in_keys_inv=[in_key],
-            out_keys_inv=[out_key],
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
         )
         self.tokenizer = tokenizer
+        self.mode = mode
+        self._action_key = action_key
+        self._token_key = token_key
 
     @property
     def in_key(self) -> NestedKey:
-        return self.in_keys_inv[0]
+        return self._action_key
 
     @property
     def out_key(self) -> NestedKey:
-        return self.out_keys_inv[0]
+        return self._token_key
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get(self.in_key, default=None)
-        if action is None:
+        if self.mode == "encode":
+            source_key = self.in_key
+            dest_key = self.out_key
+            transform = self.tokenizer.encode
+        else:
+            source_key = self.out_key
+            dest_key = self.in_key
+            transform = self.tokenizer.decode
+        value = tensordict.get(source_key, default=None)
+        if value is None:
             if self.missing_tolerance:
                 return tensordict
             raise KeyError(
-                f"{type(self).__name__}: '{self.in_key}' not found in tensordict "
+                f"{type(self).__name__}: '{source_key}' not found in tensordict "
                 f"{tensordict}."
             )
-        tensordict.set(self.out_key, self.tokenizer.encode(action))
+        tensordict.set(dest_key, transform(value))
         return tensordict
 
     def _inv_apply_transform(self, tokens: torch.Tensor) -> torch.Tensor:
-        return self.tokenizer.decode(tokens)
+        if self.mode == "encode":
+            return self.tokenizer.decode(tokens)
+        return self.tokenizer.encode(tokens)
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # This transform acts on data/replay-buffer samples through ``forward``
+        # and on env actions through ``inv``. When used as a policy-side decode
+        # module, ``in_keys``/``out_keys`` are populated for
+        # TensorDictSequential introspection, but an attached env should not try
+        # to decode observations on reset/step.
+        return next_tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Without a parent env (replay-buffer ``extend``), raw (untokenized)
@@ -2128,11 +2292,14 @@ class ActionTokenizerTransform(Transform):
         # them; a policy writing the raw action key by mistake should not
         # silently bypass the decode). The env reset path never reaches the
         # inverse: ``enable_inv_on_reset`` defaults to False.
-        if self.parent is None and tensordict.get(self.out_key, default=None) is None:
+        expected_key = self.out_key if self.mode == "encode" else self.in_key
+        if self.parent is None and tensordict.get(expected_key, default=None) is None:
             return tensordict
         return super()._inv_call(tensordict)
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
+        if self.mode == "decode":
+            return input_spec
         # Expose the token interface to the policy: replace the base env's
         # continuous action spec with a Categorical over the tokenizer
         # vocabulary. The continuous spec is removed rather than moved to the
@@ -2143,23 +2310,33 @@ class ActionTokenizerTransform(Transform):
         action_key = unravel_key(self.in_key)
         token_key = unravel_key(self.out_key)
         try:
-            leaf_spec = self.parent.full_action_spec_unbatched[action_key]
+            leaf_spec = input_spec["full_action_spec", action_key]
         except KeyError:
             raise RuntimeError(
                 f"{type(self).__name__} could not find key {action_key!r} in "
                 f"the parent environment's action spec. Available keys: "
-                f"{list(self.parent.full_action_spec.keys(True, True))}."
+                f"{list(input_spec['full_action_spec'].keys(True, True))}."
             )
+        # the incoming spec is batched and may carry dynamic (-1) dims (e.g.
+        # MultiAction's chunk dim, which full_action_spec_unbatched would
+        # mangle); dynamic dims cannot be passed to the constructor, so build
+        # with placeholder dims and expand
+        shape = leaf_spec.shape
+        concrete = torch.Size([1 if dim < 0 else dim for dim in shape])
         token_spec = Categorical(
             n=self.tokenizer.vocab_size,
-            shape=leaf_spec.shape,
+            shape=concrete,
             device=leaf_spec.device,
             dtype=torch.long,
         )
-        batch_size = self.parent.batch_size
-        if batch_size:
-            token_spec = token_spec.expand(batch_size + token_spec.shape)
+        if concrete != shape:
+            token_spec = token_spec.expand(shape)
         input_spec["full_action_spec", token_key] = token_spec
         if token_key != action_key:
             del input_spec["full_action_spec", action_key]
         return input_spec
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        if self.mode == "decode":
+            return output_spec
+        return super().transform_output_spec(output_spec)

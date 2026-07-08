@@ -13,6 +13,8 @@ from .grpo import (
     GRPOLossOutput,
     LLMLossOutput,
     MCAdvantage,
+    MCAdvantageSelector,
+    RayMCAdvantage,
 )
 from .sft import SFTLoss, SFTLossOutput
 
@@ -25,6 +27,8 @@ __all__ = [
     "GRPOLossOutput",
     "LLMLossOutput",
     "MCAdvantage",
+    "MCAdvantageSelector",
+    "RayMCAdvantage",
     "SFTLoss",
     "SFTLossOutput",
 ]

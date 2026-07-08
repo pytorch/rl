@@ -284,6 +284,7 @@ Available Transforms
     MacroPrimitive
     MacroPrimitiveTransform
     TargetMacroAction
+    CartesianSolver
     RobotMacroAction
     RobotMacroActionMode
     SatelliteMacroAction
@@ -294,6 +295,7 @@ Available Transforms
     MultiAction
     NextObservationDelta
     NextStateReconstructor
+    PolicyAgeFilter
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -305,10 +307,12 @@ Available Transforms
     RemoveEmptySpecs
     RenameTransform
     Resize
+    RNDTransform
     Reward2GoTransform
     RewardClipping
     RewardScaling
     RewardSum
+    RunningMeanStd
     SelectTransform
     SignTransform
     SqueezeTransform

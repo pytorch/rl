@@ -74,6 +74,12 @@ def sample(rb):
     rb.sample()
 
 
+def test_replay_buffer_direct_client_identity(benchmark):
+    replay_buffer = ReplayBuffer(storage=ListStorage(1))
+    client = benchmark(replay_buffer.client)
+    assert client is replay_buffer
+
+
 def sample_prioritized_sampler(sampler, storage, batch_size):
     sampler.sample(storage, batch_size)
     if sampler.device.type == "cuda":

@@ -6,11 +6,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
-
 from torchrl.trainers.algorithms.configs.common import ConfigBase
+
+if TYPE_CHECKING:
+    _ReplayServiceBackend = Literal["direct", "ray"]
+else:
+    # OmegaConf structured configs resolve this alias at runtime and do not
+    # support Literal on all TorchRL-supported versions.
+    _ReplayServiceBackend = str
 
 
 @dataclass
@@ -54,6 +60,18 @@ class RandomSamplerConfig(SamplerConfig):
     def __post_init__(self) -> None:
         """Post-initialization hook for random sampler configurations."""
         super().__post_init__()
+
+
+@dataclass
+class ConsumingSamplerConfig(SamplerConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ConsumingSampler`.
+
+    Every kwarg accepted by ``ConsumingSampler.__init__`` is exposed as a field
+    here.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.ConsumingSampler"
+    max_sample_count: int = 1
 
 
 @dataclass
@@ -316,9 +334,12 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     dim_extend: int | None = None
     checkpointer: Any = None
     generator: Any = None
+    consume_after_n_samples: int | None = None
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None
+    service_backend: _ReplayServiceBackend = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Post-initialization hook for TensorDict replay buffer configurations."""
@@ -345,6 +366,9 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     dim_extend: int | None = None
     checkpointer: Any = None
     generator: Any = None
+    consume_after_n_samples: int | None = None
     shared: bool = False
     compilable: bool | None = None
     delayed_init: bool | None = None
+    service_backend: _ReplayServiceBackend = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
