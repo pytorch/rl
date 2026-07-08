@@ -119,10 +119,12 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # captures frames from TensorDict pixel entries or ``env.render()`` and writes
 # metadata with every artifact. Notebook artifacts can additionally generate a
 # MuJoCo WASM sidecar viewer when ``--notebook-render-backend mujoco-wasm``,
-# ``--mujoco-model-path``, and ``--mujoco-qpos-key`` are provided. The generated
-# notebook imports the MuJoCo WASM display and playback helpers from TorchRL
-# rather than embedding one-off helper code in the notebook itself. MuJoCo qpos
-# capture uses :class:`~torchrl.render.backends.MujocoStateReader`, keeping
-# simulator state separate from policy observations. For API details, see
+# ``--mujoco-model-path``, and ``--mujoco-qpos-key`` are provided. Pass
+# ``--notebook-rollout-mode live`` to defer policy execution to notebook cells
+# and generate trajectories on demand. The generated notebook imports the
+# MuJoCo WASM display and playback helpers from TorchRL rather than embedding
+# one-off helper code in the notebook itself. MuJoCo qpos capture uses
+# :class:`~torchrl.render.backends.MujocoStateReader`, keeping simulator state
+# separate from policy observations. For API details, see
 # :ref:`ref_render` and the recorder utilities in
 # :ref:`Environment-Recorders`.

@@ -175,6 +175,14 @@ def tiny_policy_factory(spec):
     return ZeroPolicy().to(spec.device)
 
 
+def raising_env_factory(spec):
+    raise AssertionError("env factory should not run")
+
+
+def raising_policy_factory(spec):
+    raise AssertionError("policy factory should not run")
+
+
 def tensor_only_policy(obs):
     if not torch.is_tensor(obs):
         raise TypeError("expected a tensor observation")
@@ -260,6 +268,8 @@ class TestRenderCLI:
                 "ipynb",
                 "--notebook-render-backend",
                 "mujoco-wasm",
+                "--notebook-rollout-mode",
+                "live",
                 "--mujoco-model-path",
                 str(model),
                 "--mujoco-asset-paths",
@@ -272,6 +282,8 @@ class TestRenderCLI:
         )
         config = config_from_args(args)
         assert config.notebook_render_backend == "mujoco_wasm"
+        assert config.notebook_rollout_mode == "live"
+        assert config.save_rollout is False
         assert config.mujoco_model_path == model
         assert config.mujoco_asset_paths == [asset_dir]
         assert config.mujoco_qpos_key == ("next", "qpos")
@@ -520,6 +532,109 @@ class TestRenderVideo:
             [frames["default"], np.ones((4, 4, 3), dtype=np.uint8)]
         )
         assert grid.shape == (4, 8, 3)
+
+
+class TestRenderNotebook:
+    def test_live_notebook_defers_rollout_collection(self, tmp_path, monkeypatch):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=raising_policy_factory,
+            env=raising_env_factory,
+            max_steps=2,
+            format="ipynb",
+            out=tmp_path / "live_report.ipynb",
+            notebook_rollout_mode="live",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        result = render_policy(config)
+        notebook = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+        source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+        assert "collect_rollouts_in_notebook" in source
+        assert "live_result = collect_rollouts_in_notebook()" in source
+        assert not (tmp_path / "live_report" / "rollouts").exists()
+        metadata = json.loads((tmp_path / "live_report" / "metadata.json").read_text())
+        assert metadata["num_trajs"] == 0
+        assert metadata["requested_num_trajs"] == 1
+        assert metadata["config"]["notebook_rollout_mode"] == "live"
+
+        checkpoint = {"env_name": "checkpoint-env"}
+        calls = {}
+
+        class FakeEnv:
+            def close(self):
+                calls["closed"] = True
+
+        fake_env = FakeEnv()
+
+        monkeypatch.setattr(
+            render_module, "load_checkpoint", lambda *args, **kwargs: checkpoint
+        )
+        monkeypatch.setattr(render_module, "checkpoint_hash", lambda path: "digest")
+
+        def fake_make_env(config, *, checkpoint=None):
+            calls["env_checkpoint"] = checkpoint
+            return fake_env
+
+        def fake_make_policy(
+            config,
+            env,
+            *,
+            checkpoint=None,
+            checkpoint_digest=None,
+        ):
+            calls["policy_checkpoint"] = checkpoint
+            calls["checkpoint_digest"] = checkpoint_digest
+            return object()
+
+        fake_result = render_module.RenderResult(None, [], [], {"ok": True}, [])
+        monkeypatch.setattr(render_module, "make_render_env", fake_make_env)
+        monkeypatch.setattr(render_module, "load_render_policy", fake_make_policy)
+        monkeypatch.setattr(
+            render_module,
+            "collect_render_rollouts",
+            lambda env, policy, config: fake_result,
+        )
+        live_cell = next(
+            cell
+            for cell in notebook["cells"]
+            if "collect_rollouts_in_notebook" in "".join(cell["source"])
+            and cell["cell_type"] == "code"
+        )
+        exec("".join(live_cell["source"]), {"cfg": config})
+        assert calls == {
+            "env_checkpoint": checkpoint,
+            "policy_checkpoint": checkpoint,
+            "checkpoint_digest": "digest",
+            "closed": True,
+        }
+
+    def test_notebook_resolves_relative_checkpoint(self, tmp_path, monkeypatch):
+        working_dir = tmp_path / "project"
+        working_dir.mkdir()
+        checkpoint = working_dir / "policy.pt"
+        torch.save({}, checkpoint)
+        output_dir = tmp_path / "notebooks"
+        output_dir.mkdir()
+        monkeypatch.chdir(working_dir)
+        config = RenderConfig(
+            ckpt=Path("policy.pt"),
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=1,
+            format="ipynb",
+            out=output_dir / "report.ipynb",
+            overwrite=True,
+        )
+        result = render_policy(config)
+        notebook = json.loads(result.artifact_path.read_text())
+        namespace = {}
+        exec("".join(notebook["cells"][2]["source"]), namespace)
+        monkeypatch.chdir(output_dir)
+        exec("".join(notebook["cells"][4]["source"]), namespace)
+        assert namespace["cfg"].ckpt == checkpoint
 
 
 class TestMujocoWasm:

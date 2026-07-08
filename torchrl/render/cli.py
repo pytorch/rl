@@ -71,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--notebook-rollout-mode",
+        choices=["saved", "live", "both"],
+        help=(
+            "Notebook-only rollout mode. 'saved' collects rollouts before writing "
+            "the notebook, 'live' collects them when notebook cells run, and "
+            "'both' does both."
+        ),
+    )
+    parser.add_argument(
         "--env-backend",
         choices=[
             "auto",
@@ -241,7 +250,7 @@ def config_from_args(args: argparse.Namespace) -> RenderConfig:
                 f"Missing required rlrender option --{required.replace('_', '-')}."
             )
     if data.get("format") == "ipynb" and "save_rollout" not in data:
-        data["save_rollout"] = True
+        data["save_rollout"] = data.get("notebook_rollout_mode", "saved") != "live"
     return RenderConfig(**data)
 
 

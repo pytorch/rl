@@ -223,7 +223,14 @@ def _write_jsonl(result: RenderResult, out: Path) -> None:
 def _write_notebook_assets(
     result: RenderResult, config: RenderConfig, asset_dir: Path
 ) -> None:
-    if config.save_rollout or config.save_tensordicts or config.format == "ipynb":
+    if (
+        config.save_rollout
+        or config.save_tensordicts
+        or (
+            config.format == "ipynb"
+            and config.notebook_rollout_mode in ("saved", "both")
+        )
+    ):
         _write_rollout_assets(result, asset_dir, config)
     _write_json(asset_dir / "config.json", config.to_dict())
 
@@ -304,6 +311,7 @@ def _runtime_metadata(
         "torch_version": torch.__version__,
         "python_version": sys.version.split()[0],
         "platform": platform.platform(),
+        "working_dir": str(Path.cwd()),
         "checkpoint": checkpoint,
         "policy": config.to_dict()["policy"],
         "env": config.to_dict()["env"],
@@ -317,6 +325,7 @@ def _runtime_metadata(
             "pixels": key_to_string(config.pixel_key),
         },
         "asset_dir": str(asset_dir),
+        "asset_dir_absolute": str(asset_dir.resolve()),
     }
 
 
