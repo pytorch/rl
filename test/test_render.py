@@ -16,7 +16,6 @@ import torch
 import torchrl.render as render_module
 import torchrl.render.artifacts as artifacts_module
 import torchrl.render.mujoco_wasm as mujoco_wasm_module
-from omegaconf import OmegaConf
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
@@ -772,6 +771,7 @@ class TestMujocoWasm:
 
 class TestSotaCheckpointFactories:
     def test_dqn_cartpole_checkpoint_render_factories(self, tmp_path, monkeypatch):
+        OmegaConf = pytest.importorskip("omegaconf").OmegaConf
         dqn_dir = Path("sota-implementations/dqn").resolve()
         utils_path = dqn_dir / "utils_cartpole.py"
         make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
@@ -846,9 +846,14 @@ class TestSotaCheckpointFactories:
         importlib.util.find_spec("mujoco") is None,
         reason="MuJoCo is required for the PPO render factory integration test",
     )
+    @pytest.mark.skipif(
+        importlib.util.find_spec("gymnasium") is None,
+        reason="A modern Gymnasium MuJoCo environment is required",
+    )
     def test_ppo_inverted_pendulum_checkpoint_render_factories(
         self, tmp_path, monkeypatch
     ):
+        OmegaConf = pytest.importorskip("omegaconf").OmegaConf
         ppo_dir = Path("sota-implementations/ppo").resolve()
         utils_path = ppo_dir / "utils_mujoco.py"
         make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
@@ -956,6 +961,10 @@ class TestSotaCheckpointFactories:
     @pytest.mark.skipif(
         importlib.util.find_spec("mujoco") is None,
         reason="MuJoCo is required for the qpos extraction integration test",
+    )
+    @pytest.mark.skipif(
+        importlib.util.find_spec("gymnasium") is None,
+        reason="A modern Gymnasium MuJoCo environment is required",
     )
     def test_inverted_double_pendulum_qpos_uses_physics_state(self):
         utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
