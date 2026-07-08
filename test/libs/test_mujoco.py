@@ -116,6 +116,19 @@ class TestMujoco:
         assert reward.shape[-1] == 1
         assert torch.isfinite(reward).all()
 
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_get_state(self):
+        env = HopperEnv(num_envs=1, seed=0, backend="mujoco")
+        td = env.reset()
+        state = env.get_state()
+        assert state.batch_size == env.batch_size
+        assert set(state.keys()) == {"qpos", "qvel", "time"}
+        qpos = state["qpos"].clone()
+        td["action"] = env.action_spec.rand()
+        env.step(td)
+        assert torch.equal(state["qpos"], qpos)
+        env.close()
+
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
     def test_torch_backend_rollout_partial_reset(self):
         env = HopperEnv(

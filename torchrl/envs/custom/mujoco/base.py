@@ -551,6 +551,15 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             device=self.device,
         )
 
+    def get_state(self) -> TensorDict:
+        """Return a detached snapshot of the MuJoCo simulator state.
+
+        Returns:
+            A TensorDict containing ``qpos``, ``qvel``, and ``time`` with the
+            environment batch size.
+        """
+        return self._state_td().clone()
+
     def _index_extra_state(self, index: slice | torch.Tensor) -> dict[str, Any]:
         """Return subclass-owned batched state for an indexed env snapshot."""
         del index
