@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from tensordict import NonTensorData, TensorDictBase
 from tensordict.utils import NestedKey
-from torchrl._utils import _can_be_pickled
+from torchrl._utils import _can_be_pickled, _ends_with, logger as torchrl_logger
 from torchrl.data.tensor_specs import NonTensor, TensorSpec, Unbounded
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase
@@ -65,6 +65,16 @@ class VideoRecorder(ObservationTransform):
             to ``in_keys`` if not provided.
         fps (int, optional): Frames per second of the output video. Defaults to the logger predefined ``fps``,
             and overrides it if provided.
+        max_frames (int, optional): maximum number of frames held in the
+            recorder buffer. Once the buffer is full, new frames are
+            discarded until :meth:`dump` empties it. Use this to bound
+            memory when dumps are infrequent (or could be missed
+            altogether). Unbounded by default.
+        dump_on_done (bool, optional): if ``True``, the recorder calls
+            :meth:`dump` on its own whenever a step ends the episode, i.e.
+            whenever all the ``"done"`` entries of the root tensordict are
+            ``True`` (for a batched env, this means every sub-env is done
+            at the same step). Defaults to ``False``.
         **kwargs (Dict[str, Any], optional): additional keyword arguments for
             :meth:`~torchrl.record.loggers.Logger.log_video`.
 
@@ -139,11 +149,17 @@ class VideoRecorder(ObservationTransform):
         make_grid: bool | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         fps: int | None = None,
+        max_frames: int | None = None,
+        dump_on_done: bool = False,
         **kwargs,
     ) -> None:
         client = getattr(logger, "client", None)
         if callable(client):
             logger = client()
+        if max_frames is not None and max_frames <= 0:
+            raise ValueError(
+                f"max_frames must be a positive integer, got {max_frames}."
+            )
         if in_keys is None:
             in_keys = ["pixels"]
         if out_keys is None:
@@ -161,6 +177,8 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.center_crop = center_crop
         self.make_grid = make_grid
+        self.max_frames = max_frames
+        self.dump_on_done = dump_on_done
         if center_crop and not _has_tv:
             raise ImportError(
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
@@ -207,6 +225,8 @@ class VideoRecorder(ObservationTransform):
             observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:
+            if self.max_frames is not None and len(self.obs) >= self.max_frames:
+                return observation
             if (
                 observation_trsf.ndim >= 3
                 and observation_trsf.shape[-3] in (1, 3)
@@ -258,13 +278,49 @@ class VideoRecorder(ObservationTransform):
                 observation_trsf = _make_video_grid(obs_flat)
                 self.obs.append(observation_trsf.to("cpu", torch.uint8))
             elif observation_trsf.ndimension() >= 4:
-                self.obs.extend(observation_trsf.to("cpu", torch.uint8).flatten(0, -4))
+                frames = observation_trsf.to("cpu", torch.uint8).flatten(0, -4)
+                if self.max_frames is not None:
+                    frames = frames[: self.max_frames - len(self.obs)]
+                self.obs.extend(frames)
             else:
                 self.obs.append(observation_trsf.to("cpu", torch.uint8))
         return observation
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        next_tensordict = super()._step(tensordict, next_tensordict)
+        if self.dump_on_done and self._all_done(next_tensordict):
+            self.dump()
+        return next_tensordict
+
+    def _all_done(self, next_tensordict: TensorDictBase) -> bool:
+        """Whether every ``"done"`` entry of the post-step data is ``True``."""
+        parent = self.parent
+        if parent is not None:
+            done_keys = [key for key in parent.done_keys if _ends_with(key, "done")]
+        else:
+            done_keys = ["done"]
+        dones = [next_tensordict.get(key, None) for key in done_keys]
+        dones = [done for done in dones if done is not None]
+        if not dones:
+            return False
+        return all(bool(done.all()) for done in dones)
+
+    def _check_batched_worker_compat(self) -> None:
+        torchrl_logger.warning(
+            "A VideoRecorder was found among the transforms of a "
+            "SerialEnv/ParallelEnv worker env. Worker-side transforms are not "
+            "reached by `dump` calls issued on the outer env or by collectors "
+            "and evaluators, so recorded frames accumulate until dumped "
+            "manually (consider `max_frames` or `dump_on_done` to bound "
+            "memory). Prefer attaching the recorder to the outer env, e.g. "
+            "TransformedEnv(ParallelEnv(N, make_env), VideoRecorder(...)), "
+            "which records all worker envs into a single grid video."
+        )
 
     def to_animation(
         self,
