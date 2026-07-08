@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.render.backends
+
+
+NullRenderBackend
+=================
+
+.. autoclass:: NullRenderBackend
+    :members:
+    :inherited-members:

@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render
+
+
+make_render_env
+===============
+
+.. autofunction:: make_render_env

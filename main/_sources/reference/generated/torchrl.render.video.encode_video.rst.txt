@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render.video
+
+
+encode_video
+============
+
+.. autofunction:: encode_video

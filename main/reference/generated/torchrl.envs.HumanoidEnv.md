@@ -929,6 +929,15 @@ Raises:
  path or resolves to something that is not an
  `nn.Parameter`
 
+get_state() → [TensorDict](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict)
+
+Return a detached snapshot of the MuJoCo simulator state.
+
+Returns:
+
+A TensorDict containing `qpos`, `qvel`, and `time` with the
+environment batch size.
+
 get_submodule(*target: str*) → [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
 
 Return the submodule given by `target` if it exists, otherwise throw an error.

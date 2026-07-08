@@ -162,6 +162,12 @@ and navigate to the previous ones whenever you want to learn more!
 - [Key Features](reference/objectives.html#key-features)
 - [Quick Example](reference/objectives.html#quick-example)
 - [Documentation Sections](reference/objectives.html#documentation-sections)
+- [Rendering applications](reference/render.html)
+
+- [Core API](reference/render.html#core-api)
+- [Configuration and results](reference/render.html#configuration-and-results)
+- [Backends](reference/render.html#backends)
+- [Lower-level helpers](reference/render.html#lower-level-helpers)
 - [Service Registry](reference/services.html)
 
 - [Service owners and clients](reference/services.html#service-owners-and-clients)

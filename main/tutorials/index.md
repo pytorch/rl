@@ -17,6 +17,11 @@ Get started with Environments, TED and transforms
 [Getting started with model optimization](getting-started-2.html)
 
 Getting started with model optimization
+![](../_images/sphx_glr_rlrender_thumb.png)
+
+[Render policy rollouts with rlrender](rlrender.html)
+
+Render policy rollouts with rlrender
 ![](../_images/sphx_glr_getting-started-3_thumb.png)
 
 [Get started with data collection and storage](getting-started-3.html)

@@ -70,6 +70,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: TorchRL contributors">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_rlrender_thumb.png
+    :alt:
+
+  :doc:`/tutorials/rlrender`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Render policy rollouts with rlrender</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
 
 .. only:: html
@@ -472,6 +489,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/getting-started-4
    /tutorials/getting-started-0
    /tutorials/getting-started-2
+   /tutorials/rlrender
    /tutorials/getting-started-3
    /tutorials/pretrained_models
    /tutorials/evaluator
