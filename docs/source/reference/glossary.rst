@@ -177,7 +177,10 @@ terms with the minimum context needed to find the relevant code.
       ``("collector", "traj_ids")`` when ``track_traj_ids=True``. Used by
       :class:`~torchrl.data.replay_buffers.SliceSampler` to draw whole trajectories from a
       buffer and by :func:`~torchrl.collectors.utils.split_trajectories` to
-      slice a flat batch into per-trajectory chunks.
+      slice a flat batch into per-trajectory chunks. See
+      :ref:`Trajectory boundaries <ref_traj_boundaries>` for how these ids
+      and the done/truncated/terminated flags are consumed to recover
+      episode boundaries from a replay buffer.
 
    Transform
       TorchRL's tensordict-native environment transform abstraction,

@@ -2752,6 +2752,13 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
         tensor([[0., 0., 0., 0., 0.],
                 [1., 1., 1., 1., 1.]])
 
+    .. seealso::
+
+        Trajectory boundaries are recovered at sampling time with
+        :func:`~torchrl.data.find_start_stop_traj`; see
+        :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+        for the conventions collectors, storages and samplers follow.
+
     """
 
     def __init__(
@@ -3026,6 +3033,14 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
         steps [1, 2, 0, 1, 0, 1]
         >>> print("weight", info["priority_weight"].tolist())
         weight [9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06, 9.120110917137936e-06]
+
+    .. seealso::
+
+        Trajectory boundaries are recovered at sampling time with
+        :func:`~torchrl.data.find_start_stop_traj`; see
+        :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+        for the conventions collectors, storages and samplers follow.
+
     """
 
     def __init__(

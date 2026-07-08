@@ -239,6 +239,9 @@ class Collector(BaseCollector):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            See :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            for when these markers are needed to sample trajectories from a
+            replay buffer.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.

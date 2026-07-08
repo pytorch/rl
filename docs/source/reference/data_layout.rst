@@ -66,6 +66,9 @@ Four per-step boolean keys jointly describe a trajectory:
     :class:`~torchrl.data.replay_buffers.SliceSampler` to reconstruct trajectory boundaries
     when no ``traj_ids`` key is available, and by
     :func:`~torchrl.collectors.utils.split_trajectories` (legacy).
+    Datasets sometimes carry only a subset of the three flags; consumers
+    that detect trajectory ends from flags should use the union of
+    :data:`~torchrl.data.DEFAULT_DONE_KEYS` rather than ``done`` alone.
 
 ``("next", "terminated")``
     *Trajectory ended because the MDP says so* (goal reached, agent
@@ -88,6 +91,15 @@ Four per-step boolean keys jointly describe a trajectory:
 The "1-D contiguous" layout uses these keys *exclusively* — no shape-based
 padding, no mask. Every primitive in TorchRL that needs to know where
 trajectories start and stop reads them.
+
+.. seealso::
+
+    :ref:`Trajectory boundaries <ref_traj_boundaries>` documents how these
+    keys are *consumed* at sampling time: how
+    :func:`~torchrl.data.find_start_stop_traj` recovers boundaries from
+    trajectory ids or end flags inside a (possibly wrapped) circular
+    storage, and the blind spot when neither ids nor flags mark an episode
+    end.
 
 The replay buffer ``ndim`` arg and why it doesn't multi-process well
 --------------------------------------------------------------------
@@ -460,6 +472,10 @@ See also
   page.
 * :doc:`collectors_replay` — concrete ``ndim`` patterns and the full
   ``trajs_per_batch`` API.
+* :ref:`Trajectory boundaries <ref_traj_boundaries>` — the read-time side
+  of the boundary keys: how samplers recover trajectory starts and stops
+  from a circular storage (:func:`~torchrl.data.find_start_stop_traj`,
+  :data:`~torchrl.data.DEFAULT_DONE_KEYS`).
 * :ref:`Auto-wrapping recurrent transforms <Environment-policy-arg>` —
   the ``policy=`` env argument and the collector-side equivalent.
 * :class:`~torchrl.data.replay_buffers.SliceSampler` — reference for the

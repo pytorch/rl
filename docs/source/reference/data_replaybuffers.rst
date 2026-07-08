@@ -147,7 +147,9 @@ producers and consumers is the following:
   collectors warn when a :class:`~torchrl.data.replay_buffers.SliceSampler`
   is used and neither ``trajs_per_batch`` nor ``set_truncated`` is set,
   because different workers' batches interleave in the shared buffer and
-  adjacent frames can then belong to different episodes. Single-process
+  adjacent frames can then belong to different episodes (see
+  :ref:`collectors_replay_trajs` for the trade-offs and the recommended
+  ``trajs_per_batch`` alternative). Single-process
   collectors do not need this: they write batches in temporal order, so a
   batch boundary is not a seam -- the next batch continues exactly where the
   previous one ended, and the only mid-trajectory edge is the live write
@@ -180,6 +182,18 @@ semantics) into a padded trajectory layout, use
     indistinguishable from a single longer one, and any consumer will merge
     them. Keep the trajectory ids, or make sure every trajectory ends with
     one of the :data:`~torchrl.data.DEFAULT_DONE_KEYS` flags set.
+
+.. seealso::
+
+    - :ref:`Data layout: contiguous trajectories <data-layout>` for the
+      write-side story: the boundary keys (``is_init``, ``done``,
+      ``terminated``, ``truncated``, ``traj_ids``), the recommended flat 1-D
+      layout, and the storage ``ndim`` patterns.
+    - :ref:`collectors_replay_trajs` for the full ``trajs_per_batch`` API
+      and collector/replay-buffer interoperability.
+    - The :ref:`collector trajectory assembly tutorial
+      <collector_trajectory_assembly>` for a runnable walkthrough of
+      trajectory-based collection and slice sampling.
 
 .. currentmodule:: torchrl.data
 

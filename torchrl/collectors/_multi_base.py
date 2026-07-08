@@ -256,6 +256,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            With a multi-process collector writing to a shared replay buffer,
+            this marks the worker-batch seams that would otherwise be
+            invisible to a :class:`~torchrl.data.replay_buffers.SliceSampler`;
+            see :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            and :ref:`collectors_replay_trajs` for the trade-offs.
         trajs_per_batch (int, optional): When set together with ``replay_buffer``,
             trajectory assembly is delegated to each worker's inner
             :class:`~torchrl.collectors.Collector`.  Each worker calls
