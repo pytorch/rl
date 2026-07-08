@@ -8,6 +8,7 @@ import argparse
 import importlib.util
 import json
 import socket
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -19,7 +20,7 @@ import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
-from torchrl.envs import EnvBase
+from torchrl.envs import EnvBase, set_gym_backend
 from torchrl.record.loggers.common import _has_torchcodec
 from torchrl.render import (
     call_with_supported_kwargs,
@@ -36,6 +37,7 @@ from torchrl.render import (
     play_mujoco_wasm_trajectory,
     render_policy,
     RenderConfig,
+    RenderPolicySpec,
     TensorDictPolicyAdapter,
     write_mujoco_wasm_viewer,
     write_render_artifact,
@@ -45,6 +47,8 @@ from torchrl.render.mujoco_wasm import extract_qpos_trajectory
 from torchrl.render.video import compose_frame_grid, normalize_frame_output
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_pygame = importlib.util.find_spec("pygame") is not None
 
 
 class FakeIFrame:
@@ -707,6 +711,115 @@ class TestMujocoWasm:
             [0.0, 1.0, 2.0],
             [3.0, 4.0, 5.0],
         ]
+
+
+class TestSotaCheckpointFactories:
+    def test_dqn_cartpole_checkpoint_render_factories(self, tmp_path, monkeypatch):
+        OmegaConf = pytest.importorskip("omegaconf").OmegaConf
+        dqn_dir = Path("sota-implementations/dqn").resolve()
+        utils_path = dqn_dir / "utils_cartpole.py"
+        make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
+        checkpoint_path = tmp_path / "dqn_cartpole.pt"
+        model = make_dqn_model("CartPole-v1", device="cpu")
+        torch.save(
+            {"model_state_dict": model.state_dict(), "env_name": "CartPole-v1"},
+            checkpoint_path,
+        )
+        config = RenderConfig(
+            ckpt=checkpoint_path,
+            policy=f"{utils_path}:make_render_policy",
+            env=f"{utils_path}:make_render_env",
+            max_steps=3,
+            num_trajs=1,
+            format="npz",
+            render_backend="null",
+            out=tmp_path / "dqn_cartpole.npz",
+            overwrite=True,
+        )
+        env = make_render_env(config)
+        try:
+            policy = load_render_policy(config, env)
+            result = collect_render_rollouts(env, policy, config)
+        finally:
+            env.close()
+        assert result.trajectories[0].shape[0] > 0
+
+        monkeypatch.syspath_prepend(str(dqn_dir))
+        save_checkpoint = import_from_string(
+            f"{dqn_dir / 'dqn_cartpole.py'}:_save_checkpoint"
+        )
+        saved_path = tmp_path / "saved_dqn.pt"
+        save_checkpoint(
+            saved_path,
+            cfg=OmegaConf.create({"env": {"env_name": "CartPole-v1"}}),
+            model=model,
+            collected_frames=12,
+            metrics={"eval/reward": 10.0},
+        )
+        saved = torch.load(saved_path, weights_only=False)
+        assert saved["frames"] == 12
+        assert saved["env_name"] == "CartPole-v1"
+        assert "model_state_dict" in saved
+
+        make_render_policy = import_from_string(f"{utils_path}:make_render_policy")
+        calls = []
+
+        def make_model(env_name, device):
+            calls.append((env_name, device))
+            return model
+
+        monkeypatch.setitem(
+            make_render_policy.__globals__, "make_dqn_model", make_model
+        )
+        policy = make_render_policy(
+            RenderPolicySpec(
+                checkpoint_path,
+                {"env_name": "CartPole-v1"},
+                None,
+                torch.device("cpu"),
+                None,
+                {"env_name": "Acrobot-v1"},
+                config,
+            )
+        )
+        assert policy is model
+        assert calls == [("Acrobot-v1", torch.device("cpu"))]
+
+    @pytest.mark.skipif(
+        not (_has_gymnasium and _has_pygame),
+        reason="Gymnasium and pygame are required for CartPole pixel rendering",
+    )
+    def test_dqn_cartpole_pixel_render_factory(self, tmp_path):
+        dqn_dir = Path("sota-implementations/dqn").resolve()
+        utils_path = dqn_dir / "utils_cartpole.py"
+        make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
+        checkpoint_path = tmp_path / "dqn_cartpole.pt"
+        model = make_dqn_model("CartPole-v1", device="cpu")
+        torch.save(
+            {"model_state_dict": model.state_dict(), "env_name": "CartPole-v1"},
+            checkpoint_path,
+        )
+        config = RenderConfig(
+            ckpt=checkpoint_path,
+            policy=f"{utils_path}:make_render_policy",
+            env=f"{utils_path}:make_render_env",
+            from_pixels=True,
+            max_steps=3,
+            num_trajs=1,
+            format="npz",
+            out=tmp_path / "dqn_cartpole_pixels.npz",
+            overwrite=True,
+        )
+        with set_gym_backend("gymnasium"):
+            env = make_render_env(config)
+            try:
+                policy = load_render_policy(config, env)
+                result = collect_render_rollouts(env, policy, config)
+            finally:
+                env.close()
+        frame = result.frames[0][0].frames["default"]
+        assert frame.ndim == 3
+        assert frame.shape[-1] == 3
 
 
 if __name__ == "__main__":
