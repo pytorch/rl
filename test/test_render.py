@@ -20,7 +20,7 @@ import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
-from torchrl.envs import EnvBase
+from torchrl.envs import EnvBase, set_gym_backend
 from torchrl.record.loggers.common import _has_torchcodec
 from torchrl.render import (
     call_with_supported_kwargs,
@@ -47,6 +47,7 @@ from torchrl.render.mujoco_wasm import extract_qpos_trajectory
 from torchrl.render.video import compose_frame_grid, normalize_frame_output
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_pygame = importlib.util.find_spec("pygame") is not None
 
 
@@ -785,8 +786,8 @@ class TestSotaCheckpointFactories:
         assert calls == [("Acrobot-v1", torch.device("cpu"))]
 
     @pytest.mark.skipif(
-        not _has_pygame,
-        reason="pygame is required for Gymnasium CartPole pixel rendering",
+        not (_has_gymnasium and _has_pygame),
+        reason="Gymnasium and pygame are required for CartPole pixel rendering",
     )
     def test_dqn_cartpole_pixel_render_factory(self, tmp_path):
         dqn_dir = Path("sota-implementations/dqn").resolve()
@@ -809,16 +810,16 @@ class TestSotaCheckpointFactories:
             out=tmp_path / "dqn_cartpole_pixels.npz",
             overwrite=True,
         )
-        env = make_render_env(config)
-        try:
-            policy = load_render_policy(config, env)
-            result = collect_render_rollouts(env, policy, config)
-        finally:
-            env.close()
+        with set_gym_backend("gymnasium"):
+            env = make_render_env(config)
+            try:
+                policy = load_render_policy(config, env)
+                result = collect_render_rollouts(env, policy, config)
+            finally:
+                env.close()
         frame = result.frames[0][0].frames["default"]
         assert frame.ndim == 3
         assert frame.shape[-1] == 3
-
 
     @pytest.mark.skipif(
         importlib.util.find_spec("mujoco") is None,
