@@ -63,6 +63,22 @@ trajectory fields, and :meth:`ReplayBuffer.query` returns the matching
     >>> good = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
     >>> good[0].observation, good[0].action
 
+Trajectory boundaries are recovered with the same machinery
+:class:`~torchrl.data.replay_buffers.SliceSampler` uses, so queries and
+samplers always agree on where trajectories start and stop, including for
+storages that have wrapped around and for multi-dimensional storages
+(``LazyTensorStorage(..., ndim=2)``). Predicates built from
+:data:`~torchrl.data.traj` report the entries they read through
+:meth:`TrajectoryPredicate.required_keys
+<torchrl.data.TrajectoryPredicate.required_keys>`, letting ``query()`` fetch
+only those entries (and run only the transforms that can affect them) while
+evaluating, instead of materializing the whole buffer content.
+
+:class:`~torchrl.data.Trajectory` is a tensorclass: slicing and indexing
+return :class:`~torchrl.data.Trajectory` instances, and query results of
+different lengths can be assembled into a single ragged batch with
+:func:`~tensordict.lazy_stack`.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
