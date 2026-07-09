@@ -10,6 +10,7 @@ import itertools
 import json
 import math
 import pathlib
+import sys
 import time
 import warnings
 import weakref
@@ -29,6 +30,7 @@ from torch import nn, optim
 
 from torchrl._utils import (
     _CKPT_BACKEND,
+    implement_for,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
     rl_warnings,
@@ -78,6 +80,24 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+# On Windows, a memory-mapped checkpoint keeps the file locked for as long as
+# the loaded tensors are alive, so the checkpoint could neither be deleted nor
+# safely re-saved. Only default to ``mmap=True`` on other platforms.
+_MMAP_CKPT_DEFAULT = sys.platform != "win32"
+
+
+@implement_for("torch", "2.4")
+def _torch_load_defaults() -> dict[str, Any]:
+    return {"weights_only": True, "mmap": _MMAP_CKPT_DEFAULT}
+
+
+@implement_for("torch", None, "2.4")
+def _torch_load_defaults() -> dict[str, Any]:  # noqa: F811
+    # The weights-only unpickler of torch < 2.4 does not allow
+    # ``torch.device``, which TensorDict state-dicts carry as their
+    # ``__device`` metadata entry.
+    return {"weights_only": False, "mmap": _MMAP_CKPT_DEFAULT}
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -602,22 +622,28 @@ class Trainer:
             When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
             default for safer deserialization. Pass ``weights_only=False``
             explicitly only if you have custom (non-stdlib) objects in your
-            state dict.
+            state dict. On torch < 2.4 the default is ``weights_only=False``
+            because the weights-only unpickler of those versions cannot
+            deserialize the ``torch.device`` instances contained in
+            TensorDict state-dicts.
 
         .. note::
             When ``CKPT_BACKEND=torch``, ``mmap=True`` is set by default so
             the checkpoint is memory-mapped rather than materialized in RAM
             at load time. Pass ``mmap=False`` if the checkpoint was saved
             with the legacy (pre-zipfile) ``torch.save`` format or if
-            ``file`` is a file-like object rather than a path.
+            ``file`` is a file-like object rather than a path. On Windows
+            the default is ``mmap=False``: a mapped checkpoint would keep
+            the file locked, preventing it from being deleted or re-saved
+            while the loaded state is alive.
 
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
-            kwargs.setdefault("weights_only", True)
-            kwargs.setdefault("mmap", True)
+            for key, value in _torch_load_defaults().items():
+                kwargs.setdefault(key, value)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
         elif _CKPT_BACKEND == "memmap":

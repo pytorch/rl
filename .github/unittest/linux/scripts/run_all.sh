@@ -371,13 +371,32 @@ run_non_distributed_tests() {
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/rb/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
 
-  # Tests that spawn their own worker processes or Ray clusters. They
-  # oversubscribe (and flake) next to a machine full of xdist workers, so
-  # they always run serially. Keep the two lists in sync; narrow them
-  # file-by-file when a file's tests are shown to be parallel-safe
+  # Tests that spawn their own worker processes, Ray clusters, or logger
+  # subprocesses. They oversubscribe (and flake) next to a machine full of
+  # xdist workers, so they always run serially. Narrow the list file-by-file
+  # when a file's tests are shown to be parallel-safe
   # (test/envs/test_model_based.py spawns no processes and runs in the bulk).
-  local mp_tests="test/envs/test_parallel.py test/envs/test_special.py test/envs/test_auto_reset.py test/envs/test_env_base.py test/envs/test_nested.py test/envs/test_step_mdp.py test/test_collectors.py test/services"
-  local mp_ignores="--ignore test/envs/test_parallel.py --ignore test/envs/test_special.py --ignore test/envs/test_auto_reset.py --ignore test/envs/test_env_base.py --ignore test/envs/test_nested.py --ignore test/envs/test_step_mdp.py --ignore test/test_collectors.py --ignore test/services"
+  # Known xdist casualties that must stay here: test/services and
+  # test/test_inference_server.py (Ray GetTimeoutError under load),
+  # test/test_loggers.py (live subprocess assertions).
+  local mp_test_paths=(
+    test/envs/test_parallel.py
+    test/envs/test_special.py
+    test/envs/test_auto_reset.py
+    test/envs/test_env_base.py
+    test/envs/test_nested.py
+    test/envs/test_step_mdp.py
+    test/test_collectors.py
+    test/services
+    test/test_inference_server.py
+    test/test_loggers.py
+  )
+  local mp_tests="${mp_test_paths[*]}"
+  local mp_ignores=""
+  local mp_path
+  for mp_path in "${mp_test_paths[@]}"; do
+    mp_ignores+="--ignore ${mp_path} "
+  done
 
   # JSON report output for flaky test tracking
   local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
