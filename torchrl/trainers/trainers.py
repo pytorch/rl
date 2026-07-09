@@ -550,7 +550,19 @@ class Trainer:
                 )
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
-            torch.save(self.state_dict(), self.save_trainer_file)
+            # Write to a temporary file and atomically swap it in: an
+            # interrupted save cannot destroy the previous checkpoint, and
+            # tensors still memory-mapped from a previous
+            # ``load_from_file(mmap=True)`` keep reading from the old inode
+            # instead of from a truncated file.
+            file = pathlib.Path(self.save_trainer_file)
+            tmp_file = file.with_name(file.name + ".tmp")
+            try:
+                torch.save(self.state_dict(), tmp_file)
+                tmp_file.replace(file)
+            except BaseException:
+                tmp_file.unlink(missing_ok=True)
+                raise
         elif _CKPT_BACKEND == "memmap":
             state = self.state_dict()
             path = pathlib.Path(self.save_trainer_file)
@@ -594,13 +606,10 @@ class Trainer:
 
         .. note::
             When ``CKPT_BACKEND=torch``, ``mmap=True`` is set by default so
-            tensors in the checkpoint are memory-mapped rather than
-            materialized in RAM at load time. Restoring then only requires
-            evictable page-cache memory instead of an anonymous allocation
-            the size of the checkpoint, which matters for trainers whose
-            state includes a large replay buffer. Pass ``mmap=False`` for
-            the previous behavior (required for checkpoints saved with the
-            legacy, pre-zipfile ``torch.save`` format).
+            the checkpoint is memory-mapped rather than materialized in RAM
+            at load time. Pass ``mmap=False`` if the checkpoint was saved
+            with the legacy (pre-zipfile) ``torch.save`` format or if
+            ``file`` is a file-like object rather than a path.
 
         """
         if _CKPT_BACKEND == "torchsnapshot":
