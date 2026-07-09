@@ -365,58 +365,140 @@ run_non_distributed_tests() {
   # Test sharding: Split tests into groups for parallel execution.
   # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
   # - Shard 1: test/transforms/ (transform tests)
-  # - Shard 2: test/envs/, test_collectors.py (multiprocessing-heavy)
-  # - Shard 3: Everything else (can use pytest-xdist for parallelism)
+  # - Shard 2: the process-spawning quarantine (see MP_TESTS)
+  # - Shard 3: Everything else
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/rb/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
-  local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
-  
+  local common_args="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
+
+  # Tests that spawn their own worker processes, Ray clusters, or logger
+  # subprocesses. They oversubscribe (and flake) next to a machine full of
+  # xdist workers, so they always run serially. Narrow the list file-by-file
+  # when a file's tests are shown to be parallel-safe
+  # (test/envs/test_model_based.py spawns no processes and runs in the bulk).
+  # Known xdist casualties that must stay here: test/services and
+  # test/test_inference_server.py (Ray GetTimeoutError under load),
+  # test/test_loggers.py (live subprocess assertions).
+  local mp_test_paths=(
+    test/envs/test_parallel.py
+    test/envs/test_special.py
+    test/envs/test_auto_reset.py
+    test/envs/test_env_base.py
+    test/envs/test_nested.py
+    test/envs/test_step_mdp.py
+    test/test_collectors.py
+    test/services
+    test/test_inference_server.py
+    test/test_loggers.py
+  )
+  local mp_tests="${mp_test_paths[*]}"
+  local mp_ignores=""
+  local mp_path
+  for mp_path in "${mp_test_paths[@]}"; do
+    mp_ignores+="--ignore ${mp_path} "
+  done
+
   # JSON report output for flaky test tracking
   local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
   local json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-shard-${shard}.json --json-report-indent=2"
-  
-  # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
-  # Set TORCHRL_XDIST=0 to disable parallel execution
+
+  # pytest-xdist parallelism (set TORCHRL_XDIST=0 to disable).
+  #
+  # - shard 3 has run under xdist for months; shard 1 (transforms) and the
+  #   "all" bulk are enabled on CPU runners only, since on GPU runners many
+  #   concurrent workers can oversubscribe device memory.
+  # - --dist worksteal (no xdist_group marks exist, so loadgroup bought
+  #   nothing) balances a long tail of millisecond tests against a few 60s+
+  #   tests.
+  # - OMP/MKL are pinned to one thread per worker for xdist runs: letting
+  #   every torch op fan out to all cores makes workers serialize on thread
+  #   contention instead of scaling.
+  # - The per-test timeout is raised to 300s for xdist runs: tests that take
+  #   ~60s alone can legitimately exceed 120s on a fully loaded machine.
+  local xdist_enabled=0
+  if [ "${TORCHRL_XDIST:-1}" = "1" ]; then
+    case "${shard}" in
+      3) xdist_enabled=1 ;;
+      1|all|"") if [ "${CU_VERSION:-}" == cpu ]; then xdist_enabled=1; fi ;;
+    esac
+  fi
+  local xdist_workers="${TORCHRL_XDIST_WORKERS:-}"
+  if [ -z "${xdist_workers}" ]; then
+    if [ "${CU_VERSION:-}" == cpu ]; then
+      # Explicit, measured count: -n auto resolves to 24 workers on the
+      # linux.12xlarge CPU runners (matching physical cores), which is the
+      # configuration the timing numbers were collected with.
+      xdist_workers=24
+    else
+      xdist_workers=auto
+    fi
+  fi
   local xdist_args=""
-  if [ "${TORCHRL_XDIST:-1}" = "1" ] && [ "${shard}" = "3" ]; then
-    xdist_args="-n auto --dist loadgroup"
-    echo "Using pytest-xdist for parallel execution"
+  local serial_timeout="--timeout=120"
+  local timeout_args="${serial_timeout}"
+  if [ "${xdist_enabled}" = "1" ]; then
+    xdist_args="-n ${xdist_workers} --dist worksteal"
+    timeout_args="--timeout=300"
+    export OMP_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    echo "Using pytest-xdist for parallel execution (${xdist_args})"
   fi
 
   case "${shard}" in
     1)
       echo "Running shard 1: test/transforms/ only"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/transforms \
+        ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${timeout_args}
       ;;
     2)
-      echo "Running shard 2: test/envs/ and test_collectors.py"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/envs test/test_collectors.py \
+      echo "Running shard 2: process-spawning tests (${mp_tests})"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${serial_timeout}
       ;;
     3)
       echo "Running shard 3: All other tests"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
         --ignore test/transforms \
-        --ignore test/envs \
-        --ignore test/test_collectors.py \
+        ${mp_ignores} \
         ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${timeout_args}
       ;;
     all|"")
+      if [ "${xdist_enabled}" = "1" ]; then
+        # Split the unsharded run in two: the parallelism-friendly bulk under
+        # xdist, then the process-spawning quarantine serially. Same union of
+        # tests as the single invocation below.
+        local mp_status=0
+        echo "Running all tests, parallel bulk (everything but the process-spawning quarantine)"
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+          ${common_ignores} \
+          ${mp_ignores} \
+          ${xdist_args} \
+          "${GPU_MARKER_FILTER[@]}" \
+          ${json_report_args} \
+          ${common_args} ${timeout_args} || mp_status=$?
+        echo "Running all tests, serial remainder (${mp_tests})"
+        env -u OMP_NUM_THREADS -u MKL_NUM_THREADS \
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
+          "${GPU_MARKER_FILTER[@]}" \
+          --json-report --json-report-file="${json_report_dir}/test-results-shard-${shard}-mp.json" --json-report-indent=2 \
+          ${common_args} ${serial_timeout} || mp_status=$?
+        return ${mp_status}
+      fi
       echo "Running all tests (no sharding)"
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
-        ${common_args}
+        ${common_args} ${serial_timeout}
       ;;
     *)
       echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
