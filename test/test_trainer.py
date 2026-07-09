@@ -21,6 +21,7 @@ from torch import nn
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
+from torchrl.checkpoint import Checkpoint
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -31,11 +32,14 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
@@ -113,7 +117,7 @@ class MockingLossModule(nn.Module):
 _mocking_optim = MockingOptim()
 
 
-def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
+def mocking_trainer(file=None, optimizer=_mocking_optim, checkpoint=None) -> Trainer:
     trainer = Trainer(
         collector=MockingCollector(),
         total_frames=None,
@@ -122,9 +126,34 @@ def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
         loss_module=MockingLossModule(),
         optimizer=optimizer,
         save_trainer_file=file,
+        checkpoint=checkpoint,
     )
     trainer._pbar_str = OrderedDict()
     return trainer
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_unified_trainer_checkpoint(tmp_path, format):
+    path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(format=format),
+    )
+    assert {"collector", "loss_module", "trainer_state"}.issubset(
+        trainer.checkpoint.components
+    )
+    trainer.collected_frames = 41
+    trainer._optim_count = 7
+    trainer.save_trainer(force_save=True)
+    manifest = Checkpoint.manifest(path)
+    assert {"collector", "loss_module", "trainer_state"}.issubset(
+        manifest["components"]
+    )
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored.load_from_file(path)
+    assert restored.collected_frames == 41
+    assert restored._optim_count == 7
 
 
 class TestSelectKeys:
@@ -1388,6 +1417,26 @@ class TestPostOptimCompleteLog:
             "auto_log_optim_steps" in sig.parameters
         ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
         assert sig.parameters["auto_log_optim_steps"].default is True
+
+    @pytest.mark.parametrize(
+        "trainer_cls",
+        [
+            A2CTrainer,
+            CQLTrainer,
+            DDPGTrainer,
+            DQNTrainer,
+            IQLTrainer,
+            OfflineToOnlineTrainer,
+            PPOTrainer,
+            ReinforceTrainer,
+            SACTrainer,
+            TD3Trainer,
+        ],
+    )
+    def test_subclass_exposes_checkpoint(self, trainer_cls):
+        """Every algorithm trainer must expose the unified checkpoint argument."""
+        parameter = inspect.signature(trainer_cls.__init__).parameters["checkpoint"]
+        assert parameter.default is None
 
 
 class TestDefaultOptimizationStepper:

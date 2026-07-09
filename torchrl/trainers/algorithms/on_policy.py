@@ -16,6 +16,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -124,6 +125,7 @@ class OnPolicyTrainer(Trainer):
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
         num_epochs: int | None = None,
         replay_buffer: ReplayBuffer | None = None,
         batch_size: int | None = None,
@@ -170,6 +172,7 @@ class OnPolicyTrainer(Trainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
             num_epochs=num_epochs,
             async_collection=async_collection,
             log_timings=log_timings,
@@ -310,6 +313,9 @@ class OnPolicyTrainer(Trainer):
         # Set up comprehensive logging for on-policy training
         if self.enable_logging:
             self._setup_logging()
+
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
 
     def _setup_logging(self):
         """Set up logging hooks for on-policy training metrics.

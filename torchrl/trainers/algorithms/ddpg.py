@@ -16,6 +16,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -100,6 +101,7 @@ class DDPGTrainer(Trainer):
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
         replay_buffer: ReplayBuffer | None = None,
         enable_logging: bool = True,
         log_rewards: bool = True,
@@ -137,6 +139,7 @@ class DDPGTrainer(Trainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
             async_collection=async_collection,
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
@@ -158,6 +161,7 @@ class DDPGTrainer(Trainer):
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
 
+        self.target_net_updater = target_net_updater
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         policy_weights_getter = partial(
@@ -188,6 +192,9 @@ class DDPGTrainer(Trainer):
 
         if self.enable_logging:
             self._setup_ddpg_logging()
+
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
 
     def _setup_ddpg_logging(self):
         """Set up logging hooks for DDPG-specific metrics."""

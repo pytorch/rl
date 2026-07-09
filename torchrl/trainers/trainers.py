@@ -14,7 +14,7 @@ import time
 import warnings
 import weakref
 from collections import defaultdict, OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal
@@ -26,7 +26,6 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-
 from torchrl._utils import (
     _CKPT_BACKEND,
     KeyDependentDefaultDict,
@@ -35,6 +34,8 @@ from torchrl._utils import (
     timeit,
     VERBOSE,
 )
+
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -78,6 +79,22 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+
+class _TrainerCheckpointState:
+    """State-dict view over Trainer progress counters."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        return dict(self.trainer._get_state())
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.trainer.collected_frames = state_dict["collected_frames"]
+        self.trainer._last_log = state_dict["_last_log"]
+        self.trainer._last_save = state_dict["_last_save"]
+        self.trainer._optim_count = state_dict["_optim_count"]
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -292,6 +309,10 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+        checkpoint (Checkpoint, optional): unified checkpoint object used for
+            scheduled saves and restores. The trainer registers any missing
+            standard components on this object. When omitted, the legacy
+            ``CKPT_BACKEND`` path is retained during the compatibility window.
         async_collection (bool, optional): Whether to collect data asynchronously.
             This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
@@ -339,6 +360,7 @@ class Trainer:
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
@@ -374,6 +396,8 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.checkpoint = checkpoint
+        self._checkpoint_state = _TrainerCheckpointState(self)
         self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
@@ -450,12 +474,63 @@ class Trainer:
             log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
             log_timing_hook.register(self)
 
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
             raise RuntimeError(
                 f"{module_name} is already registered, choose a different name."
             )
         self._modules[module_name] = module
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
+    @staticmethod
+    def _is_checkpointable(component: Any) -> bool:
+        return (
+            callable(getattr(component, "dump", None))
+            and callable(getattr(component, "load", None))
+        ) or (
+            callable(getattr(component, "state_dict", None))
+            and callable(getattr(component, "load_state_dict", None))
+        )
+
+    def _checkpoint_policy(self) -> Any | None:
+        for name in ("actor_network", "value_network", "local_value_network"):
+            policy = getattr(self.loss_module, name, None)
+            if policy is not None:
+                return policy
+        return None
+
+    def _sync_checkpoint_components(self) -> Checkpoint:
+        checkpoint = self.checkpoint
+        if checkpoint is None:
+            checkpoint = self.checkpoint = Checkpoint()
+
+        def register(name: str, component: Any) -> None:
+            if (
+                name not in checkpoint
+                and component is not None
+                and self._is_checkpointable(component)
+            ):
+                checkpoint.register(name, component)
+
+        register("policy", self._checkpoint_policy())
+        register("loss_module", self.loss_module)
+        register("optimizer", self.optimizer)
+        register("collector", self.collector)
+        register("replay_buffer", getattr(self, "replay_buffer", None))
+        register("logger", self.logger)
+        register("exploration", getattr(self, "greedy_module", None))
+        register("exploration", getattr(self, "exploration_module", None))
+        register("target_updater", getattr(self, "target_net_updater", None))
+        register("trainer_state", self._checkpoint_state)
+        for name, module in self._modules.items():
+            if name in ("optimizer", "replay_buffer"):
+                continue
+            register(f"trainer_module.{name}", module)
+        return checkpoint
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
@@ -542,6 +617,17 @@ class Trainer:
         self._stop_reason = reason
 
     def _save_trainer(self) -> None:
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components().save(self.save_trainer_file)
+            return
+        warnings.warn(
+            "The legacy CKPT_BACKEND trainer checkpoint format is deprecated. "
+            "The default will change to torchrl.checkpoint in v0.15 and the "
+            "legacy backend path will be removed in v0.16. Pass "
+            "checkpoint=Checkpoint(...) to opt in now.",
+            FutureWarning,
+            stacklevel=2,
+        )
         if _CKPT_BACKEND == "torchsnapshot":
             if not _has_ts:
                 raise ImportError(
@@ -612,7 +698,11 @@ class Trainer:
             ``file`` is a file-like object rather than a path.
 
         """
-        if _CKPT_BACKEND == "torchsnapshot":
+        if Checkpoint.is_checkpoint(file):
+            self._sync_checkpoint_components().load(
+                file, map_location=kwargs.pop("map_location", None)
+            )
+        elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":

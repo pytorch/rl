@@ -19,6 +19,7 @@ import torchrl.render.artifacts as artifacts_module
 import torchrl.render.mujoco_wasm as mujoco_wasm_module
 from tensordict import TensorDict
 
+from torchrl.checkpoint import Checkpoint
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase, ObservationNorm, set_gym_backend, StepCounter, VecNorm
 from torchrl.record.loggers.common import _has_torchcodec
@@ -52,6 +53,15 @@ _has_pil = importlib.util.find_spec("PIL") is not None
 _has_gym = importlib.util.find_spec("gym") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_pygame = importlib.util.find_spec("pygame") is not None
+
+
+class UnrequestedLargeComponent:
+    def dump(self, path):
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "payload.bin").write_bytes(b"large component placeholder")
+
+    def load(self, path):
+        raise AssertionError(f"Unrequested component was read from {path}")
 
 
 class FakeIFrame:
@@ -341,6 +351,18 @@ class TestRenderCheckpoint:
         assert payload["frames"] == 7
         assert payload["metrics"] == {"eval/reward": 1.0}
         assert infer_state_dict(payload)["weight"].shape == (2, 2)
+
+    def test_unified_policy_load_does_not_read_large_components(self, tmp_path):
+        path = tmp_path / "policy.torchrl"
+        Checkpoint(
+            format="archive",
+            policy=torch.nn.Linear(2, 2),
+            replay_buffer=UnrequestedLargeComponent(),
+            environment_metadata={"env_name": "CartPole-v1"},
+        ).save(path)
+        payload = load_checkpoint(path)
+        assert payload["env_name"] == "CartPole-v1"
+        assert "model_state_dict" in payload
 
 
 class TestRenderPolicy:
@@ -966,7 +988,7 @@ class TestSotaCheckpointFactories:
             collected_frames=12,
             metrics={"eval/reward": 10.0},
         )
-        saved = torch.load(saved_path, weights_only=False)
+        saved = load_checkpoint(saved_path)
         assert saved["frames"] == 12
         assert saved["env_name"] == "CartPole-v1"
         assert "model_state_dict" in saved
@@ -1107,7 +1129,7 @@ class TestSotaCheckpointFactories:
             collected_frames=24,
             metrics={"eval/reward": 20.0},
         )
-        saved = torch.load(saved_path, weights_only=False)
+        saved = load_checkpoint(saved_path)
         assert saved["frames"] == 24
         assert saved["env_backend"] == "gym"
         assert saved["normalize_observation"] is False

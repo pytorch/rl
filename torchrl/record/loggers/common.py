@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import abc
 import importlib.util
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from typing import Any, TYPE_CHECKING
 
@@ -306,6 +306,39 @@ class Logger(metaclass=_RayServiceMetaClass):
     def close(self, timeout: float | None = None) -> None:
         """Alias for :meth:`shutdown`."""
         self.shutdown(timeout=timeout)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return local logger identifiers and counters for checkpointing."""
+        self.flush()
+        state: dict[str, Any] = {
+            "exp_name": self.exp_name,
+            "log_dir": self.log_dir,
+        }
+        for name in ("id", "video_log_counter"):
+            if hasattr(self, name):
+                state[name] = getattr(self, name)
+        experiment_state = {}
+        for name in ("scalars", "videos_counter", "text_counter"):
+            if hasattr(self.experiment, name):
+                experiment_state[name] = dict(getattr(self.experiment, name))
+        if experiment_state:
+            state["experiment"] = experiment_state
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore local logger counters without recreating external services."""
+        for name in ("id", "video_log_counter"):
+            if name in state_dict and hasattr(self, name):
+                setattr(self, name, state_dict[name])
+        for name, value in state_dict.get("experiment", {}).items():
+            target = getattr(self.experiment, name, None)
+            if (
+                target is not None
+                and hasattr(target, "clear")
+                and hasattr(target, "update")
+            ):
+                target.clear()
+                target.update(value)
 
     @abc.abstractmethod
     def _create_experiment(self) -> Experiment:  # noqa: F821

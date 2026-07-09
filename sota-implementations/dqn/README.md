@@ -31,10 +31,12 @@ python dqn_atari.py
 
 ## Rendering a CartPole checkpoint with `rlrender`
 
-The CartPole DQN script writes a local checkpoint that is directly
-loadable by `rlrender`. The checkpoint stores the policy state dict, the Gym
-environment name, the resolved Hydra config, the frame count, and the metrics
-recorded at checkpoint time.
+The CartPole DQN script writes a unified TorchRL checkpoint that is directly
+loadable by `rlrender`. It stores the policy, loss and target-update state,
+optimizer, replay buffer, collector and exploration progress, RNG state,
+resolved Hydra config, frame count, metrics, and environment metadata. Set
+`checkpoint.format=directory` for an unpacked manifest or
+`checkpoint.format=archive` for a single file.
 
 ### Smoke test
 
@@ -51,7 +53,7 @@ uv run --frozen python sota-implementations/dqn/dqn_cartpole.py \
   buffer.batch_size=32 \
   logger.test_interval=200 \
   logger.num_test_episodes=1 \
-  checkpoint.path=/tmp/torchrl_dqn_cartpole_smoke.pt
+  checkpoint.path=/tmp/torchrl_dqn_cartpole_smoke.torchrl
 ```
 
 ### Training run with W&B
@@ -72,12 +74,16 @@ uv run --frozen python sota-implementations/dqn/dqn_cartpole.py \
   buffer.batch_size=128 \
   logger.test_interval=25000 \
   logger.num_test_episodes=5 \
-  checkpoint.path=/tmp/torchrl_dqn_cartpole.pt \
+  checkpoint.path=/tmp/torchrl_dqn_cartpole.torchrl \
   checkpoint.interval=50000
 ```
 
 This default-scale command is intended to produce a visible training curve and
 a solved CartPole checkpoint.
+
+Resume the complete training state by reusing the same configuration and adding
+`checkpoint.resume=true`. Policy-only consumers such as `rlrender` read only the
+policy and environment metadata entries and do not materialize the replay buffer.
 
 The Gymnasium CartPole RGB renderer uses the optional `pygame` dependency,
 which is included in TorchRL's `rendering` extra.
@@ -86,7 +92,7 @@ Render an MP4 from the checkpoint:
 
 ```bash
 uv run --frozen --extra rendering python -m torchrl.render \
-  --ckpt /tmp/torchrl_dqn_cartpole.pt \
+  --ckpt /tmp/torchrl_dqn_cartpole.torchrl \
   --policy sota-implementations/dqn/utils_cartpole.py:make_render_policy \
   --env sota-implementations/dqn/utils_cartpole.py:make_render_env \
   --from-pixels \
@@ -101,7 +107,7 @@ Render an inspection notebook from the same checkpoint:
 
 ```bash
 uv run --frozen --extra rendering python -m torchrl.render \
-  --ckpt /tmp/torchrl_dqn_cartpole.pt \
+  --ckpt /tmp/torchrl_dqn_cartpole.torchrl \
   --policy sota-implementations/dqn/utils_cartpole.py:make_render_policy \
   --env sota-implementations/dqn/utils_cartpole.py:make_render_env \
   --from-pixels \

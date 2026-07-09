@@ -62,6 +62,7 @@ from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
+    from torchrl.trainers.algorithms import configs as algorithm_configs
     from torchrl.trainers.algorithms.configs.modules import (
         ActivationConfig,
         LayerConfig,
@@ -1592,6 +1593,27 @@ class TestLoggerConfigs:
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestTrainerConfigs:
+    @pytest.mark.parametrize(
+        "config_name",
+        [
+            "A2CTrainerConfig",
+            "CQLTrainerConfig",
+            "DDPGTrainerConfig",
+            "DQNTrainerConfig",
+            "IQLTrainerConfig",
+            "OfflineToOnlineTrainerConfig",
+            "PPOTrainerConfig",
+            "ReinforceTrainerConfig",
+            "SACTrainerConfig",
+            "TD3TrainerConfig",
+        ],
+    )
+    def test_checkpoint_config_parity(self, config_name):
+        field = getattr(algorithm_configs, config_name).__dataclass_fields__[
+            "checkpoint"
+        ]
+        assert field.default is None
+
     def test_nested_key_normalization_for_hydra_lists(self):
         from omegaconf import ListConfig
         from torchrl.trainers.algorithms.configs.common import (

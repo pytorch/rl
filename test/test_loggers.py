@@ -195,6 +195,15 @@ class TestTensorboard:
 
 
 class TestCSVLogger:
+    def test_checkpoint_state(self, tmp_path):
+        logger = CSVLogger(log_dir=tmp_path, exp_name="source")
+        restored = CSVLogger(log_dir=tmp_path, exp_name="restored")
+        logger.log_scalar("reward", 2.0)
+        logger.experiment.videos_counter["evaluation"] = 3
+        restored.load_state_dict(logger.state_dict())
+        assert restored.experiment.scalars["reward"] == [(0, 2.0)]
+        assert restored.experiment.videos_counter["evaluation"] == 3
+
     def test_direct_service_client_is_identity(self, tmpdir):
         logger = CSVLogger(log_dir=tmpdir, exp_name="direct")
         assert logger.client() is logger

@@ -32,6 +32,9 @@ logger:
 checkpoint:
   path: null
   interval: 0
+  format: archive
+  strict: error
+  resume: false
 
 # Optim
 optim:

@@ -13,6 +13,7 @@ from tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.offline_to_online import OfflineToOnlineReplayBuffer
 from torchrl.objectives.common import LossModule
@@ -199,6 +200,7 @@ class OfflineToOnlineTrainer(SACTrainer):
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -242,6 +244,7 @@ class OfflineToOnlineTrainer(SACTrainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
             replay_buffer=None,
             enable_logging=enable_logging,
             log_rewards=log_rewards,
@@ -271,3 +274,6 @@ class OfflineToOnlineTrainer(SACTrainer):
             OfflineToOnlineAnnealHook(self, replay_buffer, self.anneal_frames).register(
                 self
             )
+
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()

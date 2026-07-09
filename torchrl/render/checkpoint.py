@@ -11,6 +11,8 @@ from typing import Any
 
 import torch
 from torch import Tensor
+from torchrl.checkpoint import Checkpoint, CheckpointFormat
+from torchrl.checkpoint._checkpoint import checkpoint_manifest_hash
 
 __all__ = [
     "checkpoint_hash",
@@ -22,6 +24,19 @@ __all__ = [
 _STATE_DICT_KEYS = ("model_state_dict", "policy", "state_dict")
 
 
+class _StateDictComponent:
+    def __init__(self, state_dict: Mapping[str, Any] | None = None) -> None:
+        self.value = state_dict
+
+    def state_dict(self) -> Mapping[str, Any]:
+        if self.value is None:
+            raise RuntimeError("No state dict has been assigned.")
+        return self.value
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.value = state_dict
+
+
 def save_render_checkpoint(
     path: str | Path | None,
     model: Any,
@@ -31,6 +46,7 @@ def save_render_checkpoint(
     metrics: Mapping[str, Any] | None = None,
     config: Mapping[str, Any] | None = None,
     extra: Mapping[str, Any] | None = None,
+    format: CheckpointFormat = "archive",
 ) -> Path | None:
     """Writes a checkpoint in the layout expected by rlrender factories.
 
@@ -52,6 +68,8 @@ def save_render_checkpoint(
         metrics: Scalar metrics recorded at checkpoint time.
         config: JSON-serializable training configuration.
         extra: Additional payload entries merged last.
+        format: Unified checkpoint container format. Defaults to ``"archive"``
+            to preserve the existing single-path rlrender workflow.
 
     Returns:
         The written checkpoint path, or ``None`` when checkpointing is disabled.
@@ -71,22 +89,20 @@ def save_render_checkpoint(
     """
     if path in (None, ""):
         return None
-    state_dict = model if isinstance(model, Mapping) else model.state_dict()
-    payload: dict[str, Any] = {"model_state_dict": state_dict}
-    if env_metadata:
-        payload.update(dict(env_metadata))
+    policy = _StateDictComponent(model) if isinstance(model, Mapping) else model
+    components: dict[str, Any] = {"policy": policy}
+    if env_metadata is not None:
+        components["environment_metadata"] = dict(env_metadata)
     if frames is not None:
-        payload["frames"] = int(frames)
+        components["trainer_state"] = {"frames": int(frames)}
     if metrics is not None:
-        payload["metrics"] = dict(metrics)
+        components["metrics"] = dict(metrics)
     if config is not None:
-        payload["config"] = dict(config)
-    if extra:
-        payload.update(dict(extra))
+        components["config"] = dict(config)
+    if extra is not None:
+        components["extra"] = dict(extra)
     path = Path(path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(payload, path)
-    return path
+    return Checkpoint(format=format, **components).save(path)
 
 
 def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") -> Any:
@@ -107,6 +123,8 @@ def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") 
     if not path.exists():
         raise FileNotFoundError(f"Checkpoint path does not exist: {path!s}.")
     try:
+        if Checkpoint.is_checkpoint(path):
+            return _load_unified_checkpoint(path, map_location)
         return torch.load(path, map_location=map_location, weights_only=False)
     except Exception as err:
         raise RuntimeError(
@@ -116,13 +134,60 @@ def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") 
 
 
 def checkpoint_hash(path: str | Path) -> str:
-    """Computes the SHA256 digest of a local checkpoint file."""
+    """Compute a checkpoint digest without reading unrequested payloads.
+
+    Unified checkpoints hash their canonical manifest. Legacy checkpoint files
+    retain the historical whole-file SHA256 behavior.
+    """
     path = Path(path).expanduser()
+    if Checkpoint.is_checkpoint(path):
+        return checkpoint_manifest_hash(path)
     digest = hashlib.sha256()
     with path.open("rb") as file:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _load_unified_checkpoint(
+    path: Path, map_location: str | torch.device
+) -> dict[str, Any]:
+    manifest = Checkpoint.manifest(path)
+    policy = _StateDictComponent()
+    environment_metadata: dict[str, Any] = {}
+    trainer_state: dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
+    config: dict[str, Any] = {}
+    extra: dict[str, Any] = {}
+    checkpoint = Checkpoint(
+        strict="ignore",
+        policy=policy,
+        environment_metadata=environment_metadata,
+        trainer_state=trainer_state,
+        metrics=metrics,
+        config=config,
+        extra=extra,
+    )
+    requested = set(checkpoint.components).intersection(manifest["components"])
+    checkpoint.load(
+        path,
+        components=requested,
+        map_location=map_location,
+        strict="ignore",
+    )
+    payload: dict[str, Any] = {}
+    if policy.value is not None:
+        payload["model_state_dict"] = policy.value
+    payload.update(environment_metadata)
+    frames = trainer_state.get("frames", trainer_state.get("collected_frames"))
+    if frames is not None:
+        payload["frames"] = frames
+    if metrics:
+        payload["metrics"] = metrics
+    if config:
+        payload["config"] = config
+    payload.update(extra)
+    return payload
 
 
 def infer_state_dict(payload: Any, key: str | None = None) -> Mapping[str, Tensor]:
