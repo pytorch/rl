@@ -16,6 +16,7 @@ from ._checkpoint import (
     GlobalRNGState,
     JSONCheckpointAdapter,
     StateDictCheckpointAdapter,
+    StateDictFormat,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "GlobalRNGState",
     "JSONCheckpointAdapter",
     "StateDictCheckpointAdapter",
+    "StateDictFormat",
 ]

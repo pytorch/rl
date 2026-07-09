@@ -21,6 +21,7 @@ from torchrl.checkpoint import (
     CheckpointError,
     CheckpointOptions,
     GlobalRNGState,
+    StateDictCheckpointAdapter,
 )
 from torchrl.data import CompressedListStorage, ReplayBuffer
 
@@ -130,7 +131,11 @@ def test_state_dict_json_and_manifest_roundtrip(tmp_path, format):
     assert result.manifest["container"] == format
     assert result.manifest["versions"]["tensordict"] == tensordict.__version__
     assert result.manifest["metadata"] == {"run": "test"}
-    assert result.manifest["components"]["policy"]["files"] == ["state.pt"]
+    policy_files = result.manifest["components"]["policy"]["files"]
+    assert "state.json" in policy_files
+    assert "state/meta.json" in policy_files
+    assert any(name.endswith(".memmap") for name in policy_files)
+    assert not any(name.endswith((".pt", ".pickle")) for name in policy_files)
     torch.testing.assert_close(source.weight, target.weight)
 
 
@@ -174,9 +179,28 @@ def test_deflate_archive(tmp_path):
         )
 
 
-def test_state_dict_tensor_load_options(tmp_path, monkeypatch):
+def test_default_state_dict_does_not_use_torch_load(tmp_path, monkeypatch):
     path = tmp_path / "checkpoint"
-    Checkpoint(policy=torch.nn.Linear(2, 2)).save(path)
+    source = torch.nn.Linear(2, 2)
+    target = torch.nn.Linear(2, 2)
+    Checkpoint(policy=source).save(path)
+
+    def load(*args, **kwargs):
+        raise AssertionError("torch.load must not be used for the default payload")
+
+    monkeypatch.setattr(torch, "load", load)
+    Checkpoint(policy=target).load(path, map_location="cpu")
+    torch.testing.assert_close(source.weight, target.weight)
+
+
+def test_torch_state_dict_tensor_load_options(tmp_path, monkeypatch):
+    path = tmp_path / "checkpoint"
+    source = torch.nn.Linear(2, 2)
+    Checkpoint().register(
+        "policy",
+        source,
+        adapter=StateDictCheckpointAdapter(payload_format="torch"),
+    ).save(path)
     torch_load = torch.load
     calls = []
 
@@ -191,6 +215,54 @@ def test_state_dict_tensor_load_options(tmp_path, monkeypatch):
         tensor_load_kwargs={"weights_only": True, "mmap": False},
     )
     assert calls == [{"weights_only": True, "mmap": False, "map_location": "cpu"}]
+
+
+@pytest.mark.parametrize(
+    ("payload_format", "payload_file"),
+    [
+        ("directory", "state/meta.json"),
+        ("archive", "state.tdz"),
+        ("consolidated", "state.tdc"),
+        ("torch", "state.pt"),
+    ],
+)
+def test_state_dict_payload_formats(tmp_path, payload_format, payload_file):
+    path = tmp_path / "checkpoint"
+    source = torch.nn.Linear(2, 2)
+    target = torch.nn.Linear(2, 2)
+    Checkpoint().register(
+        "policy",
+        source,
+        adapter=StateDictCheckpointAdapter(payload_format=payload_format),
+    ).save(path)
+
+    files = Checkpoint.manifest(path)["components"]["policy"]["files"]
+    assert payload_file in files
+    Checkpoint(policy=target).load(path, map_location="cpu")
+    torch.testing.assert_close(source.weight, target.weight)
+
+
+def test_tensordict_optimizer_state_roundtrip(tmp_path):
+    path = tmp_path / "checkpoint"
+    source = torch.nn.Linear(3, 2)
+    source_optimizer = torch.optim.Adam(source.parameters(), lr=0.03)
+    source(torch.randn(4, 3)).sum().backward()
+    source_optimizer.step()
+    target = torch.nn.Linear(3, 2)
+    target_optimizer = torch.optim.Adam(target.parameters(), lr=0.1)
+    Checkpoint(policy=source, optimizer=source_optimizer).save(path)
+
+    Checkpoint(policy=target, optimizer=target_optimizer).load(path, map_location="cpu")
+
+    assert target_optimizer.param_groups[0]["lr"] == 0.03
+    source_state = source_optimizer.state_dict()["state"]
+    target_state = target_optimizer.state_dict()["state"]
+    assert source_state.keys() == target_state.keys()
+    for parameter_id in source_state:
+        for key in ("step", "exp_avg", "exp_avg_sq"):
+            torch.testing.assert_close(
+                source_state[parameter_id][key], target_state[parameter_id][key]
+            )
 
 
 def test_archive_accepts_windows_manifest_separators(tmp_path):

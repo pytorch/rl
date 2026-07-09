@@ -309,9 +309,7 @@ class TestLoadFromFile:
         restored_default.load_from_file(file)
         assert restored_default.collected_frames == 11
         assert restored_default.checkpoint is None
-        assert captured
-        expected_defaults = {**_torch_load_defaults(), "map_location": "cpu"}
-        assert all(call == expected_defaults for call in captured)
+        assert not captured
 
         captured.clear()
         restored = mocking_trainer(logger=MockingLogger())
@@ -324,16 +322,7 @@ class TestLoadFromFile:
         )
         assert restored.collected_frames == 11
         assert restored.checkpoint is None
-        assert captured
-        assert all(
-            call
-            == {
-                "weights_only": True,
-                "mmap": False,
-                "map_location": "cpu",
-            }
-            for call in captured
-        )
+        assert not captured
 
     @pytest.mark.parametrize("format", ["directory", "archive"])
     def test_unified_hook_replay_buffer_roundtrip(self, tmp_path, format):

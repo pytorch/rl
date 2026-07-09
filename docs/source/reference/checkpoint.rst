@@ -38,13 +38,39 @@ Basic usage
 
 Replay buffers use their ``dump`` and ``load`` implementations, including the
 configured storage checkpointer and compression. Other TorchRL and PyTorch
-objects normally use ``state_dict`` and ``load_state_dict``. JSON-compatible
-configuration, metrics, and metadata are stored without pickle.
+objects normally use ``state_dict`` and ``load_state_dict``. Their tensor state
+is stored with :func:`tensordict.save` by default, while a JSON schema preserves
+the state-dict structure without pickle. JSON-compatible configuration,
+metrics, and metadata are also stored without pickle.
 
 Set ``save_components={"policy", "optimizer", "trainer_state"}`` on a
 :class:`Checkpoint` to keep large components such as replay buffers out of
 scheduled Trainer saves. An explicit ``components=`` argument to
 :meth:`Checkpoint.save` overrides this default selection.
+
+State-dict payload formats
+--------------------------
+
+The inferred :class:`StateDictCheckpointAdapter` writes a TensorDict directory.
+The same adapter can write a TensorDict ZIP archive or consolidated file, and
+loads auto-detect all of these payloads. This component payload choice is
+independent of the outer :class:`Checkpoint` directory or archive container.
+
+.. code-block:: python
+
+    from torchrl.checkpoint import Checkpoint, StateDictCheckpointAdapter
+
+    checkpoint = Checkpoint().register(
+        "policy",
+        policy,
+        adapter=StateDictCheckpointAdapter(payload_format="archive"),
+    )
+
+Use ``payload_format="consolidated"`` for consolidated TensorDict storage.
+Pickle-based :func:`torch.save` remains available explicitly with
+``payload_format="torch"``. TensorDict payloads reject unsupported Python
+objects with an error that points to this opt-in rather than silently falling
+back to pickle.
 
 Custom components
 -----------------
@@ -97,3 +123,4 @@ API
     GlobalRNGState
     JSONCheckpointAdapter
     StateDictCheckpointAdapter
+    StateDictFormat

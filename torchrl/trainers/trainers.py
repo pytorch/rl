@@ -737,28 +737,28 @@ class Trainer:
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
 
-        Keyword arguments are passed to the :func:`~torch.load` function.
-        Unified checkpoints additionally accept ``strict`` to control missing
-        or incompatible components. Arguments are ignored when
-        ``CKPT_BACKEND=memmap``.
+        Keyword arguments are passed to the :func:`~torch.load` function for
+        legacy torch checkpoints and unified components explicitly saved with
+        the torch state-dict payload format. Unified checkpoints additionally
+        accept ``strict`` to control missing or incompatible components.
+        Arguments are ignored when ``CKPT_BACKEND=memmap``.
 
         .. note::
-            For unified and ``CKPT_BACKEND=torch`` checkpoints,
-            ``weights_only=True`` is the default for safer deserialization.
-            Pass ``weights_only=False``
-            explicitly only if you have custom (non-stdlib) objects in your
-            state dict. On torch < 2.4 the default is ``weights_only=False``
-            because the weights-only unpickler of those versions cannot
-            deserialize the ``torch.device`` instances contained in
-            TensorDict state-dicts.
+            Unified state-dict components use TensorDict storage by default and
+            do not invoke the pickle loader. For explicit torch payloads and
+            ``CKPT_BACKEND=torch`` checkpoints, ``weights_only=True`` is the
+            default for safer deserialization. Pass ``weights_only=False``
+            explicitly only if the state dict contains custom objects. On
+            torch < 2.4 the default is ``weights_only=False`` because the
+            weights-only unpickler of those versions cannot deserialize the
+            ``torch.device`` instances contained in TensorDict state-dicts.
 
         .. note::
-            For unified and ``CKPT_BACKEND=torch`` checkpoints,
-            ``mmap=True`` is set by default so the checkpoint is memory-mapped
-            rather than materialized in RAM at load time. Pass ``mmap=False``
-            for legacy pre-zipfile ``torch.save`` files or file-like objects.
-            On Windows the default is ``mmap=False`` because a mapped
-            checkpoint keeps the file locked, preventing deletion or re-save.
+            Explicit torch payloads and ``CKPT_BACKEND=torch`` checkpoints use
+            ``mmap=True`` by default. Pass ``mmap=False`` for legacy pre-zipfile
+            ``torch.save`` files or file-like objects. On Windows the default
+            is ``mmap=False`` because a mapped checkpoint keeps the file locked,
+            preventing deletion or re-save.
 
         .. note::
             Unified checkpoint tensors are mapped to CPU by default. Pass an

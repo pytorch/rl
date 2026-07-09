@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import base64
 import json
 import os
 import random
@@ -12,6 +13,7 @@ import shutil
 import tempfile
 import uuid
 import zipfile
+from collections import OrderedDict
 from collections.abc import Callable, Collection, Mapping, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -30,6 +32,7 @@ from torchrl._utils import logger as torchrl_logger
 CheckpointFormat = Literal["directory", "archive"]
 CheckpointStrictness = Literal["error", "warn", "ignore"]
 ArchiveCompression = Literal["stored", "deflate"]
+StateDictFormat = Literal["directory", "archive", "consolidated", "torch"]
 
 _MANIFEST_NAME = "manifest.json"
 _FORMAT_NAME = "torchrl.checkpoint"
@@ -229,17 +232,225 @@ class DumpLoadCheckpointAdapter(CheckpointAdapter):
         return None
 
 
+def _encode_state_dict_value(value: Any, tensors: dict[str, torch.Tensor]) -> Any:
+    if isinstance(value, torch.Tensor):
+        key = f"tensor_{len(tensors):08d}"
+        tensors[key] = value.detach()
+        return {"kind": "tensor", "key": key, "device": str(value.device)}
+    if isinstance(value, np.ndarray):
+        key = f"tensor_{len(tensors):08d}"
+        tensors[key] = torch.from_numpy(value.copy())
+        return {"kind": "numpy", "key": key, "dtype": value.dtype.str}
+    if isinstance(value, Mapping):
+        metadata = getattr(value, "_metadata", None)
+        mapping_type = (
+            "ordered_dict"
+            if isinstance(value, OrderedDict) or metadata is not None
+            else "dict"
+        )
+        result = {
+            "kind": mapping_type,
+            "items": [
+                [
+                    _encode_state_dict_value(key, tensors),
+                    _encode_state_dict_value(item, tensors),
+                ]
+                for key, item in value.items()
+            ],
+        }
+        if metadata is not None:
+            result["metadata"] = _encode_state_dict_value(metadata, tensors)
+        return result
+    if isinstance(value, torch.Size):
+        return {"kind": "torch_size", "items": list(value)}
+    if isinstance(value, tuple):
+        return {
+            "kind": "tuple",
+            "items": [_encode_state_dict_value(item, tensors) for item in value],
+        }
+    if isinstance(value, list):
+        return {
+            "kind": "list",
+            "items": [_encode_state_dict_value(item, tensors) for item in value],
+        }
+    if isinstance(value, set):
+        return {
+            "kind": "set",
+            "items": [_encode_state_dict_value(item, tensors) for item in value],
+        }
+    if isinstance(value, frozenset):
+        return {
+            "kind": "frozenset",
+            "items": [_encode_state_dict_value(item, tensors) for item in value],
+        }
+    if isinstance(value, slice):
+        return {
+            "kind": "slice",
+            "items": [
+                _encode_state_dict_value(item, tensors)
+                for item in (value.start, value.stop, value.step)
+            ],
+        }
+    if isinstance(value, range):
+        return {
+            "kind": "range",
+            "items": [value.start, value.stop, value.step],
+        }
+    if isinstance(value, torch.device):
+        return {"kind": "torch_device", "value": str(value)}
+    if isinstance(value, torch.dtype):
+        return {"kind": "torch_dtype", "value": str(value).removeprefix("torch.")}
+    if isinstance(value, Path):
+        return {"kind": "path", "value": str(value)}
+    if isinstance(value, bytes):
+        return {
+            "kind": "bytes",
+            "value": base64.b64encode(value).decode("ascii"),
+        }
+    if isinstance(value, bytearray):
+        return {
+            "kind": "bytearray",
+            "value": base64.b64encode(value).decode("ascii"),
+        }
+    if isinstance(value, complex):
+        return {"kind": "complex", "real": value.real, "imag": value.imag}
+    if isinstance(value, np.generic):
+        return {
+            "kind": "numpy_scalar",
+            "dtype": value.dtype.str,
+            "value": _to_json_value(value),
+        }
+    if value is Ellipsis:
+        return {"kind": "ellipsis"}
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return {"kind": "value", "value": value}
+    raise TypeError(
+        f"State-dict value of type {type(value).__name__} is not supported by "
+        "the TensorDict checkpoint format. Register "
+        "StateDictCheckpointAdapter(payload_format='torch') for state dicts "
+        "that require pickle serialization."
+    )
+
+
+def _mapped_device(saved_device: str, map_location: Any) -> torch.device:
+    if map_location is None:
+        return torch.device(saved_device)
+    if isinstance(map_location, Mapping):
+        target = map_location.get(saved_device)
+        if target is None:
+            target = map_location.get(torch.device(saved_device), saved_device)
+        return torch.device(target)
+    if callable(map_location):
+        raise TypeError(
+            "Callable map_location is only supported by the torch state-dict "
+            "payload format."
+        )
+    return torch.device(map_location)
+
+
+def _decode_state_dict_value(
+    value: Mapping[str, Any], tensors: Mapping[str, torch.Tensor], map_location: Any
+) -> Any:
+    kind = value["kind"]
+    if kind == "tensor":
+        tensor = tensors[value["key"]]
+        return tensor.to(_mapped_device(value["device"], map_location), copy=True)
+    if kind == "numpy":
+        return tensors[value["key"]].cpu().numpy().astype(value["dtype"], copy=True)
+    if kind in ("dict", "ordered_dict"):
+        mapping = OrderedDict() if kind == "ordered_dict" else {}
+        for key, item in value["items"]:
+            mapping[
+                _decode_state_dict_value(key, tensors, map_location)
+            ] = _decode_state_dict_value(item, tensors, map_location)
+        metadata = value.get("metadata")
+        if metadata is not None:
+            mapping._metadata = _decode_state_dict_value(  # type: ignore[attr-defined]
+                metadata, tensors, map_location
+            )
+        return mapping
+    if kind == "torch_size":
+        return torch.Size(value["items"])
+    if kind in ("tuple", "list", "set", "frozenset"):
+        items = [
+            _decode_state_dict_value(item, tensors, map_location)
+            for item in value["items"]
+        ]
+        return {"tuple": tuple, "list": list, "set": set, "frozenset": frozenset,}[
+            kind
+        ](items)
+    if kind == "slice":
+        return slice(
+            *(
+                _decode_state_dict_value(item, tensors, map_location)
+                for item in value["items"]
+            )
+        )
+    if kind == "range":
+        return range(*value["items"])
+    if kind == "torch_device":
+        return torch.device(value["value"])
+    if kind == "torch_dtype":
+        dtype = getattr(torch, value["value"], None)
+        if not isinstance(dtype, torch.dtype):
+            raise TypeError(f"Unknown torch dtype {value['value']!r} in checkpoint.")
+        return dtype
+    if kind == "path":
+        return Path(value["value"])
+    if kind in ("bytes", "bytearray"):
+        decoded = base64.b64decode(value["value"])
+        return decoded if kind == "bytes" else bytearray(decoded)
+    if kind == "complex":
+        return complex(value["real"], value["imag"])
+    if kind == "numpy_scalar":
+        return np.dtype(value["dtype"]).type(value["value"])
+    if kind == "ellipsis":
+        return Ellipsis
+    if kind == "value":
+        return value["value"]
+    raise TypeError(f"Unknown state-dict schema kind {kind!r}.")
+
+
 class StateDictCheckpointAdapter(CheckpointAdapter):
     """Adapter for ``state_dict`` / ``load_state_dict`` objects.
 
+    TensorDict directory payloads are used by default. ``payload_format`` can
+    select a TensorDict archive, a consolidated TensorDict, or the pickle-based
+    :func:`torch.save` format. Loading auto-detects all four payload formats.
+
+    Args:
+        payload_format: Format used for new payloads. One of ``"directory"``,
+            ``"archive"``, ``"consolidated"``, or ``"torch"``.
+        archive_compression: Compression passed to TensorDict archive saves.
+
     Examples:
         >>> from torchrl.checkpoint import StateDictCheckpointAdapter
-        >>> StateDictCheckpointAdapter().adapter_id
-        'torchrl.state_dict'
+        >>> StateDictCheckpointAdapter().payload_format
+        'directory'
+        >>> StateDictCheckpointAdapter(payload_format="torch").payload_format
+        'torch'
     """
 
     adapter_id = "torchrl.state_dict"
-    state_filename = "state.pt"
+    state_directory = "state"
+    state_archive = "state.tdz"
+    state_consolidated = "state.tdc"
+    state_torch = "state.pt"
+    schema_filename = "state.json"
+
+    def __init__(
+        self,
+        payload_format: StateDictFormat = "directory",
+        *,
+        archive_compression: str | int | None = None,
+    ) -> None:
+        if payload_format not in ("directory", "archive", "consolidated", "torch"):
+            raise ValueError(
+                "payload_format must be 'directory', 'archive', 'consolidated', "
+                f"or 'torch', got {payload_format!r}."
+            )
+        self.payload_format = payload_format
+        self.archive_compression = archive_compression
 
     def save(
         self,
@@ -251,7 +462,25 @@ class StateDictCheckpointAdapter(CheckpointAdapter):
     ) -> Any:
         path.mkdir(parents=True, exist_ok=True)
         state = component.state_dict(*args, **kwargs)
-        torch.save(state, path / self.state_filename)
+        if self.payload_format == "torch":
+            torch.save(state, path / self.state_torch)
+            return state
+        tensors: dict[str, torch.Tensor] = {}
+        schema = _encode_state_dict_value(state, tensors)
+        tensor_state = tensordict.TensorDict(tensors, batch_size=[])
+        if self.payload_format == "directory":
+            tensordict.save(tensor_state, path / self.state_directory)
+        elif self.payload_format == "archive":
+            tensor_state.save(
+                path / self.state_archive,
+                archive=True,
+                compression=self.archive_compression,
+            )
+        else:
+            tensor_state.consolidate(path / self.state_consolidated)
+        with (path / self.schema_filename).open("w", encoding="utf-8") as file:
+            json.dump(schema, file, separators=(",", ":"))
+            file.write("\n")
         return state
 
     def load(
@@ -264,11 +493,38 @@ class StateDictCheckpointAdapter(CheckpointAdapter):
         args: tuple[Any, ...],
         kwargs: Mapping[str, Any],
     ) -> Any:
-        load_kwargs: dict[str, Any] = {"weights_only": True}
-        load_kwargs.update(tensor_load_kwargs)
-        if map_location is not None:
-            load_kwargs["map_location"] = map_location
-        state = torch.load(path / self.state_filename, **load_kwargs)
+        torch_path = path / self.state_torch
+        if torch_path.exists():
+            load_kwargs: dict[str, Any] = {"weights_only": True}
+            load_kwargs.update(tensor_load_kwargs)
+            if map_location is not None:
+                load_kwargs["map_location"] = map_location
+            state = torch.load(torch_path, **load_kwargs)
+        else:
+            unsupported_load_kwargs = set(tensor_load_kwargs).difference(
+                {"mmap", "weights_only"}
+            )
+            if unsupported_load_kwargs:
+                raise TypeError(
+                    "The following tensor_load_kwargs are only accepted for torch "
+                    f"state-dict payloads: {sorted(unsupported_load_kwargs)}."
+                )
+            directory = path / self.state_directory
+            archive = path / self.state_archive
+            consolidated = path / self.state_consolidated
+            if directory.is_dir():
+                tensor_state = tensordict.load(directory)
+            elif archive.is_file():
+                tensor_state = tensordict.load(archive)
+            elif consolidated.is_file():
+                tensor_state = tensordict.from_consolidated(consolidated)
+            else:
+                raise FileNotFoundError(
+                    f"No state-dict payload was found below {path!s}."
+                )
+            with (path / self.schema_filename).open(encoding="utf-8") as file:
+                schema = json.load(file)
+            state = _decode_state_dict_value(schema, tensor_state, map_location)
         component.load_state_dict(state, *args, **kwargs)
         return None
 
@@ -646,8 +902,9 @@ class Checkpoint:
             component_options: Per-operation option overrides.
             map_location: Device mapping used while reading tensor payloads.
             tensor_load_kwargs: Additional keyword arguments passed to
-                :func:`torch.load` for state-dict components. ``weights_only``
-                defaults to ``True``.
+                :func:`torch.load` for state-dict components explicitly saved
+                with the torch payload format. ``weights_only`` defaults to
+                ``True``.
             strict: Per-operation strictness override.
 
         Returns:

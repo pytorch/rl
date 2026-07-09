@@ -22,6 +22,7 @@ from torchrl.checkpoint import (
     CheckpointAdapter,
     CheckpointOptions,
     GlobalRNGState,
+    StateDictCheckpointAdapter,
 )
 
 
@@ -74,6 +75,27 @@ assert load_result.unrequested == {
 archive_path = checkpoint.save(root / "step-128.torchrl", format="archive")
 archive_manifest = Checkpoint.manifest(archive_path)
 assert archive_manifest["container"] == "archive"
+
+
+# State-dict payload formats
+# --------------------------
+# Modules, optimizers, and other state-dict components use TensorDict files by
+# default. The component payload can instead be a TensorDict ZIP archive or a
+# consolidated TensorDict, independently of the outer checkpoint container.
+# Pickle-based torch serialization is available only when selected explicitly.
+
+consolidated_policy_path = root / "consolidated-policy"
+Checkpoint().register(
+    "policy",
+    policy,
+    adapter=StateDictCheckpointAdapter(payload_format="consolidated"),
+).save(consolidated_policy_path)
+
+torch_policy_checkpoint = Checkpoint().register(
+    "policy",
+    policy,
+    adapter=StateDictCheckpointAdapter(payload_format="torch"),
+)
 
 
 # Trainer integration
