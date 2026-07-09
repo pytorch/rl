@@ -29,6 +29,7 @@ from torch import nn, optim
 
 from torchrl._utils import (
     _CKPT_BACKEND,
+    implement_for,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
     rl_warnings,
@@ -78,6 +79,19 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+
+@implement_for("torch", "2.4")
+def _load_weights_only_default() -> bool:
+    # Trainer checkpoints contain tensordict state-dict metadata such as
+    # torch.device entries, which the weights-only unpickler only allowlists
+    # from torch 2.4 onwards.
+    return True
+
+
+@implement_for("torch", None, "2.4")
+def _load_weights_only_default() -> bool:  # noqa: F811
+    return False
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -602,7 +616,10 @@ class Trainer:
             When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
             default for safer deserialization. Pass ``weights_only=False``
             explicitly only if you have custom (non-stdlib) objects in your
-            state dict.
+            state dict. On torch < 2.4, ``weights_only`` defaults to
+            ``False`` instead, because the weights-only unpickler of those
+            versions cannot deserialize the ``torch.device`` entries found
+            in checkpoint metadata.
 
         .. note::
             When ``CKPT_BACKEND=torch``, ``mmap=True`` is set by default so
@@ -616,7 +633,7 @@ class Trainer:
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
-            kwargs.setdefault("weights_only", True)
+            kwargs.setdefault("weights_only", _load_weights_only_default())
             kwargs.setdefault("mmap", True)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)

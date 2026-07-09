@@ -42,6 +42,7 @@ from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
     _has_ts,
+    _load_weights_only_default,
     BatchSubSampler,
     CountFramesLog,
     DefaultOptimizationStepper,
@@ -240,7 +241,7 @@ class TestLoadFromFile:
             trainer2 = mocking_trainer()
             trainer2.load_from_file(file)
             assert captured["mmap"] is True
-            assert captured["weights_only"] is True
+            assert captured["weights_only"] is _load_weights_only_default()
 
             captured.clear()
             trainer2.load_from_file(file, mmap=False)
