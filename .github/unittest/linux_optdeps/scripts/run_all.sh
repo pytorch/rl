@@ -179,17 +179,33 @@ export BATCHED_PIPE_TIMEOUT=60
 # script aborted on the pytest failure via set -e, before coverage upload.)
 EXIT_STATUS=0
 
+# Hang containment, two layers (an uninterruptible C-level teardown once
+# consumed the full two-hour job budget while producing no output):
+# - --timeout-method=thread: the default signal method provably failed to
+#   interrupt that teardown. The thread method dumps every thread's stack
+#   and kills the process, so the first hard hang fails the run loudly in
+#   minutes instead of silently eating the job. The tradeoff (a per-test
+#   timeout aborts the whole run) is acceptable here: a 120s+ test in this
+#   serial suite has always meant a hang, not a slow test.
+# - timeout(1) guard: last-resort process-level bound in case even the
+#   timer thread cannot run; 100 minutes leaves room for coverage combine
+#   and artifact upload within the 120-minute job budget.
+timeout -k 60 100m \
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
   --ignore test/llm \
-  --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
-if [ $EXIT_STATUS -ne 0 ]; then
+  --timeout=120 --timeout-method=thread --mp_fork_if_no_cuda || EXIT_STATUS=$?
+if [ $EXIT_STATUS -eq 124 ]; then
+  echo "pytest was killed by the 100-minute hang guard"
+elif [ $EXIT_STATUS -ne 0 ]; then
   echo "Some tests failed with exit status $EXIT_STATUS"
 fi
 
-coverage combine -q
-coverage xml -i
+# Tolerate combine failures: a run killed by the hang guard may leave no
+# usable coverage data, and the remaining artifacts should still upload.
+coverage combine -q || echo "coverage combine failed (expected after a hang-guard kill)"
+coverage xml -i || true
 
 # Copy coverage report for Codecov artifact upload
 mkdir -p artifacts-to-be-uploaded
