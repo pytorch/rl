@@ -10,7 +10,7 @@ pytest-error-for-skips
 pytest-asyncio
 expecttest
 pybind11[global]
-pyvers
+pyvers>=0.2.3
 pyyaml
 scipy
 psutil
