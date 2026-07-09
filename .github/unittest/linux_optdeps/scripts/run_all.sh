@@ -19,19 +19,20 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y --no-install-recommends tzdata
   dpkg-reconfigure -f noninteractive tzdata || true
 
-  apt-get upgrade -y
-  apt-get install -y vim git wget cmake
-
-  apt-get install -y libglfw3 libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
+  # Single install pass, no recommends: a blanket `apt-get upgrade` /
+  # `dist-upgrade` of the throwaway container adds time to every job and
+  # provides nothing the tests need.
+  apt-get install -y --no-install-recommends \
+    vim git wget cmake \
+    libglfw3 libosmesa6 libglew-dev \
+    libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
-    # solves version `GLIBCXX_3.4.29' not found for tensorboard
-#    apt-get install -y gcc-4.9
-    apt-get upgrade -y libstdc++6
-    apt-get dist-upgrade -y
+    # solves version `GLIBCXX_3.4.29' not found for tensorboard; upgrade
+    # libstdc++6 specifically instead of dist-upgrading the whole image.
+    apt-get install -y --only-upgrade libstdc++6
   else
-    apt-get install -y g++ gcc
+    apt-get install -y --no-install-recommends g++ gcc
   fi
 
 fi
@@ -135,7 +136,7 @@ python -c "import functorch"
 #fi
 
 # install tensordict
-pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
   pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
@@ -173,11 +174,19 @@ export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
 export BATCHED_PIPE_TIMEOUT=60
 
+# Track test failures but keep going, so coverage is still combined and
+# uploaded; the script exits with this status at the end. (Previously the
+# script aborted on the pytest failure via set -e, before coverage upload.)
+EXIT_STATUS=0
+
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
   --ignore test/llm \
-  --timeout=120 --mp_fork_if_no_cuda
+  --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
+if [ $EXIT_STATUS -ne 0 ]; then
+  echo "Some tests failed with exit status $EXIT_STATUS"
+fi
 
 coverage combine -q
 coverage xml -i
@@ -190,3 +199,6 @@ cp coverage.xml artifacts-to-be-uploaded/ || true
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# Exit with failure if any tests failed
+exit $EXIT_STATUS
