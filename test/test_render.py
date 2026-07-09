@@ -49,6 +49,7 @@ from torchrl.render.mujoco_wasm import extract_qpos_trajectory
 from torchrl.render.video import compose_frame_grid, normalize_frame_output
 
 _has_pil = importlib.util.find_spec("PIL") is not None
+_has_gym = importlib.util.find_spec("gym") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_pygame = importlib.util.find_spec("pygame") is not None
 
@@ -1344,6 +1345,10 @@ class TestSotaCheckpointFactories:
         assert make_eval_env_kwargs(cfg)["num_envs"] == 1
         assert make_eval_env_kwargs(cfg)["batch_mode"] == "parallel"
 
+    @pytest.mark.skipif(
+        not (_has_gym or _has_gymnasium),
+        reason="gym or gymnasium is required for the CartPole PPO env",
+    )
     def test_ppo_vecnorm_checkpoint_roundtrip(self, tmp_path):
         utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
         ppo_make_env = import_from_string(f"{utils_path}:make_env")
