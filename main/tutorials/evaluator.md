@@ -81,7 +81,7 @@ print("First eval:", result)
 ```
 
 ```
-First eval: {'eval/reward': -1101.9150390625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 712.5143146353555, 'eval/step': 0}
+First eval: {'eval/reward': -888.1697387695312, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 715.4859547514155, 'eval/step': 0}
 ```
 
 Each subsequent call increments the internal step counter:
@@ -92,7 +92,7 @@ print("Second eval:", result)
 ```
 
 ```
-Second eval: {'eval/reward': -1268.8914794921875, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 714.1172718741796, 'eval/step': 1}
+Second eval: {'eval/reward': -963.8211059570312, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 716.2510842385826, 'eval/step': 1}
 ```
 
 ## Asynchronous evaluation
@@ -121,7 +121,7 @@ print("poll(timeout=30) returned:", result)
 ```
 
 ```
-poll(timeout=30) returned: {'eval/reward': -976.5928344726562, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 692.3167938770569, 'eval/step': 2}
+poll(timeout=30) returned: {'eval/reward': -859.734619140625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 705.9810225101983, 'eval/step': 2}
 ```
 
 By default, calling `trigger_eval()` while a previous evaluation is
@@ -171,7 +171,7 @@ print("Before weight update:", evaluator_w.evaluate())
 ```
 
 ```
-Before weight update: {'eval/reward': -1284.080810546875, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 500.25099468346036, 'eval/step': 0}
+Before weight update: {'eval/reward': -1746.832763671875, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 506.3895768395185, 'eval/step': 0}
 ```
 
 Simulate a "training step" by perturbing the weights:
@@ -191,7 +191,7 @@ print("After weight update:", evaluator_w.evaluate(weights=real_policy))
 ```
 
 ```
-After weight update: {'eval/reward': -1368.2728271484375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 497.27659881736787, 'eval/step': 1}
+After weight update: {'eval/reward': -1036.9521484375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 504.174205720108, 'eval/step': 1}
 ```
 
 You can also pass a `TensorDictBase` of weights, which is useful
@@ -204,7 +204,7 @@ evaluator_w.shutdown()
 ```
 
 ```
-With TensorDict weights: {'eval/reward': -1368.1700439453125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 495.849523791427, 'eval/step': 2}
+With TensorDict weights: {'eval/reward': -1156.97314453125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 505.98605281823035, 'eval/step': 2}
 ```
 
 ## Process-based evaluation
@@ -235,7 +235,7 @@ evaluator_proc.shutdown()
 ```
 
 ```
-Process backend: {'eval/reward': -1597.6602783203125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 678.1729513418552, 'eval/step': 0}
+Process backend: {'eval/reward': -1772.796630859375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 689.6005893380593, 'eval/step': 0}
 ```
 
 ## Logging with callbacks
@@ -286,10 +286,10 @@ print(csv_path.read_text())
 ```
 
 ```
-Logged to: /tmp/tmpiwq4re69/eval_demo/scalars/eval/reward.csv
-0,-1432.6019287109375
-1,-1369.88232421875
-2,-1262.477783203125
+Logged to: /tmp/tmpo5akg623/eval_demo/scalars/eval/reward.csv
+0,-1510.331787109375
+1,-1675.8016357421875
+2,-1261.442138671875
 ```
 
 The `on_result` callback works with both synchronous and asynchronous
@@ -319,7 +319,7 @@ the latest trained parameters.
 deep dive into how collectors assemble data.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 7.094 seconds)
+**Total running time of the script:** (0 minutes 7.029 seconds)
 
 [`Download Jupyter notebook: evaluator.ipynb`](../_downloads/0b7694ad40d411d9b5498dc6c93ed596/evaluator.ipynb)
 

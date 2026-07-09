@@ -179,7 +179,7 @@ transforms, behavior cloning, chunked execution, RL fine-tuning.
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f6c827c7f70>
+    <torch._C.Generator object at 0x7f52645c81b0>
 
 
 
@@ -763,7 +763,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.389 seconds)
+   **Total running time of the script:** (0 minutes 0.383 seconds)
 
 
 .. _sphx_glr_download_tutorials_vla.py:
