@@ -177,67 +177,20 @@ export BATCHED_PIPE_TIMEOUT=60
 COMMON_IGNORES="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/llm"
 COMMON_ARGS="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
 
-# Tests that spawn their own worker processes, Ray clusters, or logger
-# subprocesses; they oversubscribe (and flake) next to a machine full of
-# xdist workers, so they always run serially. Keep the two lists in sync.
-MP_TESTS="test/envs test/test_collectors.py test/services test/test_inference_server.py test/test_loggers.py"
-MP_IGNORES="--ignore test/envs --ignore test/test_collectors.py --ignore test/services --ignore test/test_inference_server.py --ignore test/test_loggers.py"
-
 # Track test failures but keep going, so coverage is still combined and
 # uploaded; the script exits with this status at the end.
 EXIT_STATUS=0
 
-if [ "${TORCHRL_XDIST:-1}" = "1" ]; then
-  # Coverage for pytest-xdist workers: execnet workers are plain
-  # subprocesses, not multiprocessing children, so coverage's
-  # concurrency=multiprocessing does not see them. The .pth calls
-  # coverage.process_startup(), a no-op unless COVERAGE_PROCESS_START is set
-  # (coverage_run_parallel.py exports it for its subprocess tree).
-  python - <<'PY'
-import sysconfig
-from pathlib import Path
-
-pth = Path(sysconfig.get_paths()["purelib"]) / "coverage_process_startup.pth"
-pth.write_text("import coverage; coverage.process_startup()\n")
-print(f"Wrote {pth}")
-PY
-
-  # Three invocations covering the same union of tests as the single serial
-  # run below, without overlap:
-  # 1. Parallel bulk under pytest-xdist: everything that neither requires the
-  #    GPU nor spawns its own worker processes. OMP/MKL are pinned to one
-  #    thread per worker (N workers on an N-core box otherwise serialize on
-  #    thread contention) and the per-test timeout is raised: tests that take
-  #    ~60s alone can legitimately exceed 120s on a fully loaded machine.
-  # 2. The process-spawning set (test/envs, test_collectors.py,
-  #    test/services), serial: these spawn their own worker processes or Ray
-  #    clusters and flake under a fully loaded machine.
-  # 3. GPU-marked tests, serial: xdist workers sharing one device could
-  #    oversubscribe GPU memory.
-  echo "Running parallel bulk (not gpu, without the process-spawning set)"
-  OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    ${COMMON_IGNORES} \
-    ${MP_IGNORES} \
-    -m "not gpu" \
-    -n "${TORCHRL_XDIST_WORKERS:-auto}" --dist worksteal \
-    ${COMMON_ARGS} --timeout=300 || EXIT_STATUS=$?
-  echo "Running process-spawning tests serially (${MP_TESTS})"
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${MP_TESTS} \
-    ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
-  echo "Running gpu-marked tests serially"
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    ${COMMON_IGNORES} \
-    ${MP_IGNORES} \
-    -m gpu \
-    ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
-  if [ $EXIT_STATUS -ne 0 ]; then
-    echo "Some tests failed with exit status $EXIT_STATUS"
-  fi
-else
-  python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
-    ${COMMON_IGNORES} \
-    ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
+# Note: unlike the main linux suite, optdeps stays on a single serial pytest
+# invocation. A measured xdist bulk/serial split made this job SLOWER: the
+# process-spawning serial bucket dominates on this runner (~65 min of the
+# ~80 min total), so splitting only added session startup overhead
+# (87:34 -> 90:38 wall). Revisit only together with sharding the serial set.
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+  ${COMMON_IGNORES} \
+  ${COMMON_ARGS} --timeout=120 || EXIT_STATUS=$?
+if [ $EXIT_STATUS -ne 0 ]; then
+  echo "Some tests failed with exit status $EXIT_STATUS"
 fi
 
 coverage combine -q
