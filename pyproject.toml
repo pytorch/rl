@@ -39,7 +39,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
-    "pyvers",
+    "pyvers>=0.2.3",
     "hoptorch>=0.1.4",
     "numpy",
     "packaging",
