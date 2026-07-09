@@ -42,7 +42,7 @@ from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
     _has_ts,
-    _load_weights_only_default,
+    _torch_load_defaults,
     BatchSubSampler,
     CountFramesLog,
     DefaultOptimizationStepper,
@@ -240,8 +240,12 @@ class TestLoadFromFile:
 
             trainer2 = mocking_trainer()
             trainer2.load_from_file(file)
-            assert captured["mmap"] is True
-            assert captured["weights_only"] is _load_weights_only_default()
+            # mmap defaults to False on Windows (a mapped checkpoint locks the
+            # file) and weights_only to False on torch < 2.4 (its weights-only
+            # unpickler rejects torch.device).
+            defaults = _torch_load_defaults()
+            assert captured["mmap"] is defaults["mmap"]
+            assert captured["weights_only"] is defaults["weights_only"]
 
             captured.clear()
             trainer2.load_from_file(file, mmap=False)
