@@ -156,6 +156,37 @@ class Evaluator:
     env so that per-episode returns are tracked.  Without it, the
     evaluator falls back to summing raw rewards over each trajectory.
 
+    **Eval video logging**: when the eval env contains a
+    :class:`~torchrl.record.VideoRecorder`, each evaluation ends with a
+    ``dump(step=...)`` on the env transforms of the collector that ran
+    the rollout (disable with ``dump_video=False``).  The recorder must
+    be attached to the *outermost* env: recorders nested inside the
+    worker envs of a :class:`~torchrl.envs.SerialEnv` /
+    :class:`~torchrl.envs.ParallelEnv` are not reached by the dump and
+    would accumulate frames indefinitely.  With ``backend="process"``
+    the recorder lives inside the collector worker, so build it in the
+    env factory around a picklable logger client such as
+    :meth:`ProcessLogger.client()
+    <torchrl.record.loggers.process.ProcessLogger.client>`::
+
+        from torchrl.record import VideoRecorder
+        from torchrl.record.loggers import CSVLogger, ProcessLogger
+
+        logger = ProcessLogger(CSVLogger, exp_name="run", log_dir="logs")
+        video_client = logger.client()
+
+        def make_eval_env():
+            env = make_env()
+            env.append_transform(VideoRecorder(video_client, tag="eval/video"))
+            return env
+
+        evaluator = Evaluator(
+            make_eval_env,
+            policy_factory=make_eval_policy,
+            max_steps=1000,
+            backend="process",
+        )
+
     Args:
         env: An :class:`~torchrl.envs.EnvBase` instance **or** a callable
             that returns one.  For the ``"process"`` and ``"ray"`` backends
@@ -1248,29 +1279,21 @@ class _ThreadEvalBackend(_EvalBackend):
         """Dump accumulated video frames from VideoRecorder transforms.
 
         Process-backed evaluator collectors dispatch ``Compose.dump`` to the
-        worker that owns the environment. Direct evaluators call it locally.
+        worker that owns the environment. Same-process evaluators dump the
+        collector's own env: the collector may wrap the user env (e.g. to add
+        a ``StepCounter``), cloning its transforms, so the recorder that
+        accumulated frames is the collector-side one, not the transform of
+        the env handed to the evaluator.
         """
-        if self._use_multi_collector and self._collector is not None:
+        if self._collector is None:
+            return
+        if self._use_multi_collector:
             self._collector.map_fn(
                 "_dump_env_transform",
                 list_of_kwargs=[{"step": step}] * self._collector.num_workers,
             )
             return
-        if self._env is None or not hasattr(self._env, "transform"):
-            return
-        transform = self._env.transform
-        dump = getattr(transform, "dump", None)
-        if callable(dump):
-            dump(step=step)
-            return
-        try:
-            transforms = iter(transform)
-        except TypeError:
-            return
-        for item in transforms:
-            dump = getattr(item, "dump", None)
-            if callable(dump):
-                dump(step=step)
+        self._collector._dump_env_transform(step=step)
 
 
 # ======================================================================

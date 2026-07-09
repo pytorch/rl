@@ -16,6 +16,7 @@ from torchrl.modules.inference_server._server import (
     InferenceServer,
     ProcessInferenceServer,
 )
+from torchrl.modules.inference_server._shared_memory import SharedMemoryTransport
 from torchrl.modules.inference_server._slot import SlotTransport
 from torchrl.modules.inference_server._threading import ThreadingTransport
 from torchrl.modules.inference_server._transport import InferenceTransport
@@ -31,6 +32,7 @@ __all__ = [
     "PolicyClientModule",
     "ProcessInferenceServer",
     "RayTransport",
+    "SharedMemoryTransport",
     "SlotTransport",
     "ThreadingTransport",
 ]

@@ -19,6 +19,7 @@ from tensordict import (
     unravel_key,
 )
 
+from torchrl._utils import DEFAULT_DONE_KEYS
 from torchrl.data.map.tdstorage import TensorDictMap
 from torchrl.data.map.utils import _plot_plotly_box, _plot_plotly_tree
 from torchrl.data.replay_buffers.storages import ListStorage
@@ -869,7 +870,7 @@ class MCTSForest:
         """
         done_keys = getattr(self, "_done_keys", None)
         if done_keys is None:
-            self._done_keys = done_keys = ["done", "terminated", "truncated"]
+            self._done_keys = done_keys = list(DEFAULT_DONE_KEYS)
         return done_keys
 
     @done_keys.setter

@@ -51,6 +51,48 @@ Offline-to-online helpers
 
     prefill_replay_buffer
 
+Trajectory queries
+------------------
+
+Stored transitions can be regrouped into trajectories and filtered with a
+small query language. :data:`~torchrl.data.traj` builds predicates over
+trajectory fields, and :meth:`ReplayBuffer.query` returns the matching
+:class:`~torchrl.data.Trajectory` views:
+
+    >>> from torchrl.data import traj
+    >>> good = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+    >>> good[0].observation, good[0].action
+
+Trajectory boundaries are recovered with the same machinery
+:class:`~torchrl.data.replay_buffers.SliceSampler` uses, so queries and
+samplers always agree on where trajectories start and stop, including for
+storages that have wrapped around and for multi-dimensional storages
+(``LazyTensorStorage(..., ndim=2)``). Predicates built from
+:data:`~torchrl.data.traj` report the entries they read through
+:meth:`TrajectoryPredicate.required_keys
+<torchrl.data.TrajectoryPredicate.required_keys>`, letting ``query()`` fetch
+only those entries (and run only the transforms that can affect them) while
+evaluating, instead of materializing the whole buffer content.
+
+:class:`~torchrl.data.Trajectory` is a tensorclass: slicing and indexing
+return :class:`~torchrl.data.Trajectory` instances, and query results of
+different lengths can be assembled into a single ragged batch with
+:func:`~tensordict.lazy_stack`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    Trajectory
+    TrajectoryPredicate
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    filter_trajectories
+    iter_trajectories
+
 Composable Replay Buffers
 -------------------------
 
@@ -134,6 +176,41 @@ capacity without scanning the full storage on every write. This mode supports
 ``TensorStorage``, ``LazyTensorStorage`` and ``LazyMemmapStorage`` with uniform
 random sampling. Prefetching, prioritized replay and multidimensional storages
 are rejected explicitly.
+
+Trajectory boundaries
+~~~~~~~~~~~~~~~~~~~~~
+
+Replay buffers store steps, not trajectories: components that need
+trajectories (:class:`~torchrl.data.replay_buffers.SliceSampler` and its
+variants, trajectory-aware transforms, offline dataset tooling) recover
+episode boundaries at *read time* from markers present in the stored data.
+The full producer/consumer contract — which markers exist, who writes them,
+how circular storage (wraparound, write cursor) interacts with boundary
+recovery, and its blind spots — is documented in
+:ref:`Trajectory boundaries <ref_traj_boundaries>` on the data-layout page.
+The associated APIs are:
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    find_start_stop_traj
+
+.. py:data:: DEFAULT_DONE_KEYS
+    :value: ("done", "truncated", "terminated")
+
+    Canonical end-of-trajectory signal keys in TED format. A step can be
+    marked as the last of its trajectory by any of these entries (typically
+    read under the ``"next"`` sub-tensordict); ``"done"`` is the union of the
+    other two, but datasets sometimes carry only a subset of the entries, so
+    consumers detecting trajectory ends from flags should use the union of
+    all three. Shared default of :class:`~torchrl.data.TED2Flat`,
+    :class:`~torchrl.data.TED2Nested`, :class:`~torchrl.data.postprocs.MultiStep`
+    and :class:`~torchrl.envs.transforms.MultiStepTransform`; accepted by
+    :class:`~torchrl.data.replay_buffers.SliceSampler` through its
+    ``end_keys`` argument.
 
 TED-format conversion
 ~~~~~~~~~~~~~~~~~~~~~

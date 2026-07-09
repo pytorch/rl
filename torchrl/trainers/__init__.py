@@ -12,6 +12,7 @@ from .trainers import (
     LogScalar,
     LogTiming,
     LogValidationReward,
+    LRSchedulerHook,
     mask_batch,
     OptimizationStepper,
     OptimizerHook,
@@ -23,6 +24,7 @@ from .trainers import (
     TrainerHookBase,
     UpdateWeights,
     UTDRHook,
+    ValueEstimatorHook,
 )
 
 __all__ = [
@@ -34,6 +36,7 @@ __all__ = [
     "LogScalar",
     "LogTiming",
     "LogValidationReward",
+    "LRSchedulerHook",
     "mask_batch",
     "OptimizationStepper",
     "OptimizerHook",
@@ -45,4 +48,5 @@ __all__ = [
     "UpdateWeights",
     "TargetNetUpdaterHook",
     "UTDRHook",
+    "ValueEstimatorHook",
 ]

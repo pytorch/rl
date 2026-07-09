@@ -1004,6 +1004,18 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+# Canonical end-of-trajectory signal keys in TED (TorchRL Episode Data)
+# format. A step can be marked as the last of its trajectory by any of these
+# entries (typically read under the "next" sub-tensordict); "done" is the
+# union of the other two, but datasets sometimes carry only a subset of the
+# entries, so consumers detecting trajectory ends from flags should use the
+# union of all three. Defined here (rather than in the replay-buffer layer)
+# so that envs and collectors can share it without importing replay-buffer
+# utilities; re-exported as torchrl.data.DEFAULT_DONE_KEYS, which is the
+# public path. Documented in the "Trajectory boundaries" section of the docs.
+DEFAULT_DONE_KEYS: tuple[NestedKey, ...] = ("done", "truncated", "terminated")
+
+
 def _ends_with(key, match):
     if isinstance(key, str):
         return key == match
@@ -1310,7 +1322,13 @@ class set_auto_unwrap_transformed_env(_DecoratorContextManager):
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _AUTO_UNWRAP
         _AUTO_UNWRAP = self._old_mode
-        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+        if _AUTO_UNWRAP is None:
+            # Restoring the unset state must remove the variable: writing
+            # str(None) would poison subprocesses spawned later, which parse
+            # the inherited value with strtobool.
+            os.environ.pop("AUTO_UNWRAP_TRANSFORMED_ENV", None)
+        else:
+            os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
 
 
 def auto_unwrap_transformed_env(allow_none=False):

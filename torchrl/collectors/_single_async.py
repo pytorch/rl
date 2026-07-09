@@ -154,6 +154,9 @@ class AsyncCollector(MultiAsyncCollector):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            See :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            for when these markers are needed to sample trajectories from a
+            replay buffer.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
             installed on the environment, tagging every collected frame with the current version
