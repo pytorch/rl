@@ -174,11 +174,19 @@ export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
 export BATCHED_PIPE_TIMEOUT=60
 
+# Track test failures but keep going, so coverage is still combined and
+# uploaded; the script exits with this status at the end. (Previously the
+# script aborted on the pytest failure via set -e, before coverage upload.)
+EXIT_STATUS=0
+
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
   --ignore test/llm \
-  --timeout=120 --mp_fork_if_no_cuda
+  --timeout=120 --mp_fork_if_no_cuda || EXIT_STATUS=$?
+if [ $EXIT_STATUS -ne 0 ]; then
+  echo "Some tests failed with exit status $EXIT_STATUS"
+fi
 
 coverage combine -q
 coverage xml -i
@@ -191,3 +199,6 @@ cp coverage.xml artifacts-to-be-uploaded/ || true
 # ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
+
+# Exit with failure if any tests failed
+exit $EXIT_STATUS
