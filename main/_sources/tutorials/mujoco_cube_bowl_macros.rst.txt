@@ -825,7 +825,7 @@ while the arm is moving.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (45 minutes 56.499 seconds)
+   **Total running time of the script:** (45 minutes 56.416 seconds)
 
 
 .. _sphx_glr_download_tutorials_mujoco_cube_bowl_macros.py:

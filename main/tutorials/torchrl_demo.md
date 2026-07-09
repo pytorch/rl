@@ -469,11 +469,11 @@ collector.shutdown()
 ```
 
 ```
-Collected batch: torch.Size([200]), reward: -8.55
-Collected batch: torch.Size([200]), reward: -8.81
-Collected batch: torch.Size([200]), reward: -9.31
-Collected batch: torch.Size([200]), reward: -9.08
-Collected batch: torch.Size([200]), reward: -9.17
+Collected batch: torch.Size([200]), reward: -9.10
+Collected batch: torch.Size([200]), reward: -8.70
+Collected batch: torch.Size([200]), reward: -8.85
+Collected batch: torch.Size([200]), reward: -9.20
+Collected batch: torch.Size([200]), reward: -8.47
 ```
 
 For async collection (useful when training takes longer than collecting),
@@ -524,7 +524,7 @@ print("Prioritized sample indices:", info["index"][:5], "...") # First 5 indices
 ```
 
 ```
-Prioritized sample indices: tensor([99, 38, 32, 90, 95]) ...
+Prioritized sample indices: tensor([26, 41, 61, 46, 40]) ...
 ```
 
 ## Loss Functions
@@ -645,9 +645,9 @@ env.close()
 ```
 
 ```
-Step 0: loss=1.046
-Step 5: loss=0.621
-Step 10: loss=0.402
+Step 0: loss=0.993
+Step 5: loss=0.669
+Step 10: loss=0.366
 Step 15: loss=0.274
 ```
 
@@ -688,7 +688,7 @@ folder contains production-ready implementations of:
 - [GitHub](https://github.com/pytorch/rl)
 - [Contributing Guide](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md)
 
-**Total running time of the script:** (0 minutes 5.039 seconds)
+**Total running time of the script:** (0 minutes 5.023 seconds)
 
 [`Download Jupyter notebook: torchrl_demo.ipynb`](../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb)
 
