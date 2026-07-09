@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import hydra
 import torch.nn
 import torch.optim
 import tqdm
+from omegaconf import DictConfig, OmegaConf
 from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import get_available_device, timeit
 from torchrl.collectors import Collector
@@ -20,13 +22,44 @@ from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.render import save_render_checkpoint
 from utils_cartpole import eval_model, make_dqn_model, make_env
 
 torch.set_float32_matmul_precision("high")
 
 
+def _save_checkpoint(
+    path: str | Path | None,
+    *,
+    cfg: DictConfig,
+    model: torch.nn.Module,
+    collected_frames: int,
+    metrics: dict,
+) -> Path | None:
+    """Saves a DQN checkpoint that can be consumed by ``rlrender``.
+
+    Args:
+        path: Destination checkpoint path. ``None`` disables checkpointing.
+        cfg: Hydra training configuration.
+        model: DQN policy module.
+        collected_frames: Number of training frames collected so far.
+        metrics: Scalar metrics recorded at checkpoint time.
+
+    Returns:
+        The written checkpoint path, or ``None`` when checkpointing is disabled.
+    """
+    return save_render_checkpoint(
+        path,
+        model,
+        env_metadata={"env_name": cfg.env.env_name},
+        frames=collected_frames,
+        metrics=metrics,
+        config=OmegaConf.to_container(cfg, resolve=True),
+    )
+
+
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
-def main(cfg: DictConfig):  # noqa: F821
+def main(cfg: DictConfig):
 
     device = torch.device(cfg.device) if cfg.device else get_available_device()
 
@@ -143,6 +176,9 @@ def main(cfg: DictConfig):  # noqa: F821
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     init_random_frames = cfg.collector.init_random_frames
     q_losses = torch.zeros(num_updates, device=device)
+    checkpoint_path = cfg.checkpoint.path
+    checkpoint_interval = int(cfg.checkpoint.interval or 0)
+    last_checkpoint_frame = 0
 
     c_iter = iter(collector)
     total_iter = len(collector)
@@ -221,10 +257,30 @@ def main(cfg: DictConfig):  # noqa: F821
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             logger.log_metrics(metrics_to_log, step=collected_frames)
+        if (
+            checkpoint_path
+            and checkpoint_interval > 0
+            and collected_frames - last_checkpoint_frame >= checkpoint_interval
+        ):
+            _save_checkpoint(
+                checkpoint_path,
+                cfg=cfg,
+                model=model,
+                collected_frames=collected_frames,
+                metrics=metrics_to_log,
+            )
+            last_checkpoint_frame = collected_frames
 
         # update weights of the inference policy
         collector.update_policy_weights_()
 
+    _save_checkpoint(
+        checkpoint_path,
+        cfg=cfg,
+        model=model,
+        collected_frames=collected_frames,
+        metrics=metrics_to_log,
+    )
     collector.shutdown()
     if not test_env.is_closed:
         test_env.close()

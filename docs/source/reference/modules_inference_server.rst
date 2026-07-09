@@ -34,6 +34,7 @@ Transport Backends
     ThreadingTransport
     SlotTransport
     MPTransport
+    SharedMemoryTransport
     RayTransport
     MonarchTransport
 
@@ -69,6 +70,48 @@ threads in the same process:
         ...
 
     server.shutdown()
+
+Shared-memory transport
+^^^^^^^^^^^^^^^^^^^^^^^
+
+For cross-process actors with large request payloads (e.g. image
+observations), :class:`SharedMemoryTransport` preallocates request and
+response slot banks in CPU shared memory and passes only slot indices
+through the multiprocessing queues, removing per-request pickling from the
+hot path. The caller provides representative request and response
+TensorDicts that fix the slot layout (keys, shapes, dtypes); only the
+declared keys are transmitted:
+
+.. code-block:: python
+
+    import torch
+    from tensordict import TensorDict
+    from torchrl.modules.inference_server import (
+        InferenceServer,
+        SharedMemoryTransport,
+    )
+
+    transport = SharedMemoryTransport(
+        request_spec=TensorDict({"pixels": torch.zeros(3, 224, 224)}),
+        response_spec=TensorDict(
+            {
+                "action": torch.zeros(7),
+                "policy_version": torch.zeros((), dtype=torch.long),
+            }
+        ),
+        num_slots=64,
+    )
+    # Create clients before spawning env workers
+    clients = [transport.client() for _ in range(n_workers)]
+
+    server = InferenceServer(policy, transport, policy_device="cuda:0")
+    server.start()
+
+Slots are CPU-only: clients must submit CPU tensors, and the server owns
+all device transfers (batches are moved to ``policy_device`` before the
+forward pass, results copied back into the CPU response slots).
+``num_slots`` bounds the number of concurrently in-flight requests and
+provides natural backpressure.
 
 Structured Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^

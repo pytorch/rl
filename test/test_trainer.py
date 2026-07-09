@@ -47,6 +47,7 @@ from torchrl.trainers.trainers import (
     DefaultOptimizationStepper,
     EarlyStopping,
     LogScalar,
+    LRSchedulerHook,
     mask_batch,
     OptimizationStepper,
     OptimizerHook,
@@ -55,6 +56,7 @@ from torchrl.trainers.trainers import (
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
+    ValueEstimatorHook,
 )
 
 _has_ale = importlib.util.find_spec("ale_py") is not None
@@ -1352,6 +1354,129 @@ class TestDefaultOptimizationStepper:
         assert all(
             torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
         )
+
+
+class TestLRSchedulerHook:
+    def test_scheduler_steps_on_call(self):
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.25
+
+    def test_invalid_interval_raises(self):
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        with pytest.raises(ValueError, match="interval must be"):
+            LRSchedulerHook(scheduler, interval="epoch")
+
+    def test_state_dict_roundtrip(self):
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+        hook()
+        hook()
+        state = hook.state_dict()
+
+        net2 = torch.nn.Linear(2, 2)
+        optimizer2 = torch.optim.SGD(net2.parameters(), lr=1.0)
+        scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, step_size=1, gamma=0.5)
+        hook2 = LRSchedulerHook(scheduler2)
+        hook2.load_state_dict(state)
+
+        assert scheduler2.state_dict() == scheduler.state_dict()
+
+    @pytest.mark.parametrize("interval", ["batch", "optim"])
+    def test_register(self, interval):
+        trainer = mocking_trainer()
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler, interval=interval)
+        hook.register(trainer)
+
+        dest = "post_optim" if interval == "optim" else "post_steps"
+        ops = getattr(trainer, f"_{dest}_ops")
+        assert any(getattr(op, "__wrapped__", None) is hook for op, _ in ops)
+        assert trainer._modules["lr_scheduler"] is hook
+
+    def test_no_step_without_optimization(self):
+        # once registered, the hook must not decay the learning rate while no
+        # optimization step has run (e.g. during init_random_frames warmup)
+        trainer = mocking_trainer()
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+        hook.register(trainer)
+
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 1.0
+
+        trainer._optim_count += 1
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+
+        # no new optimization step: the scheduler must not advance
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+
+
+class TestValueEstimatorHook:
+    class _RecordingEstimator:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, batch):
+            self.calls += 1
+            batch.set("advantage", torch.ones(batch.shape))
+            return batch
+
+    def test_estimator_applied_to_batch(self):
+        estimator = self._RecordingEstimator()
+        hook = ValueEstimatorHook(estimator)
+        batch = TensorDict({"observation": torch.randn(5, 3)}, [5])
+        out = hook(batch)
+        assert estimator.calls == 1
+        assert "advantage" in out.keys()
+
+    def test_none_batch_passthrough(self):
+        # async collection hands the pre_epoch stage a None batch: the hook
+        # must pass it through without calling the estimator
+        estimator = self._RecordingEstimator()
+        hook = ValueEstimatorHook(estimator)
+        assert hook(None) is None
+        assert estimator.calls == 0
+
+    def test_state_dict_plain_callable(self):
+        hook = ValueEstimatorHook(self._RecordingEstimator())
+        assert hook.state_dict() == {}
+        hook.load_state_dict({})
+
+    def test_state_dict_module_delegation(self):
+        module = torch.nn.Linear(3, 1)
+        hook = ValueEstimatorHook(module)
+        state = hook.state_dict()
+        assert "value_estimator" in state
+
+        module2 = torch.nn.Linear(3, 1)
+        hook2 = ValueEstimatorHook(module2)
+        hook2.load_state_dict(state)
+        assert torch.equal(module2.weight, module.weight)
+
+    def test_register(self):
+        trainer = mocking_trainer()
+        hook = ValueEstimatorHook(self._RecordingEstimator())
+        hook.register(trainer)
+        ops = trainer._pre_epoch_ops
+        assert any(getattr(op, "__wrapped__", None) is hook for op, _ in ops)
+        assert trainer._modules["value_estimator"] is hook
 
 
 class TestProcessLossHook:

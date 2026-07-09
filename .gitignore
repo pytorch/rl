@@ -202,6 +202,8 @@ setup-and-run.sh
 dev/
 main/
 *.html
+# CI dashboard template deployed to gh-pages
+!.github/scripts/*.html
 
 # Additional cache directories
 .ruff_cache/

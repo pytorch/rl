@@ -21,6 +21,7 @@ from torchrl.collectors._evaluator import (
     _freeze_vecnorm,
     _wrap_env_factory_frozen,
 )
+from torchrl.data import Unbounded
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import (
@@ -30,6 +31,8 @@ from torchrl.envs.transforms import (
     Transform,
     VecNormV2,
 )
+from torchrl.record import VideoRecorder
+from torchrl.record.loggers.process import ProcessLogger
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -62,6 +65,60 @@ class _DumpStep(Transform):
 
 def _make_dump_env(path: str):
     return TransformedEnv(_make_env(), Compose(_DumpStep(path)))
+
+
+class _VideoEventsLogger:
+    """Duck-typed logger that appends each ``log_video`` call to a file."""
+
+    def __init__(self, log_dir):
+        self.exp_name = "evaluator-video-test"
+        self.log_dir = str(log_dir)
+
+    def log_video(self, name, video, step=None, **kwargs):
+        del kwargs
+        with open(Path(self.log_dir) / "videos", "a") as file:
+            file.write(f"{name}:{step}:{video.shape[1]}\n")
+
+
+class _AddPixels(Transform):
+    """Writes a constant uint8 image so ``VideoRecorder`` has frames to record."""
+
+    def __init__(self):
+        super().__init__(in_keys=[], out_keys=["pixels"])
+
+    def _call(self, next_tensordict):
+        next_tensordict.set("pixels", torch.zeros(3, 8, 8, dtype=torch.uint8))
+        return next_tensordict
+
+    def _reset(self, tensordict, tensordict_reset):
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec):
+        observation_spec["pixels"] = Unbounded(
+            shape=(3, 8, 8), dtype=torch.uint8, device=observation_spec.device
+        )
+        return observation_spec
+
+
+def _make_video_env(video_logger):
+    return TransformedEnv(
+        _make_env(),
+        Compose(
+            _AddPixels(),
+            VideoRecorder(
+                video_logger,
+                tag="eval_video",
+                in_keys=["pixels"],
+                skip=1,
+                make_grid=False,
+            ),
+        ),
+    )
+
+
+def _read_video_events(log_dir):
+    lines = (Path(log_dir) / "videos").read_text().splitlines()
+    return [line.split(":") for line in lines]
 
 
 class TestEvaluatorSync:
@@ -114,6 +171,27 @@ class TestEvaluatorSync:
         try:
             metrics = evaluator.evaluate(weights=train_policy, step=0)
             assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_video_recorder_dump(self, tmp_path):
+        # Thread/same-process backend: the recorder is dumped locally by
+        # walking the env transform, once per eval at the requested step.
+        logger = _VideoEventsLogger(str(tmp_path))
+        env = _make_video_env(logger)
+        policy = _make_policy(env)
+        evaluator = Evaluator(
+            env, policy, num_trajectories=2, max_steps=10, dump_video=True
+        )
+        try:
+            evaluator.evaluate(step=11)
+            evaluator.evaluate(step=22)
+            records = _read_video_events(tmp_path)
+            assert [record[:2] for record in records] == [
+                ["eval_video", "11"],
+                ["eval_video", "22"],
+            ]
+            assert all(int(record[2]) > 0 for record in records)
         finally:
             evaluator.shutdown()
 
@@ -626,6 +704,34 @@ class TestEvaluatorProcess:
             assert metrics["eval/step"] == 456
         finally:
             evaluator.shutdown()
+
+    def test_video_recorder_dumps_to_process_logger(self, tmp_path):
+        # End-to-end: the eval env (with a VideoRecorder) lives in the
+        # collector worker process; the recorder logs through a picklable
+        # ProcessLogger client back to the parent-owned logger service.
+        process_logger = ProcessLogger(_VideoEventsLogger, str(tmp_path))
+        evaluator = Evaluator(
+            partial(_make_video_env, process_logger.client()),
+            policy_factory=_make_policy,
+            num_trajectories=2,
+            max_steps=10,
+            dump_video=True,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=3)
+            evaluator.evaluate(step=7)
+            process_logger.flush(timeout=30)
+            records = _read_video_events(tmp_path)
+            # exactly one worker-side dump per eval, at the requested step
+            assert [record[:2] for record in records] == [
+                ["eval_video", "3"],
+                ["eval_video", "7"],
+            ]
+            assert all(int(record[2]) > 0 for record in records)
+        finally:
+            evaluator.shutdown()
+            process_logger.shutdown(timeout=30)
 
     def test_dump_video_dispatches_compose_dump_in_worker(self, tmp_path):
         dump_path = tmp_path / "dump-step"
