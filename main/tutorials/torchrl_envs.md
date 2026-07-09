@@ -128,7 +128,7 @@ print("random action: \n", env.action_spec.rand())
 
 ```
 random action:
- tensor([-0.1730])
+ tensor([0.7600])
 ```
 
 Out of these specs, the `done_spec` deserves a special attention. In TorchRL,
@@ -433,7 +433,7 @@ plt.imshow(data.get("pixels").numpy())
 ![torchrl envs](../_images/sphx_glr_torchrl_envs_001.png)
 
 ```
-<matplotlib.image.AxesImage object at 0x7fe4cdcfc890>
+<matplotlib.image.AxesImage object at 0x7f59543ce690>
 ```
 
 Let's have a look at what the tensordict contains:
@@ -1015,7 +1015,7 @@ env.foo
 ```
 
 ```
-'bar_db21e7aa-7b7a-11f1-9e36-0242ac110002'
+'bar_d7c769d0-7b7b-11f1-bfc4-0242ac110002'
 ```
 
 ```
@@ -1043,7 +1043,7 @@ foo_list # needs to be instantiated, for instance using list
 ```
 
 ```
-<torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7fe4cda98190>
+<torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f593a82cb90>
 ```
 
 ```
@@ -1051,7 +1051,7 @@ list(foo_list)
 ```
 
 ```
-['bar_dcb62b62-7b7a-11f1-98db-0242ac110002', 'bar_dcb253c0-7b7a-11f1-a188-0242ac110002', 'bar_dcb62b62-7b7a-11f1-880f-0242ac110002']
+['bar_d95c925c-7b7b-11f1-9072-0242ac110002', 'bar_d94b7cce-7b7b-11f1-a50d-0242ac110002', 'bar_d95c0c38-7b7b-11f1-acd6-0242ac110002']
 ```
 
 Similarly, methods can also be accessed:
@@ -1197,8 +1197,8 @@ print("std: :", data.get("observation").std(0)) # Approx 1
 ```
 
 ```
-mean: : tensor([-0.3726, -0.0429, -0.1430])
-std: : tensor([1.0621, 1.2585, 1.2122])
+mean: : tensor([-0.1436, -0.0822, -0.6209])
+std: : tensor([1.1362, 1.1146, 1.0577])
 ```
 
 In **parallel envs** things are slightly more complicated, as we need to
@@ -1266,8 +1266,8 @@ data: TensorDict(
  batch_size=torch.Size([3, 5]),
  device=None,
  is_shared=False)
-mean: : tensor([-0.2071, 0.0978, 0.0689])
-std: : tensor([1.0269, 1.1225, 1.0888])
+mean: : tensor([-0.0282, 0.0772, -0.0189])
+std: : tensor([1.1267, 1.2093, 1.1469])
 ```
 
 The count is slightly higher than the number of steps (since we
@@ -1290,7 +1290,7 @@ del env
 update counts: tensor([18.])
 ```
 
-**Total running time of the script:** (0 minutes 24.770 seconds)
+**Total running time of the script:** (0 minutes 24.889 seconds)
 
 [`Download Jupyter notebook: torchrl_envs.ipynb`](../_downloads/3cb02b3346194d0f8cfea19dd5243c89/torchrl_envs.ipynb)
 
