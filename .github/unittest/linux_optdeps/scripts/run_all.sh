@@ -135,7 +135,7 @@ python -c "import functorch"
 #fi
 
 # install tensordict
-pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
   pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
