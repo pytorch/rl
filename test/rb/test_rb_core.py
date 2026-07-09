@@ -937,6 +937,33 @@ class TestReplayBufferConsumption:
         assert write_index.tolist() == consumed.tolist()
         assert rb2.storage.get(write_index).tolist() == [100, 101]
 
+    def test_replay_buffer_consume_load_state_dict_decouples_from_source(self):
+        # loading a state dict must clone the incoming tensors so that
+        # mutating the source afterwards does not corrupt the sampler state
+        # (e.g. tensors mmap-backed by torch.load(mmap=True))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(5),
+            batch_size=2,
+            consume_after_n_samples=1,
+        )
+        rb.extend(torch.arange(5))
+        rb.sample()
+
+        sampler_sd = rb.sampler.state_dict()
+        sampler2 = ConsumingSampler()
+        sampler2.load_state_dict(sampler_sd)
+
+        before_count = sampler2._sample_count.clone()
+        before_mask = sampler2._live_mask.clone()
+        sampler_sd["_sample_count"].fill_(42)
+        sampler_sd["_live_mask"].fill_(False)
+        assert (sampler2._sample_count == before_count).all()
+        assert (sampler2._live_mask == before_mask).all()
+        if sampler_sd["_free_indices"] is not None:
+            before_free = sampler2._free_indices.clone()
+            sampler_sd["_free_indices"].fill_(-1)
+            assert (sampler2._free_indices == before_free).all()
+
     def test_replay_buffer_consume_dumps_loads(self, tmpdir):
         torch.manual_seed(0)
         rb = ReplayBuffer(

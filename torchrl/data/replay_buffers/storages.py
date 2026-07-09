@@ -19,7 +19,7 @@ import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from copy import copy
+from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from typing import Any
 
@@ -512,10 +512,14 @@ class ListStorage(Storage):
         _storage = state_dict["_storage"]
         self._storage = []
         for elt in _storage:
+            # clone to decouple the storage from the caller's tensors (which may
+            # e.g. be mmap-backed views over a checkpoint file)
             if isinstance(elt, torch.Tensor):
-                self._storage.append(elt)
+                self._storage.append(elt.clone())
             elif isinstance(elt, (dict, OrderedDict)):
-                self._storage.append(TensorDict().load_state_dict(elt, strict=False))
+                self._storage.append(
+                    TensorDict().load_state_dict(elt, strict=False).clone()
+                )
             else:
                 raise TypeError(
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
@@ -977,7 +981,9 @@ class TensorStorage(Storage):
             if isinstance(self._storage, torch.Tensor):
                 self._storage.copy_(_storage)
             elif self._storage is None:
-                self._storage = _storage
+                # clone to decouple the storage from the caller's tensor (which
+                # may e.g. be mmap-backed by a checkpoint file)
+                self._storage = _storage.clone()
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
@@ -986,7 +992,11 @@ class TensorStorage(Storage):
             if is_tensor_collection(self._storage):
                 self._storage.load_state_dict(_storage, strict=False)
             elif self._storage is None:
-                self._storage = TensorDict().load_state_dict(_storage, strict=False)
+                # loading on an empty TensorDict assigns the state-dict tensors
+                # by reference: clone to decouple from the caller's tensors
+                self._storage = (
+                    TensorDict().load_state_dict(_storage, strict=False).clone()
+                )
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}. If your storage is pytree-based, use the dumps/load API instead."
@@ -2196,8 +2206,13 @@ class CompressedListStorage(ListStorage):
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Load the storage state."""
-        self._storage = state_dict["_storage"]
-        self._metadata = state_dict["_metadata"]
+        # clone tensors and copy containers to decouple the storage from the
+        # caller's objects
+        self._storage = [
+            elt.clone() if isinstance(elt, torch.Tensor) else elt
+            for elt in state_dict["_storage"]
+        ]
+        self._metadata = deepcopy(state_dict["_metadata"])
 
     def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
         """Convert data to a byte stream."""

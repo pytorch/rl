@@ -163,6 +163,50 @@ class TestStorages:
             storage2.get(range(10))
         )
 
+    @staticmethod
+    def _zero_state_dict_tensors(sd):
+        for value in sd.values():
+            if isinstance(value, torch.Tensor):
+                value.zero_()
+            elif isinstance(value, dict):
+                TestStorages._zero_state_dict_tensors(value)
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict"])
+    def test_load_state_dict_decouples_from_source(self, data_type):
+        # loading a state dict onto an uninitialized storage must clone the
+        # incoming tensors: aliasing them keeps e.g. mmap-backed tensors from
+        # torch.load(mmap=True) alive in the storage and leaks later mutations
+        # of the source state dict into the loaded data
+        if data_type == "tensor":
+            data = self._get_tensor()
+        else:
+            data = self._get_tensordict()
+        storage = TensorStorage(data)
+        sd = storage.state_dict()
+        storage2 = LazyTensorStorage(max_size=data.shape[0])
+        storage2.load_state_dict(sd)
+        before = storage2.get(range(10)).clone()
+        self._zero_state_dict_tensors(sd)
+        after = storage2.get(range(10))
+        if data_type == "tensor":
+            assert (after == before).all()
+        else:
+            assert_allclose_td(after, before)
+
+    def test_list_storage_load_state_dict_decouples_from_source(self):
+        storage = ListStorage(10)
+        storage.set(0, torch.randn(3))
+        storage.set(1, TensorDict({"a": torch.randn(3)}, [3]))
+        sd = storage.state_dict()
+        storage2 = ListStorage(10)
+        storage2.load_state_dict(sd)
+        before_tensor = storage2.get(0).clone()
+        before_td = storage2.get(1).clone()
+        sd["_storage"][0].zero_()
+        self._zero_state_dict_tensors(sd["_storage"][1])
+        assert (storage2.get(0) == before_tensor).all()
+        assert_allclose_td(storage2.get(1), before_td)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(),
