@@ -11,7 +11,7 @@ ${CONDA_RUN} pip install --upgrade setuptools packaging
 
 # Always install pybind11 - required for building C++ extensions
 ${CONDA_RUN} pip install "pybind11[global]"
-${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 
 # Check if ARCH is set to aarch64
 ARCH=${ARCH:-}  # This sets ARCH to an empty string if it's not defined
