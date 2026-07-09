@@ -236,10 +236,10 @@ data after sampling: TensorDict(
  batch_size=torch.Size([32]),
  device=cpu,
  is_shared=False)
-Directory '/tmp/tmpuw4lmy1y' deleted successfully.
+Directory '/tmp/tmpfzet8x6j' deleted successfully.
 ```
 
-**Total running time of the script:** (0 minutes 53.922 seconds)
+**Total running time of the script:** (0 minutes 48.131 seconds)
 
 [`Download Jupyter notebook: pretrained_models.ipynb`](../_downloads/3ba23a9a93590a43a3046afd5406df88/pretrained_models.ipynb)
 
