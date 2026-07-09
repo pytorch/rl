@@ -350,7 +350,13 @@ class SamplerWithoutReplacement(Sampler):
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.len_storage = state_dict["len_storage"]
-        self._sample_list = state_dict["_sample_list"]
+        # clone to decouple the sampler state from the caller's tensor
+        _sample_list = state_dict["_sample_list"]
+        self._sample_list = (
+            _sample_list.clone()
+            if isinstance(_sample_list, torch.Tensor)
+            else _sample_list
+        )
         self.drop_last = state_dict["drop_last"]
         self._ran_out = state_dict["_ran_out"]
 
@@ -1158,9 +1164,11 @@ class PrioritizedSampler(Sampler):
         self._alpha = state_dict["_alpha"]
         self._beta = state_dict["_beta"]
         self._eps = state_dict["_eps"]
-        self._max_priority = state_dict["_max_priority"]
-        self._sum_tree = state_dict.pop("_sum_tree")
-        self._min_tree = state_dict.pop("_min_tree")
+        # deepcopy to decouple the sampler state from the caller's objects
+        # (this also clones any tensor held in _max_priority)
+        self._max_priority = deepcopy(state_dict["_max_priority"])
+        self._sum_tree = deepcopy(state_dict["_sum_tree"])
+        self._min_tree = deepcopy(state_dict["_min_tree"])
 
     @implement_for("torch", None, "2.5.0")
     def dumps(self, path):
