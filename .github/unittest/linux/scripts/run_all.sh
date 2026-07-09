@@ -103,7 +103,7 @@ uv_pip_install \
   hypothesis \
   future \
   cloudpickle \
-  pyvers \
+  "pyvers>=0.2.3" \
   packaging \
   pygame \
   "moviepy<2.0.0" \
