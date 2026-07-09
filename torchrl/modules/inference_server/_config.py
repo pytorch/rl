@@ -9,8 +9,10 @@ from typing import Literal
 
 import torch
 
+from torchrl._utils import _make_ordinal_device
 
-def _as_device(device: torch.device | str | None) -> torch.device | None:
+
+def _as_device(device: torch.device | str | int | None) -> torch.device | None:
     if device is None:
         return None
     return torch.device(device)
@@ -77,6 +79,120 @@ class InferenceDeviceConfig:
         if self.output_device is not None:
             return self.output_device
         return self.env_device
+
+
+def _resolve_device_config(
+    device_config: InferenceDeviceConfig | None = None,
+    *,
+    device: torch.device | str | int | None = None,
+    policy_device: torch.device | str | int | None = None,
+    output_device: torch.device | str | int | None = None,
+    env_device: torch.device | str | int | None = None,
+    storing_device: torch.device | str | int | None = None,
+    allow_storing_device: bool = True,
+    collector_defaults: bool = False,
+) -> InferenceDeviceConfig:
+    """Resolve loose device kwargs and/or a device config into a single config.
+
+    This is the single source of truth for device-precedence rules shared by
+    :class:`~torchrl.modules.inference_server.InferenceServer`,
+    :class:`~torchrl.modules.inference_server.ProcessInferenceServer`,
+    :class:`~torchrl.collectors.AsyncBatchedCollector` and the regular
+    collectors (see https://github.com/pytorch/rl/issues/3943). The rules are:
+
+    - ``device_config`` is mutually exclusive with every loose device kwarg.
+    - ``device`` is an alias/default for ``policy_device``.
+    - ``output_device`` falls back to the explicitly-provided ``env_device``
+      (the natural device for actions returned to env workers).
+    - With ``collector_defaults=True`` (regular-collector semantics),
+      ``device`` also fills unset ``env_device`` and ``storing_device``,
+      devices are ordinalized (e.g. ``"cuda"`` -> ``"cuda:0"``), and an unset
+      ``storing_device`` falls back to the shared env/policy device when the
+      two coincide.
+
+    Args:
+        device_config (InferenceDeviceConfig, optional): pre-built device
+            config. Mutually exclusive with every other device argument.
+
+    Keyword Args:
+        device (torch.device, str or int, optional): generic device, used as
+            an alias for ``policy_device`` (and, with
+            ``collector_defaults=True``, as a default for ``env_device`` and
+            ``storing_device``).
+        policy_device (torch.device, str or int, optional): device that owns
+            the policy.
+        output_device (torch.device, str or int, optional): device for
+            inference results returned by a policy server.
+        env_device (torch.device, str or int, optional): device used when
+            stepping environments.
+        storing_device (torch.device, str or int, optional): device for
+            collected transitions.
+        allow_storing_device (bool, optional): when ``False``, a non-``None``
+            ``storing_device`` is rejected (policy servers do not consume it).
+            Defaults to ``True``.
+        collector_defaults (bool, optional): enable the regular-collector
+            fallbacks described above. Defaults to ``False``.
+
+    Returns:
+        InferenceDeviceConfig: a config with all precedence rules applied and
+        every field normalized to ``torch.device | None``.
+    """
+    if device_config is not None:
+        explicit = [
+            name
+            for name, value in (
+                ("device", device),
+                ("policy_device", policy_device),
+                ("output_device", output_device),
+                ("env_device", env_device),
+                ("storing_device", storing_device),
+            )
+            if value is not None
+        ]
+        if explicit:
+            raise ValueError(
+                "device_config is mutually exclusive with the explicit device "
+                f"keyword arguments (got {', '.join(explicit)})."
+            )
+    else:
+        device_config = InferenceDeviceConfig(
+            policy_device=policy_device,
+            output_device=output_device,
+            env_device=env_device,
+            storing_device=storing_device,
+        )
+    if not allow_storing_device and device_config.storing_device is not None:
+        raise ValueError(
+            "storing_device is a collector-level setting that the "
+            "server does not consume. The server only uses "
+            "policy_device and output_device (with env_device as a "
+            "fallback for output_device). Pass storing_device to the "
+            "collector instead."
+        )
+    device = _as_device(device)
+    policy_device = device_config.policy_device
+    output_device = device_config.server_output_device()
+    env_device = device_config.env_device
+    storing_device = device_config.storing_device
+    if policy_device is None:
+        policy_device = device
+    if collector_defaults:
+        if env_device is None:
+            env_device = device
+        if storing_device is None:
+            storing_device = device
+        policy_device = _make_ordinal_device(policy_device)
+        output_device = _make_ordinal_device(output_device)
+        env_device = _make_ordinal_device(env_device)
+        storing_device = _make_ordinal_device(storing_device)
+        if storing_device is None and env_device == policy_device:
+            storing_device = env_device
+    return InferenceDeviceConfig(
+        policy_device=policy_device,
+        output_device=output_device,
+        env_device=env_device,
+        storing_device=storing_device,
+    )
 
 
 @dataclass
