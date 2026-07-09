@@ -119,6 +119,49 @@
   description: "Tests full docs CI"
   color: "BFDADC"
 
+# Selective PR CI escape hatches (see .github/scripts/ci_decide.sh and .github/CI.md).
+# On PRs, the default matrix is pruned to changed-files + Python 3.12. Apply these
+# labels to force specific tracks back in without waiting for merge to main.
+- name: ciflow/full
+  description: "Run the full Linux test matrix on the PR (all tracks, all Python versions, all shards)"
+  color: "BFDADC"
+
+- name: ciflow/cpu-matrix
+  description: "Run all Python versions on the CPU test job (3.10..3.14)"
+  color: "BFDADC"
+
+- name: ciflow/gpu
+  description: "Run all three GPU test shards on the PR"
+  color: "BFDADC"
+
+- name: ciflow/stable
+  description: "Run tests-stable-gpu + tests-stable-gpu-distributed on the PR"
+  color: "BFDADC"
+
+- name: ciflow/olddeps
+  description: "Run tests-olddeps on the PR"
+  color: "BFDADC"
+
+- name: ciflow/optdeps
+  description: "Run tests-optdeps on the PR"
+  color: "BFDADC"
+
+- name: ciflow/distributed
+  description: "Run tests-gpu-distributed on the PR"
+  color: "BFDADC"
+
+- name: ciflow/sota
+  description: "Run test-linux-sota on the PR"
+  color: "BFDADC"
+
+- name: ciflow/tutorials
+  description: "Run test-linux-tutorials on the PR"
+  color: "BFDADC"
+
+- name: ciflow/windows
+  description: "Run test-windows-optdepts on the PR"
+  color: "BFDADC"
+
 # =============================================================================
 # CI Trigger Labels - Environments
 # =============================================================================
