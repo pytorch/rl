@@ -299,9 +299,6 @@ class TD3Trainer(Trainer):
         if self.enable_logging:
             self._setup_td3_logging()
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
     def _setup_td3_logging(self):
         """Set up logging hooks for TD3-specific metrics."""
         hook_dest = "pre_steps_log" if not self.async_collection else "post_optim_log"

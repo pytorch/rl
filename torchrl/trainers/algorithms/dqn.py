@@ -259,9 +259,6 @@ class DQNTrainer(Trainer):
         if self.enable_logging:
             self._setup_dqn_logging()
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
     def _step_greedy(self):
         """Advance epsilon-greedy annealing by the number of frames collected since last call."""
         delta = self.collected_frames - self._greedy_last_frames

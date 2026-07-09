@@ -193,9 +193,6 @@ class DDPGTrainer(Trainer):
         if self.enable_logging:
             self._setup_ddpg_logging()
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
     def _setup_ddpg_logging(self):
         """Set up logging hooks for DDPG-specific metrics."""
         hook_dest = "pre_steps_log" if not self.async_collection else "post_optim_log"

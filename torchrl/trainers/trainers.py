@@ -398,6 +398,7 @@ class Trainer:
         self.save_trainer_file = save_trainer_file
         self.checkpoint = checkpoint
         self._checkpoint_state = _TrainerCheckpointState(self)
+        self._checkpoint_skip_warnings: set[str] = set()
         self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
@@ -503,31 +504,61 @@ class Trainer:
                 return policy
         return None
 
-    def _sync_checkpoint_components(self) -> Checkpoint:
-        checkpoint = self.checkpoint
+    def _sync_checkpoint_components(
+        self, checkpoint: Checkpoint | None = None
+    ) -> Checkpoint:
         if checkpoint is None:
-            checkpoint = self.checkpoint = Checkpoint()
+            checkpoint = self.checkpoint
+        if checkpoint is None:
+            checkpoint = Checkpoint()
 
         def register(name: str, component: Any) -> None:
-            if (
-                name not in checkpoint
-                and component is not None
-                and self._is_checkpointable(component)
-            ):
+            if name in checkpoint or component is None:
+                return
+            if self._is_checkpointable(component):
                 checkpoint.register(name, component)
+            elif name not in self._checkpoint_skip_warnings:
+                torchrl_logger.warning(
+                    "Skipping non-checkpointable Trainer component %r (%s).",
+                    name,
+                    type(component).__name__,
+                )
+                self._checkpoint_skip_warnings.add(name)
 
         register("policy", self._checkpoint_policy())
         register("loss_module", self.loss_module)
-        register("optimizer", self.optimizer)
+
+        optimizer = self.optimizer
+        if not self._is_checkpointable(optimizer):
+            optimizer_hook = self._modules.get("optimizer")
+            hook_optimizer = getattr(optimizer_hook, "optimizer", optimizer_hook)
+            optimizer = (
+                hook_optimizer
+                if self._is_checkpointable(hook_optimizer)
+                else optimizer_hook
+            )
+        register("optimizer", optimizer)
+
         register("collector", self.collector)
-        register("replay_buffer", getattr(self, "replay_buffer", None))
+        replay_buffer = getattr(self, "replay_buffer", None)
+        if not self._is_checkpointable(replay_buffer):
+            replay_buffer_hook = self._modules.get("replay_buffer")
+            hook_replay_buffer = getattr(
+                replay_buffer_hook, "replay_buffer", replay_buffer_hook
+            )
+            replay_buffer = (
+                hook_replay_buffer
+                if self._is_checkpointable(hook_replay_buffer)
+                else replay_buffer_hook
+            )
+        register("replay_buffer", replay_buffer)
         register("logger", self.logger)
         register("exploration", getattr(self, "greedy_module", None))
         register("exploration", getattr(self, "exploration_module", None))
         register("target_updater", getattr(self, "target_net_updater", None))
         register("trainer_state", self._checkpoint_state)
         for name, module in self._modules.items():
-            if name in ("optimizer", "replay_buffer"):
+            if name in ("optimizer", "replay_buffer") and name in checkpoint:
                 continue
             register(f"trainer_module.{name}", module)
         return checkpoint
@@ -621,11 +652,16 @@ class Trainer:
             self._sync_checkpoint_components().save(self.save_trainer_file)
             return
         warnings.warn(
-            "The legacy CKPT_BACKEND trainer checkpoint format is deprecated. "
-            "The default will change to torchrl.checkpoint in v0.15 and the "
-            "legacy backend path will be removed in v0.16. Pass "
+            "The default Trainer checkpoint format will change from the legacy "
+            "CKPT_BACKEND format to torchrl.checkpoint in v0.15. Pass "
             "checkpoint=Checkpoint(...) to opt in now.",
             FutureWarning,
+            stacklevel=2,
+        )
+        warnings.warn(
+            "The legacy CKPT_BACKEND trainer checkpoint path is deprecated and "
+            "will be removed in v0.16. Use checkpoint=Checkpoint(...).",
+            DeprecationWarning,
             stacklevel=2,
         )
         if _CKPT_BACKEND == "torchsnapshot":
@@ -682,25 +718,40 @@ class Trainer:
         """Loads a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
-        They are ignored when ``CKPT_BACKEND=memmap``.
+        Unified checkpoints additionally accept ``strict`` to control missing
+        or incompatible components. Arguments are ignored when
+        ``CKPT_BACKEND=memmap``.
 
         .. note::
-            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
-            default for safer deserialization. Pass ``weights_only=False``
-            explicitly only if you have custom (non-stdlib) objects in your
-            state dict.
+            For unified and ``CKPT_BACKEND=torch`` checkpoints,
+            ``weights_only=True`` is set by default for safer deserialization.
+            Pass ``weights_only=False`` explicitly only if you have custom
+            objects in your state dict and trust the checkpoint source.
 
         .. note::
-            When ``CKPT_BACKEND=torch``, ``mmap=True`` is set by default so
-            the checkpoint is memory-mapped rather than materialized in RAM
-            at load time. Pass ``mmap=False`` if the checkpoint was saved
-            with the legacy (pre-zipfile) ``torch.save`` format or if
-            ``file`` is a file-like object rather than a path.
+            For unified and ``CKPT_BACKEND=torch`` checkpoints, ``mmap=True``
+            is set by default so tensor payloads are memory-mapped rather than
+            materialized in RAM at load time. Pass ``mmap=False`` for legacy
+            pre-zipfile ``torch.save`` files or file-like objects.
+
+        .. note::
+            Unified checkpoint tensors are mapped to CPU by default. Pass an
+            explicit ``map_location`` to select another device mapping.
 
         """
         if Checkpoint.is_checkpoint(file):
-            self._sync_checkpoint_components().load(
-                file, map_location=kwargs.pop("map_location", None)
+            checkpoint = self.checkpoint
+            if checkpoint is None:
+                checkpoint = Checkpoint()
+            map_location = kwargs.pop("map_location", "cpu")
+            strict = kwargs.pop("strict", None)
+            kwargs.setdefault("weights_only", True)
+            kwargs.setdefault("mmap", True)
+            self._sync_checkpoint_components(checkpoint).load(
+                file,
+                map_location=map_location,
+                tensor_load_kwargs=kwargs,
+                strict=strict,
             )
         elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)

@@ -107,8 +107,17 @@ class CursorAdapter(CheckpointAdapter):
         path.mkdir(parents=True, exist_ok=True)
         (path / "cursor.json").write_text(json.dumps(component.offset))
 
-    def load(self, component, path, *, map_location, args, kwargs):
-        del map_location, args, kwargs
+    def load(
+        self,
+        component,
+        path,
+        *,
+        map_location,
+        tensor_load_kwargs,
+        args,
+        kwargs,
+    ):
+        del map_location, tensor_load_kwargs, args, kwargs
         component.offset = json.loads((path / "cursor.json").read_text())
 
 

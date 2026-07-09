@@ -84,6 +84,8 @@ a solved CartPole checkpoint.
 Resume the complete training state by reusing the same configuration and adding
 `checkpoint.resume=true`. Policy-only consumers such as `rlrender` read only the
 policy and environment metadata entries and do not materialize the replay buffer.
+Set `checkpoint.include_replay_buffer=false` for smaller scheduled checkpoints
+when replay data is not required for resumption.
 
 The Gymnasium CartPole RGB renderer uses the optional `pygame` dependency,
 which is included in TorchRL's `rendering` extra.

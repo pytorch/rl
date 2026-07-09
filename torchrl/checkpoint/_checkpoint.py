@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import abc
-import hashlib
-import importlib.metadata
 import json
 import os
 import random
@@ -23,6 +21,7 @@ from typing import Any, Literal
 from urllib.parse import quote
 
 import numpy as np
+import tensordict
 import torch
 
 from torchrl import __version__ as torchrl_version
@@ -186,6 +185,7 @@ class CheckpointAdapter(abc.ABC):
         path: Path,
         *,
         map_location: Any,
+        tensor_load_kwargs: Mapping[str, Any],
         args: tuple[Any, ...],
         kwargs: Mapping[str, Any],
     ) -> Any:
@@ -220,10 +220,11 @@ class DumpLoadCheckpointAdapter(CheckpointAdapter):
         path: Path,
         *,
         map_location: Any,
+        tensor_load_kwargs: Mapping[str, Any],
         args: tuple[Any, ...],
         kwargs: Mapping[str, Any],
     ) -> Any:
-        del map_location
+        del map_location, tensor_load_kwargs
         component.load(path, *args, **kwargs)
         return None
 
@@ -259,10 +260,12 @@ class StateDictCheckpointAdapter(CheckpointAdapter):
         path: Path,
         *,
         map_location: Any,
+        tensor_load_kwargs: Mapping[str, Any],
         args: tuple[Any, ...],
         kwargs: Mapping[str, Any],
     ) -> Any:
-        load_kwargs: dict[str, Any] = {"weights_only": False}
+        load_kwargs: dict[str, Any] = {"weights_only": True}
+        load_kwargs.update(tensor_load_kwargs)
         if map_location is not None:
             load_kwargs["map_location"] = map_location
         state = torch.load(path / self.state_filename, **load_kwargs)
@@ -306,10 +309,11 @@ class JSONCheckpointAdapter(CheckpointAdapter):
         path: Path,
         *,
         map_location: Any,
+        tensor_load_kwargs: Mapping[str, Any],
         args: tuple[Any, ...],
         kwargs: Mapping[str, Any],
     ) -> Any:
-        del map_location
+        del map_location, tensor_load_kwargs
         if args or kwargs:
             raise TypeError("JSON checkpoint components do not accept load options.")
         with (path / self.state_filename).open(encoding="utf-8") as file:
@@ -342,9 +346,16 @@ class GlobalRNGState:
         """Capture all supported process-global RNG state."""
         state: dict[str, Any] = {
             "python": random.getstate(),
-            "numpy": np.random.get_state(),
             "torch_cpu": torch.random.get_rng_state(),
         }
+        numpy_state = np.random.get_state()
+        state["numpy"] = (
+            numpy_state[0],
+            torch.from_numpy(numpy_state[1].copy()),
+            numpy_state[2],
+            numpy_state[3],
+            numpy_state[4],
+        )
         if torch.cuda.is_initialized() and torch.cuda.is_available():
             state["torch_cuda"] = torch.cuda.get_rng_state_all()
         xpu = getattr(torch, "xpu", None)
@@ -368,7 +379,16 @@ class GlobalRNGState:
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         """Restore process-global RNG state."""
         random.setstate(state_dict["python"])
-        np.random.set_state(state_dict["numpy"])
+        numpy_state = state_dict["numpy"]
+        if isinstance(numpy_state[1], torch.Tensor):
+            numpy_state = (
+                numpy_state[0],
+                numpy_state[1].cpu().numpy().astype(np.uint32, copy=False),
+                numpy_state[2],
+                numpy_state[3],
+                numpy_state[4],
+            )
+        np.random.set_state(numpy_state)
         torch.random.set_rng_state(state_dict["torch_cpu"].cpu())
         if "torch_cuda" in state_dict:
             if not torch.cuda.is_available():
@@ -418,6 +438,8 @@ class Checkpoint:
             requested components.
         archive_compression: ``"stored"`` avoids recompressing payloads;
             ``"deflate"`` enables ZIP deflate compression.
+        save_components: Optional default component selection for saves. This
+            is useful for excluding large components from scheduled saves.
         **components: Named objects or JSON-compatible values to register.
 
     Examples:
@@ -441,6 +463,7 @@ class Checkpoint:
         format: CheckpointFormat = "directory",
         strict: CheckpointStrictness = "error",
         archive_compression: ArchiveCompression = "stored",
+        save_components: Collection[str] | None = None,
         **components: Any,
     ) -> None:
         self._validate_format(format)
@@ -453,6 +476,9 @@ class Checkpoint:
         self.format = format
         self.strict = strict
         self.archive_compression = archive_compression
+        self.save_components = (
+            None if save_components is None else frozenset(save_components)
+        )
         self._components: dict[str, _Component] = {}
         self._adapter_registry: list[tuple[type, CheckpointAdapter]] = []
         for name, component in components.items():
@@ -519,7 +545,9 @@ class Checkpoint:
 
         Args:
             path: Local checkpoint destination.
-            components: Component names to save. ``None`` saves all.
+            components: Component names to save. ``None`` uses
+                ``save_components`` from construction, or saves all when no
+                default selection was configured.
             component_options: Per-operation option overrides.
             format: Per-operation container override.
             metadata: JSON-compatible manifest metadata.
@@ -530,7 +558,9 @@ class Checkpoint:
         destination = self._local_path(path)
         output_format = self.format if format is None else format
         self._validate_format(output_format)
-        selected = self._selection(components)
+        selected = self._selection(
+            self.save_components if components is None else components
+        )
         options = component_options or {}
         unknown_options = set(options).difference(selected)
         if unknown_options:
@@ -539,11 +569,8 @@ class Checkpoint:
                 f"{sorted(unknown_options)}."
             )
         destination.parent.mkdir(parents=True, exist_ok=True)
-        stage = Path(
-            tempfile.mkdtemp(
-                prefix=f".{destination.name}.stage-", dir=destination.parent
-            )
-        )
+        stage = destination.parent / (f".{destination.name}.stage-{uuid.uuid4().hex}")
+        stage.mkdir(mode=0o777)
         try:
             component_records: dict[str, Any] = {}
             for index, name in enumerate(sorted(selected)):
@@ -559,14 +586,14 @@ class Checkpoint:
                     kwargs=resolved_options.save_kwargs or {},
                 )
                 files = sorted(
-                    str(file.relative_to(component_path))
+                    file.relative_to(component_path).as_posix()
                     for file in component_path.rglob("*")
                     if file.is_file()
                 )
                 component_records[name] = {
                     "adapter": adapter.adapter_id,
                     "adapter_version": adapter.format_version,
-                    "path": str(relative_path),
+                    "path": relative_path.as_posix(),
                     "files": files,
                 }
             manifest = self._new_manifest(
@@ -591,7 +618,7 @@ class Checkpoint:
                     with zipfile.ZipFile(archive, "w", compression=compression) as file:
                         for source in sorted(stage.rglob("*")):
                             if source.is_file():
-                                file.write(source, source.relative_to(stage))
+                                file.write(source, source.relative_to(stage).as_posix())
                     self._publish_path(archive, destination)
                 finally:
                     self._remove_path(archive)
@@ -607,6 +634,7 @@ class Checkpoint:
         components: Collection[str] | None = None,
         component_options: Mapping[str, CheckpointOptions] | None = None,
         map_location: Any = None,
+        tensor_load_kwargs: Mapping[str, Any] | None = None,
         strict: CheckpointStrictness | None = None,
     ) -> CheckpointLoadResult:
         """Restore selected components from a local checkpoint.
@@ -617,6 +645,9 @@ class Checkpoint:
                 registered components.
             component_options: Per-operation option overrides.
             map_location: Device mapping used while reading tensor payloads.
+            tensor_load_kwargs: Additional keyword arguments passed to
+                :func:`torch.load` for state-dict components. ``weights_only``
+                defaults to ``True``.
             strict: Per-operation strictness override.
 
         Returns:
@@ -672,8 +703,9 @@ class Checkpoint:
                 try:
                     value = adapters[name].load(
                         registration.value,
-                        root / record["path"],
+                        root / record["path"].replace("\\", "/"),
                         map_location=map_location,
+                        tensor_load_kwargs=tensor_load_kwargs or {},
                         args=resolved_options.load_args or (),
                         kwargs=resolved_options.load_kwargs or {},
                     )
@@ -824,10 +856,6 @@ class Checkpoint:
     ) -> dict[str, Any]:
         if not Checkpoint._is_json_value(metadata):
             raise TypeError("Checkpoint manifest metadata must be JSON-compatible.")
-        try:
-            tensordict_version = importlib.metadata.version("tensordict")
-        except importlib.metadata.PackageNotFoundError:
-            tensordict_version = None
         return {
             "format": _FORMAT_NAME,
             "format_version": _FORMAT_VERSION,
@@ -836,7 +864,7 @@ class Checkpoint:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "versions": {
                 "torchrl": torchrl_version,
-                "tensordict": tensordict_version,
+                "tensordict": tensordict.__version__,
                 "torch": torch.__version__,
             },
             "metadata": _to_json_value(metadata),
@@ -858,14 +886,14 @@ class Checkpoint:
         try:
             with zipfile.ZipFile(source) as archive:
                 for record in records.values():
-                    root = Path(record["path"])
+                    root = Path(record["path"].replace("\\", "/"))
                     (temporary / root).mkdir(parents=True, exist_ok=True)
                     for relative_file in record["files"]:
-                        member = root / relative_file
+                        member = root / relative_file.replace("\\", "/")
                         cls._validate_archive_member(member)
                         destination = temporary / member
                         destination.parent.mkdir(parents=True, exist_ok=True)
-                        with archive.open(str(member)) as source_file:
+                        with archive.open(member.as_posix()) as source_file:
                             with destination.open("wb") as destination_file:
                                 shutil.copyfileobj(source_file, destination_file)
             yield temporary
@@ -959,13 +987,13 @@ class Checkpoint:
             raise CheckpointError(
                 f"Checkpoint component {name!r} has an invalid file inventory."
             )
-        cls._validate_archive_member(Path(relative_path))
+        cls._validate_archive_member(Path(relative_path.replace("\\", "/")))
         for relative_file in files:
             if not isinstance(relative_file, str):
                 raise CheckpointError(
                     f"Checkpoint component {name!r} has an invalid file inventory."
                 )
-            cls._validate_archive_member(Path(relative_file))
+            cls._validate_archive_member(Path(relative_file.replace("\\", "/")))
 
     @staticmethod
     def _validate_format(format: str) -> None:
@@ -989,10 +1017,3 @@ class Checkpoint:
         except (TypeError, ValueError, OverflowError):
             return False
         return True
-
-
-def checkpoint_manifest_hash(path: str | Path) -> str:
-    """Return a stable SHA256 digest of a checkpoint manifest."""
-    manifest = Checkpoint.manifest(path)
-    payload = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(payload).hexdigest()

@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import zipfile
 
 import numpy as np
 import pytest
+import tensordict
 import torch
 from tensordict import TensorDict
 from torchrl.checkpoint import (
@@ -56,8 +58,17 @@ class BoxAdapter(CheckpointAdapter):
         path.mkdir(parents=True, exist_ok=True)
         (path / "box.json").write_text(json.dumps(component.value))
 
-    def load(self, component, path, *, map_location, args, kwargs):
-        del map_location, args, kwargs
+    def load(
+        self,
+        component,
+        path,
+        *,
+        map_location,
+        tensor_load_kwargs,
+        args,
+        kwargs,
+    ):
+        del map_location, tensor_load_kwargs, args, kwargs
         component.value = json.loads((path / "box.json").read_text())
 
 
@@ -117,6 +128,7 @@ def test_state_dict_json_and_manifest_roundtrip(tmp_path, format):
     assert result.manifest["format"] == "torchrl.checkpoint"
     assert result.manifest["format_version"] == 1
     assert result.manifest["container"] == format
+    assert result.manifest["versions"]["tensordict"] == tensordict.__version__
     assert result.manifest["metadata"] == {"run": "test"}
     assert result.manifest["components"]["policy"]["files"] == ["state.pt"]
     torch.testing.assert_close(source.weight, target.weight)
@@ -138,6 +150,16 @@ def test_component_save_selection_and_restored_value(tmp_path, format):
     assert result.values["value"] == 3
 
 
+def test_default_save_component_selection(tmp_path):
+    path = tmp_path / "checkpoint"
+    Checkpoint(
+        save_components={"policy"},
+        policy=torch.nn.Linear(2, 2),
+        replay_buffer={"large": True},
+    ).save(path)
+    assert set(Checkpoint.manifest(path)["components"]) == {"policy"}
+
+
 def test_deflate_archive(tmp_path):
     path = tmp_path / "checkpoint.torchrl"
     Checkpoint(
@@ -150,6 +172,52 @@ def test_deflate_archive(tmp_path):
             member.compress_type == zipfile.ZIP_DEFLATED
             for member in archive.infolist()
         )
+
+
+def test_state_dict_tensor_load_options(tmp_path, monkeypatch):
+    path = tmp_path / "checkpoint"
+    Checkpoint(policy=torch.nn.Linear(2, 2)).save(path)
+    torch_load = torch.load
+    calls = []
+
+    def load(*args, **kwargs):
+        calls.append(kwargs.copy())
+        return torch_load(*args, **kwargs)
+
+    monkeypatch.setattr(torch, "load", load)
+    Checkpoint(policy=torch.nn.Linear(2, 2)).load(
+        path,
+        map_location="cpu",
+        tensor_load_kwargs={"weights_only": True, "mmap": False},
+    )
+    assert calls == [{"weights_only": True, "mmap": False, "map_location": "cpu"}]
+
+
+def test_archive_accepts_windows_manifest_separators(tmp_path):
+    path = tmp_path / "checkpoint.torchrl"
+    source = torch.nn.Linear(2, 2)
+    Checkpoint(format="archive", policy=source).save(path)
+    with zipfile.ZipFile(path) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    manifest = json.loads(members["manifest.json"])
+    for record in manifest["components"].values():
+        record["path"] = record["path"].replace("/", "\\")
+        record["files"] = [name.replace("/", "\\") for name in record["files"]]
+    members["manifest.json"] = json.dumps(manifest).encode()
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, payload in members.items():
+            archive.writestr(name, payload)
+
+    target = torch.nn.Linear(2, 2)
+    Checkpoint(policy=target).load(path)
+    torch.testing.assert_close(source.weight, target.weight)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits are required")
+def test_directory_uses_normal_directory_permissions(tmp_path):
+    path = tmp_path / "checkpoint"
+    Checkpoint(value={"ok": True}).save(path)
+    assert path.stat().st_mode & 0o050 == 0o050
 
 
 @pytest.mark.parametrize("format", ["directory", "archive"])
@@ -262,7 +330,8 @@ def test_manifest_migration(tmp_path, monkeypatch):
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises(CheckpointError, match="no migration"):
         Checkpoint.manifest(path)
-    monkeypatch.setattr(Checkpoint, "_format_migrations", {0: migrate_v0_manifest})
+    monkeypatch.setattr(Checkpoint, "_format_migrations", {})
+    Checkpoint.register_migration(0, migrate_v0_manifest)
     assert Checkpoint.manifest(path)["metadata"]["migrated"] is True
 
 

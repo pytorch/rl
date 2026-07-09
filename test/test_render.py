@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import socket
@@ -62,6 +63,17 @@ class UnrequestedLargeComponent:
 
     def load(self, path):
         raise AssertionError(f"Unrequested component was read from {path}")
+
+
+class TrainerStateComponent:
+    def __init__(self, frames=0):
+        self.frames = frames
+
+    def state_dict(self):
+        return {"collected_frames": self.frames}
+
+    def load_state_dict(self, state_dict):
+        self.frames = state_dict["collected_frames"]
 
 
 class FakeIFrame:
@@ -328,7 +340,7 @@ class TestRenderCheckpoint:
         payload = {"model_state_dict": {"bias": torch.ones(1)}}
         torch.save(payload, path)
         assert load_checkpoint(path)["model_state_dict"]["bias"].item() == 1
-        assert len(checkpoint_hash(path)) == 64
+        assert checkpoint_hash(path) == hashlib.sha256(path.read_bytes()).hexdigest()
         assert infer_state_dict(payload)["bias"].item() == 1
         with pytest.raises(ValueError, match="Only local checkpoint"):
             load_checkpoint("https://example.com/policy.pt")
@@ -337,20 +349,47 @@ class TestRenderCheckpoint:
         module = torch.nn.Linear(2, 2)
         assert save_render_checkpoint(None, module) is None
         assert save_render_checkpoint("", module) is None
-        path = save_render_checkpoint(
-            tmp_path / "checkpoints" / "policy.pt",
-            module,
-            env_metadata={"env_name": "CartPole-v1", "vecnorm": None},
-            frames=7,
-            metrics={"eval/reward": 1.0},
-            config={"env": {"env_name": "CartPole-v1"}},
-        )
+        with pytest.warns(FutureWarning, match="v0.15"):
+            path = save_render_checkpoint(
+                tmp_path / "checkpoints" / "policy.pt",
+                module,
+                env_metadata={
+                    "env_name": "CartPole-v1",
+                    "vecnorm": {"loc": torch.ones(2), "scale": torch.ones(2)},
+                },
+                frames=7,
+                metrics={"eval/reward": 1.0},
+                config={"env": {"env_name": "CartPole-v1"}},
+            )
+        assert "model_state_dict" in torch.load(path, weights_only=True)
         payload = load_checkpoint(path)
         assert payload["env_name"] == "CartPole-v1"
-        assert payload["vecnorm"] is None
+        torch.testing.assert_close(payload["vecnorm"]["loc"], torch.ones(2))
         assert payload["frames"] == 7
         assert payload["metrics"] == {"eval/reward": 1.0}
         assert infer_state_dict(payload)["weight"].shape == (2, 2)
+
+    def test_unified_tensor_metadata_and_trainer_state(self, tmp_path):
+        path = save_render_checkpoint(
+            tmp_path / "policy.torchrl",
+            torch.nn.Linear(2, 2),
+            env_metadata={
+                "vecnorm": {"loc": torch.ones(2), "scale": torch.full((2,), 2)}
+            },
+            format="archive",
+        )
+        payload = load_checkpoint(path)
+        assert checkpoint_hash(path) == hashlib.sha256(path.read_bytes()).hexdigest()
+        torch.testing.assert_close(payload["vecnorm"]["loc"], torch.ones(2))
+        torch.testing.assert_close(payload["vecnorm"]["scale"], torch.full((2,), 2))
+
+        trainer_path = tmp_path / "trainer.torchrl"
+        Checkpoint(
+            format="archive",
+            policy=torch.nn.Linear(2, 2),
+            trainer_state=TrainerStateComponent(37),
+        ).save(trainer_path)
+        assert load_checkpoint(trainer_path)["frames"] == 37
 
     def test_unified_policy_load_does_not_read_large_components(self, tmp_path):
         path = tmp_path / "policy.torchrl"
@@ -980,6 +1019,9 @@ class TestSotaCheckpointFactories:
         save_checkpoint = import_from_string(
             f"{dqn_dir / 'dqn_cartpole.py'}:_save_checkpoint"
         )
+        resume_checkpoint = import_from_string(
+            f"{dqn_dir / 'dqn_cartpole.py'}:_resume_checkpoint"
+        )
         saved_path = tmp_path / "saved_dqn.pt"
         save_checkpoint(
             saved_path,
@@ -992,6 +1034,53 @@ class TestSotaCheckpointFactories:
         assert saved["frames"] == 12
         assert saved["env_name"] == "CartPole-v1"
         assert "model_state_dict" in saved
+
+        resume_path = tmp_path / "resume_dqn.torchrl"
+        Checkpoint(
+            format="archive",
+            trainer_state={"collected_frames": 9},
+            config={"learning_rate": 1e-3},
+            replay_buffer=UnrequestedLargeComponent(),
+        ).save(resume_path)
+        current_config = {"learning_rate": 2e-3}
+        current_state = {"collected_frames": 0}
+        resume_target = Checkpoint(
+            trainer_state=current_state,
+            config=current_config,
+            replay_buffer=UnrequestedLargeComponent(),
+        )
+        result = resume_checkpoint(
+            resume_target,
+            resume_path,
+            "cpu",
+            include_replay_buffer=False,
+        )
+        assert current_config == {"learning_rate": 2e-3}
+        assert current_state == {"collected_frames": 9}
+        assert result.unrequested == {"config", "replay_buffer"}
+
+        compact_path = tmp_path / "compact_dqn.torchrl"
+        compact_checkpoint = Checkpoint(
+            format="archive",
+            policy=model,
+            replay_buffer=UnrequestedLargeComponent(),
+            trainer_state={},
+            metrics={},
+        )
+        save_checkpoint(
+            compact_path,
+            cfg=OmegaConf.create(
+                {
+                    "env": {"env_name": "CartPole-v1"},
+                    "checkpoint": {"include_replay_buffer": False},
+                }
+            ),
+            model=model,
+            collected_frames=13,
+            metrics={},
+            checkpoint=compact_checkpoint,
+        )
+        assert "replay_buffer" not in Checkpoint.manifest(compact_path)["components"]
 
         make_render_policy = import_from_string(f"{utils_path}:make_render_policy")
         calls = []
@@ -1110,25 +1199,27 @@ class TestSotaCheckpointFactories:
             f"{ppo_dir / 'ppo_mujoco.py'}:_save_checkpoint"
         )
         saved_path = tmp_path / "saved_ppo.pt"
-        save_checkpoint(
-            saved_path,
-            cfg=OmegaConf.create(
-                {
-                    "env": {
-                        "env_name": "InvertedPendulum-v4",
-                        "backend": "gym",
-                        "config_overrides": {},
-                        "num_envs": 1,
-                        "batch_mode": "parallel",
-                        "normalize_observation": False,
-                        "max_episode_steps": 7,
+        with pytest.warns(FutureWarning, match="v0.15"):
+            save_checkpoint(
+                saved_path,
+                cfg=OmegaConf.create(
+                    {
+                        "env": {
+                            "env_name": "InvertedPendulum-v4",
+                            "backend": "gym",
+                            "config_overrides": {},
+                            "num_envs": 1,
+                            "batch_mode": "parallel",
+                            "normalize_observation": False,
+                            "max_episode_steps": 7,
+                        }
                     }
-                }
-            ),
-            model=actor,
-            collected_frames=24,
-            metrics={"eval/reward": 20.0},
-        )
+                ),
+                model=actor,
+                collected_frames=24,
+                metrics={"eval/reward": 20.0},
+            )
+        assert "model_state_dict" in torch.load(saved_path, weights_only=True)
         saved = load_checkpoint(saved_path)
         assert saved["frames"] == 24
         assert saved["env_backend"] == "gym"

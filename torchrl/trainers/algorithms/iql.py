@@ -172,9 +172,6 @@ class IQLTrainer(Trainer):
         if self.enable_logging:
             self._setup_iql_logging()
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
     def _setup_iql_logging(self):
         """Set up logging hooks for IQL-specific metrics."""
         hook_dest = "pre_steps_log" if not self.async_collection else "post_optim_log"

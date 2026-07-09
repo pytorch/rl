@@ -274,6 +274,3 @@ class OfflineToOnlineTrainer(SACTrainer):
             OfflineToOnlineAnnealHook(self, replay_buffer, self.anneal_frames).register(
                 self
             )
-
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()

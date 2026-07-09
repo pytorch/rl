@@ -5,14 +5,15 @@
 from __future__ import annotations
 
 import hashlib
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import torch
 from torch import Tensor
+
 from torchrl.checkpoint import Checkpoint, CheckpointFormat
-from torchrl.checkpoint._checkpoint import checkpoint_manifest_hash
 
 __all__ = [
     "checkpoint_hash",
@@ -46,7 +47,7 @@ def save_render_checkpoint(
     metrics: Mapping[str, Any] | None = None,
     config: Mapping[str, Any] | None = None,
     extra: Mapping[str, Any] | None = None,
-    format: CheckpointFormat = "archive",
+    format: CheckpointFormat | None = None,
 ) -> Path | None:
     """Writes a checkpoint in the layout expected by rlrender factories.
 
@@ -68,8 +69,8 @@ def save_render_checkpoint(
         metrics: Scalar metrics recorded at checkpoint time.
         config: JSON-serializable training configuration.
         extra: Additional payload entries merged last.
-        format: Unified checkpoint container format. Defaults to ``"archive"``
-            to preserve the existing single-path rlrender workflow.
+        format: Unified checkpoint container format. When omitted, writes the
+            legacy :func:`torch.save` payload during the compatibility window.
 
     Returns:
         The written checkpoint path, or ``None`` when checkpointing is disabled.
@@ -81,7 +82,10 @@ def save_render_checkpoint(
         >>> module = torch.nn.Linear(2, 2)
         >>> with tempfile.TemporaryDirectory() as tmpdir:
         ...     path = save_render_checkpoint(
-        ...         f"{tmpdir}/policy.pt", module, env_metadata={"env_name": "CartPole-v1"}
+        ...         f"{tmpdir}/policy.pt",
+        ...         module,
+        ...         env_metadata={"env_name": "CartPole-v1"},
+        ...         format="archive",
         ...     )
         ...     payload = load_checkpoint(path)
         >>> payload["env_name"]
@@ -89,10 +93,41 @@ def save_render_checkpoint(
     """
     if path in (None, ""):
         return None
+    path = Path(path).expanduser()
+    if format is None:
+        warnings.warn(
+            "The default save_render_checkpoint output will change from the "
+            "legacy torch.save payload to a unified TorchRL checkpoint in v0.15. "
+            "Pass format='archive' or format='directory' to opt in now.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        payload: dict[str, Any] = {
+            "model_state_dict": model
+            if isinstance(model, Mapping)
+            else model.state_dict()
+        }
+        if env_metadata:
+            payload.update(dict(env_metadata))
+        if frames is not None:
+            payload["frames"] = int(frames)
+        if metrics is not None:
+            payload["metrics"] = dict(metrics)
+        if config is not None:
+            payload["config"] = dict(config)
+        if extra:
+            payload.update(dict(extra))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(payload, path)
+        return path
+
     policy = _StateDictComponent(model) if isinstance(model, Mapping) else model
     components: dict[str, Any] = {"policy": policy}
     if env_metadata is not None:
-        components["environment_metadata"] = dict(env_metadata)
+        metadata = dict(env_metadata)
+        components["environment_metadata"] = (
+            _StateDictComponent(metadata) if _contains_tensor(metadata) else metadata
+        )
     if frames is not None:
         components["trainer_state"] = {"frames": int(frames)}
     if metrics is not None:
@@ -100,17 +135,29 @@ def save_render_checkpoint(
     if config is not None:
         components["config"] = dict(config)
     if extra is not None:
-        components["extra"] = dict(extra)
-    path = Path(path).expanduser()
+        extra_payload = dict(extra)
+        components["extra"] = (
+            _StateDictComponent(extra_payload)
+            if _contains_tensor(extra_payload)
+            else extra_payload
+        )
     return Checkpoint(format=format, **components).save(path)
 
 
-def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") -> Any:
+def load_checkpoint(
+    path: str | Path,
+    map_location: str | torch.device = "cpu",
+    *,
+    weights_only: bool | None = None,
+) -> Any:
     """Loads a local PyTorch checkpoint.
 
     Args:
         path: Local checkpoint path.
         map_location: Device mapping passed to :func:`torch.load`.
+        weights_only: Whether payloads are restricted to safe weight-only
+            types. Unified checkpoints default to ``True``. Legacy payloads
+            retain their historical ``False`` default for compatibility.
 
     Returns:
         The checkpoint payload.
@@ -124,8 +171,16 @@ def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") 
         raise FileNotFoundError(f"Checkpoint path does not exist: {path!s}.")
     try:
         if Checkpoint.is_checkpoint(path):
-            return _load_unified_checkpoint(path, map_location)
-        return torch.load(path, map_location=map_location, weights_only=False)
+            return _load_unified_checkpoint(
+                path,
+                map_location,
+                weights_only=True if weights_only is None else weights_only,
+            )
+        return torch.load(
+            path,
+            map_location=map_location,
+            weights_only=False if weights_only is None else weights_only,
+        )
     except Exception as err:
         raise RuntimeError(
             f"Could not load checkpoint {path!s}. If this checkpoint uses a custom "
@@ -134,31 +189,37 @@ def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") 
 
 
 def checkpoint_hash(path: str | Path) -> str:
-    """Compute a checkpoint digest without reading unrequested payloads.
-
-    Unified checkpoints hash their canonical manifest. Legacy checkpoint files
-    retain the historical whole-file SHA256 behavior.
-    """
+    """Compute a SHA256 digest over all checkpoint bytes."""
     path = Path(path).expanduser()
-    if Checkpoint.is_checkpoint(path):
-        return checkpoint_manifest_hash(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Checkpoint path does not exist: {path!s}.")
     digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
+    files = [path] if path.is_file() else sorted(path.rglob("*"))
+    for file_path in files:
+        if not file_path.is_file():
+            continue
+        if path.is_dir():
+            digest.update(file_path.relative_to(path).as_posix().encode())
+            digest.update(b"\0")
+        with file_path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
     return digest.hexdigest()
 
 
 def _load_unified_checkpoint(
-    path: Path, map_location: str | torch.device
+    path: Path,
+    map_location: str | torch.device,
+    *,
+    weights_only: bool,
 ) -> dict[str, Any]:
     manifest = Checkpoint.manifest(path)
     policy = _StateDictComponent()
-    environment_metadata: dict[str, Any] = {}
-    trainer_state: dict[str, Any] = {}
-    metrics: dict[str, Any] = {}
-    config: dict[str, Any] = {}
-    extra: dict[str, Any] = {}
+    environment_metadata = _restore_target(manifest, "environment_metadata")
+    trainer_state = _restore_target(manifest, "trainer_state")
+    metrics = _restore_target(manifest, "metrics")
+    config = _restore_target(manifest, "config")
+    extra = _restore_target(manifest, "extra")
     checkpoint = Checkpoint(
         strict="ignore",
         policy=policy,
@@ -173,8 +234,14 @@ def _load_unified_checkpoint(
         path,
         components=requested,
         map_location=map_location,
+        tensor_load_kwargs={"weights_only": weights_only, "mmap": True},
         strict="ignore",
     )
+    environment_metadata = _restored_mapping(environment_metadata)
+    trainer_state = _restored_mapping(trainer_state)
+    metrics = _restored_mapping(metrics)
+    config = _restored_mapping(config)
+    extra = _restored_mapping(extra)
     payload: dict[str, Any] = {}
     if policy.value is not None:
         payload["model_state_dict"] = policy.value
@@ -188,6 +255,29 @@ def _load_unified_checkpoint(
         payload["config"] = config
     payload.update(extra)
     return payload
+
+
+def _restore_target(manifest: Mapping[str, Any], name: str) -> Any:
+    record = manifest["components"].get(name)
+    if record is not None and record["adapter"] == "torchrl.state_dict":
+        return _StateDictComponent()
+    return {}
+
+
+def _restored_mapping(component: Any) -> dict[str, Any]:
+    if isinstance(component, _StateDictComponent):
+        return dict(component.value or {})
+    return component
+
+
+def _contains_tensor(value: Any) -> bool:
+    if isinstance(value, Tensor):
+        return True
+    if isinstance(value, Mapping):
+        return any(_contains_tensor(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_tensor(item) for item in value)
+    return False
 
 
 def infer_state_dict(payload: Any, key: str | None = None) -> Mapping[str, Tensor]:

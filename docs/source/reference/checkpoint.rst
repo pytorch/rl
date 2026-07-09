@@ -41,6 +41,11 @@ configured storage checkpointer and compression. Other TorchRL and PyTorch
 objects normally use ``state_dict`` and ``load_state_dict``. JSON-compatible
 configuration, metrics, and metadata are stored without pickle.
 
+Set ``save_components={"policy", "optimizer", "trainer_state"}`` on a
+:class:`Checkpoint` to keep large components such as replay buffers out of
+scheduled Trainer saves. An explicit ``components=`` argument to
+:meth:`Checkpoint.save` overrides this default selection.
+
 Custom components
 -----------------
 
@@ -68,6 +73,11 @@ Trainer's legacy ``CKPT_BACKEND`` path remains available during the migration
 window. Passing ``checkpoint=Checkpoint(...)`` to a trainer opts into the
 unified format. Existing torch, torchsnapshot, and memmap trainer checkpoints
 remain readable.
+
+The :func:`torchrl.render.save_render_checkpoint` helper also keeps its legacy
+``torch.save`` payload by default during the compatibility window. Pass
+``format="archive"`` or ``format="directory"`` to opt into the unified format;
+the default changes in v0.15.
 
 API
 ---

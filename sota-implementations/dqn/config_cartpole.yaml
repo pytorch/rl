@@ -35,6 +35,7 @@ checkpoint:
   format: archive
   strict: error
   resume: false
+  include_replay_buffer: true
 
 # Optim
 optim:

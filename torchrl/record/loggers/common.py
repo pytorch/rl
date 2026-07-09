@@ -312,33 +312,24 @@ class Logger(metaclass=_RayServiceMetaClass):
         self.flush()
         state: dict[str, Any] = {
             "exp_name": self.exp_name,
-            "log_dir": self.log_dir,
+            "log_dir": str(self.log_dir),
         }
-        for name in ("id", "video_log_counter"):
-            if hasattr(self, name):
-                state[name] = getattr(self, name)
-        experiment_state = {}
-        for name in ("scalars", "videos_counter", "text_counter"):
-            if hasattr(self.experiment, name):
-                experiment_state[name] = dict(getattr(self.experiment, name))
-        if experiment_state:
-            state["experiment"] = experiment_state
+        local_state = self._checkpoint_state()
+        if local_state:
+            state["local"] = local_state
         return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         """Restore local logger counters without recreating external services."""
-        for name in ("id", "video_log_counter"):
-            if name in state_dict and hasattr(self, name):
-                setattr(self, name, state_dict[name])
-        for name, value in state_dict.get("experiment", {}).items():
-            target = getattr(self.experiment, name, None)
-            if (
-                target is not None
-                and hasattr(target, "clear")
-                and hasattr(target, "update")
-            ):
-                target.clear()
-                target.update(value)
+        self._load_checkpoint_state(state_dict.get("local", {}))
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        """Return logger-specific local state without external connections."""
+        return {}
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore logger-specific local state."""
+        del state_dict
 
     @abc.abstractmethod
     def _create_experiment(self) -> Experiment:  # noqa: F821

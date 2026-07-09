@@ -9,6 +9,7 @@ import importlib.util
 import inspect
 import os
 import tempfile
+import warnings
 from argparse import Namespace
 from collections import OrderedDict
 from os import path, walk
@@ -114,10 +115,35 @@ class MockingLossModule(nn.Module):
     pass
 
 
+class MockingLogger:
+    def __init__(self):
+        self.value = 0
+
+    def state_dict(self):
+        return {"value": self.value}
+
+    def load_state_dict(self, state_dict):
+        self.value = state_dict["value"]
+
+
+class MockingReplayBufferHook:
+    def __init__(self, fraction=0.0):
+        self.replay_buffer = object()
+        self.fraction = fraction
+
+    def state_dict(self):
+        return {"fraction": self.fraction}
+
+    def load_state_dict(self, state_dict):
+        self.fraction = state_dict["fraction"]
+
+
 _mocking_optim = MockingOptim()
 
 
-def mocking_trainer(file=None, optimizer=_mocking_optim, checkpoint=None) -> Trainer:
+def mocking_trainer(
+    file=None, optimizer=_mocking_optim, checkpoint=None, logger=None
+) -> Trainer:
     trainer = Trainer(
         collector=MockingCollector(),
         total_frames=None,
@@ -125,6 +151,7 @@ def mocking_trainer(file=None, optimizer=_mocking_optim, checkpoint=None) -> Tra
         optim_steps_per_batch=None,
         loss_module=MockingLossModule(),
         optimizer=optimizer,
+        logger=logger,
         save_trainer_file=file,
         checkpoint=checkpoint,
     )
@@ -154,6 +181,16 @@ def test_unified_trainer_checkpoint(tmp_path, format):
     restored.load_from_file(path)
     assert restored.collected_frames == 41
     assert restored._optim_count == 7
+
+
+def test_unified_trainer_default_component_selection(tmp_path):
+    path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(save_components={"trainer_state"}),
+    )
+    trainer.save_trainer(force_save=True)
+    assert set(Checkpoint.manifest(path)["components"]) == {"trainer_state"}
 
 
 class TestSelectKeys:
@@ -251,6 +288,107 @@ class TestSelectKeys:
 
 
 class TestLoadFromFile:
+    def test_unified_load_options_strictness_and_save_format(
+        self, tmp_path, monkeypatch
+    ):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint())
+        source.collected_frames = 11
+        source.save_trainer(force_save=True)
+
+        captured = []
+        true_load = torch.load
+
+        def spy_load(*args, **kwargs):
+            captured.append(kwargs.copy())
+            return true_load(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "load", spy_load)
+        restored_default = mocking_trainer()
+        restored_default.load_from_file(file)
+        assert restored_default.collected_frames == 11
+        assert restored_default.checkpoint is None
+        assert captured
+        assert all(
+            call
+            == {
+                "weights_only": True,
+                "mmap": True,
+                "map_location": "cpu",
+            }
+            for call in captured
+        )
+
+        captured.clear()
+        restored = mocking_trainer(logger=MockingLogger())
+        restored.load_from_file(
+            file,
+            strict="ignore",
+            map_location="cpu",
+            weights_only=True,
+            mmap=False,
+        )
+        assert restored.collected_frames == 11
+        assert restored.checkpoint is None
+        assert captured
+        assert all(
+            call
+            == {
+                "weights_only": True,
+                "mmap": False,
+                "map_location": "cpu",
+            }
+            for call in captured
+        )
+
+    @pytest.mark.parametrize("format", ["directory", "archive"])
+    def test_unified_hook_replay_buffer_roundtrip(self, tmp_path, format):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint(format=format))
+        replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=2).register(source)
+        data = TensorDict({"obs": torch.randn(6, 4)}, [6])
+        replay_buffer.extend(data)
+        source.save_trainer(force_save=True)
+        assert "replay_buffer" in Checkpoint.manifest(file)["components"]
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored_replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        ReplayBufferTrainer(
+            replay_buffer=restored_replay_buffer, batch_size=2
+        ).register(restored)
+        restored.load_from_file(file)
+        torch.testing.assert_close(restored_replay_buffer[:]["obs"], data["obs"])
+
+    def test_unified_hook_owned_replay_buffer_state(self, tmp_path):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint())
+        source_hook = MockingReplayBufferHook(0.75)
+        source.register_module("replay_buffer", source_hook)
+        assert source.checkpoint.components["replay_buffer"] is source_hook
+        source.save_trainer(force_save=True)
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored_hook = MockingReplayBufferHook()
+        restored.register_module("replay_buffer", restored_hook)
+        restored.load_from_file(file)
+        assert restored_hook.fraction == 0.75
+
+    def test_legacy_save_warning_categories(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        trainer = mocking_trainer(file=tmp_path / "legacy.pt")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            trainer.save_trainer(force_save=True)
+        assert any(
+            item.category is FutureWarning and "v0.15" in str(item.message)
+            for item in caught
+        )
+        assert any(
+            item.category is DeprecationWarning and "v0.16" in str(item.message)
+            for item in caught
+        )
+
     def test_torch_backend_mmap_default(self, monkeypatch):
         monkeypatch.setenv("CKPT_BACKEND", "torch")
         captured = {}

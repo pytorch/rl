@@ -314,9 +314,6 @@ class OnPolicyTrainer(Trainer):
         if self.enable_logging:
             self._setup_logging()
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
     def _setup_logging(self):
         """Set up logging hooks for on-policy training metrics.
 

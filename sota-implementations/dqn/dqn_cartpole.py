@@ -69,7 +69,29 @@ def _save_checkpoint(
     checkpoint.components["trainer_state"]["collected_frames"] = collected_frames
     checkpoint.components["metrics"].clear()
     checkpoint.components["metrics"].update(metrics)
-    return checkpoint.save(path)
+    components = None
+    if not cfg.checkpoint.get("include_replay_buffer", True):
+        components = set(checkpoint.components).difference({"replay_buffer"})
+    return checkpoint.save(path, components=components)
+
+
+def _resume_checkpoint(
+    checkpoint: Checkpoint,
+    path: str | Path,
+    map_location: str | torch.device,
+    *,
+    include_replay_buffer: bool = True,
+):
+    """Restore mutable training state without replacing the current config."""
+    components = set(checkpoint.components).difference({"config"})
+    if not include_replay_buffer:
+        components.discard("replay_buffer")
+    return checkpoint.load(
+        path,
+        components=components,
+        map_location=map_location,
+        tensor_load_kwargs={"weights_only": True, "mmap": True},
+    )
 
 
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
@@ -182,6 +204,7 @@ def main(cfg: DictConfig):
 
     checkpoint_state = {"collected_frames": 0}
     checkpoint_metrics = {}
+    checkpoint_config = OmegaConf.to_container(cfg, resolve=True)
     checkpoint = Checkpoint(
         format=cfg.checkpoint.format,
         strict=cfg.checkpoint.strict,
@@ -195,7 +218,7 @@ def main(cfg: DictConfig):
         trainer_state=checkpoint_state,
         rng=GlobalRNGState(),
         environment_metadata={"env_name": cfg.env.env_name},
-        config=OmegaConf.to_container(cfg, resolve=True),
+        config=checkpoint_config,
         metrics=checkpoint_metrics,
     )
 
@@ -204,14 +227,19 @@ def main(cfg: DictConfig):
     if cfg.checkpoint.resume:
         if not checkpoint_path:
             raise ValueError("checkpoint.path must be set when checkpoint.resume=True.")
-        checkpoint.load(checkpoint_path, map_location=device)
+        _resume_checkpoint(
+            checkpoint,
+            checkpoint_path,
+            device,
+            include_replay_buffer=cfg.checkpoint.get("include_replay_buffer", True),
+        )
     collected_frames = checkpoint_state["collected_frames"]
     num_updates = cfg.loss.num_updates
     batch_size = cfg.buffer.batch_size
     test_interval = cfg.logger.test_interval
     num_test_episodes = cfg.logger.num_test_episodes
     frames_per_batch = cfg.collector.frames_per_batch
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames, initial=collected_frames)
     init_random_frames = cfg.collector.init_random_frames
     q_losses = torch.zeros(num_updates, device=device)
     checkpoint_interval = int(cfg.checkpoint.interval or 0)

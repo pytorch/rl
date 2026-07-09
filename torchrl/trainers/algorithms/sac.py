@@ -229,9 +229,6 @@ class SACTrainer(Trainer):
         if self.enable_logging:
             self._setup_sac_logging()
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
     def _pass_action_spec_from_collector_to_loss(
         self, collector: BaseCollector, loss: LossModule
     ):
