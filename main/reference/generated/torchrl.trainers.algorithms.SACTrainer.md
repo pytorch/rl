@@ -95,7 +95,10 @@ Note
 When `CKPT_BACKEND=torch`, `weights_only=True` is set by
 default for safer deserialization. Pass `weights_only=False`
 explicitly only if you have custom (non-stdlib) objects in your
-state dict.
+state dict. On torch < 2.4 the default is `weights_only=False`
+because the weights-only unpickler of those versions cannot
+deserialize the `torch.device` instances contained in
+TensorDict state-dicts.
 
 Note
 
@@ -103,7 +106,10 @@ When `CKPT_BACKEND=torch`, `mmap=True` is set by default so
 the checkpoint is memory-mapped rather than materialized in RAM
 at load time. Pass `mmap=False` if the checkpoint was saved
 with the legacy (pre-zipfile) `torch.save` format or if
-`file` is a file-like object rather than a path.
+`file` is a file-like object rather than a path. On Windows
+the default is `mmap=False`: a mapped checkpoint would keep
+the file locked, preventing it from being deleted or re-saved
+while the loaded state is alive.
 
 request_stop(*reason: str | None = None*) → None
 
