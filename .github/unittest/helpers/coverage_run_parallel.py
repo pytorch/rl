@@ -56,6 +56,11 @@ def main(argv: list[str]) -> int:
         os.environ["COVERAGE_RCFILE"] = str(
             config_path
         )  # This gets passed down to subprocesses
+        # Trace subprocesses that are not multiprocessing children (notably
+        # pytest-xdist execnet workers): the coverage_process_startup.pth
+        # installed in site-packages calls coverage.process_startup(), which
+        # is a no-op unless COVERAGE_PROCESS_START points at a config file.
+        os.environ["COVERAGE_PROCESS_START"] = str(config_path)
         write_config(config_path, argv)
         return subprocess.run(["coverage", "run"]).returncode
 

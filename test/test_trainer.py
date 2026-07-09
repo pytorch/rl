@@ -970,6 +970,30 @@ class TestRewardNorm:
         for key, item in reward_normalizer._reward_stats.items():
             assert item == reward_normalizer2._reward_stats[key]
 
+    def test_reward_norm_load_state_dict_decouples_from_source(self):
+        # loading a state dict must clone the incoming tensors so that
+        # mutating the source afterwards does not corrupt the normalizer
+        # stats (e.g. tensors mmap-backed by torch.load(mmap=True))
+        torch.manual_seed(0)
+        reward_normalizer = RewardNormalizer()
+        batch = 10
+        reward = torch.randn(batch, 1)
+        td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
+        reward_normalizer.update_reward_stats(td)
+        state_dict = reward_normalizer.state_dict()
+
+        reward_normalizer2 = RewardNormalizer()
+        reward_normalizer2.load_state_dict(state_dict)
+        before = {
+            key: item.clone() if isinstance(item, torch.Tensor) else item
+            for key, item in reward_normalizer2._reward_stats.items()
+        }
+        for item in state_dict["_reward_stats"].values():
+            if isinstance(item, torch.Tensor):
+                item.fill_(1e9)
+        for key, item in before.items():
+            assert reward_normalizer2._reward_stats[key] == item
+
     @pytest.mark.parametrize(
         "backend",
         [
