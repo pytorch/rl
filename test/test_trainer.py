@@ -221,6 +221,88 @@ class TestSelectKeys:
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
 
 
+class TestLoadFromFile:
+    def test_torch_backend_mmap_default(self, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        captured = {}
+        true_load = torch.load
+
+        def spy_load(*args, **kwargs):
+            captured.update(kwargs)
+            return true_load(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "load", spy_load)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            trainer = mocking_trainer(file=file)
+            trainer.save_trainer(force_save=True)
+
+            trainer2 = mocking_trainer()
+            trainer2.load_from_file(file)
+            assert captured["mmap"] is True
+            assert captured["weights_only"] is True
+
+            captured.clear()
+            trainer2.load_from_file(file, mmap=False)
+            assert captured["mmap"] is False
+
+    def test_resume_and_resave_replay_buffer(self, monkeypatch):
+        # Resuming with mmap=True leaves the replay buffer storage backed by
+        # the checkpoint file; re-saving to the same path must not corrupt it.
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+
+        def make_trainer(file=None):
+            trainer = mocking_trainer(file=file)
+            replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+            ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=2).register(
+                trainer
+            )
+            return trainer, replay_buffer
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            data = TensorDict({"obs": torch.randn(10, 4)}, [10])
+
+            trainer, replay_buffer = make_trainer(file=file)
+            replay_buffer.extend(data)
+            trainer.save_trainer(force_save=True)
+
+            trainer2, replay_buffer2 = make_trainer(file=file)
+            trainer2.load_from_file(file)
+            trainer2.save_trainer(force_save=True)
+
+            trainer3, replay_buffer3 = make_trainer()
+            trainer3.load_from_file(file)
+            torch.testing.assert_close(replay_buffer3[:]["obs"], data["obs"])
+
+    def test_torch_backend_save_is_atomic(self, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        true_save = torch.save
+
+        def failing_save(*args, **kwargs):
+            true_save(*args, **kwargs)
+            raise RuntimeError("interrupted save")
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            trainer = mocking_trainer(file=file)
+            trainer.save_trainer(force_save=True)
+            reference = torch.load(file, weights_only=True, mmap=False)
+
+            trainer.collected_frames = 42
+            monkeypatch.setattr(torch, "save", failing_save)
+            with pytest.raises(RuntimeError, match="interrupted save"):
+                trainer.save_trainer(force_save=True)
+
+            # the previous checkpoint is intact and no temp file is left over
+            loaded = torch.load(file, weights_only=True, mmap=False)
+            assert (
+                loaded["state"]["collected_frames"]
+                == reference["state"]["collected_frames"]
+            )
+            assert os.listdir(tmpdirname) == ["file.pt"]
+
+
 @pytest.mark.parametrize("prioritized", [False, True])
 class TestRB:
     def test_rb_trainer(self, prioritized):

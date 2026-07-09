@@ -1177,7 +1177,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             == self.num_workers
         ):
             raise RuntimeError(
-                f"THe length of the devices does not match the number of workers: {self.num_workers}."
+                f"The length of the devices does not match the number of workers: {self.num_workers}."
             )
         storing_device, policy_device, env_device = zip(
             *[
