@@ -347,6 +347,26 @@ commands = {
 """,
 }
 
+# CI sharding: the smoke list runs as SOTA_NUM_SHARDS parallel jobs, each
+# selecting an interleaved slice of the sorted command list via SOTA_SHARD
+# (1-based). Interleaving keeps the heavy neighbors (dreamer/dreamer_v3) on
+# different shards. Both variables unset (the local default) runs everything.
+_num_shards = int(os.environ.get("SOTA_NUM_SHARDS", "1"))
+_shard = os.environ.get("SOTA_SHARD")
+if _num_shards > 1:
+    if _shard is None:
+        raise RuntimeError("SOTA_NUM_SHARDS is set but SOTA_SHARD is not.")
+    _shard_index = int(_shard) - 1
+    if not 0 <= _shard_index < _num_shards:
+        raise RuntimeError(
+            f"SOTA_SHARD={_shard} is out of range for SOTA_NUM_SHARDS={_num_shards}."
+        )
+    commands = {
+        algo: command
+        for index, (algo, command) in enumerate(sorted(commands.items()))
+        if index % _num_shards == _shard_index
+    }
+
 
 def run_command(command):
     # Get the current coverage settings
