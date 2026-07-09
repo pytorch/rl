@@ -553,12 +553,7 @@ class SatelliteEnv(MujocoEnv):
         if not self.pixels_only:
             out.update(self._make_obs_split(state))
         if self.from_pixels:
-            out["pixels"] = self._backend.render(
-                camera_id=self.camera_id,
-                width=self.render_width,
-                height=self.render_height,
-                background=self.RENDER_BACKGROUND,
-            )
+            out["pixels"] = self._render_pixels()
         return out
 
     def _compute_reward(
