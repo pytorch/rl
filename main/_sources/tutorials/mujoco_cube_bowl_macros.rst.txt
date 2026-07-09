@@ -103,7 +103,7 @@ bowl target and a success flag. The task reward is intentionally sparse. It is
 ``1`` only when the cube center is within the environment's placement
 tolerance of the bowl target coordinate, and ``0`` otherwise.
 
-.. GENERATED FROM PYTHON SOURCE LINES 74-95
+.. GENERATED FROM PYTHON SOURCE LINES 74-82
 
 .. code-block:: Python
 
@@ -115,9 +115,34 @@ tolerance of the bowl target coordinate, and ``0`` otherwise.
             "before running this tutorial."
         )
 
+
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 83-91
+
+CI fast path
+------------
+
+Rendering dominates the runtime of this tutorial, and the doc build does not
+need four randomized rollouts to illustrate the API. When
+``TORCHRL_TUTORIALS_FAST=1`` (set in the docs CI workflow), we render at a
+smaller resolution and run a single randomized rollout. Local builds keep
+the full-quality settings.
+
+.. GENERATED FROM PYTHON SOURCE LINES 91-107
+
+.. code-block:: Python
+
+
+    TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
+
     MAX_EPISODE_STEPS = 12000
-    RENDER_WIDTH = 480
-    RENDER_HEIGHT = 360
+    RENDER_WIDTH = 320 if TUTORIAL_FAST else 480
+    RENDER_HEIGHT = 240 if TUTORIAL_FAST else 360
     VIDEO_FRAME_SKIP = 16
     VIDEO_INTERVAL_MS = 55
     IK_KWARGS = {
@@ -135,7 +160,7 @@ tolerance of the bowl target coordinate, and ``0`` otherwise.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 96-119
+.. GENERATED FROM PYTHON SOURCE LINES 108-131
 
 RobotMacroAction as the action
 -------------------------
@@ -161,7 +186,7 @@ the target explicit in object units: close about one millimeter past the cube
 width, ask the environment to convert that width to a gripper command, and
 pass that command to the ``RobotMacroAction``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 122-131
+.. GENERATED FROM PYTHON SOURCE LINES 134-143
 
 Create the MuJoCo scene
 -----------------------
@@ -173,11 +198,14 @@ one primitive-control transform with ``execute=True``. After that,
 ``env.step`` accepts a ``RobotMacroAction`` directly under ``td["action"]`` and
 executes the expanded low-level sequence internally.
 
-.. GENERATED FROM PYTHON SOURCE LINES 131-161
+.. GENERATED FROM PYTHON SOURCE LINES 143-177
 
 .. code-block:: Python
 
 
+    # ``render_every`` matches the recorder's ``skip``: the recorder keeps one
+    # frame in ``VIDEO_FRAME_SKIP``, so rendering the frames it drops would only
+    # burn time (rendering dominates the cost of a step in this scene).
     env = CubeBowlEnv(
         seed=0,
         max_episode_steps=MAX_EPISODE_STEPS,
@@ -186,6 +214,7 @@ executes the expanded low-level sequence internally.
         pixels_only=False,
         render_width=RENDER_WIDTH,
         render_height=RENDER_HEIGHT,
+        render_every=VIDEO_FRAME_SKIP,
     )
     assert env.action_spec.shape[-1] == 7
     assert env.robot_home_qpos is not None
@@ -214,7 +243,7 @@ executes the expanded low-level sequence internally.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-181
+.. GENERATED FROM PYTHON SOURCE LINES 178-197
 
 Indexing MuJoCo batches
 -----------------------
@@ -236,7 +265,7 @@ snapshots, while boolean masks are intentionally not supported.
 Preserving a singleton batch for integer indexing keeps downstream code that
 expects batched specs and TensorDicts working unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 181-228
+.. GENERATED FROM PYTHON SOURCE LINES 197-244
 
 .. code-block:: Python
 
@@ -294,7 +323,7 @@ expects batched specs and TensorDicts working unchanged.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 229-236
+.. GENERATED FROM PYTHON SOURCE LINES 245-252
 
 Policy shape
 ------------
@@ -304,7 +333,7 @@ the minimal shape we want users to see: build a list of poses and gripper
 commands, place the next ``RobotMacroAction`` under the normal action key, and call
 ``env.step``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 236-251
+.. GENERATED FROM PYTHON SOURCE LINES 252-267
 
 .. code-block:: Python
 
@@ -330,7 +359,7 @@ commands, place the next ``RobotMacroAction`` under the normal action key, and c
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 252-289
+.. GENERATED FROM PYTHON SOURCE LINES 268-305
 
 Keeping the end effector constrained
 -------------------------------------
@@ -370,7 +399,7 @@ Cartesian waypoint solving is more expensive than joint interpolation. It is
 most useful when intermediate geometry matters, such as transporting a held
 object without tilting it or drifting sideways.
 
-.. GENERATED FROM PYTHON SOURCE LINES 292-299
+.. GENERATED FROM PYTHON SOURCE LINES 308-315
 
 A scripted cube-to-bowl macro
 -----------------------------
@@ -380,7 +409,7 @@ robot commands. The generator below is deliberately explicit: it names the
 poses we want the pinch site to reach and interleaves them with gripper
 commands.
 
-.. GENERATED FROM PYTHON SOURCE LINES 299-560
+.. GENERATED FROM PYTHON SOURCE LINES 315-576
 
 .. code-block:: Python
 
@@ -652,7 +681,7 @@ commands.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 561-566
+.. GENERATED FROM PYTHON SOURCE LINES 577-582
 
 Fixed scene video
 -----------------
@@ -660,7 +689,7 @@ Fixed scene video
 First, render the default task once. This is the simple cube-to-bowl scene
 used above to introduce the scripted policy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 566-576
+.. GENERATED FROM PYTHON SOURCE LINES 582-592
 
 .. code-block:: Python
 
@@ -689,7 +718,7 @@ used above to introduce the scripted policy.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 577-586
+.. GENERATED FROM PYTHON SOURCE LINES 593-602
 
 Randomized workspace video
 --------------------------
@@ -701,12 +730,14 @@ front-to-left-back, and right-front to center-back. The ``VideoRecorder`` keeps
 appending frames until we ask it to render, so the final video is one long
 clip containing all four randomized rollouts.
 
-.. GENERATED FROM PYTHON SOURCE LINES 586-593
+.. GENERATED FROM PYTHON SOURCE LINES 602-611
 
 .. code-block:: Python
 
 
-    rollout_count = len(workspace_layouts)
+    # In the CI fast path a single randomized rollout is enough to demonstrate
+    # the reset-onto-new-layout mechanics.
+    rollout_count = 1 if TUTORIAL_FAST else len(workspace_layouts)
     for rollout_index in range(rollout_count):
         td = env.reset(random_scene_reset(rollout_index))
         td = run_scripted_rollout(td)
@@ -719,7 +750,7 @@ clip containing all four randomized rollouts.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 594-599
+.. GENERATED FROM PYTHON SOURCE LINES 612-617
 
 Rendered randomized rollouts
 ----------------------------
@@ -727,7 +758,7 @@ Rendered randomized rollouts
 The second animation shows the same hand-written policy on the randomized
 scenes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 599-607
+.. GENERATED FROM PYTHON SOURCE LINES 617-625
 
 .. code-block:: Python
 
@@ -754,7 +785,7 @@ scenes.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 608-613
+.. GENERATED FROM PYTHON SOURCE LINES 626-631
 
 Reset and reuse the same environment
 ------------------------------------
@@ -762,7 +793,7 @@ Reset and reuse the same environment
 The same transformed environment can be reset and reused for another scripted
 rollout.
 
-.. GENERATED FROM PYTHON SOURCE LINES 613-618
+.. GENERATED FROM PYTHON SOURCE LINES 631-636
 
 .. code-block:: Python
 
@@ -778,7 +809,7 @@ rollout.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 619-647
+.. GENERATED FROM PYTHON SOURCE LINES 637-665
 
 Conclusion and further reading
 ------------------------------
@@ -809,7 +840,7 @@ while the arm is moving.
    - :class:`~torchrl.envs.transforms.MultiAction` for executing batched low-level action
      sequences.
 
-.. GENERATED FROM PYTHON SOURCE LINES 647-649
+.. GENERATED FROM PYTHON SOURCE LINES 665-667
 
 .. code-block:: Python
 
@@ -825,7 +856,7 @@ while the arm is moving.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (45 minutes 56.396 seconds)
+   **Total running time of the script:** (2 minutes 18.754 seconds)
 
 
 .. _sphx_glr_download_tutorials_mujoco_cube_bowl_macros.py:
