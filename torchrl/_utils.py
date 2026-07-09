@@ -1308,7 +1308,13 @@ class set_auto_unwrap_transformed_env(_DecoratorContextManager):
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _AUTO_UNWRAP
         _AUTO_UNWRAP = self._old_mode
-        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+        if _AUTO_UNWRAP is None:
+            # Restoring the unset state must remove the variable: writing
+            # str(None) would poison subprocesses spawned later, which parse
+            # the inherited value with strtobool.
+            os.environ.pop("AUTO_UNWRAP_TRANSFORMED_ENV", None)
+        else:
+            os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
 
 
 def auto_unwrap_transformed_env(allow_none=False):
