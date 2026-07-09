@@ -73,6 +73,14 @@ default for safer deserialization. Pass `weights_only=False`
 explicitly only if you have custom (non-stdlib) objects in your
 state dict.
 
+Note
+
+When `CKPT_BACKEND=torch`, `mmap=True` is set by default so
+the checkpoint is memory-mapped rather than materialized in RAM
+at load time. Pass `mmap=False` if the checkpoint was saved
+with the legacy (pre-zipfile) `torch.save` format or if
+`file` is a file-like object rather than a path.
+
 request_stop(*reason: str | None = None*) → None[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.request_stop)
 
 Signal that training should stop at the next loop boundary.
