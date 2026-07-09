@@ -1761,8 +1761,10 @@ class RewardNormalizer(TrainerHookBase):
         }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        # deepcopy to decouple the normalizer stats from the caller's tensors
+        # (which may e.g. be mmap-backed by a checkpoint file)
         for key, value in state_dict.items():
-            setattr(self, key, value)
+            setattr(self, key, deepcopy(value))
 
     def register(self, trainer: Trainer, name: str = "reward_normalizer"):
         trainer.register_op("batch_process", self.update_reward_stats)

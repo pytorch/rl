@@ -83,6 +83,41 @@ def test_samplerwithoutrep(size, samples, drop_last):
         assert not visited
 
 
+def test_samplerwithoutrep_load_state_dict_decouples_from_source():
+    # loading a state dict must clone the incoming tensors so that mutating
+    # the source afterwards does not corrupt the sampler state (e.g. tensors
+    # mmap-backed by a checkpoint file loaded with torch.load(mmap=True))
+    torch.manual_seed(0)
+    storage = ListStorage(10)
+    storage.set(range(10), range(10))
+    sampler = SamplerWithoutReplacement()
+    sampler.sample(storage, 4)
+    sd = sampler.state_dict()
+    sampler2 = SamplerWithoutReplacement()
+    sampler2.load_state_dict(sd)
+    before = sampler2._sample_list.clone()
+    sd["_sample_list"].fill_(-1)
+    assert (sampler2._sample_list == before).all()
+
+
+def test_prioritized_sampler_load_state_dict_decouples_from_source():
+    sampler = PrioritizedSampler(max_capacity=10, alpha=0.7, beta=0.9)
+    sampler.extend(torch.arange(5))
+    sampler.update_priority(torch.arange(5), torch.arange(1.0, 6.0))
+    sd = sampler.state_dict()
+    sampler2 = PrioritizedSampler(max_capacity=10, alpha=0.7, beta=0.9)
+    sampler2.load_state_dict(sd)
+    # the source state dict is left intact (keys are not popped)
+    assert "_sum_tree" in sd
+    assert "_min_tree" in sd
+    # the trees are decoupled from the source state dict
+    assert sampler2._sum_tree is not sd["_sum_tree"]
+    assert sampler2._min_tree is not sd["_min_tree"]
+    before = sampler2._sum_tree[0]
+    sd["_sum_tree"][0] = before + 1000.0
+    assert sampler2._sum_tree[0] == before
+
+
 class TestSamplers:
     @pytest.mark.parametrize(
         "backend", ["torch"] + (["torchsnapshot"] if _has_snapshot else [])
