@@ -531,8 +531,13 @@ class DiscreteActionVecMockEnv(_MockEnv):
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
+        # Class attributes must be set unconditionally: guarding them behind
+        # `observation_spec is None` makes an explicit-spec instantiation
+        # depend on some earlier default instantiation in the same process
+        # having populated them (breaks under test-order shuffling, e.g.
+        # pytest-xdist).
+        cls.out_key = "observation"
         if observation_spec is None:
-            cls.out_key = "observation"
             observation_spec = Composite(
                 observation=Unbounded(shape=torch.Size([*batch_size, size])),
                 observation_orig=Unbounded(shape=torch.Size([*batch_size, size])),
@@ -552,8 +557,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 terminated=Categorical(2, dtype=torch.bool, shape=(*batch_size, 1))
             )
 
+        cls._out_key = "observation_orig"
         if state_spec is None:
-            cls._out_key = "observation_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["observation"],
@@ -638,8 +643,13 @@ class ContinuousActionVecMockEnv(_MockEnv):
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
+        # Class attributes must be set unconditionally: guarding them behind
+        # `observation_spec is None` makes an explicit-spec instantiation
+        # depend on some earlier default instantiation in the same process
+        # having populated them (breaks under test-order shuffling, e.g.
+        # pytest-xdist).
+        cls.out_key = "observation"
         if observation_spec is None:
-            cls.out_key = "observation"
             observation_spec = Composite(
                 observation=Unbounded(shape=torch.Size([*batch_size, size])),
                 observation_orig=Unbounded(shape=torch.Size([*batch_size, size])),
@@ -659,8 +669,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         if done_spec is None:
             done_spec = Categorical(2, dtype=torch.bool, shape=(*batch_size, 1))
 
+        cls._out_key = "observation_orig"
         if state_spec is None:
-            cls._out_key = "observation_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["observation"],
@@ -773,8 +783,8 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
+        cls.out_key = "pixels"
         if observation_spec is None:
-            cls.out_key = "pixels"
             observation_spec = Composite(
                 pixels=Unbounded(shape=torch.Size([*batch_size, 1, 7, 7])),
                 pixels_orig=Unbounded(shape=torch.Size([*batch_size, 1, 7, 7])),
@@ -787,8 +797,8 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
         if done_spec is None:
             done_spec = Categorical(2, dtype=torch.bool, shape=(*batch_size, 1))
 
+        cls._out_key = "pixels_orig"
         if state_spec is None:
-            cls._out_key = "pixels_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["pixels_orig"].clone(),
