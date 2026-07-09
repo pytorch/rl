@@ -17,23 +17,25 @@ if [[ $OSTYPE != 'darwin'* ]]; then
   apt-get install -y --no-install-recommends tzdata
   dpkg-reconfigure -f noninteractive tzdata || true
 
-  apt-get upgrade -y
-  apt-get install -y vim git wget cmake curl python3-dev
-
-  # SDL2 and freetype needed for building pygame from source (Python 3.14+)
-  apt-get install -y libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev
-  apt-get install -y libfreetype6-dev pkg-config
-
-  apt-get install -y libglfw3 libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg \
+  # Single install pass, no recommends: a blanket `apt-get upgrade` /
+  # `dist-upgrade` of the throwaway container adds time to every job and
+  # provides nothing the tests need.
+  # SDL2 and freetype are needed for building pygame from source (Python 3.14+).
+  apt-get install -y --no-install-recommends \
+    vim git wget cmake curl python3-dev \
+    libsdl2-dev libsdl2-2.0-0 libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev \
+    libfreetype6-dev pkg-config \
+    libglfw3 libosmesa6 libglew-dev \
+    libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2 xvfb ffmpeg \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
     libavdevice-dev libavfilter-dev
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
-    apt-get upgrade -y libstdc++6
-    apt-get dist-upgrade -y
+    # torch wheels need a recent GLIBCXX; upgrade libstdc++6 specifically
+    # instead of dist-upgrading the whole image.
+    apt-get install -y --only-upgrade libstdc++6
   else
-    apt-get install -y g++ gcc
+    apt-get install -y --no-install-recommends g++ gcc
   fi
 fi
 
