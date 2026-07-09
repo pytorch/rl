@@ -12,9 +12,9 @@ checkpoints are the default and are best suited to large replay buffers;
 archives are convenient single-file artifacts. Loading either container is
 automatic.
 
-Format v1 targets local filesystems. URI paths and coordinated distributed
-rank checkpoints are rejected rather than importing an optional remote-storage
-stack implicitly.
+TorchRL checkpoints target local filesystems. URI paths and coordinated
+distributed rank checkpoints are rejected rather than importing an optional
+remote-storage stack implicitly.
 
 Basic usage
 -----------

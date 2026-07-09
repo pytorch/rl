@@ -947,7 +947,7 @@ class Checkpoint:
     def _local_path(path: str | Path) -> Path:
         if "://" in str(path):
             raise ValueError(
-                f"Only local checkpoint paths are supported in format v1, got {path!s}."
+                f"Only local checkpoint paths are supported, got {path!s}."
             )
         return Path(path).expanduser().absolute()
 
