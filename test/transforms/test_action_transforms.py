@@ -3003,6 +3003,11 @@ class TestActionChunkTransform(TransformBase):
         assert t(td)[ACTION_CHUNK_KEY].shape == torch.Size([2, 4, 3, 3])
 
     @pytest.mark.skipif(IS_WIN, reason="torch.compile requires a C++ compiler")
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"),
+        reason="requires torch>=2.5 (old dynamo cannot trace the tensordict-based "
+        "transform stack, e.g. InternalTorchDynamoError: next on torch 2.1)",
+    )
     def test_compile(self):
         t = ActionChunkTransform(chunk_size=3)
         td = TensorDict({"action": torch.randn(2, 5, 2)}, batch_size=[2, 5])
