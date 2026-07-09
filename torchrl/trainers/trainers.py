@@ -592,12 +592,23 @@ class Trainer:
             explicitly only if you have custom (non-stdlib) objects in your
             state dict.
 
+        .. note::
+            When ``CKPT_BACKEND=torch``, ``mmap=True`` is set by default so
+            tensors in the checkpoint are memory-mapped rather than
+            materialized in RAM at load time. Restoring then only requires
+            evictable page-cache memory instead of an anonymous allocation
+            the size of the checkpoint, which matters for trainers whose
+            state includes a large replay buffer. Pass ``mmap=False`` for
+            the previous behavior (required for checkpoints saved with the
+            legacy, pre-zipfile ``torch.save`` format).
+
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
             kwargs.setdefault("weights_only", True)
+            kwargs.setdefault("mmap", True)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
         elif _CKPT_BACKEND == "memmap":

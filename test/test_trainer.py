@@ -221,6 +221,32 @@ class TestSelectKeys:
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
 
 
+class TestLoadFromFile:
+    def test_torch_backend_mmap_default(self, monkeypatch):
+        os.environ["CKPT_BACKEND"] = "torch"
+        captured = {}
+        true_load = torch.load
+
+        def spy_load(*args, **kwargs):
+            captured.update(kwargs)
+            return true_load(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "load", spy_load)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            trainer = mocking_trainer(file=file)
+            trainer.save_trainer(force_save=True)
+
+            trainer2 = mocking_trainer()
+            trainer2.load_from_file(file)
+            assert captured["mmap"] is True
+            assert captured["weights_only"] is True
+
+            captured.clear()
+            trainer2.load_from_file(file, mmap=False)
+            assert captured["mmap"] is False
+
+
 @pytest.mark.parametrize("prioritized", [False, True])
 class TestRB:
     def test_rb_trainer(self, prioritized):
