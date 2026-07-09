@@ -102,7 +102,7 @@ fi
 echo "=== Installing build dependencies ==="
 conda install anaconda::cmake -y
 python -m pip install "pybind11[global]"
-python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 
 # install tensordict
 echo "=== Installing tensordict ==="
