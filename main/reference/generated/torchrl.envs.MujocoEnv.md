@@ -42,13 +42,6 @@ from MuJoCo at reset and after every step.
 Requires `from_pixels=True`.
 - **render_width** - pixel observation width used when `from_pixels=True`.
 - **render_height** - pixel observation height used when `from_pixels=True`.
-- **render_every** - render a fresh frame every `render_every` steps and
-reuse the previous frame in between; resets always render fresh.
-Rendering often dominates step cost, so consumers that subsample
-frames anyway (e.g. [`VideoRecorder`](torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder) with
-`skip`) should set this to the same stride instead of paying
-for frames that are dropped. Defaults to `1` (render every
-step).
 - **camera_id** - MuJoCo camera id used for pixel observations and by
 `render()` when no camera override is provided.
 

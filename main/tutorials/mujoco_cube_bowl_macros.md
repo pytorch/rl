@@ -79,22 +79,10 @@ if MENAGERIE_PATH is None:
  f"Set {CubeBowlEnv.MENAGERIE_ENV_VAR} to a MuJoCo Menagerie checkout "
  "before running this tutorial."
  )
-```
-
-## CI fast path
-
-Rendering dominates the runtime of this tutorial, and the doc build does not
-need four randomized rollouts to illustrate the API. When
-`TORCHRL_TUTORIALS_FAST=1` (set in the docs CI workflow), we render at a
-smaller resolution and run a single randomized rollout. Local builds keep
-the full-quality settings.
-
-```
-TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
 
 MAX_EPISODE_STEPS = 12000
-RENDER_WIDTH = 320 if TUTORIAL_FAST else 480
-RENDER_HEIGHT = 240 if TUTORIAL_FAST else 360
+RENDER_WIDTH = 480
+RENDER_HEIGHT = 360
 VIDEO_FRAME_SKIP = 16
 VIDEO_INTERVAL_MS = 55
 IK_KWARGS = {
@@ -138,9 +126,6 @@ one primitive-control transform with `execute=True`. After that,
 executes the expanded low-level sequence internally.
 
 ```
-# ``render_every`` matches the recorder's ``skip``: the recorder keeps one
-# frame in ``VIDEO_FRAME_SKIP``, so rendering the frames it drops would only
-# burn time (rendering dominates the cost of a step in this scene).
 env = CubeBowlEnv(
  seed=0,
  max_episode_steps=MAX_EPISODE_STEPS,
@@ -149,7 +134,6 @@ env = CubeBowlEnv(
  pixels_only=False,
  render_width=RENDER_WIDTH,
  render_height=RENDER_HEIGHT,
- render_every=VIDEO_FRAME_SKIP,
 )
 assert env.action_spec.shape[-1] == 7
 assert env.robot_home_qpos is not None
@@ -581,9 +565,7 @@ appending frames until we ask it to render, so the final video is one long
 clip containing all four randomized rollouts.
 
 ```
-# In the CI fast path a single randomized rollout is enough to demonstrate
-# the reset-onto-new-layout mechanics.
-rollout_count = 1 if TUTORIAL_FAST else len(workspace_layouts)
+rollout_count = len(workspace_layouts)
 for rollout_index in range(rollout_count):
  td = env.reset(random_scene_reset(rollout_index))
  td = run_scripted_rollout(td)
@@ -644,7 +626,7 @@ sequences.
 env.close()
 ```
 
-**Total running time of the script:** (2 minutes 18.323 seconds)
+**Total running time of the script:** (45 minutes 56.396 seconds)
 
 [`Download Jupyter notebook: mujoco_cube_bowl_macros.ipynb`](../_downloads/bcaf588259087706c7dcfb03a5a9380e/mujoco_cube_bowl_macros.ipynb)
 
