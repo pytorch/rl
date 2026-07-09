@@ -363,10 +363,16 @@ run_non_distributed_tests() {
   # Also ignore test_setup.py as it's tested in the dedicated test-setup-minimal job.
   #
   # Test sharding: Split tests into groups for parallel execution.
-  # TORCHRL_TEST_SHARD can be: "all" (default), "1", "2", or "3"
+  # TORCHRL_TEST_SHARD can be: "all" (default), "bulk", "collectors", "mp",
+  # "1", "2", or "3"
   # - Shard 1: test/transforms/ (transform tests)
-  # - Shard 2: the process-spawning quarantine (see MP_TESTS)
+  # - Shard 2: the whole process-spawning quarantine (collectors + mp)
   # - Shard 3: Everything else
+  # - Shard "bulk": everything except the quarantine, xdist-friendly (the
+  #   parallel half of "all"; CPU jobs pair it with "collectors" + "mp")
+  # - Shard "collectors": test/test_collectors.py alone -- it dominates the
+  #   quarantine (66-79% of its wall time), so it gets its own job
+  # - Shard "mp": the rest of the process-spawning quarantine
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/rb/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --mp_fork_if_no_cuda"
@@ -379,6 +385,12 @@ run_non_distributed_tests() {
   # Known xdist casualties that must stay here: test/services and
   # test/test_inference_server.py (Ray GetTimeoutError under load),
   # test/test_loggers.py (live subprocess assertions).
+  # test/test_collectors.py is quarantined too, but measured at 66-79% of the
+  # quarantine wall time, so it is kept in its own list (and its own CPU job,
+  # shard "collectors") separate from the other process-spawning files.
+  local collector_test_paths=(
+    test/test_collectors.py
+  )
   local mp_test_paths=(
     test/envs/test_parallel.py
     test/envs/test_special.py
@@ -386,16 +398,18 @@ run_non_distributed_tests() {
     test/envs/test_env_base.py
     test/envs/test_nested.py
     test/envs/test_step_mdp.py
-    test/test_collectors.py
     test/services
     test/test_inference_server.py
     test/test_loggers.py
   )
+  local quarantine_test_paths=("${collector_test_paths[@]}" "${mp_test_paths[@]}")
+  local collector_tests="${collector_test_paths[*]}"
   local mp_tests="${mp_test_paths[*]}"
-  local mp_ignores=""
-  local mp_path
-  for mp_path in "${mp_test_paths[@]}"; do
-    mp_ignores+="--ignore ${mp_path} "
+  local quarantine_tests="${quarantine_test_paths[*]}"
+  local quarantine_ignores=""
+  local quarantine_path
+  for quarantine_path in "${quarantine_test_paths[@]}"; do
+    quarantine_ignores+="--ignore ${quarantine_path} "
   done
 
   # JSON report output for flaky test tracking
@@ -404,9 +418,9 @@ run_non_distributed_tests() {
 
   # pytest-xdist parallelism (set TORCHRL_XDIST=0 to disable).
   #
-  # - shard 3 has run under xdist for months; shard 1 (transforms) and the
-  #   "all" bulk are enabled on CPU runners only, since on GPU runners many
-  #   concurrent workers can oversubscribe device memory.
+  # - shard 3 has run under xdist for months; shard 1 (transforms), "bulk"
+  #   and the "all" bulk are enabled on CPU runners only, since on GPU
+  #   runners many concurrent workers can oversubscribe device memory.
   # - --dist worksteal (no xdist_group marks exist, so loadgroup bought
   #   nothing) balances a long tail of millisecond tests against a few 60s+
   #   tests.
@@ -419,7 +433,7 @@ run_non_distributed_tests() {
   if [ "${TORCHRL_XDIST:-1}" = "1" ]; then
     case "${shard}" in
       3) xdist_enabled=1 ;;
-      1|all|"") if [ "${CU_VERSION:-}" == cpu ]; then xdist_enabled=1; fi ;;
+      1|bulk|all|"") if [ "${CU_VERSION:-}" == cpu ]; then xdist_enabled=1; fi ;;
     esac
   fi
   local xdist_workers="${TORCHRL_XDIST_WORKERS:-}"
@@ -454,8 +468,8 @@ run_non_distributed_tests() {
         ${common_args} ${timeout_args}
       ;;
     2)
-      echo "Running shard 2: process-spawning tests (${mp_tests})"
-      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
+      echo "Running shard 2: process-spawning tests (${quarantine_tests})"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${quarantine_tests} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args} ${serial_timeout}
@@ -465,11 +479,38 @@ run_non_distributed_tests() {
       python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
         ${common_ignores} \
         --ignore test/transforms \
-        ${mp_ignores} \
+        ${quarantine_ignores} \
         ${xdist_args} \
         "${GPU_MARKER_FILTER[@]}" \
         ${json_report_args} \
         ${common_args} ${timeout_args}
+      ;;
+    bulk)
+      # The xdist-friendly half of "all": everything except the
+      # process-spawning quarantine. CPU jobs run this alongside the
+      # "collectors" and "mp" shards; the union of the three equals "all".
+      echo "Running shard bulk: everything but the process-spawning quarantine"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
+        ${common_ignores} \
+        ${quarantine_ignores} \
+        ${xdist_args} \
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args} ${timeout_args}
+      ;;
+    collectors)
+      echo "Running shard collectors: ${collector_tests} (serial)"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${collector_tests} \
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args} ${serial_timeout}
+      ;;
+    mp)
+      echo "Running shard mp: process-spawning tests except collectors (${mp_tests})"
+      python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
+        "${GPU_MARKER_FILTER[@]}" \
+        ${json_report_args} \
+        ${common_args} ${serial_timeout}
       ;;
     all|"")
       if [ "${xdist_enabled}" = "1" ]; then
@@ -480,14 +521,14 @@ run_non_distributed_tests() {
         echo "Running all tests, parallel bulk (everything but the process-spawning quarantine)"
         python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
           ${common_ignores} \
-          ${mp_ignores} \
+          ${quarantine_ignores} \
           ${xdist_args} \
           "${GPU_MARKER_FILTER[@]}" \
           ${json_report_args} \
           ${common_args} ${timeout_args} || mp_status=$?
-        echo "Running all tests, serial remainder (${mp_tests})"
+        echo "Running all tests, serial remainder (${quarantine_tests})"
         env -u OMP_NUM_THREADS -u MKL_NUM_THREADS \
-        python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${mp_tests} \
+        python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${quarantine_tests} \
           "${GPU_MARKER_FILTER[@]}" \
           --json-report --json-report-file="${json_report_dir}/test-results-shard-${shard}-mp.json" --json-report-indent=2 \
           ${common_args} ${serial_timeout} || mp_status=$?
@@ -501,7 +542,7 @@ run_non_distributed_tests() {
         ${common_args} ${serial_timeout}
       ;;
     *)
-      echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|1|2|3."
+      echo "Unknown TORCHRL_TEST_SHARD='${shard}'. Expected: all|bulk|collectors|mp|1|2|3."
       exit 2
       ;;
   esac
