@@ -232,6 +232,17 @@ class Collector(BaseCollector):
             tensordict is added to a replay buffer for instance,
             the whole content of the buffer will be identical.
             Default is ``False``.
+            When ``return_same_td=True``, :attr:`clone_data` is ignored because
+            the collector already yields the live buffer without cloning.
+        clone_data (bool, optional): if ``True`` (default), each yielded
+            TensorDict is a clone of the collector's internal rollout buffer.
+            This guarantees that successive batches do not alias each other when
+            the caller keeps references across iterations. Set ``clone_data=False``
+            to skip that defensive copy when each batch is fully consumed before
+            the next ``next(collector)`` call. Prefer attaching a
+            :class:`~torchrl.data.ReplayBuffer` via ``replay_buffer=`` for
+            off-policy loops, which avoids the yield clone entirely.
+            Defaults to ``True``.
         interruptor (_Interruptor, optional):
             An _Interruptor object that can be used from outside the class to control rollout collection.
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
@@ -446,6 +457,7 @@ class Collector(BaseCollector):
         track_traj_ids: bool = True,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         return_same_td: bool = False,
+        clone_data: bool = True,
         reset_when_done: bool = True,
         interruptor=None,
         set_truncated: bool = False,
@@ -575,6 +587,7 @@ class Collector(BaseCollector):
             exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
         )
         self.return_same_td = return_same_td
+        self.clone_data = bool(clone_data)
         self.set_truncated = set_truncated
 
         # Set split trajectories option
@@ -1552,7 +1565,7 @@ class Collector(BaseCollector):
                 tensordict_out = self._postproc(tensordict_out)
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
-                    # stored in the tensordict.
+                    # stored in the tensordict. Takes precedence over clone_data.
                     if events:
                         for event in events:
                             event.record()
@@ -1567,8 +1580,10 @@ class Collector(BaseCollector):
                     self.replay_buffer.extend(tensordict_out)
                     yield
                 else:
-                    # we must clone the values, as the tensordict is updated in-place.
-                    # otherwise the following code may break:
+                    # By default, clone so successive yields do not alias the
+                    # in-place buffer. Set clone_data=False to skip when each
+                    # batch is fully consumed before the next iteration.
+                    # otherwise the following code may break under the default:
                     # >>> for i, data in enumerate(collector):
                     # >>>      if i == 0:
                     # >>>          data0 = data
@@ -1577,7 +1592,8 @@ class Collector(BaseCollector):
                     # >>>      else:
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
-                    tensordict_out = tensordict_out.clone()
+                    if self.clone_data:
+                        tensordict_out = tensordict_out.clone()
                     if self.post_collect_hook is not None:
                         self.post_collect_hook(tensordict_out)
                     yield tensordict_out

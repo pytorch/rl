@@ -5297,6 +5297,108 @@ class TestCollectorRemoteHelpers:
             collector.shutdown()
 
 
+class TestCollectorCloneData:
+    """Regression tests for Collector.clone_data yield ownership."""
+
+    def _make_collector(self, **kwargs):
+        env = ContinuousActionVecMockEnv()
+        defaults = {
+            "create_env_fn": env,
+            "policy": RandomPolicy(env.action_spec),
+            "frames_per_batch": 20,
+            "total_frames": 60,
+            "device": "cpu",
+        }
+        defaults.update(kwargs)
+        return Collector(**defaults)
+
+    @staticmethod
+    def _obs_ptr(td):
+        return td["observation"].untyped_storage().data_ptr()
+
+    def test_default_yields_are_isolated(self):
+        """Default clone_data=True: successive yields must not alias."""
+        collector = self._make_collector()
+        try:
+            assert collector.clone_data is True
+            it = iter(collector)
+            data0 = next(it)
+            data1 = next(it)
+            assert data0 is not data1
+            assert self._obs_ptr(data0) != self._obs_ptr(data1)
+            before = data0["observation"].clone()
+            data1["observation"].zero_()
+            assert torch.equal(data0["observation"], before)
+        finally:
+            collector.shutdown()
+
+    def test_clone_data_false_allows_aliasing(self):
+        """clone_data=False: successive yields may share storage (expected)."""
+        collector = self._make_collector(clone_data=False)
+        try:
+            assert collector.clone_data is False
+            it = iter(collector)
+            data0 = next(it)
+            data1 = next(it)
+            # Live buffer is reused; holding data0 across next() is unsafe.
+            assert self._obs_ptr(data0) == self._obs_ptr(data1)
+            before = data0["observation"].clone()
+            data1["observation"].zero_()
+            # Aliasing: mutating the later yield mutates the earlier reference.
+            assert not torch.equal(data0["observation"], before)
+            assert torch.equal(data0["observation"], data1["observation"])
+        finally:
+            collector.shutdown()
+
+    def test_return_same_td_takes_precedence(self):
+        """return_same_td=True yields the same object; clone_data is ignored."""
+        collector = self._make_collector(return_same_td=True, clone_data=True)
+        try:
+            it = iter(collector)
+            data0 = next(it)
+            data1 = next(it)
+            assert data0 is data1
+            assert self._obs_ptr(data0) == self._obs_ptr(data1)
+        finally:
+            collector.shutdown()
+
+    def test_replay_buffer_path_unaffected_by_clone_data(self):
+        """Attached replay_buffer still extends once and yields None."""
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), batch_size=8)
+        collector = self._make_collector(
+            replay_buffer=rb,
+            extend_buffer=True,
+            clone_data=False,
+            total_frames=40,
+            frames_per_batch=20,
+        )
+        try:
+            yielded = []
+            for batch in collector:
+                yielded.append(batch)
+            assert all(b is None for b in yielded)
+            assert len(rb) == 40
+        finally:
+            collector.shutdown()
+
+    def test_post_collect_hook_runs_without_clone(self):
+        """post_collect_hook still fires when clone_data=False."""
+        seen = []
+
+        def hook(td):
+            seen.append(self._obs_ptr(td))
+
+        collector = self._make_collector(clone_data=False, post_collect_hook=hook)
+        try:
+            it = iter(collector)
+            next(it)
+            next(it)
+            assert len(seen) == 2
+            assert seen[0] == seen[1]
+        finally:
+            collector.shutdown()
+
+
 class TestCollectorRB:
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_sync(self):
