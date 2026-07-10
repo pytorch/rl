@@ -455,6 +455,11 @@ run_non_distributed_tests() {
     timeout_args="--timeout=300"
     export OMP_NUM_THREADS=1
     export MKL_NUM_THREADS=1
+    # Let coverage_run_parallel.py export COVERAGE_PROCESS_START so the xdist
+    # execnet workers get traced. Only for xdist runs: the variable makes every
+    # spawned interpreter start a tracer, which roughly doubles worker startup
+    # and slows serial process-spawning suites far past their CI timeout.
+    export TORCHRL_COV_TRACE_SUBPROCESSES=1
     echo "Using pytest-xdist for parallel execution (${xdist_args})"
   fi
 
@@ -527,7 +532,7 @@ run_non_distributed_tests() {
           ${json_report_args} \
           ${common_args} ${timeout_args} || mp_status=$?
         echo "Running all tests, serial remainder (${quarantine_tests})"
-        env -u OMP_NUM_THREADS -u MKL_NUM_THREADS \
+        env -u OMP_NUM_THREADS -u MKL_NUM_THREADS -u TORCHRL_COV_TRACE_SUBPROCESSES \
         python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${quarantine_tests} \
           "${GPU_MARKER_FILTER[@]}" \
           --json-report --json-report-file="${json_report_dir}/test-results-shard-${shard}-mp.json" --json-report-indent=2 \
