@@ -186,18 +186,20 @@ EXIT_STATUS=0
 #   and kills the process, so the first hard hang fails the run loudly in
 #   minutes instead of silently eating the job. The tradeoff (a per-test
 #   timeout aborts the whole run) is acceptable here: a 120s+ test in this
-#   serial suite has always meant a hang, not a slow test.
+#   serial suite has meant a hang, with one known exception -- the
+#   test_setup.py install tests, which carry their own 600s marker.
 # - timeout(1) guard: last-resort process-level bound in case even the
-#   timer thread cannot run; 100 minutes leaves room for coverage combine
-#   and artifact upload within the 120-minute job budget.
-timeout -k 60 100m \
+#   timer thread cannot run; 105 minutes leaves room for coverage combine
+#   and artifact upload within the 120-minute job budget (a healthy run
+#   under memory pressure has been observed at 98 minutes of pytest).
+timeout -k 60 105m \
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
   --ignore test/llm \
   --timeout=120 --timeout-method=thread --mp_fork_if_no_cuda || EXIT_STATUS=$?
 if [ $EXIT_STATUS -eq 124 ]; then
-  echo "pytest was killed by the 100-minute hang guard"
+  echo "pytest was killed by the 105-minute hang guard"
 elif [ $EXIT_STATUS -ne 0 ]; then
   echo "Some tests failed with exit status $EXIT_STATUS"
 fi
