@@ -13,8 +13,7 @@ import pytest
 import torch
 from _rb_common import _has_snapshot, TORCH_VERSION
 from packaging import version
-from tensordict import TensorDict
-
+from tensordict import NonTensorStack, TensorDict
 from torchrl._utils import _replace_last
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -28,6 +27,7 @@ from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
+    PromptGroupSampler,
     RandomSampler,
     Sampler,
     SamplerWithoutReplacement,
@@ -42,6 +42,7 @@ from torchrl.data.replay_buffers.scheduler import (
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
 )
@@ -1868,6 +1869,245 @@ class TestStalenessAwareSampler:
         # Should not raise
         batch = rb.sample()
         assert batch.shape[0] == 8
+
+
+class TestPromptGroupSampler:
+    @staticmethod
+    def _make_rb(sampler, batch_size, max_size=100):
+        return ReplayBuffer(
+            storage=LazyStackStorage(max_size),
+            sampler=sampler,
+            batch_size=batch_size,
+        )
+
+    def test_basic_grouping(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="prompt"), batch_size=8
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2])},
+                batch_size=[12],
+            )
+        )
+        sample = rb.sample()
+        assert sample.shape[0] == 8
+        prompts, counts = sample["prompt"].unique(return_counts=True)
+        assert prompts.numel() == 2
+        assert (counts == 4).all()
+
+    def test_samples_per_group_inference(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(samples_per_group=3, group_key="prompt"), batch_size=6
+        )
+        rb.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 0, 1, 1, 1])}, batch_size=[6])
+        )
+        sample = rb.sample()
+        _, counts = sample["prompt"].unique(return_counts=True)
+        assert sample.shape[0] == 6
+        assert (counts == 3).all()
+
+    def test_string_keys(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="q"), batch_size=4
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "q": NonTensorStack("a", "a", "a", "b", "b", "b", "c", "c", "c"),
+                    "v": torch.arange(9),
+                },
+                batch_size=[9],
+            )
+        )
+        sample = rb.sample()
+        assert len(set(sample["q"])) == 2
+
+    def test_nested_key(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key=("text", "prompt")),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "text": TensorDict(
+                        {"prompt": torch.tensor([0, 0, 1, 1, 2, 2])}, batch_size=[6]
+                    ),
+                    "v": torch.arange(6),
+                },
+                batch_size=[6],
+            )
+        )
+        sample = rb.sample()
+        assert sample["text", "prompt"].unique().numel() == 2
+
+    def test_strategy_recency(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(
+                samples_per_group=2, group_key="prompt", strategy="recency"
+            ),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.tensor([5, 5, 5, 5]), "id": torch.arange(4)},
+                batch_size=[4],
+            )
+        )
+        sample = rb.sample()
+        assert sorted(sample["id"].tolist()) == [2, 3]
+
+    def test_strategy_reward(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(
+                samples_per_group=2, group_key="prompt", strategy="reward"
+            ),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "prompt": torch.tensor([0, 0, 0, 1, 1, 1]),
+                    "next": TensorDict(
+                        {"reward": torch.tensor([1.0, 2.0, 3.0, 9.0, 8.0, 7.0])},
+                        batch_size=[6],
+                    ),
+                },
+                batch_size=[6],
+            )
+        )
+        rewards = rb.sample()["next", "reward"].tolist()
+        assert 1.0 not in rewards
+        assert 7.0 not in rewards
+
+    def test_strategy_variance(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=1, group_key="prompt", strategy="variance"),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "prompt": torch.tensor([0, 0, 1, 1]),
+                    "next": TensorDict(
+                        {"reward": torch.tensor([1.0, 1.0, 0.0, 10.0])},
+                        batch_size=[4],
+                    ),
+                },
+                batch_size=[4],
+            )
+        )
+        for _ in range(5):
+            assert (rb.sample()["prompt"] == 1).all()
+
+    def test_reward_strategy_requires_tensor_reward(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(
+                num_groups=1, group_key="prompt", strategy="reward", reward_key="r"
+            ),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.tensor([0, 0]), "r": NonTensorStack("x", "y")},
+                batch_size=[2],
+            )
+        )
+        with pytest.raises(TypeError, match="requires reward_key"):
+            rb.sample()
+
+    def test_cache_invalidation_on_extend(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=1, group_key="prompt"), batch_size=2
+        )
+        rb.extend(TensorDict({"prompt": torch.tensor([7, 7])}, batch_size=[2]))
+        rb.sample()
+        rb.extend(TensorDict({"prompt": torch.tensor([9, 9])}, batch_size=[2]))
+        seen = set()
+        for _ in range(20):
+            seen.update(rb.sample()["prompt"].tolist())
+        assert seen == {7, 9}
+
+    def test_small_group_warns_and_fills(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(samples_per_group=4, group_key="prompt"), batch_size=4
+        )
+        rb.extend(TensorDict({"prompt": torch.tensor([3, 3])}, batch_size=[2]))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sample = rb.sample()
+        assert sample.shape[0] == 4
+        assert any("with replacement" in str(w.message) for w in caught)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"num_groups": 2, "samples_per_group": 2},
+            {"num_groups": 2, "strategy": "bogus"},
+        ],
+    )
+    def test_construction_errors(self, kwargs):
+        with pytest.raises((TypeError, ValueError)):
+            PromptGroupSampler(**kwargs)
+
+    def test_non_divisible_batch_raises(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=3, group_key="prompt"), batch_size=8
+        )
+        rb.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 1, 1, 2, 2])}, batch_size=[6])
+        )
+        with pytest.raises(ValueError, match="divisible"):
+            rb.sample()
+
+    def test_ndim_gt_one_raises(self):
+        torch.manual_seed(0)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100, ndim=2),
+            sampler=PromptGroupSampler(num_groups=1, group_key="prompt"),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.zeros(4, 5, dtype=torch.long)}, batch_size=[4, 5]
+            )
+        )
+        with pytest.raises(NotImplementedError):
+            rb.sample()
+
+    def test_state_dict_and_pickle_drop_cache(self, tmp_path):
+        import pickle
+
+        sampler = PromptGroupSampler(num_groups=2, group_key="prompt")
+        assert sampler.state_dict() == {}
+        sampler.load_state_dict({})
+        sampler.dumps(tmp_path)
+        sampler.loads(tmp_path)
+        sampler._group_index = {0: torch.tensor([0])}
+        restored = pickle.loads(pickle.dumps(sampler))
+        assert restored._group_index is None
+
+    def test_persistence_independence(self):
+        torch.manual_seed(0)
+        sampler = PromptGroupSampler(num_groups=1, group_key="prompt")
+        source = sampler.state_dict()
+        source["poisoned"] = True
+        sampler.load_state_dict(sampler.state_dict())
+        assert not hasattr(sampler, "poisoned")
 
 
 def test_prioritized_slice_sampler_doc_example():

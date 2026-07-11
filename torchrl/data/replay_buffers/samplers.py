@@ -8,12 +8,12 @@ import json
 import textwrap
 import warnings
 from abc import ABC, ABCMeta, abstractmethod
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from collections.abc import Sequence
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -3484,6 +3484,287 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def extend(self, index: torch.Tensor) -> None:
         PrioritizedSampler.extend(self, index)
         return SliceSampler.extend(self, index)
+
+
+class PromptGroupSampler(Sampler):
+    """A sampler that draws complete groups of items sharing a common key.
+
+    This sampler partitions the storage into groups whose items share the same
+    value under ``group_key`` (for LLM post-training, the prompt or query). Every
+    call to :meth:`~torchrl.data.ReplayBuffer.sample` returns
+    ``samples_per_group`` items for each of ``num_groups`` selected groups, so a
+    batch is laid out as balanced groups rather than independent items. This is
+    the layout required by group-relative objectives such as
+    :class:`~torchrl.objectives.llm.GRPOLoss`.
+
+    Sampling never consumes the storage, so past generations for a group remain
+    available and can be replayed across policy updates. Combined with a
+    persistent replay buffer (one that is not emptied between iterations), this
+    turns an on-policy GRPO loop into the replay-enhanced regime of RePO
+    ("RePO: Replay-Enhanced Policy Optimization", Li et al. 2025,
+    https://arxiv.org/abs/2506.09340), where each update mixes fresh on-policy
+    groups with off-policy groups retrieved from the buffer.
+
+    Keyword Args:
+        num_groups (int, optional): the number of distinct groups to draw per
+            batch. Exactly one of ``num_groups`` or ``samples_per_group`` must be
+            provided; the other is inferred from the ``batch_size`` passed to
+            :meth:`~torchrl.data.ReplayBuffer.sample`.
+        samples_per_group (int, optional): the number of items to draw from each
+            selected group. Exactly one of ``num_groups`` or
+            ``samples_per_group`` must be provided.
+        group_key (NestedKey, optional): the tensordict key identifying the group
+            each item belongs to. Stored values may be integers (e.g. a prompt
+            id) or strings (e.g. the prompt text). Defaults to ``"query"``.
+        strategy (str, optional): the retrieval strategy. One of:
+
+            - ``"random"`` (default): groups are chosen uniformly at random and
+              items within a group are drawn uniformly at random.
+            - ``"recency"``: the items with the most recent storage positions are
+              drawn from each group.
+            - ``"reward"``: the highest-reward items are drawn from each group.
+            - ``"variance"``: the groups with the highest within-group reward
+              variance are selected (the vanishing-gradient case RePO targets),
+              with items drawn uniformly within each group.
+
+        reward_key (NestedKey, optional): the key holding a numeric reward,
+            required by the ``"reward"`` and ``"variance"`` strategies. It is
+            reduced to one scalar per item by averaging over any trailing
+            dimensions. Defaults to ``("next", "reward")``.
+        cache_groups (bool, optional): if ``True`` (default), the group index is
+            cached and rebuilt only when items are added to the storage. Set to
+            ``False`` if the stored group values may change in place.
+
+    .. note:: This sampler currently supports single-dimensional storages only.
+
+    .. warning:: When a group holds fewer than ``samples_per_group`` items (or
+        the storage holds fewer than ``num_groups`` groups), the missing draws
+        are completed by sampling with replacement and a warning is raised once.
+
+    .. seealso:: :class:`~torchrl.objectives.llm.MCAdvantage`, the group-relative
+        advantage engine these batches feed into.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyStackStorage, ReplayBuffer
+        >>> from torchrl.data.replay_buffers.samplers import PromptGroupSampler
+        >>> rb = ReplayBuffer(
+        ...     storage=LazyStackStorage(100),
+        ...     sampler=PromptGroupSampler(num_groups=2, group_key="prompt"),
+        ...     batch_size=8,
+        ... )
+        >>> data = TensorDict(
+        ...     {
+        ...         "prompt": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2]),
+        ...         "reward": torch.arange(12.0),
+        ...     },
+        ...     batch_size=[12],
+        ... )
+        >>> _ = rb.extend(data)
+        >>> sample = rb.sample()
+        >>> int(sample["prompt"].unique().numel())
+        2
+        >>> int(sample.shape[0])
+        8
+    """
+
+    def __init__(
+        self,
+        *,
+        num_groups: int | None = None,
+        samples_per_group: int | None = None,
+        group_key: NestedKey = "query",
+        strategy: Literal["random", "recency", "reward", "variance"] = "random",
+        reward_key: NestedKey = ("next", "reward"),
+        cache_groups: bool = True,
+    ) -> None:
+        if (num_groups is None) == (samples_per_group is None):
+            raise TypeError(
+                "Exactly one of num_groups or samples_per_group must be provided, "
+                f"got num_groups={num_groups} and samples_per_group={samples_per_group}."
+            )
+        if strategy not in ("random", "recency", "reward", "variance"):
+            raise ValueError(
+                f"Unknown strategy={strategy!r}. Expected one of 'random', "
+                "'recency', 'reward', 'variance'."
+            )
+        self.num_groups = num_groups
+        self.samples_per_group = samples_per_group
+        self.group_key = group_key
+        self.strategy = strategy
+        self.reward_key = reward_key
+        self.cache_groups = cache_groups
+        self._group_index: dict[Any, torch.Tensor] | None = None
+        self._row_rewards: torch.Tensor | None = None
+        self._index_len: int = 0
+        self._warned_small_group: bool = False
+
+    @property
+    def _needs_reward(self) -> bool:
+        return self.strategy in ("reward", "variance")
+
+    def _shape(self, batch_size: int) -> tuple[int, int]:
+        if self.num_groups is not None:
+            num_groups = self.num_groups
+            if batch_size % num_groups != 0:
+                raise ValueError(
+                    f"batch_size={batch_size} is not divisible by "
+                    f"num_groups={num_groups}."
+                )
+            return num_groups, batch_size // num_groups
+        samples_per_group = self.samples_per_group
+        if batch_size % samples_per_group != 0:
+            raise ValueError(
+                f"batch_size={batch_size} is not divisible by "
+                f"samples_per_group={samples_per_group}."
+            )
+        return batch_size // samples_per_group, samples_per_group
+
+    def _randperm(self, n: int) -> torch.Tensor:
+        device = self._rng.device if self._rng is not None else None
+        return torch.randperm(n, generator=self._rng, device=device).cpu()
+
+    def _randint(self, n: int, k: int) -> torch.Tensor:
+        device = self._rng.device if self._rng is not None else None
+        return torch.randint(n, (k,), generator=self._rng, device=device).cpu()
+
+    @staticmethod
+    def _to_key_list(values: Any) -> list:
+        if hasattr(values, "tolist"):
+            values = values.tolist()
+        else:
+            values = list(values)
+        return [tuple(value) if isinstance(value, list) else value for value in values]
+
+    def _maybe_build_index(self, storage: Storage) -> None:
+        data = storage[:]
+        length = data.shape[0] if data.batch_dims else len(storage)
+        if (
+            self.cache_groups
+            and self._group_index is not None
+            and length == self._index_len
+        ):
+            return
+        keys = self._to_key_list(data.get(self.group_key))
+        group_index: dict[Any, list[int]] = defaultdict(list)
+        for position, key in enumerate(keys):
+            group_index[key].append(position)
+        self._group_index = {
+            key: torch.tensor(positions, dtype=torch.long)
+            for key, positions in group_index.items()
+        }
+        if self._needs_reward:
+            reward = data.get(self.reward_key)
+            if not isinstance(reward, torch.Tensor):
+                raise TypeError(
+                    f"The {self.strategy!r} strategy requires reward_key="
+                    f"{self.reward_key} to hold a tensor, got {type(reward)}."
+                )
+            self._row_rewards = (
+                reward.reshape(reward.shape[0], -1).float().mean(-1).cpu()
+            )
+        self._index_len = len(keys)
+
+    def _select_groups(self, num_groups: int) -> list:
+        keys = list(self._group_index)
+        n = len(keys)
+        if self.strategy == "variance":
+            variances = torch.stack(
+                [
+                    self._row_rewards[self._group_index[key]].var(unbiased=False)
+                    if self._group_index[key].numel() > 1
+                    else self._row_rewards.new_zeros(())
+                    for key in keys
+                ]
+            )
+            keys = [keys[i] for i in torch.argsort(variances, descending=True).tolist()]
+            if n >= num_groups:
+                return keys[:num_groups]
+        elif n >= num_groups:
+            return [keys[i] for i in self._randperm(n)[:num_groups].tolist()]
+        self._warn_small()
+        return [keys[i] for i in self._randint(n, num_groups).tolist()]
+
+    def _select_within(self, positions: torch.Tensor, k: int) -> torch.Tensor:
+        n = positions.numel()
+        if n < k:
+            self._warn_small()
+            return positions[self._randint(n, k)]
+        if self.strategy == "recency":
+            return positions.sort().values[-k:]
+        if self.strategy == "reward":
+            top = torch.topk(self._row_rewards[positions], k).indices
+            return positions[top]
+        return positions[self._randperm(n)[:k]]
+
+    def _warn_small(self) -> None:
+        if not self._warned_small_group:
+            warnings.warn(
+                "A group (or the set of groups) was smaller than the requested "
+                "sample size; completing the draw with replacement. Add more data "
+                "or lower num_groups/samples_per_group to avoid this.",
+                stacklevel=2,
+            )
+            self._warned_small_group = True
+
+    def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
+        if len(storage) == 0:
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
+        if storage.ndim > 1:
+            raise NotImplementedError(
+                f"{type(self).__name__} only supports single-dimensional storages, "
+                f"got storage.ndim={storage.ndim}."
+            )
+        num_groups, samples_per_group = self._shape(batch_size)
+        self._maybe_build_index(storage)
+        selected = self._select_groups(num_groups)
+        index = torch.cat(
+            [
+                self._select_within(self._group_index[key], samples_per_group)
+                for key in selected
+            ],
+            0,
+        )
+        return index, {}
+
+    def extend(self, index: torch.Tensor) -> None:
+        self._group_index = None
+
+    def add(self, index: int) -> None:
+        self._group_index = None
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state["_group_index"] = None
+        state["_row_rewards"] = None
+        state["_index_len"] = 0
+        return state
+
+    def _empty(self) -> None:
+        self._group_index = None
+        self._row_rewards = None
+        self._index_len = 0
+        self._warned_small_group = False
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        return
+
+    def dumps(self, path):
+        ...
+
+    def loads(self, path):
+        ...
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(num_groups={self.num_groups}, "
+            f"samples_per_group={self.samples_per_group}, "
+            f"group_key={self.group_key}, strategy={self.strategy!r})"
+        )
 
 
 class SamplerEnsemble(Sampler):
