@@ -565,3 +565,7 @@ TorchRL aims to introduce them with deprecation warnings over multiple release
 cycles.
 
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+*[Mukller](https://github.com/Mukller)*
