@@ -18,7 +18,7 @@ from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TYPE_CHECKING
 
 import numpy as np
 import torch.nn
@@ -51,6 +51,9 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
+
+if TYPE_CHECKING:
+    from torchrl.trainers.learners import LearnerGroup, LearnerWeights
 
 try:
     from tqdm import tqdm
@@ -384,6 +387,13 @@ class Trainer:
             keys of the averaged loss TensorDict at the end of every optimization loop, in addition
             to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
             this logging to user-registered hooks. Default is True.
+        learner_group (LearnerGroup, optional): Remotely owned optimization
+            group. This is mutually exclusive with driver-owned ``loss_module``,
+            ``optimizer``, and ``optimization_stepper`` objects.
+        replay_buffer (optional): Replay owner coordinated by the controller in
+            learner-group mode.
+        learner_poll_interval (float): Polling interval used while asynchronous
+            collectors populate replay. Defaults to ``0.05`` seconds.
     """
 
     @classmethod
@@ -408,9 +418,12 @@ class Trainer:
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: OptimizationStepper | None = None,
+        learner_group: LearnerGroup | None = None,
+        replay_buffer: Any | None = None,
+        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -431,8 +444,42 @@ class Trainer:
         self.loss_module = loss_module
         self.optimizer = optimizer
         self.data_parallel_context = None
+        self.learner_group = learner_group
+        self.replay_buffer = replay_buffer
         self.logger = logger
         self.async_collection = async_collection
+
+        if learner_group is None:
+            if loss_module is None:
+                raise ValueError("loss_module is required in local Trainer mode.")
+        else:
+            mixed = []
+            if loss_module is not None:
+                mixed.append("loss_module")
+            if optimizer is not None:
+                mixed.append("optimizer")
+            if optimization_stepper is not None:
+                mixed.append("optimization_stepper")
+            if mixed:
+                raise ValueError(
+                    "learner_group owns optimization state; remove driver-owned "
+                    f"arguments: {', '.join(mixed)}."
+                )
+            if replay_buffer is None:
+                raise ValueError("replay_buffer is required with learner_group.")
+            if optim_steps_per_batch is None:
+                raise ValueError(
+                    "optim_steps_per_batch must be finite with learner_group."
+                )
+        if learner_poll_interval <= 0:
+            raise ValueError("learner_poll_interval must be positive.")
+        self.learner_poll_interval = float(learner_poll_interval)
+        self._learner_round = 0
+        self._learner_generation = 0
+        self._published_model_version = -1
+        self._update_credit = 0.0
+        self._replay_write_baseline = 0
+        self._last_replay_write_count = 0
 
         # Logging frequency control - how often to log each metric (in frames)
         self._log_interval = log_interval
@@ -1210,6 +1257,8 @@ class Trainer:
             op(**kwargs)
 
     def train(self):
+        if self.learner_group is not None:
+            return self._train_with_learner_group()
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = {}
@@ -1270,6 +1319,186 @@ class Trainer:
 
         self._shutdown_hook()
         self.collector.shutdown()
+
+    def _train_with_learner_group(self) -> None:
+        """Run the central-controller path for a remote learner group."""
+        self._validate_learner_group_hooks()
+        if self.progress_bar:
+            self._pbar = tqdm(total=self.total_frames)
+            self._pbar_str = {}
+
+        setup_complete = False
+        try:
+            self.replay_buffer.start()
+            self.learner_group.start()
+            self._learner_generation = getattr(
+                self.learner_group, "generation", self._learner_generation + 1
+            )
+            self._replay_write_baseline = self._get_replay_write_count()
+            self._last_replay_write_count = self._replay_write_baseline
+            self._publish_learner_weights()
+            self._setup_hook()
+            setup_complete = True
+
+            if self.async_collection:
+                self.collector.start()
+                self._run_async_learner_controller()
+            else:
+                self._run_sync_learner_controller()
+        finally:
+            if setup_complete:
+                self._shutdown_hook()
+            try:
+                self.collector.shutdown()
+            finally:
+                try:
+                    self.learner_group.shutdown()
+                finally:
+                    self.replay_buffer.shutdown()
+
+    def _run_async_learner_controller(self) -> None:
+        while True:
+            previous_frames = self.collected_frames
+            progressed = self._observe_replay_progress(update_collected_frames=True)
+            updated = self._drain_learner_updates()
+            if updated:
+                self._post_steps_hook()
+
+            current_frames = self.collected_frames - previous_frames
+            if self.progress_bar and current_frames > 0:
+                self._pbar.update(current_frames)
+                self._pbar_description()
+
+            if self._stop_training:
+                self.save_trainer(force_save=True)
+                return
+            if self.collected_frames >= self.total_frames:
+                if self._update_credit >= 1 and not updated:
+                    raise RuntimeError(
+                        "Collection completed before replay contained enough data "
+                        "for the queued global-batch learner update."
+                    )
+                if self._update_credit < 1:
+                    self.save_trainer(force_save=True)
+                    return
+            self.save_trainer()
+            if not progressed and not updated:
+                time.sleep(self.learner_poll_interval)
+
+    def _run_sync_learner_controller(self) -> None:
+        for batch in self.collector:
+            if batch is None:
+                raise RuntimeError(
+                    "A synchronous collector without direct replay writes must "
+                    "return TensorDict batches."
+                )
+            batch = self._process_batch_hook(batch)
+            current_frames = (
+                batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                .sum()
+                .item()
+                * self.frame_skip
+            )
+            self.collected_frames += current_frames
+            self._pre_steps_log_hook(batch)
+            replay_batch = batch
+            if ("collector", "mask") in replay_batch.keys(True):
+                replay_batch = replay_batch[replay_batch.get(("collector", "mask"))]
+            else:
+                replay_batch = replay_batch.reshape(-1)
+            self.replay_buffer.extend(replay_batch.cpu())
+            self._observe_replay_progress(update_collected_frames=False)
+            if self.collected_frames >= getattr(
+                self.collector, "init_random_frames", 0
+            ):
+                updated = self._drain_learner_updates()
+                if updated:
+                    self._post_steps_hook()
+            self._post_steps_log_hook(batch)
+
+            if self.progress_bar:
+                self._pbar.update(current_frames)
+                self._pbar_description()
+            if self._stop_training or self.collected_frames >= self.total_frames:
+                self.save_trainer(force_save=True)
+                return
+            self.save_trainer()
+
+    def _observe_replay_progress(self, *, update_collected_frames: bool) -> bool:
+        write_count = self._get_replay_write_count()
+        delta = max(0, write_count - self._last_replay_write_count)
+        self._last_replay_write_count = write_count
+        if delta:
+            frames_per_batch = int(getattr(self.collector, "frames_per_batch", delta))
+            if frames_per_batch <= 0:
+                raise ValueError("collector.frames_per_batch must be positive.")
+            self._update_credit += delta / frames_per_batch
+        if update_collected_frames:
+            self.collected_frames = (
+                write_count - self._replay_write_baseline
+            ) * self.frame_skip
+        return bool(delta)
+
+    def _drain_learner_updates(self) -> bool:
+        from torchrl.trainers.learners import LearnerStepRequest
+
+        updated = False
+        while self._update_credit >= 1 and not self._stop_training:
+            global_batch_size = self.learner_group.global_batch_size
+            if len(self.replay_buffer) < global_batch_size:
+                return updated
+            request = LearnerStepRequest(
+                round_id=self._learner_round + 1,
+                num_steps=self.optim_steps_per_batch * self.num_epochs,
+                global_batch_size=global_batch_size,
+            )
+            result = self.learner_group.step(request)
+            if result.round_id != request.round_id:
+                raise RuntimeError(
+                    "Learner group returned an unexpected round: "
+                    f"{result.round_id} != {request.round_id}."
+                )
+            self._learner_round = result.round_id
+            self._optim_count += result.optim_steps
+            self._update_credit -= 1
+            metrics = result.metrics.flatten_keys(".").to_dict()
+            self._log(optim_steps=self._optim_count, **metrics)
+            self._publish_learner_weights()
+            updated = True
+        return updated
+
+    def _publish_learner_weights(self) -> None:
+        snapshot = self.learner_group.get_weights("policy")
+        if snapshot.model_version <= self._published_model_version:
+            return
+        weights = self._prepare_learner_weights(snapshot)
+        self.collector.update_policy_weights_(weights)
+        self._published_model_version = snapshot.model_version
+
+    def _prepare_learner_weights(self, snapshot: LearnerWeights) -> TensorDictBase:
+        return snapshot.weights
+
+    def _get_replay_write_count(self) -> int:
+        write_count = self.replay_buffer.write_count
+        if callable(write_count):
+            write_count = write_count()
+        return int(write_count)
+
+    def _validate_learner_group_hooks(self) -> None:
+        ambiguous = {
+            "pre_optim": self._pre_optim_ops,
+            "process_optim_batch": self._process_optim_batch_ops,
+            "post_loss": self._post_loss_ops,
+            "process_loss": self._process_loss_ops,
+            "optimizer": self._optimizer_ops,
+            "post_optim": self._post_optim_ops,
+        }
+        registered = [name for name, hooks in ambiguous.items() if hooks]
+        if registered:
+            raise RuntimeError(
+                "Learner-group mode cannot place legacy learner-side hooks. "
+                f"Remove or move hooks registered at: {', '.join(registered)}."
+            )
 
     def _async_iterator(self):
         """Create an iterator for async collection that monitors replay buffer write_count.

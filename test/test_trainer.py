@@ -36,6 +36,8 @@ from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import (
     Learner,
     LearnerStepRequest,
+    LearnerStepResult,
+    LearnerWeights,
     LocalLearnerGroup,
     LogValidationReward,
     Trainer,
@@ -1808,6 +1810,169 @@ class TestLearnerGroup:
         with pytest.raises(RuntimeError, match="Expected round_id=1"):
             group.step(LearnerStepRequest(2, 1, 4))
         group.shutdown()
+
+
+class _ControllerReplay:
+    def __init__(self, events):
+        self.events = events
+        self.write_count = 0
+        self._length = 0
+
+    def start(self):
+        self.events.append("replay_start")
+        return self
+
+    def extend(self, batch):
+        self.write_count += batch.numel()
+        self._length += batch.numel()
+
+    def __len__(self):
+        return self._length
+
+    def shutdown(self):
+        self.events.append("replay_shutdown")
+
+
+class _ControllerCollector:
+    def __init__(self, events):
+        self.events = events
+        self.frames_per_batch = 4
+        self.init_random_frames = 0
+        self._batches = [
+            TensorDict({"x": torch.zeros(2, 1)}, [2]),
+            TensorDict({"x": torch.ones(2, 1)}, [2]),
+        ]
+        self.published_weights = []
+
+    def __iter__(self):
+        return iter(self._batches)
+
+    def update_policy_weights_(self, weights):
+        self.events.append("publish")
+        self.published_weights.append(weights.clone())
+
+    def shutdown(self):
+        self.events.append("collector_shutdown")
+
+
+class _ControllerLearnerGroup:
+    global_batch_size = 4
+    generation = 1
+
+    def __init__(self, events, replay):
+        self.events = events
+        self.replay = replay
+        self.model_version = 0
+        self.requests = []
+
+    def start(self):
+        self.events.append("group_start")
+        return self
+
+    def step(self, request):
+        assert request.round_id == len(self.requests) + 1
+        assert len(self.replay) >= request.global_batch_size
+        self.requests.append(request)
+        self.model_version += request.num_steps
+        return LearnerStepResult(
+            round_id=request.round_id,
+            optim_steps=request.num_steps,
+            model_version=self.model_version,
+            metrics=TensorDict({"loss": torch.tensor(float(request.round_id))}, []),
+        )
+
+    def get_weights(self, model_id="policy"):
+        return LearnerWeights(
+            model_id=model_id,
+            model_version=self.model_version,
+            weights=TensorDict({"weight": torch.tensor(float(self.model_version))}, []),
+        )
+
+    def shutdown(self):
+        self.events.append("group_shutdown")
+
+
+class TestLearnerGroupController:
+    def test_progress_credit_bundling_publication_and_lifecycle(self):
+        events = []
+        replay = _ControllerReplay(events)
+        collector = _ControllerCollector(events)
+        learner_group = _ControllerLearnerGroup(events, replay)
+        trainer = Trainer(
+            collector=collector,
+            total_frames=4,
+            frame_skip=1,
+            optim_steps_per_batch=2,
+            num_epochs=3,
+            loss_module=None,
+            optimizer=None,
+            learner_group=learner_group,
+            replay_buffer=replay,
+            progress_bar=False,
+        )
+
+        trainer.train()
+
+        assert len(learner_group.requests) == 1
+        assert learner_group.requests[0].num_steps == 6
+        assert trainer._learner_round == 1
+        assert trainer._optim_count == 6
+        assert trainer._update_credit == 0
+        assert [
+            weights["weight"].item() for weights in collector.published_weights
+        ] == [
+            0,
+            6,
+        ]
+        assert trainer._log_dict["loss"] == [torch.tensor(1.0)]
+        assert events[:3] == ["replay_start", "group_start", "publish"]
+        assert events[-3:] == [
+            "collector_shutdown",
+            "group_shutdown",
+            "replay_shutdown",
+        ]
+
+    def test_dqn_remote_mode_keeps_optimization_actor_owned(self):
+        events = []
+        replay = _ControllerReplay(events)
+        collector = _ControllerCollector(events)
+        learner_group = _ControllerLearnerGroup(events, replay)
+        with pytest.warns(UserWarning, match="experimental/prototype"):
+            trainer = DQNTrainer(
+                collector=collector,
+                total_frames=4,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                optimizer=None,
+                learner_group=learner_group,
+                replay_buffer=replay,
+                progress_bar=False,
+                enable_logging=False,
+            )
+
+        assert not trainer._optimizer_ops
+        assert not trainer._process_optim_batch_ops
+        assert not trainer._post_loss_ops
+        assert not trainer._post_optim_ops
+        trainer.train()
+        assert trainer._learner_round == 1
+        assert trainer._optim_count == 1
+
+    def test_rejects_driver_owned_optimization(self):
+        events = []
+        replay = _ControllerReplay(events)
+        with pytest.raises(ValueError, match="remove driver-owned arguments"):
+            Trainer(
+                collector=_ControllerCollector(events),
+                total_frames=4,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=MockingLossModule(),
+                optimizer=None,
+                learner_group=_ControllerLearnerGroup(events, replay),
+                replay_buffer=replay,
+            )
 
 
 class TestTD3OptimizationStepper:
