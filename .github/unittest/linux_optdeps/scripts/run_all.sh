@@ -179,34 +179,64 @@ export BATCHED_PIPE_TIMEOUT=60
 # script aborted on the pytest failure via set -e, before coverage upload.)
 EXIT_STATUS=0
 
-# Hang containment, two layers (an uninterruptible C-level teardown once
-# consumed the full two-hour job budget while producing no output):
-# - --timeout-method=thread: the default signal method provably failed to
-#   interrupt that teardown. The thread method dumps every thread's stack
-#   and kills the process, so the first hard hang fails the run loudly in
-#   minutes instead of silently eating the job. The tradeoff (a per-test
-#   timeout aborts the whole run) is acceptable here: a 120s+ test in this
-#   serial suite has meant a hang, with one known exception -- the
-#   test_setup.py install tests, which carry their own 600s marker.
-# - timeout(1) guard: last-resort process-level bound in case even the
-#   timer thread cannot run; 105 minutes leaves room for coverage combine
-#   and artifact upload within the 120-minute job budget (a healthy run
-#   under memory pressure has been observed at 98 minutes of pytest).
-timeout -k 60 105m \
+# Hang containment (an uninterruptible C-level teardown once consumed the
+# full two-hour job budget while producing no output). A fixed wall-clock
+# guard cannot work here: healthy runs have been measured anywhere between
+# 76 and 105+ minutes of pytest, so any budget tight enough to save the job
+# also kills slow-but-progressing runs. Neither can pytest-timeout's thread
+# method: its killer thread needs the GIL, which the native hang holds, and
+# it turns any legitimately slow test into a whole-run abort. The reliable
+# signal is inactivity -- the suite prints a line every few seconds under
+# -vv while the observed hang was a full hour of silence -- so a watchdog
+# kills the run only after 20 minutes without output.
+pytest_log="${root_dir}/optdeps-pytest.log"
+stall_flag="${root_dir}/optdeps-stalled"
+rm -f "${stall_flag}"
+: > "${pytest_log}"
+# Line-buffer python output through the tee pipe so the log's mtime tracks
+# real pytest activity (and CI log streaming stays live).
+export PYTHONUNBUFFERED=1
+
+# setsid gives pytest its own process group so the watchdog can kill the
+# whole tree without touching this script.
+setsid bash -c '
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test \
   --instafail --durations 200 -vv --capture no --ignore test/test_rlhf.py \
   --ignore test/test_distributed.py \
   --ignore test/llm \
-  --timeout=120 --timeout-method=thread --mp_fork_if_no_cuda || EXIT_STATUS=$?
-if [ $EXIT_STATUS -eq 124 ]; then
-  echo "pytest was killed by the 105-minute hang guard"
+  --timeout=120 --mp_fork_if_no_cuda
+' > >(tee "${pytest_log}") 2>&1 &
+pytest_pid=$!
+
+(
+  set +x
+  stall_limit=$((20 * 60))
+  while kill -0 "${pytest_pid}" 2>/dev/null; do
+    sleep 60
+    last_output=$(stat -c %Y "${pytest_log}" 2>/dev/null || echo 0)
+    if [ $(( $(date +%s) - last_output )) -ge "${stall_limit}" ]; then
+      touch "${stall_flag}"
+      echo "No pytest output for ${stall_limit}s; killing the hung run"
+      kill -TERM -- "-${pytest_pid}" 2>/dev/null
+      sleep 60
+      kill -KILL -- "-${pytest_pid}" 2>/dev/null
+      break
+    fi
+  done
+) &
+watchdog_pid=$!
+
+wait "${pytest_pid}" || EXIT_STATUS=$?
+kill "${watchdog_pid}" 2>/dev/null || true
+if [ -f "${stall_flag}" ]; then
+  echo "pytest was killed by the 20-minute inactivity watchdog"
 elif [ $EXIT_STATUS -ne 0 ]; then
   echo "Some tests failed with exit status $EXIT_STATUS"
 fi
 
-# Tolerate combine failures: a run killed by the hang guard may leave no
+# Tolerate combine failures: a run killed by the watchdog may leave no
 # usable coverage data, and the remaining artifacts should still upload.
-coverage combine -q || echo "coverage combine failed (expected after a hang-guard kill)"
+coverage combine -q || echo "coverage combine failed (expected after a watchdog kill)"
 coverage xml -i || true
 
 # Copy coverage report for Codecov artifact upload
