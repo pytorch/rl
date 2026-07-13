@@ -106,7 +106,7 @@ def main() -> None:
         loss_module = DQNLoss(
             value_network,
             action_space="one-hot",
-            delay_value=True,
+            delay_value=False,
         ).to(context.device)
         context.broadcast_module(loss_module)
         optimizer = torch.optim.Adam(loss_module.parameters(), lr=args.learning_rate)
@@ -126,6 +126,9 @@ def main() -> None:
                     batch.numel(),
                 )
     finally:
+        # This simple teardown assumes every rank reaches the collectives. If a
+        # rank exits early, peers may block until the process-group timeout; a
+        # failure-aware controller should coordinate teardown in production.
         context.barrier()
         if owner is not None:
             owner.shutdown()

@@ -50,6 +50,9 @@ A Ray replay-buffer client can be viewed by replicated learner ranks with
 The configured and explicit sample batch sizes are **global**: with global
 batch size ``B`` and ``W`` ranks, every rank request samples ``B / W`` items
 from the single Ray owner. ``B`` must be divisible by ``W``.
+Phase 1 rejects data-parallel sampling when owner-side prefetching is enabled,
+because the prefetch queue is not keyed by requested batch size. Construct the
+owner with ``prefetch=0``.
 
 .. code-block:: python
 

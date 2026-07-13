@@ -64,6 +64,10 @@ class DataParallelReplayBufferClient:
     .. note::
         Shared iteration is intentionally unsupported. A finite sampler epoch
         cannot be coordinated safely through independent ``next`` calls.
+
+    .. warning::
+        Owner-side prefetching is unsupported. Construct the replay-buffer
+        owner with ``prefetch=0``.
     """
 
     _LIFECYCLE_METHODS = frozenset({"client", "close", "shutdown", "start"})
@@ -91,6 +95,10 @@ class DataParallelReplayBufferClient:
         self._client = client
         self._rank = rank
         self._world_size = world_size
+        # Treat the configured batch size as fixed for the lifetime of this view.
+        # A local snapshot avoids an extra service round trip on every default
+        # sample call.
+        self._batch_size = client.batch_size
         self._sampling_strategy: _SamplingStrategy = _OwnerSerializedSampling()
 
     @property
@@ -106,7 +114,7 @@ class DataParallelReplayBufferClient:
     @property
     def batch_size(self) -> int | None:
         """The configured global batch size of the replay buffer."""
-        return self._client.batch_size
+        return self._batch_size
 
     def sample(
         self,
@@ -190,8 +198,10 @@ class DataParallelReplayBufferClient:
         self._client[index] = value
 
     def __getattr__(self, name: str) -> Any:
-        if name.startswith("_") or name in self._LIFECYCLE_METHODS:
+        if name in self._LIFECYCLE_METHODS:
             raise AttributeError(
                 f"{type(self).__name__} has no lifecycle capability {name!r}."
             )
+        if name.startswith("_"):
+            raise AttributeError(f"{type(self).__name__} has no attribute {name!r}.")
         return getattr(self._client, name)

@@ -1436,6 +1436,14 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     def _sample_data_parallel(self, batch_size: int, *args, **kwargs) -> Any:
         """Sample a local shard while treating the configured batch size as global."""
+        if self._prefetch:
+            raise RuntimeError(
+                "Data-parallel replay-buffer clients do not support owner-side "
+                "prefetching. Construct the replay buffer with prefetch=0."
+            )
+        # Phase 1 routes calls through a serialized service owner. Concurrent
+        # direct in-process calls could race only on whether the batch-size
+        # warning below is suppressed.
         data_parallel_sample = getattr(self, "_data_parallel_sample", False)
         self._data_parallel_sample = True
         try:

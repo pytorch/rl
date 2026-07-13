@@ -41,8 +41,14 @@ RETRY_BACKOFF = 3
 
 class _RecordingReplayBufferClient:
     def __init__(self, batch_size=8):
-        self.batch_size = batch_size
+        self._batch_size = batch_size
+        self.batch_size_reads = 0
         self.calls = []
+
+    @property
+    def batch_size(self):
+        self.batch_size_reads += 1
+        return self._batch_size
 
     def _sample_data_parallel(self, batch_size, *args, **kwargs):
         self.calls.append((batch_size, args, kwargs))
@@ -202,6 +208,7 @@ class TestDataParallelReplayBufferClient:
         assert info["index"].shape == (2,)
         assert base_client.calls == [(2, (), {"return_info": True})]
         assert client.batch_size == 8
+        assert base_client.batch_size_reads == 1
         assert client.rank == 1
         assert client.world_size == 4
         assert len(client) == 17
@@ -267,6 +274,15 @@ class TestDataParallelReplayBufferClient:
             iter(client)
         for name in ("client", "close", "shutdown", "start"):
             assert not hasattr(client, name)
+        with pytest.raises(AttributeError, match="has no attribute '__deepcopy__'"):
+            client.__deepcopy__
+
+    def test_owner_prefetch_is_unsupported(self):
+        replay_buffer = ReplayBuffer(batch_size=4, prefetch=1)
+        replay_buffer.extend(torch.arange(8))
+        client = DataParallelReplayBufferClient(replay_buffer, rank=0, world_size=2)
+        with pytest.raises(RuntimeError, match="do not support owner-side prefetching"):
+            client.sample()
 
 
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
@@ -359,7 +375,7 @@ class TestRayRB:
         )
         try:
             rb.extend(TensorDict({"x": torch.arange(16)}, batch_size=16))
-            client = rb.client().data_parallel(rank=1, world_size=4)
+            client = rb.data_parallel(rank=1, world_size=4)
             restored = pickle.loads(pickle.dumps(client))
             sample, info = restored.sample(return_info=True)
             assert sample.shape == (2,)

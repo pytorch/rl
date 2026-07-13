@@ -266,13 +266,12 @@ class DataParallelContext:
         """
         self._ensure_open()
         parameters = self._optimizer_parameters(optimizer)
-        unsupported = [
-            parameter
-            for parameter in parameters
-            if parameter.grad is not None and parameter.grad.layout is not torch.strided
-        ]
         if self.world_size == 1:
-            if unsupported:
+            if any(
+                parameter.grad is not None
+                and parameter.grad.layout is not torch.strided
+                for parameter in parameters
+            ):
                 raise RuntimeError(
                     "DataParallelContext does not support sparse or non-strided "
                     "gradients."
@@ -304,7 +303,8 @@ class DataParallelContext:
                 device=bucket_parameters[0].device,
             )
             dist.all_reduce(metadata, op=dist.ReduceOp.SUM, group=self.process_group)
-            if metadata[1].any().item():
+            metadata_cpu = metadata.cpu()
+            if metadata_cpu[1].any().item():
                 raise RuntimeError(
                     "DataParallelContext does not support sparse or non-strided "
                     "gradients."
@@ -331,7 +331,7 @@ class DataParallelContext:
                     parameter
                 )
                 offset += numel
-                if metadata[0, index].item():
+                if metadata_cpu[0, index].item():
                     if parameter.grad is None:
                         parameter.grad = reduced_gradient.clone(
                             memory_format=torch.preserve_format
