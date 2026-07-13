@@ -46,22 +46,12 @@ jobs:
   tests-cpu:
     strategy:
       matrix:
-        # Every Python version runs the xdist bulk (24k tests in ~5 min --
-        # the smoke subset for the middle versions). The serial quarantine
-        # shards (collectors + mp, the expensive part) run on the oldest and
-        # newest Python only; the middle versions get them on non-PR events
-        # via tests-cpu-quarantine-mid below.
-        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-        shard: ["bulk"]
-        include:
-          - python_version: "3.10"
-            shard: "collectors"
-          - python_version: "3.10"
-            shard: "mp"
-          - python_version: "3.14"
-            shard: "collectors"
-          - python_version: "3.14"
-            shard: "mp"
+        # PR version set: 3.10 (oldest), 3.13 (newest with the full optional
+        # dependency stack) and 3.14 (newest, cheap -- most optional deps do
+        # not install there) run all three shards on every event. 3.11 and
+        # 3.12 run only on non-PR events via tests-cpu-mid below.
+        python_version: ["3.10", "3.13", "3.14"]
+        shard: ["bulk", "collectors", "mp"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -90,16 +80,16 @@ jobs:
         ## setup_env.sh
         bash .github/unittest/linux/scripts/run_all.sh
 
-  # Serial quarantine shards for the middle Python versions. Skipped on pull
-  # requests (3.10 and 3.14 bracket the version range there); pushes to main
-  # and the nightly orchestrator keep full five-version coverage. For an
-  # on-demand full run on a PR branch, use workflow_dispatch.
-  tests-cpu-quarantine-mid:
+  # All shards for the middle Python versions. Skipped on pull requests
+  # (3.10/3.13/3.14 bracket the version range there); pushes to main and the
+  # nightly orchestrator keep full five-version coverage. For an on-demand
+  # full run on a PR branch, use workflow_dispatch.
+  tests-cpu-mid:
     if: github.event_name != 'pull_request'
     strategy:
       matrix:
-        python_version: ["3.11", "3.12", "3.13"]
-        shard: ["collectors", "mp"]
+        python_version: ["3.11", "3.12"]
+        shard: ["bulk", "collectors", "mp"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -382,7 +372,7 @@ jobs:
   upload-codecov:
     needs:
       - tests-cpu
-      - tests-cpu-quarantine-mid
+      - tests-cpu-mid
       - tests-gpu
       - tests-gpu-distributed
       - tests-optdeps
