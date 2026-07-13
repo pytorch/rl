@@ -8,6 +8,7 @@ API Reference
     checkpoint
     data
     data_layout
+    distributed
     envs
     llms
     modules
