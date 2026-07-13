@@ -131,6 +131,7 @@
 - [NestedStorageCheckpointer](reference/generated/torchrl.data.replay_buffers.NestedStorageCheckpointer.md)
 - [PrioritizedSampler](reference/generated/torchrl.data.replay_buffers.PrioritizedSampler.md)
 - [PrioritizedSliceSampler](reference/generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.md)
+- [PromptGroupSampler](reference/generated/torchrl.data.replay_buffers.PromptGroupSampler.md)
 - [RandomSampler](reference/generated/torchrl.data.replay_buffers.RandomSampler.md)
 - [RoundRobinWriter](reference/generated/torchrl.data.replay_buffers.RoundRobinWriter.md)
 - [Sampler](reference/generated/torchrl.data.replay_buffers.Sampler.md)

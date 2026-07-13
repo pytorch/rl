@@ -166,6 +166,7 @@ rb.update_tensordict_priority(sample)
 
 - [PrioritizedSampler](generated/torchrl.data.replay_buffers.PrioritizedSampler.html)
 - [PrioritizedSliceSampler](generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html)
+- [PromptGroupSampler](generated/torchrl.data.replay_buffers.PromptGroupSampler.html)
 - [ConsumingSampler](generated/torchrl.data.replay_buffers.ConsumingSampler.html)
 - [RandomSampler](generated/torchrl.data.replay_buffers.RandomSampler.html)
 - [Sampler](generated/torchrl.data.replay_buffers.Sampler.html)

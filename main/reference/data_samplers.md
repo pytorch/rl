@@ -13,6 +13,7 @@ wraparound and the write cursor -- are documented in
 | [`PrioritizedSampler`](generated/torchrl.data.replay_buffers.PrioritizedSampler.html#torchrl.data.replay_buffers.PrioritizedSampler)(*args, **kwargs) | Prioritized sampler for replay buffer. |
 | --- | --- |
 | [`PrioritizedSliceSampler`](generated/torchrl.data.replay_buffers.PrioritizedSliceSampler.html#torchrl.data.replay_buffers.PrioritizedSliceSampler)(*args, **kwargs) | Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling. |
+| [`PromptGroupSampler`](generated/torchrl.data.replay_buffers.PromptGroupSampler.html#torchrl.data.replay_buffers.PromptGroupSampler)(*args, **kwargs) | A sampler that draws complete groups of items sharing a common key. |
 | [`ConsumingSampler`](generated/torchrl.data.replay_buffers.ConsumingSampler.html#torchrl.data.replay_buffers.ConsumingSampler)(*args, **kwargs) | A random sampler that consumes entries after they have been sampled. |
 | [`RandomSampler`](generated/torchrl.data.replay_buffers.RandomSampler.html#torchrl.data.replay_buffers.RandomSampler)(*args, **kwargs) | A uniformly random sampler for composable replay buffers. |
 | [`Sampler`](generated/torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler)(*args, **kwargs) | A generic sampler base class for composable Replay Buffers. |
