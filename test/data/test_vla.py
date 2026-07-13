@@ -28,6 +28,7 @@ from torchrl.data.vla import (
     VLAObservation,
     VocabTailActionTokenizer,
 )
+from torchrl.data.vla.preprocessing import _fractional_center_crop, _lanczos3_resize
 
 _has_pil = importlib.util.find_spec("PIL") is not None
 _has_tensorflow = importlib.util.find_spec("tensorflow") is not None
@@ -275,6 +276,12 @@ class TestVLAContainers:
 
 
 class TestOpenVLAImagePreprocessor:
+    @pytest.mark.skipif(not _has_torchvision, reason="torchvision not found")
+    def test_default_backend(self):
+        proc = OpenVLAImagePreprocessor()
+
+        assert proc.backend == "torch_reference"
+
     @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
     def test_pil_backend_shapes(self):
         proc = OpenVLAImagePreprocessor(size=32, backend="pil", center_crop=True)
@@ -296,6 +303,199 @@ class TestOpenVLAImagePreprocessor:
         assert fast.shape == fast_again.shape == ref.shape == torch.Size([2, 3, 32, 32])
         assert fast.dtype == fast_again.dtype == ref.dtype == torch.uint8
         assert (fast.float() - ref.float()).abs().mean() < 25.0
+
+    @pytest.mark.skipif(not _has_torchvision, reason="torchvision not found")
+    @pytest.mark.parametrize("channels", [1, 3])
+    def test_torch_reference_backend(self, channels):
+        proc = OpenVLAImagePreprocessor(
+            size=32, backend="torch_reference", center_crop=True
+        )
+        images = torch.full((2, channels, 25, 39), 73, dtype=torch.uint8)
+
+        out = proc(images)
+        unbatched = proc(images[0])
+
+        assert out.shape == torch.Size([2, 3, 32, 32])
+        assert unbatched.shape == torch.Size([3, 32, 32])
+        assert out.dtype == unbatched.dtype == torch.uint8
+        torch.testing.assert_close(out[0], unbatched)
+        torch.testing.assert_close(out[:, 0], out[:, 1])
+        torch.testing.assert_close(out[:, 1], out[:, 2])
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.skipif(not _has_torchvision, reason="torchvision not found")
+    def test_torch_reference_cuda_input(self):
+        proc = OpenVLAImagePreprocessor(
+            size=16, backend="torch_reference", center_crop=True
+        )
+        images = torch.randint(0, 256, (2, 3, 17, 23), dtype=torch.uint8, device="cuda")
+
+        out = proc(images)
+
+        assert out.device == images.device
+        assert out.shape == (2, 3, 16, 16)
+
+    def test_torch_reference_interpolation_matches_tensorflow_golden(self):
+        image = torch.arange(20, dtype=torch.float32).reshape(1, 1, 4, 5) * 7
+        expected_resize = torch.tensor(
+            [
+                [6.495448, 15.063237, 24.094267, 32.662056],
+                [53.416706, 61.9845, 71.015526, 79.58331],
+                [100.33795, 108.90575, 117.93678, 126.50456],
+            ]
+        ).reshape(1, 1, 3, 4)
+        torch.testing.assert_close(
+            _lanczos3_resize(image, (3, 4)),
+            expected_resize,
+            rtol=0,
+            atol=1e-4,
+        )
+        expected_upscale = torch.tensor(
+            [
+                [-1.605574, 3.354574, 10.117878, 15.132814, 21.896118, 26.856264],
+                [21.150263, 26.110410, 32.873714, 37.888645, 44.651955, 49.612103],
+                [52.269077, 57.229220, 63.992523, 69.007450, 75.770770, 80.730910],
+                [83.387886, 88.348030, 95.111336, 100.126270, 106.889580, 111.849724],
+                [
+                    106.143720,
+                    111.103874,
+                    117.867180,
+                    122.882100,
+                    129.645420,
+                    134.605560,
+                ],
+            ]
+        ).reshape(1, 1, 5, 6)
+        torch.testing.assert_close(
+            _lanczos3_resize(image, (5, 6)),
+            expected_upscale,
+            rtol=0,
+            atol=2e-4,
+        )
+
+        crop_input = torch.tensor(
+            [
+                [0, 17, 41, 83],
+                [11, 59, 101, 131],
+                [29, 73, 149, 191],
+                [47, 97, 211, 255],
+            ],
+            dtype=torch.uint8,
+        ).reshape(1, 1, 4, 4)
+        expected_crop = torch.tensor(
+            [
+                [2, 20, 45, 83],
+                [15, 60, 101, 130],
+                [31, 74, 146, 186],
+                [49, 98, 203, 247],
+            ],
+            dtype=torch.uint8,
+        ).reshape(1, 1, 4, 4)
+        torch.testing.assert_close(
+            _fractional_center_crop(crop_input, (4, 4)), expected_crop
+        )
+
+    def test_lanczos3_resize_batch_matches_sequential_and_compiles(self):
+        generator = torch.Generator().manual_seed(0)
+        images = torch.rand(4, 3, 37, 53, generator=generator)
+        expected = torch.cat(
+            [_lanczos3_resize(image.unsqueeze(0), (41, 59)) for image in images]
+        )
+
+        actual = _lanczos3_resize(images, (41, 59))
+        compiled = torch.compile(_lanczos3_resize, backend="eager", fullgraph=True)(
+            images, (41, 59)
+        )
+
+        torch.testing.assert_close(actual, expected)
+        torch.testing.assert_close(compiled, expected)
+
+    def test_fractional_center_crop_does_not_mutate_and_compiles(self):
+        generator = torch.Generator().manual_seed(1)
+        images = torch.randint(
+            0, 256, (4, 3, 17, 23), dtype=torch.uint8, generator=generator
+        ).to(torch.float32)
+        original = images.clone()
+
+        expected = _fractional_center_crop(images, (19, 21))
+        compiled = torch.compile(
+            _fractional_center_crop, backend="eager", fullgraph=True
+        )(images, (19, 21))
+
+        torch.testing.assert_close(images, original)
+        torch.testing.assert_close(compiled, expected)
+
+    @pytest.mark.skipif(not _has_tensorflow, reason="TensorFlow not found")
+    def test_torch_reference_interpolation_matches_tensorflow(self):
+        tensorflow = importlib.import_module("tensorflow")
+        generator = torch.Generator().manual_seed(0)
+        images = torch.randint(
+            0, 256, (2, 3, 37, 53), dtype=torch.uint8, generator=generator
+        )
+        expected_resize = tensorflow.image.resize(
+            images.permute(0, 2, 3, 1).numpy(),
+            (32, 32),
+            method="lanczos3",
+            antialias=True,
+        )
+        expected_resize = torch.from_numpy(expected_resize.numpy().copy()).permute(
+            0, 3, 1, 2
+        )
+        resize = _lanczos3_resize(images.float(), (32, 32))
+        torch.testing.assert_close(resize, expected_resize, rtol=0, atol=2e-4)
+
+        quantized = expected_resize.round().clamp(0, 255).to(torch.uint8)
+        crop_size = tensorflow.sqrt(tensorflow.constant(0.9))
+        offset = (1 - crop_size) / 2
+        boxes = tensorflow.stack(
+            [[offset, offset, offset + crop_size, offset + crop_size]] * 2
+        )
+        expected_crop = tensorflow.image.crop_and_resize(
+            tensorflow.image.convert_image_dtype(
+                quantized.permute(0, 2, 3, 1).numpy(), tensorflow.float32
+            ),
+            boxes,
+            tensorflow.range(2),
+            (32, 32),
+        )
+        expected_crop = tensorflow.image.convert_image_dtype(
+            tensorflow.clip_by_value(expected_crop, 0, 1),
+            tensorflow.uint8,
+            saturate=True,
+        )
+        expected_crop = torch.from_numpy(expected_crop.numpy().copy()).permute(
+            0, 3, 1, 2
+        )
+        crop = _fractional_center_crop(quantized, (32, 32))
+        error = (crop.to(torch.int16) - expected_crop).abs()
+        assert error.max() <= 1
+        assert error.to(torch.float32).mean() < 1e-3
+
+    @pytest.mark.skipif(
+        not (_has_tensorflow and _has_torchvision),
+        reason="TensorFlow/torchvision not found",
+    )
+    @pytest.mark.parametrize("channels", [1, 3])
+    @pytest.mark.parametrize("center_crop", [False, True])
+    def test_torch_reference_is_closer_to_tensorflow(self, channels, center_crop):
+        generator = torch.Generator().manual_seed(10 + channels)
+        images = torch.randint(
+            0, 256, (1, channels, 37, 53), dtype=torch.uint8, generator=generator
+        )
+        tensorflow = OpenVLAImagePreprocessor(
+            size=32, backend="tensorflow", center_crop=center_crop
+        )(images)
+        torch_reference = OpenVLAImagePreprocessor(
+            size=32, backend="torch_reference", center_crop=center_crop
+        )(images)
+        torchvision = OpenVLAImagePreprocessor(
+            size=32, backend="torchvision", center_crop=center_crop
+        )(images)
+
+        reference_error = (torch_reference.float() - tensorflow.float()).abs().mean()
+        torchvision_error = (torchvision.float() - tensorflow.float()).abs().mean()
+        assert reference_error < torchvision_error
 
     @pytest.mark.skipif(not _has_tensorflow, reason="TensorFlow not found")
     def test_tensorflow_reference_backend(self):

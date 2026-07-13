@@ -350,10 +350,14 @@ Requirements beyond the toy scale: LIBERO (see the `torchrl.envs.LiberoEnv`
 docs for install notes), `transformers`, `timm`, `Pillow`, and `peft` when
 `policy.lora_rank` is set.
 
-For reference-parity rollouts, set `policy.image_backend=tensorflow`. This uses
-the SimpleVLA JPEG, Lanczos resize, and center-crop order. Normalized
-vocabulary-tail action tokens are detokenized through the NumPy float64 CPU
-path before the gripper transform is applied once in the environment. Use
+The default `policy.image_backend=torch_reference` uses torchvision's JPEG
+codec and matches SimpleVLA's JPEG-before-resize order, antialiased Lanczos3
+resize, and fractional center-crop interpolation semantics without requiring
+TensorFlow. Set `policy.image_backend=torchvision` for the faster bicubic path,
+or `policy.image_backend=tensorflow` when the TensorFlow codec itself is
+required for exact reference comparisons. Normalized vocabulary-tail action
+tokens are detokenized through the NumPy float64 CPU path before the gripper
+transform is applied once in the environment. Use
 `env.train_init_state_mode=fixed env.train_init_state_id=<id>` for a fixed
 LIBERO initial state. `collector.policy_micro_batch_size` only slices actual
 model calls inside the inference-server policy; it does not change PPO

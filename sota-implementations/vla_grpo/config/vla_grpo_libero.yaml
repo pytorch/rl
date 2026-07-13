@@ -69,7 +69,8 @@ policy:
   use_proprio: false
   num_images_in_input: 1
   center_crop: true # the SimpleVLA-RL checkpoints are trained with augmentations
-  image_backend: torchvision # OpenVLA preprocessing: torchvision | pil | tensorflow (reference)
+  # OpenVLA preprocessing: torchvision | torch_reference | pil | tensorflow
+  image_backend: torch_reference
   # the model emits a continuous gripper; LIBERO/robosuite needs a firm +/-1
   # open/close (demo gripper is binary, -1 open / +1 close). SimpleVLA-RL
   # applies sign(2 * g - 1) then inverts, so threshold 0.0 here is equivalent

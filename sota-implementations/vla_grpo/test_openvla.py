@@ -41,8 +41,10 @@ _has_deps = all(
     importlib.util.find_spec(name) is not None
     for name in ("transformers", "timm", "PIL", "tokenizers")
 )
+_has_torchvision = importlib.util.find_spec("torchvision") is not None
 
 if _has_deps:
+    import openvla
     from openvla import (
         GripperPostProcessTransform,
         OpenVLAOFTL1Wrapper,
@@ -1078,6 +1080,37 @@ class TestOpenVLAOFTWrapper:
         policy._preprocess(images, None, instructions)
 
         assert processor.tokenizer.calls == 2
+
+    @pytest.mark.skipif(not _has_torchvision, reason="torchvision not found")
+    def test_preprocess_default_torch_reference_backend(self):
+        processor = _BatchProcessor()
+        policy = OpenVLAOFTWrapper(_TinyOFT(), processor)
+        images = torch.randint(0, 256, (2, 3, 31, 47), dtype=torch.uint8)
+
+        _, _, pixel_values = policy._preprocess(
+            images, None, ["pick up the bowl", "open drawer"]
+        )
+
+        assert policy.image_backend == "torch_reference"
+        assert pixel_values.shape == (2, 3, 224, 224)
+        assert pixel_values.dtype == torch.float32
+        assert processor.image_processor.calls == 0
+
+    def test_preprocess_fallback_warns(self, caplog, monkeypatch):
+        def fake_image_preprocessor(**kwargs):
+            backend = kwargs["backend"]
+            if backend == "torch_reference":
+                raise ImportError("torchvision is unavailable")
+            return SimpleNamespace(backend=backend)
+
+        monkeypatch.setattr(
+            openvla, "OpenVLAImagePreprocessor", fake_image_preprocessor
+        )
+        with caplog.at_level("WARNING"):
+            policy = OpenVLAOFTWrapper(_TinyOFT(), _BatchProcessor())
+
+        assert policy.image_backend == "pil"
+        assert "does not preserve reference preprocessing semantics" in caplog.text
 
     def test_unbatched_input(self, policy):
         obs = TensorDict(
