@@ -1150,6 +1150,11 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
 
+    def _torchrl_checkpoint_detach_from_load_path(self):
+        detach = getattr(self._storage.checkpointer, "_detach_from_load_path", None)
+        if detach is not None:
+            detach(self._storage)
+
     @_maybe_delay_init
     def register_save_hook(self, hook: Callable[[Any], Any]):
         """Registers a save hook for the storage.

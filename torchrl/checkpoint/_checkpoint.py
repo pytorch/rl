@@ -194,6 +194,10 @@ class CheckpointAdapter(abc.ABC):
     ) -> Any:
         """Restore ``component`` from ``path`` and optionally return a value."""
 
+    def _detach_from_load_path(self, component: Any) -> None:
+        """Detach a loaded component from temporary archive payload files."""
+        del component
+
 
 class DumpLoadCheckpointAdapter(CheckpointAdapter):
     """Adapter for objects exposing ``dump(path)`` and ``load(path)``.
@@ -230,6 +234,11 @@ class DumpLoadCheckpointAdapter(CheckpointAdapter):
         del map_location, tensor_load_kwargs
         component.load(path, *args, **kwargs)
         return None
+
+    def _detach_from_load_path(self, component: Any) -> None:
+        detach = getattr(component, "_torchrl_checkpoint_detach_from_load_path", None)
+        if detach is not None:
+            detach()
 
 
 def _encode_state_dict_value(value: Any, tensors: dict[str, torch.Tensor]) -> Any:
@@ -966,6 +975,8 @@ class Checkpoint:
                         args=resolved_options.load_args or (),
                         kwargs=resolved_options.load_kwargs or {},
                     )
+                    if not source.is_dir():
+                        adapters[name]._detach_from_load_path(registration.value)
                 except Exception as error:
                     result.incompatible[name] = str(error)
                     if load_strict == "error":

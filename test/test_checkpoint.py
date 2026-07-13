@@ -15,6 +15,7 @@ import pytest
 import tensordict
 import torch
 from tensordict import TensorDict
+from tensordict.memmap import MemoryMappedTensor
 from torchrl.checkpoint import (
     Checkpoint,
     CheckpointAdapter,
@@ -485,6 +486,8 @@ def test_compressed_replay_buffer_roundtrip(tmp_path, format):
     ]
     assert len(target) == len(source)
     torch.testing.assert_close(target.storage.get(0), source.storage.get(0))
+    loaded_observation = target.storage._storage[0]["observation"]
+    assert isinstance(loaded_observation, MemoryMappedTensor) is (format == "directory")
 
 
 @pytest.mark.gpu
