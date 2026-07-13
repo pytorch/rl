@@ -112,6 +112,96 @@ def test_prioritized_sampler_load_state_dict_decouples_from_source():
     assert sampler2._sum_tree[0] == before
 
 
+def _slice_data(size=20, episode_len=5):
+    return TensorDict(
+        {
+            "a": torch.arange(size),
+            "episode": torch.arange(size) // episode_len,
+            ("next", "done"): (torch.arange(size) % episode_len == episode_len - 1)
+            .unsqueeze(-1)
+            .bool(),
+        },
+        batch_size=[size],
+    )
+
+
+def test_prioritized_slice_sampler_load_state_dict_restores_priorities():
+    # PrioritizedSliceSampler resolves load_state_dict through the MRO. Without an
+    # explicit forwarder it lands on SliceSampler.load_state_dict, a no-op, and the
+    # sum/min trees serialized by state_dict() are silently discarded on restore.
+    def build():
+        sampler = PrioritizedSliceSampler(
+            max_capacity=20, num_slices=2, alpha=0.7, beta=0.9
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20), sampler=sampler, batch_size=4
+        )
+        rb.extend(_slice_data())
+        return sampler, rb
+
+    sampler, rb = build()
+    rb.update_priority(torch.arange(20), torch.arange(1.0, 21.0))
+    sd = rb.state_dict()
+
+    sampler2, rb2 = build()
+    rb2.load_state_dict(sd)
+
+    assert sampler2._max_priority[0] == sampler._max_priority[0]
+    assert sampler2._max_priority[1] == sampler._max_priority[1]
+    torch.testing.assert_close(
+        torch.as_tensor(sampler2._sum_tree.query(0, 20)),
+        torch.as_tensor(sampler._sum_tree.query(0, 20)),
+    )
+
+
+def test_prioritized_slice_sampler_load_state_dict_decouples_from_source():
+    sampler = PrioritizedSliceSampler(
+        max_capacity=20, num_slices=2, alpha=0.7, beta=0.9
+    )
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(20), sampler=sampler, batch_size=4
+    )
+    rb.extend(_slice_data())
+    rb.update_priority(torch.arange(20), torch.arange(1.0, 21.0))
+    sd = sampler.state_dict()
+
+    sampler2 = PrioritizedSliceSampler(
+        max_capacity=20, num_slices=2, alpha=0.7, beta=0.9
+    )
+    sampler2.load_state_dict(sd)
+    # guard against a vacuous pass: if load_state_dict were a no-op nothing would be
+    # loaded, and the decoupling assertions below would hold trivially.
+    assert sampler2._max_priority[0] == sampler._max_priority[0]
+    assert sampler2._sum_tree is not sd["_sum_tree"]
+    before = sampler2._sum_tree[0]
+    sd["_sum_tree"][0] = before + 1000.0
+    assert sampler2._sum_tree[0] == before
+
+
+def test_slice_sampler_without_replacement_dumps_restores_cursor(tmp_path):
+    # SliceSamplerWithoutReplacement overrides state_dict/load_state_dict but its
+    # dumps/loads used to fall through to the SliceSampler no-ops, so the memmap
+    # checkpoint path silently dropped the without-replacement cursor.
+    def build():
+        sampler = SliceSamplerWithoutReplacement(num_slices=2)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20), sampler=sampler, batch_size=4
+        )
+        rb.extend(_slice_data())
+        return sampler, rb
+
+    sampler, rb = build()
+    rb.sample()
+    before = sampler._sample_list.clone()
+
+    rb.dumps(tmp_path)
+    sampler2, rb2 = build()
+    rb2.loads(tmp_path)
+
+    assert sampler2._sample_list is not None
+    torch.testing.assert_close(sampler2._sample_list, before)
+
+
 class TestSamplers:
     @pytest.mark.parametrize(
         "backend", ["torch"] + (["torchsnapshot"] if _has_snapshot else [])
