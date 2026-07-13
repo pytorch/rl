@@ -47,6 +47,10 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        # Fan the job out into the xdist bulk and the two halves of the
+        # process-spawning quarantine (collectors dominates it), so the job
+        # wall is the max of the three instead of their sum.
+        shard: ["bulk", "collectors", "mp"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -54,7 +58,7 @@ jobs:
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       timeout: 120
-      upload-artifact: test-results-cpu-${{ matrix.python_version }}
+      upload-artifact: test-results-cpu-${{ matrix.python_version }}-shard-${{ matrix.shard }}
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -67,6 +71,7 @@ jobs:
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
+        export TORCHRL_TEST_SHARD=${{ matrix.shard }}
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
