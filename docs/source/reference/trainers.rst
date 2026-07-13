@@ -50,5 +50,6 @@ Documentation Sections
    :maxdepth: 2
 
    trainers_basics
+   trainers_learners
    trainers_loggers
    trainers_hooks
