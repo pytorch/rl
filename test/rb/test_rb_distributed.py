@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pickle
 
 import sys
 import time
@@ -18,7 +19,13 @@ import torch.multiprocessing as mp
 from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import RayReplayBuffer, ReplayBuffer
+from torchrl.data import (
+    ConsumingSampler,
+    DataParallelReplayBufferClient,
+    PrioritizedSampler,
+    RayReplayBuffer,
+    ReplayBuffer,
+)
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
@@ -30,6 +37,31 @@ from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3
+
+
+class _RecordingReplayBufferClient:
+    def __init__(self, batch_size=8):
+        self.batch_size = batch_size
+        self.calls = []
+
+    def _sample_data_parallel(self, batch_size, *args, **kwargs):
+        self.calls.append((batch_size, args, kwargs))
+        sample = torch.arange(batch_size)
+        if kwargs.get("return_info", False):
+            return sample, {"index": sample.clone()}
+        return sample
+
+    def __len__(self):
+        return 17
+
+    def extend(self, data):
+        return data
+
+    def add(self, data):
+        return data
+
+    def update_priority(self, index, priority):
+        return index, priority
 
 
 class ReplayBufferNode(RemoteTensorDictReplayBuffer):
@@ -160,6 +192,83 @@ def _make_mcadvantage_traj(group_id, rewards):
     )
 
 
+class TestDataParallelReplayBufferClient:
+    def test_global_to_local_batch_conversion_and_return_info(self):
+        base_client = _RecordingReplayBufferClient(batch_size=8)
+        client = DataParallelReplayBufferClient(base_client, rank=1, world_size=4)
+
+        sample, info = client.sample(return_info=True)
+        assert sample.shape == (2,)
+        assert info["index"].shape == (2,)
+        assert base_client.calls == [(2, (), {"return_info": True})]
+        assert client.batch_size == 8
+        assert client.rank == 1
+        assert client.world_size == 4
+        assert len(client) == 17
+
+    @pytest.mark.parametrize(
+        ("rank", "world_size", "error"),
+        [
+            (-1, 2, ValueError),
+            (2, 2, ValueError),
+            (0, 0, ValueError),
+            (0.0, 2, TypeError),
+            (0, 2.0, TypeError),
+        ],
+    )
+    def test_invalid_rank_metadata(self, rank, world_size, error):
+        with pytest.raises(error):
+            DataParallelReplayBufferClient(
+                _RecordingReplayBufferClient(), rank=rank, world_size=world_size
+            )
+
+    @pytest.mark.parametrize("batch_size", [0, -1, 3, 3.0])
+    def test_invalid_global_batch_size(self, batch_size):
+        client = DataParallelReplayBufferClient(
+            _RecordingReplayBufferClient(), rank=0, world_size=2
+        )
+        with pytest.raises((TypeError, ValueError)):
+            client.sample(batch_size)
+
+    def test_missing_batch_size(self):
+        client = DataParallelReplayBufferClient(
+            _RecordingReplayBufferClient(batch_size=None), rank=0, world_size=2
+        )
+        with pytest.raises(RuntimeError, match="batch_size not specified"):
+            client.sample()
+
+    def test_writes_and_priorities_are_forwarded(self):
+        client = DataParallelReplayBufferClient(
+            _RecordingReplayBufferClient(), rank=0, world_size=2
+        )
+        data = torch.arange(3)
+        assert client.extend(data) is data
+        assert client.add(data) is data
+        index, priority = client.update_priority(data, data + 1)
+        torch.testing.assert_close(index, data)
+        torch.testing.assert_close(priority, data + 1)
+
+    def test_pickling(self):
+        client = DataParallelReplayBufferClient(
+            _RecordingReplayBufferClient(), rank=1, world_size=2
+        )
+        restored = pickle.loads(pickle.dumps(client))
+        assert restored.rank == 1
+        assert restored.world_size == 2
+        assert restored.sample().shape == (4,)
+
+    def test_iteration_and_lifecycle_are_unsupported(self):
+        client = DataParallelReplayBufferClient(
+            _RecordingReplayBufferClient(), rank=0, world_size=2
+        )
+        with pytest.raises(RuntimeError, match="does not support shared next"):
+            client.next()
+        with pytest.raises(RuntimeError, match="does not support shared next"):
+            iter(client)
+        for name in ("client", "close", "shutdown", "start"):
+            assert not hasattr(client, name)
+
+
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
 class TestRayRB:
     @pytest.fixture(autouse=True, scope="module")
@@ -238,6 +347,93 @@ class TestRayRB:
             remote_worker = ray.remote(Worker).remote(client)
             ray.get(remote_worker.run.remote())
             assert len(rb) == 100
+        finally:
+            rb.close()
+
+    def test_data_parallel_client_serialization_and_global_batch(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 32),
+            batch_size=8,
+            ray_init_config={"num_cpus": 1},
+            remote_config={"num_cpus": 0},
+        )
+        try:
+            rb.extend(TensorDict({"x": torch.arange(16)}, batch_size=16))
+            client = rb.client().data_parallel(rank=1, world_size=4)
+            restored = pickle.loads(pickle.dumps(client))
+            sample, info = restored.sample(return_info=True)
+            assert sample.shape == (2,)
+            assert info["index"].shape == (2,)
+            assert restored.batch_size == 8
+            assert len(restored) == 16
+        finally:
+            rb.close()
+
+    def test_data_parallel_without_replacement_is_globally_disjoint(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 8),
+            sampler=partial(SamplerWithoutReplacement, drop_last=True, shuffle=False),
+            batch_size=8,
+            remote_config={"num_cpus": 0},
+        )
+        try:
+            rb.extend(TensorDict({"x": torch.arange(8)}, batch_size=8))
+            rank0 = rb.client().data_parallel(rank=0, world_size=2)
+            rank1 = rb.client().data_parallel(rank=1, world_size=2)
+            sample0 = rank0.sample()["x"]
+            sample1 = rank1.sample()["x"]
+            assert set(sample0.tolist()).isdisjoint(sample1.tolist())
+            assert sorted(torch.cat([sample0, sample1]).tolist()) == list(range(8))
+        finally:
+            rb.close()
+
+    def test_data_parallel_consumption_and_free_list_reuse(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 8),
+            sampler=ConsumingSampler,
+            batch_size=8,
+            remote_config={"num_cpus": 0},
+        )
+        try:
+            rb.extend(TensorDict({"x": torch.arange(8)}, batch_size=8))
+            rank0 = rb.client().data_parallel(rank=0, world_size=2)
+            rank1 = rb.client().data_parallel(rank=1, world_size=2)
+
+            sample0 = rank0.sample()["x"]
+            assert len(rank1) == 4
+            sample1 = rank1.sample()["x"]
+            assert len(rank0) == 0
+            assert set(sample0.tolist()).isdisjoint(sample1.tolist())
+
+            reused = rank1.extend(
+                TensorDict({"x": torch.tensor([100, 101])}, batch_size=2)
+            )
+            assert reused.numel() == 2
+            assert len(rank0) == 2
+            replacement = rank0.sample()["x"]
+            assert sorted(replacement.tolist()) == [100, 101]
+        finally:
+            rb.close()
+
+    def test_data_parallel_priority_updates_share_one_tree(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 8),
+            sampler=partial(PrioritizedSampler, max_capacity=8, alpha=1.0, beta=1.0),
+            batch_size=4,
+            remote_config={"num_cpus": 0},
+        )
+        try:
+            rb.extend(TensorDict({"x": torch.arange(8)}, batch_size=8))
+            rank0 = rb.client().data_parallel(rank=0, world_size=2)
+            rank1 = rb.client().data_parallel(rank=1, world_size=2)
+            rank0.update_priority(torch.tensor([0]), torch.tensor([1000.0]))
+            sampler_state = rank1.state_dict()["_sampler"]
+            assert sampler_state["_sum_tree"][0] > sampler_state["_sum_tree"][1]
+
+            sample0, info0 = rank0.sample(return_info=True)
+            sample1, info1 = rank1.sample(return_info=True)
+            assert sample0.shape == sample1.shape == (2,)
+            assert info0["index"].shape == info1["index"].shape == (2,)
         finally:
             rb.close()
 

@@ -1392,6 +1392,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             batch_size is not None
             and self._batch_size is not None
             and batch_size != self._batch_size
+            and not getattr(self, "_data_parallel_sample", False)
         ):
             warnings.warn(
                 f"Got conflicting batch_sizes in constructor ({self._batch_size}) "
@@ -1432,6 +1433,15 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 info = tree_map(lambda x: x.to(device) if hasattr(x, "to") else x, info)
             return out, info
         return result[0]
+
+    def _sample_data_parallel(self, batch_size: int, *args, **kwargs) -> Any:
+        """Sample a local shard while treating the configured batch size as global."""
+        data_parallel_sample = getattr(self, "_data_parallel_sample", False)
+        self._data_parallel_sample = True
+        try:
+            return self.sample(batch_size, *args, **kwargs)
+        finally:
+            self._data_parallel_sample = data_parallel_sample
 
     @_maybe_delay_init
     def mark_update(self, index: int | torch.Tensor) -> None:

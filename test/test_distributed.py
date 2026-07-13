@@ -43,6 +43,7 @@ from torchrl.data import (
     RoundRobinWriter,
     SamplerWithoutReplacement,
 )
+from torchrl.distributed import DataParallelContext
 from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
 from torchrl.testing.dist_utils import (
@@ -1035,6 +1036,205 @@ class TestRayTrajsPerBatch:
                 ray_init_config=ray_init_config,
                 remote_configs=remote_configs,
             )
+
+
+class _GradientSyncTestModule(nn.Module):
+    def __init__(self, rank: int = 0):
+        super().__init__()
+        self.weight = nn.Parameter(torch.tensor([0.25, -0.5]) + 10 * rank)
+        self.bias = nn.Parameter(torch.tensor(0.125 + 10 * rank))
+        self.rank_only = nn.Parameter(torch.tensor(-0.75 + 10 * rank))
+        self.never_used = nn.Parameter(torch.tensor(3.0 + 10 * rank))
+
+    def forward(self, value, *, use_rank_only: bool):
+        result = value @ self.weight + self.bias
+        if use_rank_only:
+            result = result + value[:, 0] * self.rank_only
+        return result
+
+
+def _gradient_sync_data(rank):
+    if rank == 0:
+        return (
+            torch.tensor([[1.0, 2.0], [-1.0, 0.5]]),
+            torch.tensor([0.4, -0.2]),
+        )
+    return (
+        torch.tensor([[0.3, -0.7], [2.0, 1.0]]),
+        torch.tensor([0.1, 1.5]),
+    )
+
+
+def _gloo_gradient_sync_worker(rank, world_size, init_method, output_dir):
+    dist.init_process_group(
+        "gloo",
+        init_method=init_method,
+        rank=rank,
+        world_size=world_size,
+    )
+    try:
+        context = DataParallelContext.from_process_group(device="cpu", local_rank=rank)
+        module = _GradientSyncTestModule(rank)
+        context.broadcast_module(module)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.05)
+        value, target = _gradient_sync_data(rank)
+        loss = (module(value, use_rank_only=rank == 0) - target).square().mean()
+        loss.backward()
+        if rank == 0:
+            assert module.rank_only.grad is not None
+        else:
+            assert module.rank_only.grad is None
+        assert module.never_used.grad is None
+        context.sync_gradients(optimizer)
+        assert module.rank_only.grad is not None
+        assert module.never_used.grad is None
+        optimizer.step()
+        torch.save(module.state_dict(), os.path.join(output_dir, f"rank-{rank}.pt"))
+        context.close()
+        context.close()
+        assert dist.is_initialized()
+    finally:
+        dist.destroy_process_group()
+
+
+def _nccl_gradient_sync_worker(rank, world_size, init_method, output_dir):
+    torch.cuda.set_device(rank)
+    dist.init_process_group(
+        "nccl",
+        init_method=init_method,
+        rank=rank,
+        world_size=world_size,
+    )
+    try:
+        context = DataParallelContext.from_process_group(
+            device=torch.device("cuda", rank), local_rank=rank
+        )
+        module = nn.Linear(2, 1).to(context.device)
+        with torch.no_grad():
+            module.weight.fill_(rank + 1.0)
+            module.bias.fill_(rank + 2.0)
+        context.broadcast_module(module)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        module(torch.full((2, 2), rank + 1.0, device=context.device)).sum().backward()
+        context.sync_gradients(optimizer)
+        optimizer.step()
+        torch.save(
+            {key: value.cpu() for key, value in module.state_dict().items()},
+            os.path.join(output_dir, f"nccl-rank-{rank}.pt"),
+        )
+        context.close()
+    finally:
+        dist.destroy_process_group()
+
+
+def _torchrun_context_worker(rank, world_size, init_method, output_dir):
+    os.environ["RANK"] = str(rank)
+    os.environ["LOCAL_RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+    context = DataParallelContext.from_torchrun(
+        backend="gloo", device="cpu", init_method=init_method
+    )
+    assert dist.is_initialized()
+    assert context.rank == rank
+    assert context.local_rank == rank
+    assert context.world_size == world_size
+    context.barrier()
+    context.close()
+    context.close()
+    assert not dist.is_initialized()
+    torch.save(True, os.path.join(output_dir, f"torchrun-rank-{rank}.pt"))
+
+
+class TestDataParallelContext:
+    def test_from_torchrun_single_process(self, monkeypatch):
+        monkeypatch.setenv("RANK", "0")
+        monkeypatch.setenv("LOCAL_RANK", "3")
+        monkeypatch.setenv("WORLD_SIZE", "1")
+        context = DataParallelContext.from_torchrun(device="cpu")
+        assert context.rank == 0
+        assert context.local_rank == 3
+        assert context.world_size == 1
+        assert context.device == torch.device("cpu")
+        assert context.is_rank_zero
+        context.barrier()
+        context.close()
+        context.close()
+        assert context.is_closed
+        with pytest.raises(RuntimeError, match="closed"):
+            context.barrier()
+
+    def test_from_torchrun_requires_environment(self, monkeypatch):
+        monkeypatch.delenv("RANK", raising=False)
+        monkeypatch.delenv("WORLD_SIZE", raising=False)
+        with pytest.raises(RuntimeError, match="RANK is not set"):
+            DataParallelContext.from_torchrun(device="cpu")
+
+    def test_sparse_gradients_fail_explicitly(self):
+        module = nn.Embedding(4, 2, sparse=True)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        module(torch.tensor([0, 1])).sum().backward()
+        with pytest.raises(RuntimeError, match="sparse or non-strided"):
+            DataParallelContext().sync_gradients(optimizer)
+
+    def test_gloo_updates_match_global_batch_reference(self, tmp_path):
+        init_path = tmp_path / "gloo-init"
+        init_method = f"file://{init_path}"
+        mp.spawn(
+            _gloo_gradient_sync_worker,
+            args=(2, init_method, str(tmp_path)),
+            nprocs=2,
+            join=True,
+        )
+
+        reference = _GradientSyncTestModule(rank=0)
+        optimizer = torch.optim.SGD(reference.parameters(), lr=0.05)
+        loss_sum = 0.0
+        for rank in range(2):
+            value, target = _gradient_sync_data(rank)
+            loss_sum = (
+                loss_sum
+                + (reference(value, use_rank_only=rank == 0) - target).square().sum()
+            )
+        (loss_sum / 4).backward()
+        optimizer.step()
+
+        reference_state = reference.state_dict()
+        rank_states = [torch.load(tmp_path / f"rank-{rank}.pt") for rank in range(2)]
+        for rank_state in rank_states:
+            for key, expected in reference_state.items():
+                torch.testing.assert_close(rank_state[key], expected)
+        for key in reference_state:
+            torch.testing.assert_close(rank_states[0][key], rank_states[1][key])
+
+    def test_from_torchrun_initializes_and_owns_group(self, tmp_path):
+        init_path = tmp_path / "torchrun-init"
+        mp.spawn(
+            _torchrun_context_worker,
+            args=(2, f"file://{init_path}", str(tmp_path)),
+            nprocs=2,
+            join=True,
+        )
+        for rank in range(2):
+            assert torch.load(tmp_path / f"torchrun-rank-{rank}.pt")
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(
+        torch.cuda.device_count() < 2, reason="two CUDA devices are required"
+    )
+    def test_nccl_smoke(self, tmp_path):
+        init_path = tmp_path / "nccl-init"
+        init_method = f"file://{init_path}"
+        mp.spawn(
+            _nccl_gradient_sync_worker,
+            args=(2, init_method, str(tmp_path)),
+            nprocs=2,
+            join=True,
+        )
+        rank_states = [
+            torch.load(tmp_path / f"nccl-rank-{rank}.pt") for rank in range(2)
+        ]
+        for key in rank_states[0]:
+            torch.testing.assert_close(rank_states[0][key], rank_states[1][key])
 
 
 if __name__ == "__main__":

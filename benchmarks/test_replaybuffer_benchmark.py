@@ -14,6 +14,7 @@ from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    RayReplayBuffer,
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -77,6 +78,30 @@ def test_replay_buffer_direct_client_identity(benchmark):
     replay_buffer = ReplayBuffer(storage=ListStorage(1))
     client = benchmark(replay_buffer.client)
     assert client is replay_buffer
+
+
+@pytest.mark.parametrize("rank_aware", [False, True])
+def test_ray_replay_buffer_rank_aware_sample(benchmark, rank_aware):
+    ray = pytest.importorskip("ray")
+    ray.shutdown()
+    ray.init(num_cpus=1)
+    replay_buffer = RayReplayBuffer(
+        storage=functools.partial(LazyTensorStorage, 4096),
+        batch_size=256,
+        remote_config={"num_cpus": 0},
+    )
+    try:
+        replay_buffer.extend(torch.arange(4096))
+        client = replay_buffer.client()
+        if rank_aware:
+            client = client.data_parallel(rank=0, world_size=2)
+            sample_call = functools.partial(client.sample, 256)
+        else:
+            sample_call = functools.partial(client.sample, 128)
+        benchmark.pedantic(sample_call, iterations=1, rounds=20)
+    finally:
+        replay_buffer.close()
+        ray.shutdown()
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):

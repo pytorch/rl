@@ -12,6 +12,7 @@ from typing import Any
 
 import torch
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.replay_buffers.distributed import DataParallelReplayBufferClient
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs.transforms.transforms import Transform
 
@@ -80,6 +81,15 @@ class _RayReplayBufferClient:
 
     def sample(self, *args, **kwargs):
         return ray.get(self._actor.sample.remote(*args, **kwargs))
+
+    def _sample_data_parallel(self, *args, **kwargs):
+        return ray.get(self._actor._sample_data_parallel.remote(*args, **kwargs))
+
+    def data_parallel(
+        self, *, rank: int, world_size: int
+    ) -> DataParallelReplayBufferClient:
+        """Create a lifecycle-free, rank-aware view of this client."""
+        return DataParallelReplayBufferClient(self, rank=rank, world_size=world_size)
 
     def extend(self, *args, **kwargs):
         if not self.has_gpu:
@@ -264,6 +274,12 @@ class RayReplayBuffer(ReplayBuffer):
         if not self.is_alive:
             raise RuntimeError("RayReplayBuffer is closed.")
         return _RayReplayBufferClient(self._rb, has_gpu=self.has_gpu)
+
+    def data_parallel(
+        self, *, rank: int, world_size: int
+    ) -> DataParallelReplayBufferClient:
+        """Return a rank-aware view of a new lifecycle-free client."""
+        return self.client().data_parallel(rank=rank, world_size=world_size)
 
     def shutdown(self, timeout: float | None = None) -> None:
         """Terminate the owned Ray actor."""
