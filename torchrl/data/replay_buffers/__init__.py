@@ -13,6 +13,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .distributed import DataParallelReplayBufferClient
 from .her import HERReplayBuffer, HindsightStrategy
 from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
 from .ray_buffer import RayReplayBuffer
@@ -62,6 +63,7 @@ __all__ = [
     "HindsightStrategy",
     "CompressedListStorage",
     "CompressedListStorageCheckpointer",
+    "DataParallelReplayBufferClient",
     "FlatStorageCheckpointer",
     "H5StorageCheckpointer",
     "ListStorageCheckpointer",
