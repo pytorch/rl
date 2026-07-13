@@ -1019,12 +1019,14 @@ class TestCollectorGeneric:
         collector_frames = collector._frames
         collector_iter = collector._iter
         collector_state_dict = collector.state_dict()
+        saved_traj_id = collector_state_dict["traj_pool"]["traj_id"].item()
         collector.shutdown()
 
         collector = collector_class(**collector_kwargs)
         collector.load_state_dict(collector_state_dict)
         assert collector._frames == collector_frames
         assert collector._iter == collector_iter
+        assert collector.state_dict()["traj_pool"]["traj_id"].item() > saved_traj_id
         for _ in enumerate(collector):
             raise AssertionError
         collector.shutdown()
@@ -4389,6 +4391,77 @@ class TestPolicyVersion:
             assert (batch4["next", "policy_version"] == v0[0] + 2).all()
         finally:
             collector.shutdown()
+
+    def test_single_collector_restores_policy_version(self):
+        """Collector state preserves its policy revision across reconstruction."""
+        collector = Collector(
+            self._Env,
+            policy=self._make_policy(),
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            collector.update_policy_weights_()
+            collector.update_policy_weights_()
+            state_dict = collector.state_dict()
+            saved_version = collector.policy_version
+        finally:
+            collector.shutdown()
+
+        restored = Collector(
+            self._Env,
+            policy=self._make_policy(),
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            restored.load_state_dict(state_dict)
+            assert restored.policy_version == saved_version
+            restored.update_policy_weights_()
+            assert restored.policy_version == saved_version + 1
+        finally:
+            restored.shutdown()
+
+    def test_multi_collector_restores_worker_policy_versions(self):
+        """Multiprocess restore preserves each worker's policy revision."""
+        collector = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            collector.update_policy_weights_()
+            collector.update_policy_weights_()
+            state_dict = collector.state_dict()
+            saved_versions = [
+                state_dict[f"worker{idx}"]["policy_version"] for idx in range(2)
+            ]
+        finally:
+            collector.shutdown()
+
+        restored = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            restored.load_state_dict(state_dict)
+            restored_state = restored.state_dict()
+            assert [
+                restored_state[f"worker{idx}"]["policy_version"] for idx in range(2)
+            ] == saved_versions
+        finally:
+            restored.shutdown()
 
     @pytest.mark.parametrize(
         "collector_cls",

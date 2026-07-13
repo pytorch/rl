@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import abc
 import importlib.util
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from typing import Any, TYPE_CHECKING
 
@@ -306,6 +306,30 @@ class Logger(metaclass=_RayServiceMetaClass):
     def close(self, timeout: float | None = None) -> None:
         """Alias for :meth:`shutdown`."""
         self.shutdown(timeout=timeout)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return local logger identifiers and counters for checkpointing."""
+        self.flush()
+        state: dict[str, Any] = {
+            "exp_name": self.exp_name,
+            "log_dir": str(self.log_dir),
+        }
+        local_state = self._checkpoint_state()
+        if local_state:
+            state["local"] = local_state
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore local logger counters without recreating external services."""
+        self._load_checkpoint_state(state_dict.get("local", {}))
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        """Return logger-specific local state without external connections."""
+        return {}
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore logger-specific local state."""
+        del state_dict
 
     @abc.abstractmethod
     def _create_experiment(self) -> Experiment:  # noqa: F821

@@ -36,6 +36,7 @@ from tensordict.nn import InteractionType, TensorDictSequential
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
+from torchrl._utils import logger as torchrl_logger
 
 from torchrl.data.vla import (
     ACTION_CHUNK_KEY,
@@ -188,7 +189,9 @@ class OpenVLAInputTransform(Transform):
         *,
         use_wrist_image: bool = False,
         center_crop: bool = False,
-        image_backend: Literal["torchvision", "pil", "tensorflow"] = "torchvision",
+        image_backend: Literal[
+            "torchvision", "torch_reference", "pil", "tensorflow"
+        ] = "torch_reference",
         image_key: NestedKey = ("observation", "image"),
         wrist_image_key: NestedKey | None = ("observation", "wrist_image"),
         instruction_key: NestedKey = "language_instruction",
@@ -339,7 +342,7 @@ class OpenVLAInputTransform(Transform):
     def _make_image_preprocessor(
         self,
         processor,
-        image_backend: Literal["torchvision", "pil", "tensorflow"],
+        image_backend: Literal["torchvision", "torch_reference", "pil", "tensorflow"],
     ) -> OpenVLAImagePreprocessor | None:
         image_processor = getattr(processor, "image_processor", None)
         if image_processor is None:
@@ -357,9 +360,15 @@ class OpenVLAInputTransform(Transform):
                 mean=mean,
                 std=std,
             )
-        except ImportError:
-            if image_backend != "torchvision":
+        except ImportError as err:
+            if image_backend not in ("torchvision", "torch_reference"):
                 raise
+            torchrl_logger.warning(
+                "OpenVLA image backend %r is unavailable (%s); falling back to "
+                "'pil', which does not preserve reference preprocessing semantics.",
+                image_backend,
+                err,
+            )
             return OpenVLAImagePreprocessor(
                 size=size,
                 jpeg_quality=_JPEG_QUALITY,
@@ -783,10 +792,12 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
             augmented training. Defaults to ``False``.
         image_backend (str, optional): backend passed to
             :class:`~torchrl.data.vla.OpenVLAImagePreprocessor` for the fast
-            batched image path. ``"torchvision"`` keeps preprocessing in tensor
-            form when available; ``"tensorflow"`` is the exact LIBERO
-            reference path and ``"pil"`` is a lightweight debugging path.
-            Defaults to ``"torchvision"``.
+            batched image path. ``"torch_reference"`` follows the LIBERO
+            reference operation order and interpolation semantics without a
+            TensorFlow dependency; ``"tensorflow"`` runs the reference
+            implementation, ``"torchvision"`` selects the faster bicubic path,
+            and ``"pil"`` is a lightweight debugging path. Defaults to
+            ``"torch_reference"``.
         gripper_binarize (bool, optional): binarize the decoded gripper action
             to +/-1. The model emits a continuous gripper value but robots
             (LIBERO/robosuite) need a firm open/close, so without this the
@@ -815,7 +826,9 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         output_mode: Literal["chunk", "tokens", "both"] | None = None,
         use_wrist_image: bool = False,
         center_crop: bool = False,
-        image_backend: Literal["torchvision", "pil", "tensorflow"] = "torchvision",
+        image_backend: Literal[
+            "torchvision", "torch_reference", "pil", "tensorflow"
+        ] = "torch_reference",
         gripper_binarize: bool = False,
         gripper_binarize_threshold: float = 0.0,
         gripper_invert: bool = False,
@@ -1025,7 +1038,7 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
     def _make_image_preprocessor(
         self,
         processor,
-        image_backend: Literal["torchvision", "pil", "tensorflow"],
+        image_backend: Literal["torchvision", "torch_reference", "pil", "tensorflow"],
     ) -> OpenVLAImagePreprocessor | None:
         return self.input_transform._make_image_preprocessor(processor, image_backend)
 
@@ -1097,7 +1110,9 @@ class OpenVLAOFTL1Wrapper(OpenVLAOFTWrapper):
         use_proprio: bool = True,
         use_wrist_image: bool = True,
         center_crop: bool = True,
-        image_backend: Literal["torchvision", "pil", "tensorflow"] = "torchvision",
+        image_backend: Literal[
+            "torchvision", "torch_reference", "pil", "tensorflow"
+        ] = "torch_reference",
         gripper_binarize: bool = True,
         gripper_binarize_threshold: float = 0.0,
         gripper_invert: bool = True,

@@ -9,8 +9,10 @@ import importlib.util
 import inspect
 import os
 import tempfile
+import warnings
 from argparse import Namespace
 from collections import OrderedDict
+from copy import deepcopy
 from os import path, walk
 from time import sleep
 
@@ -21,6 +23,7 @@ from torch import nn
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
+from torchrl.checkpoint import Checkpoint
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -31,11 +34,14 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
@@ -78,24 +84,36 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
+    def __init__(self, source_policy=None):
+        self.source_policy = source_policy
+        self.policy = deepcopy(source_policy) if source_policy is not None else None
+        self.called_update_policy_weights_ = False
+
     def set_seed(self, seed, **kwargs):
         return seed
 
-    def update_policy_weights_(self):
+    def update_policy_weights_(self, policy=None):
         self.called_update_policy_weights_ = True
+        policy = self.source_policy if policy is None else policy
+        if policy is not None:
+            self.policy.load_state_dict(policy.state_dict())
 
     def shutdown(self):
         pass
 
     def state_dict(self):
-        return {}
+        if self.policy is None:
+            return {}
+        return {"policy": self.policy.state_dict()}
 
     def load_state_dict(self, state_dict):
-        pass
+        if self.policy is not None:
+            self.policy.load_state_dict(state_dict["policy"])
 
 
 class MockingIterableCollector(MockingCollector):
     def __init__(self, batches):
+        super().__init__()
         self._batches = batches
         self.init_random_frames = 10**9
         self.shutdown_calls = 0
@@ -111,21 +129,115 @@ class MockingLossModule(nn.Module):
     pass
 
 
+class MockingLogger:
+    def __init__(self):
+        self.value = 0
+
+    def state_dict(self):
+        return {"value": self.value}
+
+    def load_state_dict(self, state_dict):
+        self.value = state_dict["value"]
+
+
+class MockingReplayBufferHook:
+    def __init__(self, fraction=0.0):
+        self.replay_buffer = object()
+        self.fraction = fraction
+
+    def state_dict(self):
+        return {"fraction": self.fraction}
+
+    def load_state_dict(self, state_dict):
+        self.fraction = state_dict["fraction"]
+
+
 _mocking_optim = MockingOptim()
 
 
-def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
+def mocking_trainer(
+    file=None,
+    optimizer=_mocking_optim,
+    checkpoint=None,
+    logger=None,
+    with_policy=False,
+) -> Trainer:
+    loss_module = MockingLossModule()
+    if with_policy:
+        loss_module.actor_network = nn.Linear(2, 2)
+    collector = MockingCollector(getattr(loss_module, "actor_network", None))
     trainer = Trainer(
-        collector=MockingCollector(),
+        collector=collector,
         total_frames=None,
         frame_skip=None,
         optim_steps_per_batch=None,
-        loss_module=MockingLossModule(),
+        loss_module=loss_module,
         optimizer=optimizer,
+        logger=logger,
         save_trainer_file=file,
+        checkpoint=checkpoint,
     )
     trainer._pbar_str = OrderedDict()
     return trainer
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_unified_trainer_checkpoint(tmp_path, format):
+    path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(format=format),
+    )
+    assert {"collector", "loss_module", "trainer_state"}.issubset(
+        trainer.checkpoint.components
+    )
+    trainer.collected_frames = 41
+    trainer._optim_count = 7
+    trainer.save_trainer(force_save=True)
+    manifest = Checkpoint.manifest(path)
+    assert {"collector", "loss_module", "trainer_state"}.issubset(
+        manifest["components"]
+    )
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored.load_from_file(path)
+    assert restored.collected_frames == 41
+    assert restored._optim_count == 7
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_unified_trainer_resyncs_collector_policy_after_load(tmp_path, format):
+    path = tmp_path / "trainer-checkpoint"
+    source = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(format=format),
+        with_policy=True,
+    )
+    with torch.no_grad():
+        for parameter in source.loss_module.actor_network.parameters():
+            parameter.fill_(3.0)
+    assert any(
+        not torch.equal(source.collector.policy.state_dict()[key], value)
+        for key, value in source.loss_module.actor_network.state_dict().items()
+    )
+    source.save_trainer(force_save=True)
+
+    restored = mocking_trainer(checkpoint=Checkpoint(), with_policy=True)
+    restored.load_from_file(path)
+
+    assert restored.collector.called_update_policy_weights_
+    for key, value in restored.loss_module.actor_network.state_dict().items():
+        torch.testing.assert_close(restored.collector.policy.state_dict()[key], value)
+
+
+def test_unified_trainer_default_component_selection(tmp_path):
+    path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(save_components={"trainer_state"}),
+    )
+    trainer.save_trainer(force_save=True)
+    assert set(Checkpoint.manifest(path)["components"]) == {"trainer_state"}
 
 
 class TestSelectKeys:
@@ -223,6 +335,89 @@ class TestSelectKeys:
 
 
 class TestLoadFromFile:
+    def test_unified_load_options_strictness_and_save_format(
+        self, tmp_path, monkeypatch
+    ):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint())
+        source.collected_frames = 11
+        source.save_trainer(force_save=True)
+
+        captured = []
+        true_load = torch.load
+
+        def spy_load(*args, **kwargs):
+            captured.append(kwargs.copy())
+            return true_load(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "load", spy_load)
+        restored_default = mocking_trainer()
+        restored_default.load_from_file(file)
+        assert restored_default.collected_frames == 11
+        assert restored_default.checkpoint is None
+        assert not captured
+
+        captured.clear()
+        restored = mocking_trainer(logger=MockingLogger())
+        restored.load_from_file(
+            file,
+            strict="ignore",
+            map_location="cpu",
+            weights_only=True,
+            mmap=False,
+        )
+        assert restored.collected_frames == 11
+        assert restored.checkpoint is None
+        assert not captured
+
+    @pytest.mark.parametrize("format", ["directory", "archive"])
+    def test_unified_hook_replay_buffer_roundtrip(self, tmp_path, format):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint(format=format))
+        replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=2).register(source)
+        data = TensorDict({"obs": torch.randn(6, 4)}, [6])
+        replay_buffer.extend(data)
+        source.save_trainer(force_save=True)
+        assert "replay_buffer" in Checkpoint.manifest(file)["components"]
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored_replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        ReplayBufferTrainer(
+            replay_buffer=restored_replay_buffer, batch_size=2
+        ).register(restored)
+        restored.load_from_file(file)
+        torch.testing.assert_close(restored_replay_buffer[:]["obs"], data["obs"])
+
+    def test_unified_hook_owned_replay_buffer_state(self, tmp_path):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint())
+        source_hook = MockingReplayBufferHook(0.75)
+        source.register_module("replay_buffer", source_hook)
+        assert source.checkpoint.components["replay_buffer"] is source_hook
+        source.save_trainer(force_save=True)
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored_hook = MockingReplayBufferHook()
+        restored.register_module("replay_buffer", restored_hook)
+        restored.load_from_file(file)
+        assert restored_hook.fraction == 0.75
+
+    def test_legacy_save_warning_categories(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        trainer = mocking_trainer(file=tmp_path / "legacy.pt")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            trainer.save_trainer(force_save=True)
+        assert any(
+            item.category is FutureWarning and "v0.15" in str(item.message)
+            for item in caught
+        )
+        assert any(
+            item.category is DeprecationWarning and "v0.16" in str(item.message)
+            for item in caught
+        )
+
     def test_torch_backend_mmap_default(self, monkeypatch):
         monkeypatch.setenv("CKPT_BACKEND", "torch")
         captured = {}
@@ -1140,6 +1335,30 @@ def test_updateweights():
     assert trainer.collector.called_update_policy_weights_
 
 
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_updateweights_checkpoint_counter(tmp_path, format):
+    checkpoint_path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=checkpoint_path, checkpoint=Checkpoint(format=format)
+    )
+    update_weights = UpdateWeights(trainer.collector, 5)
+    update_weights.register(trainer)
+    for _ in range(3):
+        trainer._post_steps_hook()
+    trainer.save_trainer(force_save=True)
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored_update_weights = UpdateWeights(restored.collector, 5)
+    restored_update_weights.register(restored)
+    restored.load_from_file(checkpoint_path)
+
+    assert restored_update_weights.counter == 3
+    restored._post_steps_hook()
+    assert not restored.collector.called_update_policy_weights_
+    restored._post_steps_hook()
+    assert restored.collector.called_update_policy_weights_
+
+
 class TestCountFrames:
     def test_countframes(self):
         torch.manual_seed(0)
@@ -1417,6 +1636,26 @@ class TestPostOptimCompleteLog:
             "auto_log_optim_steps" in sig.parameters
         ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
         assert sig.parameters["auto_log_optim_steps"].default is True
+
+    @pytest.mark.parametrize(
+        "trainer_cls",
+        [
+            A2CTrainer,
+            CQLTrainer,
+            DDPGTrainer,
+            DQNTrainer,
+            IQLTrainer,
+            OfflineToOnlineTrainer,
+            PPOTrainer,
+            ReinforceTrainer,
+            SACTrainer,
+            TD3Trainer,
+        ],
+    )
+    def test_subclass_exposes_checkpoint(self, trainer_cls):
+        """Every algorithm trainer must expose the unified checkpoint argument."""
+        parameter = inspect.signature(trainer_cls.__init__).parameters["checkpoint"]
+        assert parameter.default is None
 
 
 class TestDefaultOptimizationStepper:

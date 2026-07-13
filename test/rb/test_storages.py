@@ -984,6 +984,18 @@ class TestSharedStorageInit:
         assert sample["index"].device.type == "cpu"
 
 
+def test_compressed_storage_checkpointing_releases_staging_memmaps(tmp_path):
+    storage = CompressedListStorage(max_size=4)
+    storage.set(0, TensorDict({"observation": torch.randn(3)}, batch_size=[]))
+
+    checkpoint_path = tmp_path / "checkpoint"
+    storage.dumps(checkpoint_path)
+
+    assert (checkpoint_path / "compressed_data").is_dir()
+    assert (checkpoint_path / "metadata.json").is_file()
+    assert (checkpoint_path / "data_indices.json").is_file()
+
+
 @pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")
 class TestCompressedListStorage:
     """Test cases for CompressedListStorage."""

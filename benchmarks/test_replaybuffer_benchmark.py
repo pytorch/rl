@@ -12,6 +12,7 @@ from tensordict import TensorDict
 
 from torchrl.data import (
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
     ReplayBuffer,
@@ -20,6 +21,7 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
+    PromptGroupSampler,
     RandomSampler,
     SamplerWithoutReplacement,
     SliceSampler,
@@ -283,6 +285,26 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
         size=size,
     )()
     torch.manual_seed(0)
+    benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("size", [1_000, 100_000])
+def test_prompt_group_sampler_cached_sample(benchmark, size):
+    rb = ReplayBuffer(
+        storage=LazyStackStorage(size),
+        sampler=PromptGroupSampler(num_groups=8, group_key="prompt"),
+        batch_size=64,
+    )
+    rb.extend(
+        TensorDict(
+            {
+                "prompt": torch.arange(size) % 64,
+                "value": torch.arange(size),
+            },
+            batch_size=[size],
+        )
+    )
+    rb.sample()
     benchmark(sample, rb)
 
 

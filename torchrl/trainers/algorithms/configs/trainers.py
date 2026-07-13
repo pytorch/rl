@@ -91,6 +91,7 @@ class SACTrainerConfig(TrainerConfig):
     action_key: Any = "action"
     observation_key: Any = "observation"
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -118,6 +119,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
@@ -200,6 +202,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         batch_size=batch_size,
         enable_logging=enable_logging,
@@ -261,6 +264,7 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
@@ -340,6 +344,7 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
         log_actions=log_actions,
@@ -461,6 +466,7 @@ class OnPolicyTrainerConfig(TrainerConfig):
     action_key: Any = "action"
     observation_key: Any = "observation"
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     def __post_init__(self) -> None:
         """Post-initialization hook for on-policy trainer configurations."""
@@ -527,6 +533,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file", None)
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed", None)
     actor_network = kwargs.pop("actor_network", None)
     critic_network = kwargs.pop("critic_network", None)
@@ -630,6 +637,7 @@ def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         batch_size=batch_size,
         gamma=gamma,
@@ -703,6 +711,7 @@ class DQNTrainerConfig(TrainerConfig):
     log_rewards: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    checkpoint: Any = None
     mixing_strategy: str | None = None
     done_key: Any = "done"
     terminated_key: Any = "terminated"
@@ -741,6 +750,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     value_network = kwargs.pop("value_network")
     kwargs.pop("create_env_fn", None)
@@ -844,6 +854,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -907,6 +918,7 @@ class DDPGTrainerConfig(TrainerConfig):
     action_key: Any = "action"
     observation_key: Any = "observation"
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
 
@@ -933,6 +945,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
@@ -1000,6 +1013,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -1055,6 +1069,7 @@ class IQLTrainerConfig(TrainerConfig):
     log_actions: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
 
@@ -1081,6 +1096,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     qvalue_network = kwargs.pop("qvalue_network")
@@ -1146,6 +1162,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -1194,6 +1211,7 @@ class CQLTrainerConfig(TrainerConfig):
     log_actions: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
 
@@ -1220,6 +1238,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     qvalue_network = kwargs.pop("qvalue_network")
@@ -1280,6 +1299,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -1334,6 +1354,7 @@ class TD3TrainerConfig(TrainerConfig):
     policy_update_delay: int = 2
     value_estimator_gamma: float | None = None
     hooks: list[Any] | None = None
+    checkpoint: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
 
     def __post_init__(self) -> None:
@@ -1365,6 +1386,7 @@ def _make_td3_trainer(*args, **kwargs):
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     num_epochs = kwargs.pop("num_epochs", 1)
     async_collection = kwargs.pop("async_collection", False)
@@ -1491,6 +1513,7 @@ def _make_td3_trainer(*args, **kwargs):
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         num_epochs=num_epochs,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
