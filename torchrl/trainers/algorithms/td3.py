@@ -15,6 +15,7 @@ from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
     LogScalar,
+    OptimizationContext,
     OptimizationStepper,
     ReplayBufferTrainer,
     TargetNetUpdaterHook,
@@ -49,6 +50,8 @@ class TD3OptimizationStepper(OptimizationStepper):
         ``update_tensordict_priority``, priorities are updated immediately after
         the critic update using TD error from ``value_loss``.
     """
+
+    supports_data_parallel = True
 
     def __init__(
         self,
@@ -87,7 +90,7 @@ class TD3OptimizationStepper(OptimizationStepper):
 
     def step(
         self,
-        trainer: Trainer,
+        trainer: OptimizationContext,
         sub_batch: TensorDictBase,
     ) -> TensorDictBase:
         self._update_counter += 1
@@ -98,6 +101,7 @@ class TD3OptimizationStepper(OptimizationStepper):
 
         q_loss, q_metadata = trainer.loss_module.value_loss(sub_batch)
         q_loss.backward()
+        trainer.sync_gradients(self.optimizer_critic)
 
         critic_params = list(self._params(self.optimizer_critic))
         if clip_grad_norm and clip_norm is not None:
@@ -112,6 +116,7 @@ class TD3OptimizationStepper(OptimizationStepper):
         if do_actor:
             actor_loss, *_ = trainer.loss_module.actor_loss(sub_batch)
             actor_loss.backward()
+            trainer.sync_gradients(self.optimizer_actor)
 
             actor_params = list(self._params(self.optimizer_actor))
             if clip_grad_norm and clip_norm is not None:
