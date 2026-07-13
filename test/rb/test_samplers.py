@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pickle
 import warnings
 
 import numpy as np
@@ -1964,6 +1965,23 @@ class TestPromptGroupSampler:
         sample = rb.sample()
         assert sorted(sample["id"].tolist()) == [2, 3]
 
+    def test_strategy_recency_after_wraparound(self):
+        rb = self._make_rb(
+            PromptGroupSampler(
+                samples_per_group=2, group_key="prompt", strategy="recency"
+            ),
+            batch_size=2,
+            max_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.zeros(4, dtype=torch.long), "id": torch.arange(4)},
+                batch_size=[4],
+            )
+        )
+        rb.add(TensorDict({"prompt": 0, "id": 4}, batch_size=[]))
+        assert sorted(rb.sample()["id"].tolist()) == [3, 4]
+
     def test_strategy_reward(self):
         torch.manual_seed(0)
         rb = self._make_rb(
@@ -1989,7 +2007,6 @@ class TestPromptGroupSampler:
         assert 7.0 not in rewards
 
     def test_strategy_variance(self):
-        torch.manual_seed(0)
         rb = self._make_rb(
             PromptGroupSampler(num_groups=1, group_key="prompt", strategy="variance"),
             batch_size=2,
@@ -1997,17 +2014,35 @@ class TestPromptGroupSampler:
         rb.extend(
             TensorDict(
                 {
-                    "prompt": torch.tensor([0, 0, 1, 1]),
+                    "prompt": torch.zeros(4, dtype=torch.long),
                     "next": TensorDict(
-                        {"reward": torch.tensor([1.0, 1.0, 0.0, 10.0])},
+                        {"reward": torch.tensor([0.0, 0.0, 1.0, 1.0])},
                         batch_size=[4],
                     ),
                 },
                 batch_size=[4],
             )
         )
-        for _ in range(5):
-            assert (rb.sample()["prompt"] == 1).all()
+        assert sorted(rb.sample()["next", "reward"].tolist()) == [0.0, 1.0]
+
+    def test_strategy_variance_breaks_ties_by_reward(self):
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=1, group_key="prompt", strategy="variance"),
+            batch_size=3,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "prompt": torch.zeros(4, dtype=torch.long),
+                    "next": TensorDict(
+                        {"reward": torch.tensor([2.0, -7.0, 10.0, 1.0])},
+                        batch_size=[4],
+                    ),
+                },
+                batch_size=[4],
+            )
+        )
+        assert sorted(rb.sample()["next", "reward"].tolist()) == [-7.0, 2.0, 10.0]
 
     def test_reward_strategy_requires_tensor_reward(self):
         torch.manual_seed(0)
@@ -2039,6 +2074,73 @@ class TestPromptGroupSampler:
             seen.update(rb.sample()["prompt"].tolist())
         assert seen == {7, 9}
 
+    def test_cache_hit_does_not_read_full_storage(self, monkeypatch):
+        sampler = PromptGroupSampler(num_groups=1, group_key="prompt")
+        rb = self._make_rb(sampler, batch_size=2)
+        rb.extend(TensorDict({"prompt": torch.tensor([0, 0, 1, 1])}, batch_size=[4]))
+        sampler.sample(rb._storage, 2)
+
+        calls = []
+        get = rb._storage.get
+
+        def tracked_get(index):
+            calls.append(index)
+            return get(index)
+
+        monkeypatch.setattr(rb._storage, "get", tracked_get)
+        sampler.sample(rb._storage, 2)
+        assert not calls
+
+    def test_shared_storage_update_invalidates_cache(self):
+        storage = LazyTensorStorage(6)
+        reader = ReplayBuffer(
+            storage=storage,
+            sampler=PromptGroupSampler(num_groups=2, group_key="prompt"),
+            batch_size=4,
+        )
+        writer = ReplayBuffer(
+            storage=storage,
+            sampler=PromptGroupSampler(num_groups=2, group_key="prompt"),
+            batch_size=4,
+        )
+        writer.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 0, 1, 1, 1])}, batch_size=[6])
+        )
+        reader.sample()
+        writer.add(TensorDict({"prompt": 1}, batch_size=[]))
+
+        _, counts = reader.sample()["prompt"].unique(return_counts=True)
+        assert counts.tolist() == [2, 2]
+
+    def test_load_state_dict_invalidates_cache(self):
+        source = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="prompt"), batch_size=4
+        )
+        destination = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="prompt"), batch_size=4
+        )
+        source.extend(
+            TensorDict({"prompt": torch.tensor([0, 1, 0, 1])}, batch_size=[4])
+        )
+        destination.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 1, 1])}, batch_size=[4])
+        )
+        destination.sample()
+        destination.load_state_dict(source.state_dict())
+
+        _, counts = destination.sample()["prompt"].unique(return_counts=True)
+        assert counts.tolist() == [2, 2]
+
+    def test_plain_list_storage_raises(self):
+        rb = ReplayBuffer(
+            storage=ListStorage(4),
+            sampler=PromptGroupSampler(num_groups=1, group_key="prompt"),
+            batch_size=2,
+        )
+        rb.extend(TensorDict({"prompt": torch.tensor([0, 0, 1, 1])}, batch_size=[4]))
+        with pytest.raises(TypeError, match="Plain ListStorage is not supported"):
+            rb.sample()
+
     def test_small_group_warns_and_fills(self):
         torch.manual_seed(0)
         rb = self._make_rb(
@@ -2057,6 +2159,11 @@ class TestPromptGroupSampler:
             {},
             {"num_groups": 2, "samples_per_group": 2},
             {"num_groups": 2, "strategy": "bogus"},
+            {"num_groups": 0},
+            {"num_groups": -1},
+            {"num_groups": True},
+            {"num_groups": 1.5},
+            {"samples_per_group": 0},
         ],
     )
     def test_construction_errors(self, kwargs):
@@ -2090,8 +2197,6 @@ class TestPromptGroupSampler:
             rb.sample()
 
     def test_state_dict_and_pickle_drop_cache(self, tmp_path):
-        import pickle
-
         sampler = PromptGroupSampler(num_groups=2, group_key="prompt")
         assert sampler.state_dict() == {}
         sampler.load_state_dict({})
@@ -2100,6 +2205,31 @@ class TestPromptGroupSampler:
         sampler._group_index = {0: torch.tensor([0])}
         restored = pickle.loads(pickle.dumps(sampler))
         assert restored._group_index is None
+
+    def test_recency_state_roundtrip(self, tmp_path):
+        sampler = PromptGroupSampler(
+            samples_per_group=2, group_key="prompt", strategy="recency"
+        )
+        rb = self._make_rb(sampler, batch_size=2, max_size=4)
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.zeros(4, dtype=torch.long), "id": torch.arange(4)},
+                batch_size=[4],
+            )
+        )
+        rb.add(TensorDict({"prompt": 0, "id": 4}, batch_size=[]))
+
+        restored = PromptGroupSampler(
+            samples_per_group=2, group_key="prompt", strategy="recency"
+        )
+        restored.load_state_dict(sampler.state_dict())
+        index, _ = restored.sample(rb._storage, 2)
+        assert sorted(rb._storage[index]["id"].tolist()) == [3, 4]
+
+        sampler.dumps(tmp_path)
+        restored.loads(tmp_path)
+        index, _ = restored.sample(rb._storage, 2)
+        assert sorted(rb._storage[index]["id"].tolist()) == [3, 4]
 
     def test_persistence_independence(self):
         torch.manual_seed(0)
@@ -2264,17 +2394,21 @@ def test_prioritized_parameter_scheduler(
     for i in range(total_steps):
         curr_alpha = rb.sampler.alpha
         torch.testing.assert_close(
-            curr_alpha
-            if torch.is_tensor(curr_alpha)
-            else torch.tensor(curr_alpha).float(),
+            (
+                curr_alpha
+                if torch.is_tensor(curr_alpha)
+                else torch.tensor(curr_alpha).float()
+            ),
             expected_alpha_vals[i],
             msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
         )
         curr_beta = rb.sampler.beta
         torch.testing.assert_close(
-            curr_beta
-            if torch.is_tensor(curr_beta)
-            else torch.tensor(curr_beta).float(),
+            (
+                curr_beta
+                if torch.is_tensor(curr_beta)
+                else torch.tensor(curr_beta).float()
+            ),
             expected_beta_vals[i],
             msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
         )

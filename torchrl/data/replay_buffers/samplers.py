@@ -114,8 +114,7 @@ class Sampler(ABC, metaclass=_SamplerMeta):
     _rng: torch.Generator | None = None
 
     @abstractmethod
-    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
-        ...
+    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]: ...
 
     def add(self, index: int) -> None:
         return
@@ -145,12 +144,10 @@ class Sampler(ABC, metaclass=_SamplerMeta):
         return 1.0
 
     @abstractmethod
-    def state_dict(self) -> dict[str, Any]:
-        ...
+    def state_dict(self) -> dict[str, Any]: ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
     @property
     def ran_out(self) -> bool:
@@ -158,16 +155,13 @@ class Sampler(ABC, metaclass=_SamplerMeta):
         return False
 
     @abstractmethod
-    def _empty(self):
-        ...
+    def _empty(self): ...
 
     @abstractmethod
-    def dumps(self, path):
-        ...
+    def dumps(self, path): ...
 
     @abstractmethod
-    def loads(self, path):
-        ...
+    def loads(self, path): ...
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
@@ -537,9 +531,11 @@ class ConsumingSampler(Sampler):
             _sample_count=self._sample_count,
             _live_mask=self._live_mask,
             _known_storage_len=self._known_storage_len,
-            _free_indices=None
-            if self._free_indices is None
-            else self._free_indices[self._free_head :],
+            _free_indices=(
+                None
+                if self._free_indices is None
+                else self._free_indices[self._free_head :]
+            ),
             _free_head=0,
             _ran_out=self._ran_out,
         )
@@ -1994,9 +1990,11 @@ class SliceSampler(Sampler):
         self._gpu_device = (
             None
             if not self.use_gpu
-            else torch.device(use_gpu)
-            if not isinstance(use_gpu, bool)
-            else _auto_device()
+            else (
+                torch.device(use_gpu)
+                if not isinstance(use_gpu, bool)
+                else _auto_device()
+            )
         )
 
         if isinstance(span, (bool, int)):
@@ -2705,8 +2703,7 @@ class SliceSampler(Sampler):
     def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
 
 
 class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
@@ -3520,12 +3517,12 @@ class PromptGroupSampler(Sampler):
 
             - ``"random"`` (default): groups are chosen uniformly at random and
               items within a group are drawn uniformly at random.
-            - ``"recency"``: the items with the most recent storage positions are
-              drawn from each group.
+            - ``"recency"``: the most recently inserted items are drawn from
+              each group.
             - ``"reward"``: the highest-reward items are drawn from each group.
-            - ``"variance"``: the groups with the highest within-group reward
-              variance are selected (the vanishing-gradient case RePO targets),
-              with items drawn uniformly within each group.
+            - ``"variance"``: the fixed-size subset that maximizes reward
+              variance is drawn from each group, breaking ties by total reward.
+              This targets the vanishing-gradient case described by RePO.
 
         reward_key (NestedKey, optional): the key holding a numeric reward,
             required by the ``"reward"`` and ``"variance"`` strategies. It is
@@ -3535,7 +3532,12 @@ class PromptGroupSampler(Sampler):
             cached and rebuilt only when items are added to the storage. Set to
             ``False`` if the stored group values may change in place.
 
-    .. note:: This sampler currently supports single-dimensional storages only.
+    .. note:: This sampler supports single-dimensional TensorDict-backed
+        storages, including :class:`~torchrl.data.LazyTensorStorage`,
+        :class:`~torchrl.data.LazyMemmapStorage`, and
+        :class:`~torchrl.data.LazyStackStorage`. Plain
+        :class:`~torchrl.data.ListStorage` is unsupported because its slices
+        return Python lists.
 
     .. warning:: When a group holds fewer than ``samples_per_group`` items (or
         the storage holds fewer than ``num_groups`` groups), the missing draws
@@ -3584,13 +3586,21 @@ class PromptGroupSampler(Sampler):
                 "Exactly one of num_groups or samples_per_group must be provided, "
                 f"got num_groups={num_groups} and samples_per_group={samples_per_group}."
             )
+        value_name = "num_groups" if num_groups is not None else "samples_per_group"
+        value = num_groups if num_groups is not None else samples_per_group
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(f"{value_name} must be a positive integer, got {value!r}.")
+        if value <= 0:
+            raise ValueError(f"{value_name} must be a positive integer, got {value!r}.")
         if strategy not in ("random", "recency", "reward", "variance"):
             raise ValueError(
                 f"Unknown strategy={strategy!r}. Expected one of 'random', "
                 "'recency', 'reward', 'variance'."
             )
-        self.num_groups = num_groups
-        self.samples_per_group = samples_per_group
+        self.num_groups = int(num_groups) if num_groups is not None else None
+        self.samples_per_group = (
+            int(samples_per_group) if samples_per_group is not None else None
+        )
         self.group_key = group_key
         self.strategy = strategy
         self.reward_key = reward_key
@@ -3598,6 +3608,9 @@ class PromptGroupSampler(Sampler):
         self._group_index: dict[Any, torch.Tensor] | None = None
         self._row_rewards: torch.Tensor | None = None
         self._index_len: int = 0
+        self._cache_storage_id: int | None = None
+        self._position_recency: torch.Tensor | None = None
+        self._recency_clock: int = 0
         self._warned_small_group: bool = False
 
     @property
@@ -3638,15 +3651,28 @@ class PromptGroupSampler(Sampler):
         return [tuple(value) if isinstance(value, list) else value for value in values]
 
     def _maybe_build_index(self, storage: Storage) -> None:
-        data = storage[:]
-        length = data.shape[0] if data.batch_dims else len(storage)
+        length = len(storage)
         if (
             self.cache_groups
             and self._group_index is not None
             and length == self._index_len
+            and self._cache_storage_id == id(storage)
         ):
             return
+        data = storage[:]
+        if not is_tensor_collection(data):
+            raise TypeError(
+                f"{type(self).__name__} requires a single-dimensional storage "
+                "whose slices return a tensor collection, such as "
+                "LazyTensorStorage or LazyStackStorage. Plain ListStorage is "
+                "not supported."
+            )
         keys = self._to_key_list(data.get(self.group_key))
+        if len(keys) != length:
+            raise RuntimeError(
+                f"Expected group_key={self.group_key!r} to contain one value per "
+                f"storage item, got {len(keys)} values for {length} items."
+            )
         group_index: dict[Any, list[int]] = defaultdict(list)
         for position, key in enumerate(keys):
             group_index[key].append(position)
@@ -3665,37 +3691,62 @@ class PromptGroupSampler(Sampler):
                 reward.reshape(reward.shape[0], -1).float().mean(-1).cpu()
             )
         self._index_len = len(keys)
+        self._cache_storage_id = id(storage)
+        if self.strategy == "recency":
+            self._ensure_recency(length)
 
     def _select_groups(self, num_groups: int) -> list:
         keys = list(self._group_index)
         n = len(keys)
-        if self.strategy == "variance":
-            variances = torch.stack(
-                [
-                    self._row_rewards[self._group_index[key]].var(unbiased=False)
-                    if self._group_index[key].numel() > 1
-                    else self._row_rewards.new_zeros(())
-                    for key in keys
-                ]
-            )
-            keys = [keys[i] for i in torch.argsort(variances, descending=True).tolist()]
-            if n >= num_groups:
-                return keys[:num_groups]
-        elif n >= num_groups:
+        if n >= num_groups:
             return [keys[i] for i in self._randperm(n)[:num_groups].tolist()]
         self._warn_small()
-        return [keys[i] for i in self._randint(n, num_groups).tolist()]
+        selected = [keys[i] for i in self._randperm(n).tolist()]
+        selected.extend(keys[i] for i in self._randint(n, num_groups - n).tolist())
+        return selected
+
+    def _select_max_variance(self, positions: torch.Tensor, k: int) -> torch.Tensor:
+        rewards = self._row_rewards[positions].double()
+        order = torch.argsort(rewards)
+        values = rewards[order]
+        n = values.numel()
+
+        prefix = torch.cat([values.new_zeros(1), values.cumsum(0)])
+        prefix_sq = torch.cat([values.new_zeros(1), values.square().cumsum(0)])
+        num_low = torch.arange(k + 1)
+        num_high = k - num_low
+        totals = prefix[num_low] + prefix[n] - prefix[n - num_high]
+        totals_sq = prefix_sq[num_low] + prefix_sq[n] - prefix_sq[n - num_high]
+        variances = totals_sq / k - (totals / k).square()
+
+        # A maximum-variance fixed-size subset consists of some of the lowest
+        # rewards and some of the highest rewards. Among equal-variance splits,
+        # RePO selects the one with the highest total reward.
+        max_variance = variances.max()
+        best_num_low = torch.where(
+            torch.isclose(variances, max_variance, rtol=1e-12, atol=1e-12),
+            totals,
+            totals.new_full((), -torch.inf),
+        ).argmax()
+        rank = torch.arange(n)
+        selected = (rank < best_num_low) | (rank >= n - (k - best_num_low))
+        return positions[order[selected]]
 
     def _select_within(self, positions: torch.Tensor, k: int) -> torch.Tensor:
         n = positions.numel()
         if n < k:
             self._warn_small()
-            return positions[self._randint(n, k)]
+            selected = self._select_within(positions, n)
+            replacement = positions[self._randint(n, k - n)]
+            return torch.cat([selected, replacement])
         if self.strategy == "recency":
-            return positions.sort().values[-k:]
+            recency = self._position_recency[positions]
+            return positions[torch.argsort(recency)[-k:]]
         if self.strategy == "reward":
             top = torch.topk(self._row_rewards[positions], k).indices
             return positions[top]
+        if self.strategy == "variance":
+            return self._select_max_variance(positions, k)
         return positions[self._randperm(n)[:k]]
 
     def _warn_small(self) -> None:
@@ -3728,36 +3779,117 @@ class PromptGroupSampler(Sampler):
         )
         return index, {}
 
-    def extend(self, index: torch.Tensor) -> None:
+    def _invalidate_cache(self) -> None:
         self._group_index = None
+        self._row_rewards = None
+        self._index_len = 0
+        self._cache_storage_id = None
+
+    def _record_update(self, index: int | torch.Tensor) -> None:
+        if self.strategy != "recency":
+            return
+        index = torch.as_tensor(index, dtype=torch.long).reshape(-1).cpu()
+        if not index.numel():
+            return
+        required_size = int(index.max()) + 1
+        if self._position_recency is None:
+            self._position_recency = torch.full((required_size,), -1, dtype=torch.long)
+        elif self._position_recency.numel() < required_size:
+            self._position_recency = torch.cat(
+                [
+                    self._position_recency,
+                    torch.full(
+                        (required_size - self._position_recency.numel(),),
+                        -1,
+                        dtype=torch.long,
+                    ),
+                ]
+            )
+        for position in index.tolist():
+            self._recency_clock += 1
+            self._position_recency[position] = self._recency_clock
+
+    def _ensure_recency(self, length: int) -> None:
+        if self._position_recency is None:
+            self._position_recency = torch.arange(length, dtype=torch.long)
+            self._recency_clock = max(self._recency_clock, length)
+            return
+        if self._position_recency.numel() < length:
+            self._position_recency = torch.cat(
+                [
+                    self._position_recency,
+                    torch.full(
+                        (length - self._position_recency.numel(),),
+                        -1,
+                        dtype=torch.long,
+                    ),
+                ]
+            )
+        recency = self._position_recency[:length]
+        missing = (recency < 0).nonzero(as_tuple=True)[0]
+        if not missing.numel():
+            return
+        known = recency[recency >= 0]
+        if known.numel():
+            stop = int(known.min())
+            start = stop - missing.numel()
+            recency[missing] = torch.arange(start, stop, dtype=torch.long)
+        else:
+            recency[missing] = torch.arange(missing.numel(), dtype=torch.long)
+            self._recency_clock = max(self._recency_clock, missing.numel())
+
+    def extend(self, index: torch.Tensor) -> None:
+        self._record_update(index)
+        self._invalidate_cache()
 
     def add(self, index: int) -> None:
-        self._group_index = None
+        self._record_update(index)
+        self._invalidate_cache()
+
+    def mark_update(
+        self, index: int | torch.Tensor, *, storage: Storage | None = None
+    ) -> None:
+        self._record_update(index)
+        self._invalidate_cache()
 
     def __getstate__(self):
         state = super().__getstate__()
         state["_group_index"] = None
         state["_row_rewards"] = None
         state["_index_len"] = 0
+        state["_cache_storage_id"] = None
         return state
 
     def _empty(self) -> None:
-        self._group_index = None
-        self._row_rewards = None
-        self._index_len = 0
+        self._invalidate_cache()
+        self._position_recency = None
+        self._recency_clock = 0
         self._warned_small_group = False
 
     def state_dict(self) -> dict[str, Any]:
-        return {}
+        if self._position_recency is None:
+            return {}
+        return {
+            "position_recency": self._position_recency.clone(),
+            "recency_clock": self._recency_clock,
+        }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        return
+        position_recency = state_dict.get("position_recency")
+        self._position_recency = (
+            position_recency.clone().cpu() if position_recency is not None else None
+        )
+        self._recency_clock = int(state_dict.get("recency_clock", 0))
+        self._invalidate_cache()
 
     def dumps(self, path):
-        ...
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+        TensorDict(self.state_dict()).memmap(path)
 
     def loads(self, path):
-        ...
+        state_dict = TensorDict.load_memmap(path).to_dict()
+        self.load_state_dict(state_dict)
 
     def __repr__(self) -> str:
         return (
@@ -3889,9 +4021,11 @@ class SamplerEnsemble(Sampler):
         )
         infos = torch.stack(
             [
-                TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
-                if info
-                else TensorDict()
+                (
+                    TensorDict.from_dict(info, batch_dims=samples.ndim - 1)
+                    if info
+                    else TensorDict()
+                )
                 for info in infos
             ]
         )
