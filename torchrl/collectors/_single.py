@@ -2132,6 +2132,10 @@ class Collector(BaseCollector):
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
         state_dict.update({"frames": self._frames, "iter": self._iter})
+        if self.track_traj_ids:
+            state_dict["traj_pool"] = self._traj_pool.state_dict()
+        if self.policy_version_tracker is not None:
+            state_dict["policy_version"] = self.policy_version
 
         return state_dict
 
@@ -2156,6 +2160,20 @@ class Collector(BaseCollector):
             )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        if self.track_traj_ids:
+            traj_pool_state = state_dict.get("traj_pool")
+            if traj_pool_state is not None:
+                self._traj_pool.load_state_dict(traj_pool_state)
+            # Runtime environment state is not generally serializable. The new
+            # carrier therefore starts a fresh trajectory whose identifier must
+            # be allocated after restoring the global trajectory counter.
+            traj_ids = self._traj_pool.get_traj_and_increment(
+                self.n_env, device=self.storing_device
+            ).view(self.env.batch_size)
+            self._carrier.set(("collector", "traj_ids"), traj_ids)
+        policy_version = state_dict.get("policy_version")
+        if policy_version is not None and self.policy_version_tracker is not None:
+            self.policy_version_tracker.version = policy_version
 
     def __repr__(self) -> str:
         try:

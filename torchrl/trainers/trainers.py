@@ -764,6 +764,11 @@ class Trainer:
             Unified checkpoint tensors are mapped to CPU by default. Pass an
             explicit ``map_location`` to select another device mapping.
 
+        .. note::
+            After restoring an independently registered policy component, the
+            trainer synchronizes the collector once so local policy copies and
+            remote workers observe the restored learner weights.
+
         """
         if Checkpoint.is_checkpoint(file):
             checkpoint = self.checkpoint
@@ -773,12 +778,22 @@ class Trainer:
             strict = kwargs.pop("strict", None)
             for key, value in _torch_load_defaults().items():
                 kwargs.setdefault(key, value)
-            self._sync_checkpoint_components(checkpoint).load(
+            result = self._sync_checkpoint_components(checkpoint).load(
                 file,
                 map_location=map_location,
                 tensor_load_kwargs=kwargs,
                 strict=strict,
             )
+            if "policy" in result.loaded:
+                # The collector payload is restored before the independently
+                # registered policy component. Synchronize once more after all
+                # components have loaded so local copies, remote workers, and
+                # weight-transport caches observe the restored learner policy.
+                policy = checkpoint.components["policy"]
+                if policy is self._checkpoint_policy():
+                    self.collector.update_policy_weights_()
+                else:
+                    self.collector.update_policy_weights_(policy)
         elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
@@ -2386,10 +2401,10 @@ class UpdateWeights(TrainerHookBase):
         )
 
     def state_dict(self) -> dict:
-        return {}
+        return {"counter": self.counter}
 
     def load_state_dict(self, state_dict) -> None:
-        return
+        self.counter = state_dict.get("counter", 0)
 
 
 class CountFramesLog(TrainerHookBase):

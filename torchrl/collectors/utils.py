@@ -446,6 +446,16 @@ class _TrajectoryPool:
             self._traj_id.copy_(1 + out[-1].item())
         return out
 
+    def state_dict(self) -> dict[str, torch.Tensor]:
+        """Return the next trajectory identifier without exposing shared storage."""
+        with self.lock:
+            return {"traj_id": self._traj_id.clone()}
+
+    def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
+        """Restore the next trajectory identifier in-place."""
+        with self.lock:
+            self._traj_id.copy_(state_dict["traj_id"])
+
 
 def _map_weight(
     weight,

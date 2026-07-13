@@ -12,6 +12,7 @@ import tempfile
 import warnings
 from argparse import Namespace
 from collections import OrderedDict
+from copy import deepcopy
 from os import path, walk
 from time import sleep
 
@@ -83,24 +84,36 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
+    def __init__(self, source_policy=None):
+        self.source_policy = source_policy
+        self.policy = deepcopy(source_policy) if source_policy is not None else None
+        self.called_update_policy_weights_ = False
+
     def set_seed(self, seed, **kwargs):
         return seed
 
-    def update_policy_weights_(self):
+    def update_policy_weights_(self, policy=None):
         self.called_update_policy_weights_ = True
+        policy = self.source_policy if policy is None else policy
+        if policy is not None:
+            self.policy.load_state_dict(policy.state_dict())
 
     def shutdown(self):
         pass
 
     def state_dict(self):
-        return {}
+        if self.policy is None:
+            return {}
+        return {"policy": self.policy.state_dict()}
 
     def load_state_dict(self, state_dict):
-        pass
+        if self.policy is not None:
+            self.policy.load_state_dict(state_dict["policy"])
 
 
 class MockingIterableCollector(MockingCollector):
     def __init__(self, batches):
+        super().__init__()
         self._batches = batches
         self.init_random_frames = 10**9
         self.shutdown_calls = 0
@@ -143,14 +156,22 @@ _mocking_optim = MockingOptim()
 
 
 def mocking_trainer(
-    file=None, optimizer=_mocking_optim, checkpoint=None, logger=None
+    file=None,
+    optimizer=_mocking_optim,
+    checkpoint=None,
+    logger=None,
+    with_policy=False,
 ) -> Trainer:
+    loss_module = MockingLossModule()
+    if with_policy:
+        loss_module.actor_network = nn.Linear(2, 2)
+    collector = MockingCollector(getattr(loss_module, "actor_network", None))
     trainer = Trainer(
-        collector=MockingCollector(),
+        collector=collector,
         total_frames=None,
         frame_skip=None,
         optim_steps_per_batch=None,
-        loss_module=MockingLossModule(),
+        loss_module=loss_module,
         optimizer=optimizer,
         logger=logger,
         save_trainer_file=file,
@@ -182,6 +203,31 @@ def test_unified_trainer_checkpoint(tmp_path, format):
     restored.load_from_file(path)
     assert restored.collected_frames == 41
     assert restored._optim_count == 7
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_unified_trainer_resyncs_collector_policy_after_load(tmp_path, format):
+    path = tmp_path / "trainer-checkpoint"
+    source = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(format=format),
+        with_policy=True,
+    )
+    with torch.no_grad():
+        for parameter in source.loss_module.actor_network.parameters():
+            parameter.fill_(3.0)
+    assert any(
+        not torch.equal(source.collector.policy.state_dict()[key], value)
+        for key, value in source.loss_module.actor_network.state_dict().items()
+    )
+    source.save_trainer(force_save=True)
+
+    restored = mocking_trainer(checkpoint=Checkpoint(), with_policy=True)
+    restored.load_from_file(path)
+
+    assert restored.collector.called_update_policy_weights_
+    for key, value in restored.loss_module.actor_network.state_dict().items():
+        torch.testing.assert_close(restored.collector.policy.state_dict()[key], value)
 
 
 def test_unified_trainer_default_component_selection(tmp_path):
@@ -1287,6 +1333,30 @@ def test_updateweights():
         trainer._post_steps_hook()
         assert trainer.collector.called_update_policy_weights_ is (t == T - 1)
     assert trainer.collector.called_update_policy_weights_
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_updateweights_checkpoint_counter(tmp_path, format):
+    checkpoint_path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=checkpoint_path, checkpoint=Checkpoint(format=format)
+    )
+    update_weights = UpdateWeights(trainer.collector, 5)
+    update_weights.register(trainer)
+    for _ in range(3):
+        trainer._post_steps_hook()
+    trainer.save_trainer(force_save=True)
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored_update_weights = UpdateWeights(restored.collector, 5)
+    restored_update_weights.register(restored)
+    restored.load_from_file(checkpoint_path)
+
+    assert restored_update_weights.counter == 3
+    restored._post_steps_hook()
+    assert not restored.collector.called_update_policy_weights_
+    restored._post_steps_hook()
+    assert restored.collector.called_update_policy_weights_
 
 
 class TestCountFrames:
