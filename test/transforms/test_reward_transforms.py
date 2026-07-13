@@ -415,7 +415,7 @@ class TestRewardScaling(TransformBase):
         if standard_normal:
             assert torch.allclose((reward - loc) / scale, td["reward"])
         else:
-            assert torch.allclose((td["reward"] - loc) / scale, reward)
+            assert torch.allclose(reward * scale + loc, td["reward"])
 
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_transform_compose(self, standard_normal):
@@ -429,7 +429,7 @@ class TestRewardScaling(TransformBase):
         if standard_normal:
             assert torch.allclose((reward - loc) / scale, td["reward"])
         else:
-            assert torch.allclose((td["reward"] - loc) / scale, reward)
+            assert torch.allclose(reward * scale + loc, td["reward"])
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     @pytest.mark.parametrize("standard_normal", [True, False])
@@ -448,7 +448,7 @@ class TestRewardScaling(TransformBase):
         if standard_normal:
             assert torch.allclose((reward - loc) / scale, td["next", "reward"])
         else:
-            assert torch.allclose((td["next", "reward"] - loc) / scale, reward)
+            assert torch.allclose(reward * scale + loc, td["next", "reward"])
 
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_transform_model(self, standard_normal):
@@ -462,7 +462,7 @@ class TestRewardScaling(TransformBase):
         if standard_normal:
             assert torch.allclose((reward - loc) / scale, td["reward"])
         else:
-            assert torch.allclose((td["reward"] - loc) / scale, reward)
+            assert torch.allclose(reward * scale + loc, td["reward"])
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("standard_normal", [True, False])
@@ -479,7 +479,7 @@ class TestRewardScaling(TransformBase):
         if standard_normal:
             assert torch.allclose((reward - loc) / scale, td["reward"])
         else:
-            assert torch.allclose((td["reward"] - loc) / scale, reward)
+            assert torch.allclose(reward * scale + loc, td["reward"])
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for RewardScaling")
