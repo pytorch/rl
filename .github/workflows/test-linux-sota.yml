@@ -29,6 +29,9 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["13.0"]
+        # Two parallel shards over the smoke-test list; see the SOTA_SHARD
+        # filtering in .github/unittest/linux_sota/scripts/test_sota.py.
+        shard: ["1", "2"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -60,6 +63,8 @@ jobs:
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
         export TD_GET_DEFAULTS_TO_NONE=1
+        export SOTA_SHARD=${{ matrix.shard }}
+        export SOTA_NUM_SHARDS=2
 
         ## setup_env.sh
         bash .github/unittest/linux_sota/scripts/run_all.sh
