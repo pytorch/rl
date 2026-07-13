@@ -21,7 +21,6 @@ from tensordict import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
-from torch.utils._pytree import tree_map
 from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
@@ -33,6 +32,23 @@ from torchrl.data.replay_buffers.utils import (
     TED2Flat,
     TED2Nested,
 )
+
+
+def _map_metadata(function, metadata, *, is_leaf):
+    if is_leaf(metadata):
+        return function(metadata)
+    if isinstance(metadata, dict):
+        return {
+            key: _map_metadata(function, value, is_leaf=is_leaf)
+            for key, value in metadata.items()
+        }
+    if isinstance(metadata, list):
+        return [_map_metadata(function, value, is_leaf=is_leaf) for value in metadata]
+    if isinstance(metadata, tuple):
+        return tuple(
+            _map_metadata(function, value, is_leaf=is_leaf) for value in metadata
+        )
+    return function(metadata)
 
 
 class StorageCheckpointerBase:
@@ -221,7 +237,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                     return {"__type__": "NonTensorData", "value": item.data}
                 return item
 
-            serializable_metadata = tree_map(
+            serializable_metadata = _map_metadata(
                 map_to_json_serializable, metadata, is_leaf=is_leaf
             )
 
@@ -292,7 +308,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                     return NonTensorData(item["value"])
             return item
 
-        metadata = tree_map(
+        metadata = _map_metadata(
             map_from_json_serializable, serializable_metadata, is_leaf=is_leaf
         )
 

@@ -607,7 +607,7 @@ class GlobalRNGState:
         numpy_state = np.random.get_state()
         state["numpy"] = (
             numpy_state[0],
-            torch.from_numpy(numpy_state[1].copy()),
+            torch.from_numpy(numpy_state[1].astype(np.int64, copy=True)),
             numpy_state[2],
             numpy_state[3],
             numpy_state[4],
