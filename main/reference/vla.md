@@ -107,11 +107,14 @@ a language-model head.
 
 ## Image preprocessing
 
-The reusable [`OpenVLAImagePreprocessor`](generated/torchrl.data.vla.OpenVLAImagePreprocessor.html#torchrl.data.vla.OpenVLAImagePreprocessor) implements the
-OpenVLA-style image preprocessing order used by OpenVLA-OFT policies: square
-resize, JPEG quality-95 round trip, optional 0.9-area center crop and resize
-back. Its default backend keeps images as tensors and uses `torchvision` JPEG
-codecs, while `backend="pil"` remains available as a reference path.
+The reusable [`OpenVLAImagePreprocessor`](generated/torchrl.data.vla.OpenVLAImagePreprocessor.html#torchrl.data.vla.OpenVLAImagePreprocessor) implements
+OpenVLA-style image preprocessing. The `backend="torch_reference"` path uses
+`torchvision` for a JPEG round trip followed by an antialiased Lanczos3
+resize and the optional fractional 0.9-area center crop. It follows the
+TensorFlow reference operation order and interpolation semantics without
+requiring TensorFlow and is the default. The `backend="torchvision"` option
+uses a faster bicubic tensor path, while `backend="tensorflow"` remains
+available for reference comparisons.
 
 | [`OpenVLAImagePreprocessor`](generated/torchrl.data.vla.OpenVLAImagePreprocessor.html#torchrl.data.vla.OpenVLAImagePreprocessor)(*[, size, ...]) | OpenVLA-style image resize, JPEG round-trip and optional center crop. |
 | --- | --- |
