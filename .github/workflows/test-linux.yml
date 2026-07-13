@@ -206,7 +206,13 @@ jobs:
         ## setup_env.sh
         bash .github/unittest/linux/scripts/run_all.sh
 
+  # Oldest-supported-torch compatibility suite. Not run on PRs by default:
+  # add the ci/olddeps label when a change uses a torch API that may not
+  # exist in the oldest supported stable torch (see CLAUDE.md section 7b).
+  # Labels do not retrigger the workflow -- label, then push or rerun.
+  # Full runs happen on every push to main and on the nightly orchestrator.
   tests-olddeps:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci/olddeps')
     strategy:
       matrix:
         python_version: ["3.10"]
@@ -246,7 +252,14 @@ jobs:
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
 
+  # Full optional-dependencies suite (~2h serial). Not run on PRs by
+  # default: PRs get tests-optdeps-smoke below; add the ci/optdeps label
+  # when a change touches optional-dependency integrations (see CLAUDE.md
+  # section 7b). Labels do not retrigger the workflow -- label, then push
+  # or rerun. Full runs happen on every push to main and on the nightly
+  # orchestrator.
   tests-optdeps:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci/optdeps')
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -275,6 +288,46 @@ jobs:
           export TORCH_VERSION=nightly
         fi
         export TD_GET_DEFAULTS_TO_NONE=1
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        ## setup_env.sh
+        bash .github/unittest/linux_optdeps/scripts/run_all.sh
+
+  # PR-time replacement for tests-optdeps: builds the same optional-deps
+  # environment but only proves it imports cleanly (test/smoke_test.py)
+  # instead of running the ~2h suite. Skipped when ci/optdeps requests the
+  # full run, and on non-PR events where tests-optdeps runs anyway.
+  tests-optdeps-smoke:
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci/optdeps')
+    strategy:
+      matrix:
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 60
+      script: |
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+        export TD_GET_DEFAULTS_TO_NONE=1
+        export TORCHRL_OPTDEPS_SMOKE=1
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
