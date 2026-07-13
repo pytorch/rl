@@ -1,8 +1,9 @@
 name: Continuous Benchmark
+# No longer runs on every push to main (2 x ~40-60 min GPU jobs per push):
+# the nightly orchestrator calls it daily via workflow_call and uploads the
+# results to the gh-pages trend dashboard. workflow_dispatch remains for
+# on-demand runs.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
   workflow_call:
     inputs:
