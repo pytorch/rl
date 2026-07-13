@@ -1,6 +1,14 @@
 name: Continuous Benchmark (PR)
+# Opt-in only: the baseline-vs-head comparison costs 2 x ~40-60 min GPU jobs
+# per PR push, and most PRs don't touch performance-relevant code. Add the
+# "benchmarks/upload" CI-trigger label to a PR to run it (the "labeled"
+# trigger starts the run as soon as the label is applied). The gate must NOT
+# match the auto-applied "Benchmarks" category label: contains() compares
+# case-insensitively, so a plain "benchmarks" gate would fire on every PR
+# the labeler tags.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
@@ -16,6 +24,7 @@ jobs:
 
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
+    if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
     runs-on: linux.g5.4xlarge.nvidia.gpu
     env:
       PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}

@@ -27,16 +27,23 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export CUDA_LAUNCH_BLOCKING=1
 
-# JSON report for flaky test tracking
+# JSON report for flaky test tracking. Distinct file names per invocation
+# (the smoke and sota reports previously shared one name, so the second
+# overwrote the first) and per shard, so parallel shard jobs don't collide.
+sota_shard="${SOTA_SHARD:-all}"
 json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
-json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-sota.json --json-report-indent=2"
+smoke_json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-sota-smoke-shard-${sota_shard}.json --json-report-indent=2"
+sota_json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-sota-shard-${sota_shard}.json --json-report-indent=2"
 
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py ${json_report_args} -v --durations 200
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py ${smoke_json_report_args} -v --durations 200
 
-coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py ${json_report_args} --instafail --durations 200 -vvv --capture no
+coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py ${sota_json_report_args} --instafail --durations 200 -vvv --capture no
 
-# unit tests living next to the recipes they cover (tiny models, no downloads)
-python .github/unittest/helpers/coverage_run_parallel.py -m pytest sota-implementations/vla_grpo/test_openvla.py -v --durations 20
+# unit tests living next to the recipes they cover (tiny models, no
+# downloads). Run once, on the first (or only) shard.
+if [ "${sota_shard}" = "all" ] || [ "${sota_shard}" = "1" ]; then
+  python .github/unittest/helpers/coverage_run_parallel.py -m pytest sota-implementations/vla_grpo/test_openvla.py -v --durations 20
+fi
 
 coverage combine -q
 coverage xml -i

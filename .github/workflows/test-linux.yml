@@ -46,7 +46,12 @@ jobs:
   tests-cpu:
     strategy:
       matrix:
-        python_version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        # PR version set: 3.10 (oldest), 3.13 (newest with the full optional
+        # dependency stack) and 3.14 (newest, cheap -- most optional deps do
+        # not install there) run all three shards on every event. 3.11 and
+        # 3.12 run only on non-PR events via tests-cpu-mid below.
+        python_version: ["3.10", "3.13", "3.14"]
+        shard: ["bulk", "collectors", "mp"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -54,7 +59,7 @@ jobs:
       repository: pytorch/rl
       docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
       timeout: 120
-      upload-artifact: test-results-cpu-${{ matrix.python_version }}
+      upload-artifact: test-results-cpu-${{ matrix.python_version }}-shard-${{ matrix.shard }}
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
@@ -67,6 +72,45 @@ jobs:
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
+        export TORCHRL_TEST_SHARD=${{ matrix.shard }}
+
+        echo "PYTHON_VERSION: $PYTHON_VERSION"
+        echo "CU_VERSION: $CU_VERSION"
+
+        ## setup_env.sh
+        bash .github/unittest/linux/scripts/run_all.sh
+
+  # All shards for the middle Python versions. Skipped on pull requests
+  # (3.10/3.13/3.14 bracket the version range there); pushes to main and the
+  # nightly orchestrator keep full five-version coverage. For an on-demand
+  # full run on a PR branch, use workflow_dispatch.
+  tests-cpu-mid:
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        python_version: ["3.11", "3.12"]
+        shard: ["bulk", "collectors", "mp"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.12xlarge
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      timeout: 120
+      upload-artifact: test-results-cpu-${{ matrix.python_version }}-shard-${{ matrix.shard }}
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+        export TD_GET_DEFAULTS_TO_NONE=1
+        # Set env vars from matrix
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CU_VERSION="cpu"
+        export TORCHRL_TEST_SHARD=${{ matrix.shard }}
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
@@ -167,6 +211,10 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["11.8"]
+        # The single serial run reached 84 min of pytest (96 min job wall),
+        # the critical path of the unit-test workflows. Fan out into three
+        # serial shards; see linux_olddeps/scripts_gym_0_13/run_test.sh.
+        shard: ["transforms", "quarantine", "remainder"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
@@ -176,6 +224,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 120
+      upload-artifact: test-results-olddeps-shard-${{ matrix.shard }}
       script: |
         set -euo pipefail
         export PYTHON_VERSION="3.10"
@@ -190,6 +239,7 @@ jobs:
         fi
         export TF_CPP_MIN_LOG_LEVEL=0
         export TD_GET_DEFAULTS_TO_NONE=1
+        export TORCHRL_TEST_SHARD=${{ matrix.shard }}
 
 
         bash .github/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
@@ -322,6 +372,7 @@ jobs:
   upload-codecov:
     needs:
       - tests-cpu
+      - tests-cpu-mid
       - tests-gpu
       - tests-gpu-distributed
       - tests-optdeps
