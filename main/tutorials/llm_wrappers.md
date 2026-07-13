@@ -156,7 +156,7 @@ except ImportError:
 Loading Transformers model...
 
 Loading weights: 0%| | 0/290 [00:00<?, ?it/s]
-Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3691.69it/s]
+Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3657.05it/s]
 Transformers wrapper input keys: [('history', 'prompt')]
 Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
 Transformers Results:
@@ -421,7 +421,7 @@ Tutorial completed successfully!
 ============================================================
 ```
 
-**Total running time of the script:** (0 minutes 7.169 seconds)
+**Total running time of the script:** (0 minutes 7.883 seconds)
 
 [`Download Jupyter notebook: llm_wrappers.ipynb`](../_downloads/193ac0d7b83cba60008d159b8e5c8771/llm_wrappers.ipynb)
 

@@ -16,7 +16,7 @@ A default spec to use in transforms / envs that return Text objects.
 
 Retrieves the device type of tensor class.
 
-dumps(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*) → Any
+dumps(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
 
 Saves the tensordict to disk.
 
@@ -750,14 +750,22 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*) → Any
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
 Parameters:
 
 - **prefix** (*str**or**Path to folder*) - the path to the folder where the
-saved tensordict should be fetched.
+saved tensordict should be fetched, or the path to a memmap
+archive file written through
+`save(..., archive=True)` / a `".tdz"` prefix (or packed
+with `pack_memmap()`). Archives are
+memory-mapped once and every leaf is exposed as a zero-copy
+view into the mapping: only the pages of the leaves that are
+actually accessed are read from disk. Unlike directory-backed
+tensordicts, in-place writes to the leaves of an
+archive-loaded tensordict do not propagate to the file.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**equivalent**,**optional*) - if provided, the
 data will be asynchronously cast to that device.
 Supports "meta" device, in which case the data isn't loaded
@@ -771,6 +779,33 @@ should be written.
 - **robust_key** (*bool**,**optional*) - if `True` (default), expects robust key encoding was used
 when saving and decodes filenames accordingly. If `False`, uses legacy
 behavior. If `None`, uses the default robust behavior.
+- **subpath** (*NestedKey**or**str path**,**optional*) - the location of a
+nested tensordict to load, as a nested key (e.g.
+`("module", "0")`, with arbitrary nesting allowed as usual)
+or as a `"/"`-separated string path (e.g. `"module/0"`).
+Only that subtree is loaded. Works both for directories
+(equivalent to appending the path to `prefix`) and for
+archives.
+- **mode** (*str**,**optional*) - `"r"` (default) or `"r+"`. Only
+relevant when loading an archive: with `"r"` the archive is
+mapped copy-on-write and in-place writes to the leaves stay
+in memory; with `"r+"` the mapping is shared and in-place
+writes propagate to the file, like directory-backed
+tensordicts. `"r+"` requires uncompressed, aligned tensor
+payloads (i.e. archives written by tensordict without
+`compression`) and is not available for nested-tensor
+leaves. In-place writes do not update the per-entry CRC-32
+stored by the zip format; `load_memmap()` ignores
+checksums, but call
+`refresh_archive_checksums()` before handing
+a modified archive to tools that verify them (`unzip`,
+`unpack_memmap()`, ...). Directory prefixes
+are always write-through and ignore this argument.
+- **num_threads** (*int**,**optional*) - number of threads used to decompress
+the leaves of a compressed archive (deflate entries are
+inflated in parallel, which scales nearly linearly). Without
+compression, loading is a metadata-only operation and this
+argument has no effect. Defaults to `0` (sequential).
 
 Examples
 
@@ -846,7 +881,7 @@ Attempts to make a dense stack of tensordicts, and falls back on lazy stack when
 
 See `maybe_dense_stack()` for details.
 
-memmap(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*) → Any
+memmap(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *existsok: bool = True*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
 
 Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -854,6 +889,10 @@ Parameters:
 
 - **prefix** (*str*) - directory prefix where the memory-mapped tensors will
 be stored. The directory tree structure will mimic the tensordict's.
+If `prefix` ends with `".tdz"` (or `archive=True` is
+passed), a single-file archive is written instead of a
+directory: a standard zip file whose entries replicate the
+memmap directory layout. See `archive` below.
 - **copy_existing** (*bool*) - If False (default), an exception will be raised if an
 entry in the tensordict is already a tensor stored on disk
 with an associated file, but is not saved in the correct
@@ -878,6 +917,27 @@ exists in the same path. Defaults to `True`.
 handles keys with path separators and special characters. If `False`,
 uses legacy behavior (keys used as-is). If `None`, uses the default
 robust behavior.
+- **archive** (*bool**,**optional*) - if `True`, `prefix` designates a
+single file rather than a directory and the tensordict is
+written as a memmap archive: a zip file mirroring the memmap
+directory tree, with tensor payloads stored uncompressed and
+aligned so that `load_memmap()` can memory-map the file
+and expose every leaf as a zero-copy view. If `None`
+(default), archive mode is enabled when `prefix` ends with
+`".tdz"`. The result of `load_memmap()` on an archive
+behaves like the result of `from_consolidated()`: all
+leaves are views into a single storage, and in-place writes do
+not propagate to the file. Archives and memmap directories are
+mutually convertible with `pack_memmap()` /
+`unpack_memmap()` (or any zip tool). Note that
+archives are written sequentially (single data pass) and
+`num_threads` has no effect on them.
+- **compression** (*str**or**int**,**optional*) - compression for archive
+entries (`"stored"`, `"deflate"`, `"bzip2"`, `"lzma"`
+or a `zipfile` constant). Defaults to `"stored"`
+(uncompressed), which is what enables zero-copy loading.
+Compressed archives load correctly but leaves are
+decompressed in memory on access. Only valid in archive mode.
 
 The TensorDict is then locked, meaning that any writing operations that
 isn't in-place will throw an exception (eg, rename, set or remove an
@@ -944,7 +1004,7 @@ Note
 Serialising in this fashion might be slow with deeply nested tensordicts, so
 it is not recommended to call this method inside a training loop.
 
-memmap_like(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *existsok: bool = True*, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*) → Any
+memmap_like(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *existsok: bool = True*, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*) → Any
 
 Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
@@ -952,6 +1012,9 @@ Parameters:
 
 - **prefix** (*str*) - directory prefix where the memory-mapped tensors will
 be stored. The directory tree structure will mimic the tensordict's.
+If `prefix` ends with `".tdz"` (or `archive=True` is
+passed), a preallocated single-file archive is created
+instead. See `archive` below.
 - **copy_existing** (*bool*) - If False (default), an exception will be raised if an
 entry in the tensordict is already a tensor stored on disk
 with an associated file, but is not saved in the correct
@@ -976,6 +1039,16 @@ exists in the same path. Defaults to `True`.
 handles keys with path separators and special characters. If `False`,
 uses legacy behavior (keys used as-is). If `None`, uses the default
 robust behavior.
+- **archive** (*bool**,**optional*) - if `True`, `prefix` designates a
+single file and a preallocated, zero-filled memmap archive is
+created and loaded back with
+`load_memmap(prefix, mode="r+")`: the returned tensordict
+writes through to the archive. If `None` (default), archive
+mode is enabled when `prefix` ends with `".tdz"`.
+In-place writes leave the zip per-entry checksums stale; call
+`refresh_archive_checksums()` before handing
+the archive to tools that verify them. Nested tensors are not
+supported in this mode.
 
 The TensorDict is then locked, meaning that any writing operations that
 isn't in-place will throw an exception (eg, rename, set or remove an
@@ -1010,7 +1083,7 @@ Refreshes the content of the memory-mapped tensordict if it has a [`saved_path`]
 
 This method will raise an exception if no path is associated with it.
 
-save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*) → Any
+save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
 
 Saves the tensordict to disk.
 

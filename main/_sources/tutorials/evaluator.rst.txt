@@ -151,7 +151,7 @@ frames-per-second.
 
  .. code-block:: none
 
-    First eval: {'eval/reward': -888.1697387695312, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 715.4859547514155, 'eval/step': 0}
+    First eval: {'eval/reward': -988.582275390625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 717.0664518889173, 'eval/step': 0}
 
 
 
@@ -176,7 +176,7 @@ Each subsequent call increments the internal step counter:
 
  .. code-block:: none
 
-    Second eval: {'eval/reward': -963.8211059570312, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 716.2510842385826, 'eval/step': 1}
+    Second eval: {'eval/reward': -958.79443359375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 715.5887579674132, 'eval/step': 1}
 
 
 
@@ -236,7 +236,7 @@ To wait for the result, pass a timeout to ``poll()`` or use ``wait()``:
 
  .. code-block:: none
 
-    poll(timeout=30) returned: {'eval/reward': -859.734619140625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 705.9810225101983, 'eval/step': 2}
+    poll(timeout=30) returned: {'eval/reward': -1294.103759765625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 716.3960815383856, 'eval/step': 2}
 
 
 
@@ -327,7 +327,7 @@ Evaluate with the initial (random) weights:
 
  .. code-block:: none
 
-    Before weight update: {'eval/reward': -1746.832763671875, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 506.3895768395185, 'eval/step': 0}
+    Before weight update: {'eval/reward': -1310.2047119140625, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 507.47654150989104, 'eval/step': 0}
 
 
 
@@ -373,7 +373,7 @@ automatically:
 
  .. code-block:: none
 
-    After weight update: {'eval/reward': -1036.9521484375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 504.174205720108, 'eval/step': 1}
+    After weight update: {'eval/reward': -982.5281982421875, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 503.9503991455678, 'eval/step': 1}
 
 
 
@@ -400,7 +400,7 @@ when you already have detached weight snapshots:
 
  .. code-block:: none
 
-    With TensorDict weights: {'eval/reward': -1156.97314453125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 505.98605281823035, 'eval/step': 2}
+    With TensorDict weights: {'eval/reward': -981.4835205078125, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 505.78842225930174, 'eval/step': 2}
 
 
 
@@ -448,7 +448,7 @@ environment and the policy:
 
  .. code-block:: none
 
-    Process backend: {'eval/reward': -1772.796630859375, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 689.6005893380593, 'eval/step': 0}
+    Process backend: {'eval/reward': -884.2205200195312, 'eval/reward_std': 0.0, 'eval/num_episodes': 1, 'eval/episode_length': 200.0, 'eval/fps': 702.3558539453793, 'eval/step': 0}
 
 
 
@@ -540,10 +540,10 @@ Let's verify what was logged:
 
  .. code-block:: none
 
-    Logged to: /tmp/tmpo5akg623/eval_demo/scalars/eval/reward.csv
-    0,-1510.331787109375
-    1,-1675.8016357421875
-    2,-1261.442138671875
+    Logged to: /tmp/tmp2753inzg/eval_demo/scalars/eval/reward.csv
+    0,-1857.341552734375
+    1,-1001.7149658203125
+    2,-1154.087646484375
 
 
 
@@ -583,7 +583,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.029 seconds)
+   **Total running time of the script:** (0 minutes 7.033 seconds)
 
 
 .. _sphx_glr_download_tutorials_evaluator.py:

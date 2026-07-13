@@ -720,14 +720,22 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*) → Any
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
 Parameters:
 
 - **prefix** (*str**or**Path to folder*) - the path to the folder where the
-saved tensordict should be fetched.
+saved tensordict should be fetched, or the path to a memmap
+archive file written through
+`save(..., archive=True)` / a `".tdz"` prefix (or packed
+with `pack_memmap()`). Archives are
+memory-mapped once and every leaf is exposed as a zero-copy
+view into the mapping: only the pages of the leaves that are
+actually accessed are read from disk. Unlike directory-backed
+tensordicts, in-place writes to the leaves of an
+archive-loaded tensordict do not propagate to the file.
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**equivalent**,**optional*) - if provided, the
 data will be asynchronously cast to that device.
 Supports "meta" device, in which case the data isn't loaded
@@ -741,6 +749,33 @@ should be written.
 - **robust_key** (*bool**,**optional*) - if `True` (default), expects robust key encoding was used
 when saving and decodes filenames accordingly. If `False`, uses legacy
 behavior. If `None`, uses the default robust behavior.
+- **subpath** (*NestedKey**or**str path**,**optional*) - the location of a
+nested tensordict to load, as a nested key (e.g.
+`("module", "0")`, with arbitrary nesting allowed as usual)
+or as a `"/"`-separated string path (e.g. `"module/0"`).
+Only that subtree is loaded. Works both for directories
+(equivalent to appending the path to `prefix`) and for
+archives.
+- **mode** (*str**,**optional*) - `"r"` (default) or `"r+"`. Only
+relevant when loading an archive: with `"r"` the archive is
+mapped copy-on-write and in-place writes to the leaves stay
+in memory; with `"r+"` the mapping is shared and in-place
+writes propagate to the file, like directory-backed
+tensordicts. `"r+"` requires uncompressed, aligned tensor
+payloads (i.e. archives written by tensordict without
+`compression`) and is not available for nested-tensor
+leaves. In-place writes do not update the per-entry CRC-32
+stored by the zip format; `load_memmap()` ignores
+checksums, but call
+`refresh_archive_checksums()` before handing
+a modified archive to tools that verify them (`unzip`,
+`unpack_memmap()`, ...). Directory prefixes
+are always write-through and ignore this argument.
+- **num_threads** (*int**,**optional*) - number of threads used to decompress
+the leaves of a compressed archive (deflate entries are
+inflated in parallel, which scales nearly linearly). Without
+compression, loading is a metadata-only operation and this
+argument has no effect. Defaults to `0` (sequential).
 
 Examples
 
