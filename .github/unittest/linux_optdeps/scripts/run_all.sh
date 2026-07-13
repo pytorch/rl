@@ -174,6 +174,15 @@ export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=100
 export BATCHED_PIPE_TIMEOUT=60
 
+# PR smoke mode (tests-optdeps-smoke): prove the optional-dependency
+# environment builds and imports cleanly, then stop before the full suite.
+# The full suite runs on main/nightly, or on PRs with the ci/optdeps label.
+if [ "${TORCHRL_OPTDEPS_SMOKE:-0}" = "1" ]; then
+  python -m pytest test/smoke_test.py -v --durations 20
+  echo "Optdeps smoke mode: imports OK, skipping the full suite."
+  exit 0
+fi
+
 # Track test failures but keep going, so coverage is still combined and
 # uploaded; the script exits with this status at the end. (Previously the
 # script aborted on the pytest failure via set -e, before coverage upload.)
