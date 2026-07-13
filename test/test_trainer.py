@@ -33,7 +33,13 @@ from torchrl.data import (
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers import (
+    Learner,
+    LearnerStepRequest,
+    LocalLearnerGroup,
+    LogValidationReward,
+    Trainer,
+)
 from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
@@ -43,7 +49,7 @@ from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
-from torchrl.trainers.algorithms.td3 import TD3Trainer
+from torchrl.trainers.algorithms.td3 import TD3OptimizationStepper, TD3Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
@@ -1704,6 +1710,153 @@ class TestDefaultOptimizationStepper:
         assert all(
             torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
         )
+
+    def test_gradient_sync_precedes_clipping_and_step(self):
+        events = []
+        model = nn.Linear(2, 1)
+
+        class Loss(nn.Module):
+            def forward(self, td):
+                return TensorDict({"loss": model(td["x"]).sum()}, [])
+
+        class RecordingOptimizer(torch.optim.SGD):
+            def step(self, closure=None):
+                events.append("step")
+                return super().step(closure)
+
+        class RecordingContext:
+            def sync_gradients(self, optimizer):
+                assert all(
+                    parameter.grad is not None
+                    for group in optimizer.param_groups
+                    for parameter in group["params"]
+                )
+                events.append("sync")
+
+        optimizer = RecordingOptimizer(model.parameters(), lr=0.1)
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=1,
+            loss_module=Loss(),
+            optimizer=optimizer,
+            optimization_stepper=DefaultOptimizationStepper(),
+            clip_norm=1.0,
+        )
+        trainer.data_parallel_context = RecordingContext()
+        trainer.optimization_stepper.step(
+            trainer, TensorDict({"x": torch.ones(3, 2)}, [3])
+        )
+        assert events == ["sync", "step"]
+
+
+class _LearnerLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(()))
+
+    def forward(self, batch):
+        return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
+
+
+class TestLearnerGroup:
+    @staticmethod
+    def _make_group(replay_buffer):
+        def learner_factory(context):
+            loss = _LearnerLoss()
+            return Learner(
+                loss,
+                context.replay_buffer,
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                data_parallel_context=context.data_parallel_context,
+            )
+
+        return LocalLearnerGroup(learner_factory, replay_buffer, global_batch_size=4)
+
+    def test_local_group_rounds_metrics_and_state(self):
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16), batch_size=4
+        )
+        replay_buffer.extend(TensorDict({"x": torch.ones(16, 1)}, [16]))
+        group = self._make_group(replay_buffer).start()
+
+        result = group.step(LearnerStepRequest(1, 2, 4))
+        assert result.round_id == 1
+        assert result.optim_steps == 2
+        assert result.model_version == 2
+        assert result.metrics.device == torch.device("cpu")
+        assert result.metrics["loss"].ndim == 0
+
+        state = group.state_dict()
+        weights = group.get_weights()
+        assert weights.model_version == 2
+        group.shutdown()
+        group.shutdown()
+
+        restored = self._make_group(replay_buffer).start()
+        restored.load_state_dict(state)
+        assert restored.step(LearnerStepRequest(2, 1, 4)).model_version == 3
+        restored.shutdown()
+
+    def test_rejects_nonconsecutive_round(self):
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8), batch_size=4
+        )
+        replay_buffer.extend(TensorDict({"x": torch.ones(8, 1)}, [8]))
+        group = self._make_group(replay_buffer).start()
+        with pytest.raises(RuntimeError, match="Expected round_id=1"):
+            group.step(LearnerStepRequest(2, 1, 4))
+        group.shutdown()
+
+
+class TestTD3OptimizationStepper:
+    def test_synchronizes_each_optimizer_before_step(self):
+        events = []
+        critic = nn.Parameter(torch.ones(()))
+        actor = nn.Parameter(torch.ones(()))
+
+        class RecordingOptimizer(torch.optim.SGD):
+            def __init__(self, name, params):
+                self.name = name
+                super().__init__(params, lr=0.1)
+
+            def step(self, closure=None):
+                events.append(f"step_{self.name}")
+                return super().step(closure)
+
+        critic_optim = RecordingOptimizer("critic", [critic])
+        actor_optim = RecordingOptimizer("actor", [actor])
+        stepper = TD3OptimizationStepper(
+            actor_optim, critic_optim, policy_update_delay=1
+        )
+
+        class Loss:
+            class tensor_keys:
+                priority = "td_error"
+
+            def value_loss(self, batch):
+                return critic.square(), {"td_error": torch.ones(1, 1)}
+
+            def actor_loss(self, batch):
+                return actor.square(), None
+
+        class Context:
+            loss_module = Loss()
+            clip_grad_norm = True
+            clip_norm = 1.0
+            replay_buffer = None
+
+            def sync_gradients(self, optimizer):
+                events.append(f"sync_{optimizer.name}")
+
+        stepper.step(Context(), TensorDict({}, []))
+        assert events == [
+            "sync_critic",
+            "step_critic",
+            "sync_actor",
+            "step_actor",
+        ]
 
 
 class TestLRSchedulerHook:

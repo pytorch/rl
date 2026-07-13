@@ -18,7 +18,7 @@ from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 import numpy as np
 import torch.nn
@@ -169,6 +169,32 @@ class TrainerHookBase:
         raise NotImplementedError
 
 
+class OptimizationContext(Protocol):
+    """Minimal state required by an :class:`OptimizationStepper`.
+
+    Both :class:`Trainer` and distributed learners implement this protocol. The
+    protocol keeps optimization code independent from collection, logging, and
+    controller lifecycle concerns while preserving the released stepper calling
+    convention.
+
+    Example:
+        >>> from torchrl.trainers import OptimizationContext
+        >>> isinstance(OptimizationContext, type)
+        True
+    """
+
+    loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase]
+    optimizer: optim.Optimizer | None
+    clip_grad_norm: bool
+    clip_norm: float | None
+
+    def register_module(self, module_name: str, module: Any) -> None:
+        ...
+
+    def sync_gradients(self, optimizer: optim.Optimizer) -> None:
+        ...
+
+
 class OptimizationStepper(TrainerHookBase):
     """Performs a single optimization step in a Trainer.
 
@@ -186,13 +212,18 @@ class OptimizationStepper(TrainerHookBase):
     values suitable for logging.
     """
 
-    _trainer: Trainer
+    _trainer: OptimizationContext
+    supports_data_parallel = False
 
-    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+    def step(
+        self, trainer: OptimizationContext, sub_batch: TensorDictBase
+    ) -> TensorDictBase:
         """Perform one optimization step on a ``sub_batch``.
 
         Args:
-            trainer (Trainer): The trainer executing the optimization loop.
+            trainer (OptimizationContext): The optimization context executing
+                the update. Existing local trainers continue to pass the full
+                :class:`Trainer` instance.
             sub_batch (TensorDictBase): Batch used for this optimization step.
 
         Returns:
@@ -206,7 +237,9 @@ class OptimizationStepper(TrainerHookBase):
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return
 
-    def register(self, trainer: Trainer, name: str = "optimization_stepper") -> None:
+    def register(
+        self, trainer: OptimizationContext, name: str = "optimization_stepper"
+    ) -> None:
         """Register the stepper with a Trainer for checkpointing."""
         # Register as a module so it is included in Trainer checkpoints.
         # This is not a hook stage (i.e., it is not registered via ``register_op``).
@@ -224,6 +257,8 @@ class DefaultOptimizationStepper(OptimizationStepper):
     Optionally, a subset of loss entries can be selected via ``loss_components``.
     In that case, only the selected keys contribute to the backward pass.
     """
+
+    supports_data_parallel = True
 
     def __init__(self, loss_components: Sequence[str] | None = None) -> None:
         if loss_components is not None and not loss_components:
@@ -253,7 +288,9 @@ class DefaultOptimizationStepper(OptimizationStepper):
                 nn.utils.clip_grad_value_(params, clip_norm)
         return float(gn)
 
-    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+    def step(
+        self, trainer: OptimizationContext, sub_batch: TensorDictBase
+    ) -> TensorDictBase:
         losses_td = trainer.loss_module(sub_batch)
 
         if trainer.optimizer is None:
@@ -271,6 +308,8 @@ class DefaultOptimizationStepper(OptimizationStepper):
             items = [item for key, item in losses_td.items() if key.startswith("loss")]
         loss = sum(items)
         loss.backward()
+
+        trainer.sync_gradients(trainer.optimizer)
 
         gn = self._compute_and_clip_grad_norm(
             trainer.optimizer,
@@ -391,6 +430,7 @@ class Trainer:
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
+        self.data_parallel_context = None
         self.logger = logger
         self.async_collection = async_collection
 
@@ -582,6 +622,15 @@ class Trainer:
                 continue
             register(f"trainer_module.{name}", module)
         return checkpoint
+
+    def sync_gradients(self, optimizer: optim.Optimizer) -> None:
+        """Synchronize gradients when a data-parallel context is attached.
+
+        Local trainers do not attach a context, making this method a no-op and
+        preserving their existing numerical behavior.
+        """
+        if self.data_parallel_context is not None:
+            self.data_parallel_context.sync_gradients(optimizer)
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
