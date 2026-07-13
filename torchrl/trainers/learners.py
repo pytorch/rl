@@ -260,6 +260,8 @@ class Learner:
         self._last_round = 0
         self._initialized = False
         self._closed = False
+        self._active_request: LearnerStepRequest | None = None
+        self._active_metrics: list[TensorDictBase] = []
 
         if models is None:
             policy = self._infer_policy(loss_module)
@@ -305,47 +307,72 @@ class Learner:
 
     def step(self, request: LearnerStepRequest) -> LearnerStepResult:
         """Execute a consecutive bounded optimization round."""
+        self._begin_round(request)
+        for _ in range(request.num_steps):
+            self._step_round_once()
+        return self._finish_round()
+
+    def _begin_round(self, request: LearnerStepRequest) -> None:
+        """Begin an ordered round for a learner-group implementation."""
         self._ensure_ready()
+        if self._active_request is not None:
+            raise RuntimeError(
+                f"Round {self._active_request.round_id} is already in progress."
+            )
         expected_round = self.last_round + 1
         if request.round_id != expected_round:
             raise RuntimeError(
                 f"Expected round_id={expected_round}, got {request.round_id}."
             )
+        self._active_request = request
+        self._active_metrics = []
 
-        averaged_metrics: TensorDictBase | None = None
-        for index in range(request.num_steps):
-            batch = self.batch_source.next(request)
-            metrics = self.optimization_stepper.step(self, batch)
-            if self.update_replay_priority and hasattr(
-                self.replay_buffer, "update_tensordict_priority"
-            ):
-                self.replay_buffer.update_tensordict_priority(batch)
-            if self.target_net_updater is not None:
-                self.target_net_updater.step()
-            self._model_version += 1
-            metrics = self._normalize_metrics(metrics)
-            if averaged_metrics is None:
-                averaged_metrics = metrics
-            else:
-                if set(averaged_metrics.keys(True, True)) != set(
-                    metrics.keys(True, True)
-                ):
-                    raise RuntimeError("Learner metric keys changed within a round.")
-                for key, value in metrics.items(True, True):
-                    previous = averaged_metrics.get(key)
-                    averaged_metrics.set(
-                        key, previous * index / (index + 1) + value / (index + 1)
-                    )
-
-        self._last_round = request.round_id
-        if averaged_metrics is None:
-            averaged_metrics = TensorDict({}, batch_size=[], device="cpu")
+    def _step_round_once(self) -> LearnerStepResult:
+        """Execute one substep of the active round."""
+        request = self._active_request
+        if request is None:
+            raise RuntimeError("No learner round is active.")
+        if len(self._active_metrics) >= request.num_steps:
+            raise RuntimeError(f"Round {request.round_id} is already complete.")
+        batch = self.batch_source.next(request)
+        metrics = self.optimization_stepper.step(self, batch)
+        if self.update_replay_priority and hasattr(
+            self.replay_buffer, "update_tensordict_priority"
+        ):
+            self.replay_buffer.update_tensordict_priority(batch)
+        if self.target_net_updater is not None:
+            self.target_net_updater.step()
+        self._model_version += 1
+        metrics = self._normalize_metrics(metrics)
+        self._active_metrics.append(metrics)
         return LearnerStepResult(
+            round_id=request.round_id,
+            optim_steps=1,
+            model_version=self.model_version,
+            metrics=metrics,
+        )
+
+    def _finish_round(self) -> LearnerStepResult:
+        """Finish the active round after every requested substep completed."""
+        request = self._active_request
+        if request is None:
+            raise RuntimeError("No learner round is active.")
+        if len(self._active_metrics) != request.num_steps:
+            raise RuntimeError(
+                f"Round {request.round_id} completed {len(self._active_metrics)} "
+                f"of {request.num_steps} optimizer steps."
+            )
+        averaged_metrics = self._average_metrics(self._active_metrics)
+        self._last_round = request.round_id
+        result = LearnerStepResult(
             round_id=request.round_id,
             optim_steps=request.num_steps,
             model_version=self.model_version,
             metrics=averaged_metrics,
         )
+        self._active_request = None
+        self._active_metrics = []
+        return result
 
     def get_weights(self, model_id: str = "policy") -> LearnerWeights:
         """Return a detached CPU snapshot of a named model."""
@@ -370,6 +397,8 @@ class Learner:
 
     def state_dict(self) -> dict[str, Any]:
         """Return learner optimization and RNG state."""
+        if self._active_request is not None:
+            raise RuntimeError("Cannot checkpoint a learner during an active round.")
         state: dict[str, Any] = {
             "loss_module": self.loss_module.state_dict(),
             "optimization_stepper": self.optimization_stepper.state_dict(),
@@ -430,6 +459,21 @@ class Learner:
                     f"{tuple(value.shape)}."
                 )
             result.set(key, value.detach().reshape(()).to("cpu"))
+        return result
+
+    @staticmethod
+    def _average_metrics(metrics: list[TensorDictBase]) -> TensorDictBase:
+        if not metrics:
+            return TensorDict({}, batch_size=[], device="cpu")
+        keys = set(metrics[0].keys(True, True))
+        if any(set(item.keys(True, True)) != keys for item in metrics[1:]):
+            raise RuntimeError("Learner metric keys changed within a round.")
+        result = metrics[0].clone()
+        for key in keys:
+            result.set(
+                key,
+                torch.stack([item.get(key) for item in metrics]).mean(),
+            )
         return result
 
     @staticmethod

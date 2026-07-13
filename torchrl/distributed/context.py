@@ -184,6 +184,87 @@ class DataParallelContext:
             owns_process_group=False,
         )
 
+    @classmethod
+    def from_rendezvous(
+        cls,
+        *,
+        rank: int,
+        world_size: int,
+        local_rank: int,
+        device: DEVICE_TYPING,
+        init_method: str,
+        backend: str | dist.Backend | None = None,
+        timeout: timedelta | None = None,
+    ) -> DataParallelContext:
+        """Initialize a process group from explicit actor rendezvous metadata.
+
+        Unlike :meth:`from_torchrun`, this constructor does not read or mutate
+        environment variables. It is intended for actor runtimes such as Ray,
+        where logical local rank and the actor-visible CUDA index may differ.
+
+        Args:
+            rank (int): Global rank.
+            world_size (int): Number of ranks.
+            local_rank (int): Rank among actors on the same node.
+            device (DEVICE_TYPING): Actual actor-visible device, commonly
+                ``"cuda:0"`` for a one-GPU Ray actor.
+            init_method (str): Process-group rendezvous URL.
+            backend (str or Backend, optional): Collective backend. Defaults to
+                NCCL for CUDA devices and Gloo otherwise.
+            timeout (datetime.timedelta, optional): Process-group timeout.
+
+        Returns:
+            A context that owns the process group initialized by this call.
+
+        Example:
+            >>> context = DataParallelContext.from_rendezvous(
+            ...     rank=0,
+            ...     world_size=1,
+            ...     local_rank=0,
+            ...     device="cpu",
+            ...     backend="gloo",
+            ...     init_method="tcp://127.0.0.1:29500",
+            ... )
+            >>> context.close()
+        """
+        cls._validate_rank_metadata(rank, local_rank, world_size)
+        resolved_device = cls._resolve_device(device, local_rank)
+        if resolved_device.type == "cuda":
+            torch.cuda.set_device(resolved_device)
+
+        owns_process_group = False
+        if dist.is_initialized():
+            actual_rank = dist.get_rank()
+            actual_world_size = dist.get_world_size()
+            if (actual_rank, actual_world_size) != (rank, world_size):
+                raise RuntimeError(
+                    "The initialized process group does not match rendezvous "
+                    f"metadata: group=({actual_rank}, {actual_world_size}), "
+                    f"requested=({rank}, {world_size})."
+                )
+        elif world_size > 1:
+            if backend is None:
+                backend = "nccl" if resolved_device.type == "cuda" else "gloo"
+            init_kwargs: dict[str, Any] = {
+                "backend": backend,
+                "init_method": init_method,
+                "rank": rank,
+                "world_size": world_size,
+            }
+            if timeout is not None:
+                init_kwargs["timeout"] = timeout
+            dist.init_process_group(**init_kwargs)
+            owns_process_group = True
+
+        return cls(
+            rank=rank,
+            world_size=world_size,
+            local_rank=local_rank,
+            device=resolved_device,
+            process_group=None if world_size == 1 else dist.group.WORLD,
+            owns_process_group=owns_process_group,
+        )
+
     @property
     def rank(self) -> int:
         """Rank within the process group."""

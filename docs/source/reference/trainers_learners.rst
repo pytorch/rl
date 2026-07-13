@@ -20,3 +20,14 @@ not issue collective-bearing commands to individual ranks.
     Learner
     LearnerGroup
     LocalLearnerGroup
+
+Ray learner groups
+------------------
+
+.. currentmodule:: torchrl.trainers.distributed
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    RayLearnerGroup

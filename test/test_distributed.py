@@ -42,6 +42,7 @@ from torchrl.data import (
     ReplayBuffer,
     RoundRobinWriter,
     SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
 )
 from torchrl.distributed import DataParallelContext
 from torchrl.envs import StepCounter, TransformedEnv
@@ -52,6 +53,8 @@ from torchrl.testing.dist_utils import (
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+from torchrl.trainers import Learner, LearnerStepRequest
+from torchrl.trainers.distributed import RayLearnerGroup
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -80,6 +83,44 @@ class CountingPolicy(TensorDictModuleBase):
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
         return tensordict
+
+
+class _RayLearnerLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(1, 1)
+
+    def forward(self, batch):
+        return TensorDict(
+            {"loss": (self.linear(batch["x"]) - batch["y"]).square().mean()}, []
+        )
+
+
+def _make_ray_test_learner(context):
+    loss = _RayLearnerLoss().to(context.device)
+    return Learner(
+        loss,
+        context.replay_buffer,
+        optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
+        data_parallel_context=context.data_parallel_context,
+        models={"policy": loss.linear},
+    )
+
+
+class _FailingRayLearnerLoss(_RayLearnerLoss):
+    def forward(self, batch):
+        raise RuntimeError("intentional learner failure")
+
+
+def _make_failing_ray_test_learner(context):
+    loss = _FailingRayLearnerLoss().to(context.device)
+    return Learner(
+        loss,
+        context.replay_buffer,
+        optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
+        data_parallel_context=context.data_parallel_context,
+        models={"policy": loss.linear},
+    )
 
 
 class DistributedCollectorBase:
@@ -1145,6 +1186,121 @@ def _torchrun_context_worker(rank, world_size, init_method, output_dir):
     torch.save(True, os.path.join(output_dir, f"torchrun-rank-{rank}.pt"))
 
 
+@pytest.mark.skipif(
+    not _has_ray, reason="Ray not found. Ray may be badly configured or not installed."
+)
+class TestRayLearnerGroup:
+    @pytest.fixture(autouse=True)
+    def start_ray(self):
+        import ray
+
+        ray.shutdown()
+        ray.init(
+            num_cpus=4,
+            include_dashboard=False,
+            runtime_env={
+                "working_dir": os.path.dirname(__file__),
+                "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            },
+        )
+        yield
+        ray.shutdown()
+
+    @staticmethod
+    def _make_replay_buffer():
+        replay_buffer = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=LazyTensorStorage(64),
+            batch_size=8,
+        )
+        replay_buffer.extend(
+            TensorDict({"x": torch.ones(64, 1), "y": torch.zeros(64, 1)}, [64])
+        )
+        return replay_buffer
+
+    @staticmethod
+    def _make_group(
+        replay_buffer, factory=_make_ray_test_learner, *, num_gpus: float = 0
+    ):
+        return RayLearnerGroup(
+            factory,
+            replay_buffer.client(),
+            world_size=2,
+            global_batch_size=8,
+            resources_per_rank={"num_cpus": 1, "num_gpus": num_gpus},
+            setup_timeout=60,
+            command_timeout=60,
+            seed=0,
+        )
+
+    def test_gloo_step_matches_global_batch_and_restores(self):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer).start()
+        try:
+            result = group.step(LearnerStepRequest(1, 1, 8))
+            assert result.round_id == 1
+            assert result.model_version == 1
+            assert result.metrics.device == torch.device("cpu")
+
+            torch.manual_seed(0)
+            reference = _RayLearnerLoss()
+            optimizer = torch.optim.SGD(reference.parameters(), lr=0.05)
+            batch = TensorDict({"x": torch.ones(8, 1), "y": torch.zeros(8, 1)}, [8])
+            reference(batch)["loss"].backward()
+            optimizer.step()
+            expected = TensorDict.from_module(reference.linear)
+            actual = group.get_weights().weights
+            for key in expected.keys(True, True):
+                torch.testing.assert_close(actual.get(key), expected.get(key))
+
+            state = group.state_dict()
+            assert len(state["rng_by_rank"]) == 2
+            group.shutdown()
+            group.shutdown()
+
+            restored = self._make_group(replay_buffer).start()
+            restored.load_state_dict(state)
+            assert restored.step(LearnerStepRequest(2, 1, 8)).model_version == 2
+            restored.shutdown()
+            assert replay_buffer.is_alive
+            import ray
+
+            assert ray.is_initialized()
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+    def test_rank_failure_invalidates_the_group_only(self):
+        import ray
+
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer, _make_failing_ray_test_learner).start()
+        try:
+            with pytest.raises(RuntimeError, match="generation=1, round=1") as error:
+                group.step(LearnerStepRequest(1, 1, 8))
+            assert isinstance(error.value.__cause__, Exception)
+            assert not group.is_alive
+            assert replay_buffer.is_alive
+            assert ray.is_initialized()
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(
+        torch.cuda.device_count() < 2, reason="two CUDA devices are required"
+    )
+    def test_nccl_smoke(self):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer, num_gpus=1).start()
+        try:
+            result = group.step(LearnerStepRequest(1, 1, 8))
+            assert result.model_version == 1
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+
 class TestDataParallelContext:
     @pytest.fixture(autouse=True)
     def reset_process_group(self):
@@ -1153,6 +1309,19 @@ class TestDataParallelContext:
         yield
         if dist.is_initialized():
             dist.destroy_process_group()
+
+    def test_from_rendezvous_single_process(self):
+        context = DataParallelContext.from_rendezvous(
+            rank=0,
+            world_size=1,
+            local_rank=0,
+            device="cpu",
+            backend="gloo",
+            init_method="tcp://127.0.0.1:29500",
+        )
+        assert context.rank == 0
+        assert context.device == torch.device("cpu")
+        context.close()
 
     def test_from_torchrun_single_process(self, monkeypatch):
         monkeypatch.setenv("RANK", "0")
