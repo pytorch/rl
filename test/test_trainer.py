@@ -12,6 +12,7 @@ import tempfile
 import warnings
 from argparse import Namespace
 from collections import OrderedDict
+from contextlib import contextmanager
 from copy import deepcopy
 from os import path, walk
 from time import sleep
@@ -1832,6 +1833,13 @@ class _ControllerReplay:
     def shutdown(self):
         self.events.append("replay_shutdown")
 
+    def state_dict(self):
+        return {"write_count": self.write_count, "length": self._length}
+
+    def load_state_dict(self, state_dict):
+        self.write_count = state_dict["write_count"]
+        self._length = state_dict["length"]
+
 
 class _ControllerCollector:
     def __init__(self, events):
@@ -1843,6 +1851,7 @@ class _ControllerCollector:
             TensorDict({"x": torch.ones(2, 1)}, [2]),
         ]
         self.published_weights = []
+        self.state_value = 0
 
     def __iter__(self):
         return iter(self._batches)
@@ -1854,25 +1863,44 @@ class _ControllerCollector:
     def shutdown(self):
         self.events.append("collector_shutdown")
 
+    @contextmanager
+    def pause(self, timeout=None):
+        del timeout
+        self.events.append("collector_paused")
+        yield
+        self.events.append("collector_resumed")
+
+    def state_dict(self):
+        return {"state_value": self.state_value}
+
+    def load_state_dict(self, state_dict):
+        self.state_value = state_dict["state_value"]
+
 
 class _ControllerLearnerGroup:
     global_batch_size = 4
     generation = 1
+    world_size = 1
+    learner_id = "controller-test-learner"
 
     def __init__(self, events, replay):
         self.events = events
         self.replay = replay
         self.model_version = 0
+        self.last_round = 0
         self.requests = []
+        self.is_alive = False
 
     def start(self):
         self.events.append("group_start")
+        self.is_alive = True
         return self
 
     def step(self, request):
-        assert request.round_id == len(self.requests) + 1
+        assert request.round_id == self.last_round + 1
         assert len(self.replay) >= request.global_batch_size
         self.requests.append(request)
+        self.last_round = request.round_id
         self.model_version += request.num_steps
         return LearnerStepResult(
             round_id=request.round_id,
@@ -1890,6 +1918,26 @@ class _ControllerLearnerGroup:
 
     def shutdown(self):
         self.events.append("group_shutdown")
+        self.is_alive = False
+
+    def state_dict(self):
+        return {
+            "format_version": 1,
+            "generation": self.generation,
+            "world_size": self.world_size,
+            "global_batch_size": self.global_batch_size,
+            "last_round": self.last_round,
+            "model_version": self.model_version,
+            "learner_id": self.learner_id,
+            "replicated": {"value": self.model_version},
+            "rng_by_rank": [{"value": 0}],
+        }
+
+    def load_state_dict(self, state_dict):
+        assert state_dict["world_size"] == self.world_size
+        assert state_dict["learner_id"] == self.learner_id
+        self.last_round = state_dict["last_round"]
+        self.model_version = state_dict["model_version"]
 
 
 class TestLearnerGroupController:
@@ -1973,6 +2021,73 @@ class TestLearnerGroupController:
                 learner_group=_ControllerLearnerGroup(events, replay),
                 replay_buffer=replay,
             )
+
+    def test_distributed_checkpoint_uses_latest_complete_state(self, tmp_path):
+        events = []
+        replay = _ControllerReplay(events)
+        replay.write_count = replay._length = 8
+        collector = _ControllerCollector(events)
+        collector.state_value = 11
+        learner_group = _ControllerLearnerGroup(events, replay)
+        learner_group.start()
+        learner_group.last_round = 3
+        learner_group.model_version = 5
+        checkpoint_root = tmp_path / "checkpoints"
+        trainer = Trainer(
+            collector=collector,
+            total_frames=20,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            learner_group=learner_group,
+            replay_buffer=replay,
+            async_collection=True,
+            progress_bar=False,
+            save_trainer_file=checkpoint_root,
+        )
+        trainer.collected_frames = 8
+        trainer._optim_count = 5
+        trainer._learner_round = 3
+        trainer._published_model_version = 5
+        trainer._update_credit = 0.5
+        trainer._last_replay_write_count = replay.write_count
+
+        checkpoint_path = trainer._save_distributed_checkpoint()
+        assert (checkpoint_path / "manifest.json").is_file()
+        assert events[-2:] == ["collector_paused", "collector_resumed"]
+        incomplete = checkpoint_root / "checkpoint-999999999999-999999999999"
+        incomplete.mkdir()
+        (incomplete / "controller.pt").touch()
+
+        restored_events = []
+        restored_replay = _ControllerReplay(restored_events)
+        restored_collector = _ControllerCollector(restored_events)
+        restored_group = _ControllerLearnerGroup(restored_events, restored_replay)
+        restored = Trainer(
+            collector=restored_collector,
+            total_frames=20,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            learner_group=restored_group,
+            replay_buffer=restored_replay,
+            async_collection=True,
+            progress_bar=False,
+        ).load_from_file(checkpoint_root)
+
+        assert restored.collected_frames == 8
+        assert restored._optim_count == 5
+        assert restored._learner_round == restored_group.last_round == 3
+        assert restored_group.model_version == 5
+        assert restored._update_credit == 0.5
+        assert restored_collector.state_value == 11
+        assert restored_replay.write_count == len(restored_replay) == 8
+        restored_replay.write_count += 4
+        restored_replay._length += 4
+        restored._observe_replay_progress(update_collected_frames=True)
+        assert restored.collected_frames == 12
 
 
 class TestTD3OptimizationStepper:

@@ -10,7 +10,7 @@ import warnings
 
 from collections.abc import Callable
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictSequential
@@ -297,6 +297,25 @@ class DQNTrainer(Trainer):
             },
             batch_size=[],
         )
+
+    def _controller_checkpoint_state(self) -> dict[str, Any]:
+        if self.greedy_module is None:
+            return {}
+        return {
+            "greedy_module": self.greedy_module.state_dict(),
+            "greedy_last_frames": self._greedy_last_frames,
+        }
+
+    def _load_controller_checkpoint_state(self, state_dict: dict[str, Any]) -> None:
+        if self.greedy_module is None:
+            if state_dict:
+                raise ValueError(
+                    "Checkpoint contains exploration state but this DQNTrainer "
+                    "has no greedy_module."
+                )
+            return
+        self.greedy_module.load_state_dict(state_dict["greedy_module"])
+        self._greedy_last_frames = int(state_dict["greedy_last_frames"])
 
     def _step_greedy(self):
         """Advance epsilon-greedy annealing by the number of frames collected since last call."""

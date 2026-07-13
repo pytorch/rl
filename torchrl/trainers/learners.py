@@ -427,6 +427,15 @@ class Learner:
         if "rng" in state_dict:
             self._set_rng_state(state_dict["rng"])
 
+    def _synchronize_after_restore(self) -> dict[str, int]:
+        self._ensure_ready()
+        self.data_parallel_context.broadcast_module(self.loss_module)
+        self.data_parallel_context.barrier()
+        return {
+            "last_round": self.last_round,
+            "model_version": self.model_version,
+        }
+
     def close(self) -> None:
         """Close rank-local resources without touching shared services."""
         if self._closed:

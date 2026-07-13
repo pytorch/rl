@@ -72,6 +72,7 @@ def make_learner(
         action_space="one-hot",
         delay_value=True,
     ).to(context.device)
+    loss_module.make_value_estimator()
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=learning_rate)
     target_updater = HardUpdate(
         loss_module, value_network_update_interval=target_update_interval
@@ -98,6 +99,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--target-update-interval", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--checkpoint-dir", default=None)
+    parser.add_argument("--checkpoint-interval", type=int, default=10_000)
+    parser.add_argument("--resume", default=None)
     return parser.parse_args()
 
 
@@ -155,7 +159,11 @@ def main() -> None:
             async_collection=True,
             progress_bar=True,
             enable_logging=False,
+            save_trainer_file=args.checkpoint_dir,
+            save_trainer_interval=args.checkpoint_interval,
         )
+        if args.resume is not None:
+            trainer.load_from_file(args.resume)
         trainer.train()
         torchrl_logger.info(
             "completed frames=%s optimizer_steps=%s rounds=%s model_version=%s",

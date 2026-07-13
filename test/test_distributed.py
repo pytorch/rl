@@ -53,7 +53,7 @@ from torchrl.testing.dist_utils import (
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
-from torchrl.trainers import Learner, LearnerStepRequest
+from torchrl.trainers import Learner, LearnerStepRequest, Trainer
 from torchrl.trainers.distributed import RayLearnerGroup
 
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -105,6 +105,27 @@ def _make_ray_test_learner(context):
         data_parallel_context=context.data_parallel_context,
         models={"policy": loss.linear},
     )
+
+
+class _RayCheckpointCollector:
+    frames_per_batch = 8
+    init_random_frames = 0
+
+    def __init__(self):
+        self.state_value = 0
+        self.collected_frames = 0
+
+    def state_dict(self):
+        return {"state_value": self.state_value}
+
+    def load_state_dict(self, state_dict):
+        self.state_value = state_dict["state_value"]
+
+    def update_policy_weights_(self, weights):
+        del weights
+
+    def shutdown(self):
+        pass
 
 
 class _FailingRayLearnerLoss(_RayLearnerLoss):
@@ -966,6 +987,47 @@ class TestRayCollector(DistributedCollectorBase):
         finally:
             rb.close()
 
+    def test_background_pause_drains_writes_and_resumes(self):
+        env = ContinuousActionVecMockEnv
+        policy = RandomPolicy(env().action_spec)
+        replay_buffer = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 1000),
+            batch_size=16,
+            remote_config={"num_cpus": 0},
+        )
+        collector = RayCollector(
+            [env, env],
+            policy,
+            total_frames=100_000,
+            frames_per_batch=16,
+            sync=False,
+            replay_buffer=replay_buffer,
+            **self.distributed_kwargs(),
+        )
+        try:
+            collector.start()
+            deadline = time.monotonic() + 30
+            while replay_buffer.write_count == 0 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert replay_buffer.write_count > 0
+
+            with collector.pause(timeout=30):
+                paused_count = replay_buffer.write_count
+                time.sleep(0.2)
+                assert replay_buffer.write_count == paused_count
+
+            deadline = time.monotonic() + 30
+            while (
+                replay_buffer.write_count == paused_count
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            assert replay_buffer.write_count > paused_count
+        finally:
+            collector.shutdown()
+            replay_buffer.shutdown()
+
     # class CustomCollectorCls(Collector):
     #     def __init__(self, create_env_fn, **kwargs):
     #         policy = lambda td: td.set("action", torch.full(td.shape, 2))
@@ -1269,6 +1331,61 @@ class TestRayLearnerGroup:
         finally:
             group.shutdown()
             replay_buffer.close()
+
+    def test_controller_checkpoint_restores_new_generation(self, tmp_path):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer).start()
+        collector = _RayCheckpointCollector()
+        checkpoint_root = tmp_path / "ray-checkpoints"
+        try:
+            result = group.step(LearnerStepRequest(1, 1, 8))
+            trainer = Trainer(
+                collector=collector,
+                total_frames=64,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                optimizer=None,
+                learner_group=group,
+                replay_buffer=replay_buffer,
+                progress_bar=False,
+                save_trainer_file=checkpoint_root,
+            )
+            trainer.collected_frames = 8
+            trainer._optim_count = result.optim_steps
+            trainer._learner_round = result.round_id
+            trainer._published_model_version = result.model_version
+            collector.state_value = 17
+            trainer._save_distributed_checkpoint()
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+        restored_replay = self._make_replay_buffer()
+        restored_group = self._make_group(restored_replay)
+        restored_collector = _RayCheckpointCollector()
+        try:
+            restored = Trainer(
+                collector=restored_collector,
+                total_frames=64,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                optimizer=None,
+                learner_group=restored_group,
+                replay_buffer=restored_replay,
+                progress_bar=False,
+            ).load_from_file(checkpoint_root)
+            assert restored._learner_round == 1
+            assert restored._optim_count == 1
+            assert restored_group.model_version == 1
+            assert restored_collector.state_value == 17
+            assert len(restored_replay) == 64
+            resumed = restored_group.step(LearnerStepRequest(2, 1, 8))
+            assert resumed.model_version == 2
+        finally:
+            restored_group.shutdown()
+            restored_replay.close()
 
     def test_rank_failure_invalidates_the_group_only(self):
         import ray

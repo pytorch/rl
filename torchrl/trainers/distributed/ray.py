@@ -144,6 +144,11 @@ class _RayLearnerWorker:
     def state_dict(self) -> dict[str, Any]:
         return self._require_learner().state_dict()
 
+    def checkpoint_state(self) -> dict[str, Any]:
+        learner = self._require_learner()
+        learner.data_parallel_context.barrier()
+        return learner.state_dict()
+
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> dict[str, int]:
         learner = self._require_learner()
         learner.load_state_dict(state_dict)
@@ -151,6 +156,9 @@ class _RayLearnerWorker:
             "last_round": learner.last_round,
             "model_version": learner.model_version,
         }
+
+    def synchronize_after_restore(self) -> dict[str, int]:
+        return self._require_learner()._synchronize_after_restore()
 
     def close(self) -> None:
         if self.learner is not None:
@@ -373,10 +381,16 @@ class RayLearnerGroup(LearnerGroup):
     def state_dict(self) -> dict[str, Any]:
         with self._lock:
             self._ensure_running()
-            states = self._get(
-                [actor.state_dict.remote() for actor in self._actors],
-                timeout=self.command_timeout,
-            )
+            try:
+                states = self._get_ranked(
+                    [actor.checkpoint_state.remote() for actor in self._actors],
+                    timeout=self.command_timeout,
+                )
+            except BaseException as err:
+                self._mark_failed()
+                raise RuntimeError(
+                    "Ray learner group failed while creating checkpoint state."
+                ) from err
             replicated = dict(states[0])
             replicated.pop("rng", None)
             return {
@@ -405,23 +419,54 @@ class RayLearnerGroup(LearnerGroup):
                     f"Checkpoint learner_id={state_dict['learner_id']!r} does not "
                     f"match {self.learner_id!r}."
                 )
+            if len(state_dict["rng_by_rank"]) != self.world_size:
+                raise ValueError(
+                    "Checkpoint RNG rank count does not match learner world size."
+                )
             rank_states = []
             for rng in state_dict["rng_by_rank"]:
                 rank_state = dict(state_dict["replicated"])
                 rank_state["rng"] = rng
                 rank_states.append(rank_state)
-            results = self._get(
-                [
-                    actor.load_state_dict.remote(rank_state)
-                    for actor, rank_state in zip(self._actors, rank_states)
-                ],
-                timeout=self.command_timeout,
-            )
+            try:
+                results = self._get_ranked(
+                    [
+                        actor.load_state_dict.remote(rank_state)
+                        for actor, rank_state in zip(self._actors, rank_states)
+                    ],
+                    timeout=self.command_timeout,
+                )
+                synchronized = self._get_ranked(
+                    [
+                        actor.synchronize_after_restore.remote()
+                        for actor in self._actors
+                    ],
+                    timeout=self.command_timeout,
+                )
+            except BaseException as err:
+                self._mark_failed()
+                raise RuntimeError(
+                    "Ray learner group failed while restoring checkpoint state."
+                ) from err
             if any(result != results[0] for result in results[1:]):
                 self._mark_failed()
                 raise RuntimeError("Learner ranks disagreed after state restoration.")
+            if any(result != synchronized[0] for result in synchronized[1:]):
+                self._mark_failed()
+                raise RuntimeError(
+                    "Learner ranks disagreed after restored-state synchronization."
+                )
             self._last_round = int(state_dict["last_round"])
             self._model_version = int(state_dict["model_version"])
+            expected = {
+                "last_round": self.last_round,
+                "model_version": self.model_version,
+            }
+            if synchronized[0] != expected:
+                self._mark_failed()
+                raise RuntimeError(
+                    "Restored learner state does not match checkpoint metadata."
+                )
 
     def shutdown(self, timeout: float | None = None) -> None:
         with self._lock:

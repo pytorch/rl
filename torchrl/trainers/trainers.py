@@ -10,12 +10,14 @@ import itertools
 import json
 import math
 import pathlib
+import random
 import sys
 import time
 import warnings
 import weakref
 from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal, Protocol, TYPE_CHECKING
@@ -89,6 +91,7 @@ REWARD_KEY = ("next", "reward")
 # the loaded tensors are alive, so the checkpoint could neither be deleted nor
 # safely re-saved. Only default to ``mmap=True`` on other platforms.
 _MMAP_CKPT_DEFAULT = sys.platform != "win32"
+_DISTRIBUTED_CHECKPOINT_VERSION = 1
 
 
 @implement_for("torch", "2.4")
@@ -118,6 +121,19 @@ class _TrainerCheckpointState:
         self.trainer._last_log = state_dict["_last_log"]
         self.trainer._last_save = state_dict["_last_save"]
         self.trainer._optim_count = state_dict["_optim_count"]
+
+
+class _DistributedControllerCheckpointState:
+    """State-dict view over learner-group controller state."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        return self.trainer._distributed_controller_state_dict()
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.trainer._load_distributed_controller_state_dict(dict(state_dict))
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -480,6 +496,7 @@ class Trainer:
         self._update_credit = 0.0
         self._replay_write_baseline = 0
         self._last_replay_write_count = 0
+        self._collected_frames_baseline = 0
 
         # Logging frequency control - how often to log each metric (in frames)
         self._log_interval = log_interval
@@ -505,6 +522,7 @@ class Trainer:
         self.save_trainer_file = save_trainer_file
         self.checkpoint = checkpoint
         self._checkpoint_state = _TrainerCheckpointState(self)
+        self._distributed_checkpoint_state = _DistributedControllerCheckpointState(self)
         self._checkpoint_skip_warnings: set[str] = set()
         self.auto_log_optim_steps = auto_log_optim_steps
 
@@ -764,6 +782,9 @@ class Trainer:
         self._stop_reason = reason
 
     def _save_trainer(self) -> None:
+        if self.learner_group is not None:
+            self._save_distributed_checkpoint()
+            return
         if self.checkpoint is not None:
             self._sync_checkpoint_components().save(self.save_trainer_file)
             return
@@ -866,6 +887,8 @@ class Trainer:
             remote workers observe the restored learner weights.
 
         """
+        if self.learner_group is not None and pathlib.Path(file).is_dir():
+            return self._load_distributed_checkpoint(pathlib.Path(file))
         if Checkpoint.is_checkpoint(file):
             checkpoint = self.checkpoint
             if checkpoint is None:
@@ -913,6 +936,226 @@ class Trainer:
                 state["state"] = json.load(f)
             self.load_state_dict(state)
         return self
+
+    def _save_distributed_checkpoint(self) -> pathlib.Path:
+        root = pathlib.Path(self.save_trainer_file)
+        if root.exists() and not root.is_dir():
+            raise ValueError(
+                "Learner-group checkpoints require save_trainer_file to be a "
+                "directory."
+            )
+        root.mkdir(parents=True, exist_ok=True)
+        pause = getattr(self.collector, "pause", None)
+        timeout = float(getattr(self.learner_group, "command_timeout", 30.0))
+        pause_context = (
+            pause(timeout=timeout)
+            if self.async_collection and callable(pause)
+            else nullcontext()
+        )
+        with pause_context:
+            if self.async_collection:
+                self._observe_replay_progress(update_collected_frames=True)
+            checkpoint_name = (
+                f"checkpoint-{self._optim_count:012d}-{self.collected_frames:012d}-"
+                f"{self._learner_round:012d}"
+            )
+            final_path = root / checkpoint_name
+            if final_path.exists():
+                return final_path
+            checkpoint = self._sync_distributed_checkpoint_components()
+            checkpoint.save(
+                final_path,
+                components=set(checkpoint.components),
+                format="directory",
+                metadata=self._distributed_checkpoint_metadata(),
+            )
+        return final_path
+
+    def _load_distributed_checkpoint(self, root: pathlib.Path) -> Trainer:
+        checkpoint_path, manifest = self._resolve_distributed_checkpoint(root)
+        expected_class = f"{type(self).__module__}.{type(self).__qualname__}"
+        metadata = manifest["metadata"]
+        if metadata["trainer_class"] != expected_class:
+            raise ValueError(
+                f"Checkpoint trainer_class={metadata['trainer_class']!r} does not "
+                f"match {expected_class!r}."
+            )
+
+        self.replay_buffer.start()
+        self.learner_group.start()
+        checkpoint = self._sync_distributed_checkpoint_components()
+        result = checkpoint.load(
+            checkpoint_path,
+            components=set(checkpoint.components),
+            map_location="cpu",
+            strict="error",
+        )
+        required = {
+            "collector",
+            "replay_buffer",
+            "learner_group",
+            "distributed_controller",
+        }
+        if not required.issubset(result.loaded):
+            raise RuntimeError(
+                "Distributed checkpoint did not restore required components: "
+                f"{sorted(required.difference(result.loaded))}."
+            )
+
+        group_round = getattr(self.learner_group, "last_round", self._learner_round)
+        group_version = getattr(
+            self.learner_group,
+            "model_version",
+            self._published_model_version,
+        )
+        if group_round != self._learner_round:
+            raise RuntimeError(
+                "Controller and learner-group rounds disagree after restore."
+            )
+        if group_version < self._published_model_version:
+            raise RuntimeError(
+                "Restored learner model predates the published controller version."
+            )
+        self._learner_generation = getattr(
+            self.learner_group, "generation", self._learner_generation + 1
+        )
+        self._replay_write_baseline = self._get_replay_write_count()
+        self._last_replay_write_count = self._replay_write_baseline
+        self._collected_frames_baseline = self.collected_frames
+        if hasattr(self.collector, "collected_frames"):
+            self.collector.collected_frames = self.collected_frames
+        return self
+
+    def _sync_distributed_checkpoint_components(self) -> Checkpoint:
+        checkpoint = self._sync_checkpoint_components(self.checkpoint)
+        for name, component in (
+            ("learner_group", self.learner_group),
+            ("distributed_controller", self._distributed_checkpoint_state),
+        ):
+            if name not in checkpoint:
+                checkpoint.register(name, component)
+        return checkpoint
+
+    def _distributed_checkpoint_metadata(self) -> dict[str, Any]:
+        return {
+            "trainer_mode": "learner_group",
+            "distributed_format_version": _DISTRIBUTED_CHECKPOINT_VERSION,
+            "trainer_class": f"{type(self).__module__}.{type(self).__qualname__}",
+            "controller": {
+                "collected_frames": self.collected_frames,
+                "optimizer_steps": self._optim_count,
+                "round": self._learner_round,
+                "published_model_version": self._published_model_version,
+            },
+            "learner_group": {
+                "generation": getattr(self.learner_group, "generation", 0),
+                "world_size": self.learner_group.world_size,
+                "global_batch_size": self.learner_group.global_batch_size,
+                "last_round": getattr(
+                    self.learner_group, "last_round", self._learner_round
+                ),
+                "model_version": getattr(
+                    self.learner_group,
+                    "model_version",
+                    self._published_model_version,
+                ),
+                "learner_id": getattr(self.learner_group, "learner_id", None),
+            },
+        }
+
+    def _distributed_controller_state_dict(self) -> dict[str, Any]:
+        return {
+            "format_version": _DISTRIBUTED_CHECKPOINT_VERSION,
+            "collected_frames": self.collected_frames,
+            "last_log": dict(self._last_log),
+            "last_save": self._last_save,
+            "optim_count": self._optim_count,
+            "learner_round": self._learner_round,
+            "learner_generation": self._learner_generation,
+            "published_model_version": self._published_model_version,
+            "update_credit": self._update_credit,
+            "rng": {
+                "python": random.getstate(),
+                "numpy": np.random.get_state(),
+                "torch": torch.get_rng_state(),
+                "cuda": (
+                    torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []
+                ),
+            },
+            "extension": self._controller_checkpoint_state(),
+        }
+
+    def _load_distributed_controller_state_dict(
+        self, state_dict: dict[str, Any]
+    ) -> None:
+        self.collected_frames = int(state_dict["collected_frames"])
+        self._last_log = defaultdict(int, state_dict.get("last_log", {}))
+        self._last_save = int(state_dict["last_save"])
+        self._optim_count = int(state_dict["optim_count"])
+        self._learner_round = int(state_dict["learner_round"])
+        self._learner_generation = int(state_dict["learner_generation"])
+        self._published_model_version = int(state_dict["published_model_version"])
+        self._update_credit = float(state_dict["update_credit"])
+        rng = state_dict["rng"]
+        random.setstate(rng["python"])
+        np.random.set_state(rng["numpy"])
+        torch.set_rng_state(rng["torch"])
+        if torch.cuda.is_available() and rng.get("cuda"):
+            torch.cuda.set_rng_state_all(rng["cuda"])
+        self._load_controller_checkpoint_state(state_dict.get("extension", {}))
+
+    def _controller_checkpoint_state(self) -> dict[str, Any]:
+        return {}
+
+    def _load_controller_checkpoint_state(self, state_dict: dict[str, Any]) -> None:
+        if state_dict:
+            raise ValueError(
+                "Checkpoint contains controller extension state unsupported by "
+                f"{type(self).__name__}."
+            )
+
+    @staticmethod
+    def _resolve_distributed_checkpoint(
+        root: pathlib.Path,
+    ) -> tuple[pathlib.Path, dict[str, Any]]:
+        def read_manifest(path: pathlib.Path) -> dict[str, Any] | None:
+            try:
+                manifest = Checkpoint.manifest(path)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                return None
+            metadata = manifest.get("metadata", {})
+            if metadata.get("trainer_mode") != "learner_group":
+                return None
+            if (
+                metadata.get("distributed_format_version")
+                != _DISTRIBUTED_CHECKPOINT_VERSION
+            ):
+                return None
+            return manifest
+
+        direct_manifest = read_manifest(root)
+        if direct_manifest is not None:
+            return root, direct_manifest
+        candidates = []
+        if root.is_dir():
+            for path in root.iterdir():
+                if not path.is_dir():
+                    continue
+                manifest = read_manifest(path)
+                if manifest is not None:
+                    controller = manifest["metadata"]["controller"]
+                    key = (
+                        int(controller["optimizer_steps"]),
+                        int(controller["collected_frames"]),
+                        int(controller["round"]),
+                    )
+                    candidates.append((key, path, manifest))
+        if not candidates:
+            raise FileNotFoundError(
+                f"No complete distributed checkpoint found under {root}."
+            )
+        _, path, manifest = max(candidates, key=lambda item: item[0])
+        return path, manifest
 
     def set_seed(self):
         seed = self.collector.set_seed(self.seed, static_seed=False)
@@ -1324,7 +1567,7 @@ class Trainer:
         """Run the central-controller path for a remote learner group."""
         self._validate_learner_group_hooks()
         if self.progress_bar:
-            self._pbar = tqdm(total=self.total_frames)
+            self._pbar = tqdm(total=self.total_frames, initial=self.collected_frames)
             self._pbar_str = {}
 
         setup_complete = False
@@ -1336,7 +1579,8 @@ class Trainer:
             )
             self._replay_write_baseline = self._get_replay_write_count()
             self._last_replay_write_count = self._replay_write_baseline
-            self._publish_learner_weights()
+            self._collected_frames_baseline = self.collected_frames
+            self._publish_learner_weights(force=True)
             self._setup_hook()
             setup_complete = True
 
@@ -1435,8 +1679,9 @@ class Trainer:
             self._update_credit += delta / frames_per_batch
         if update_collected_frames:
             self.collected_frames = (
-                write_count - self._replay_write_baseline
-            ) * self.frame_skip
+                self._collected_frames_baseline
+                + (write_count - self._replay_write_baseline) * self.frame_skip
+            )
         return bool(delta)
 
     def _drain_learner_updates(self) -> bool:
@@ -1467,9 +1712,9 @@ class Trainer:
             updated = True
         return updated
 
-    def _publish_learner_weights(self) -> None:
+    def _publish_learner_weights(self, *, force: bool = False) -> None:
         snapshot = self.learner_group.get_weights("policy")
-        if snapshot.model_version <= self._published_model_version:
+        if not force and snapshot.model_version <= self._published_model_version:
             return
         weights = self._prepare_learner_weights(snapshot)
         self.collector.update_policy_weights_(weights)
