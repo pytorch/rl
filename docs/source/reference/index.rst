@@ -5,6 +5,7 @@ API Reference
     :maxdepth: 3
 
     collectors
+    checkpoint
     data
     data_layout
     envs

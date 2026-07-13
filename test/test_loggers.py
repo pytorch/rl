@@ -17,7 +17,9 @@ from time import sleep
 import pytest
 import torch
 from tensordict import MemoryMappedTensor
+
 from torchrl._comm import MailboxPeerClosedError
+from torchrl.checkpoint import Checkpoint
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
@@ -195,6 +197,20 @@ class TestTensorboard:
 
 
 class TestCSVLogger:
+    def test_checkpoint_state(self, tmp_path):
+        logger = CSVLogger(log_dir=tmp_path, exp_name="source")
+        restored = CSVLogger(log_dir=tmp_path, exp_name="restored")
+        logger.log_scalar("reward", 2.0)
+        logger.experiment.videos_counter["evaluation"] = 3
+        checkpoint_path = tmp_path / "checkpoint"
+        Checkpoint(logger=logger).save(checkpoint_path)
+        Checkpoint(logger=restored).load(
+            checkpoint_path,
+            tensor_load_kwargs={"weights_only": True, "mmap": True},
+        )
+        assert restored.experiment.scalars["reward"] == [(0, 2.0)]
+        assert restored.experiment.videos_counter["evaluation"] == 3
+
     def test_direct_service_client_is_identity(self, tmpdir):
         logger = CSVLogger(log_dir=tmpdir, exp_name="direct")
         assert logger.client() is logger

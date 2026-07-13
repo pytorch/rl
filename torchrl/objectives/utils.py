@@ -8,7 +8,7 @@ import functools
 import importlib
 import re
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from enum import Enum
 from typing import Any, TypeVar
@@ -506,6 +506,19 @@ class TargetNetUpdater:
 
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return target-update progress not already owned by the loss module."""
+        state = {"initialized": self.initialized}
+        if hasattr(self, "counter"):
+            state["counter"] = self.counter
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore target-update progress."""
+        self.initialized = state_dict.get("initialized", self.initialized)
+        if "counter" in state_dict and hasattr(self, "counter"):
+            self.counter = state_dict["counter"]
 
     def __repr__(self) -> str:
         string = (

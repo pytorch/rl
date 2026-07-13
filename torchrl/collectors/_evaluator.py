@@ -77,7 +77,7 @@ import logging
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import torch
@@ -521,6 +521,40 @@ class Evaluator:
         if self._async_thread is not None and self._async_thread.is_alive():
             self._async_thread.join(timeout=timeout)
         self._backend.shutdown(timeout)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return evaluator progress when no asynchronous work is pending."""
+        with self._async_lock:
+            if self._backend.pending or self._async_requests or self._ready_results:
+                raise RuntimeError(
+                    "Evaluator checkpointing requires no pending, queued, or unread "
+                    "evaluation results."
+                )
+            state: dict[str, Any] = {"step_counter": self._step_counter}
+            backend_state_dict = getattr(self._backend, "state_dict", None)
+            if callable(backend_state_dict):
+                state["backend"] = backend_state_dict()
+            return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore evaluator progress when no asynchronous work is pending."""
+        with self._async_lock:
+            if self._backend.pending or self._async_requests or self._ready_results:
+                raise RuntimeError(
+                    "Evaluator state cannot be restored while evaluation work is "
+                    "pending, queued, or unread."
+                )
+            self._step_counter = state_dict.get("step_counter", 0)
+            if "backend" in state_dict:
+                backend_load_state_dict = getattr(
+                    self._backend, "load_state_dict", None
+                )
+                if not callable(backend_load_state_dict):
+                    raise RuntimeError(
+                        "Checkpoint contains evaluator backend state, but this backend "
+                        "cannot restore it."
+                    )
+                backend_load_state_dict(state_dict["backend"])
 
     def __del__(self):
         try:

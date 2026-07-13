@@ -15,7 +15,7 @@ import time
 import warnings
 import weakref
 from collections import defaultdict, OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal
@@ -27,7 +27,6 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-
 from torchrl._utils import (
     _CKPT_BACKEND,
     implement_for,
@@ -37,6 +36,8 @@ from torchrl._utils import (
     timeit,
     VERBOSE,
 )
+
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -98,6 +99,22 @@ def _torch_load_defaults() -> dict[str, Any]:  # noqa: F811
     # ``torch.device``, which TensorDict state-dicts carry as their
     # ``__device`` metadata entry.
     return {"weights_only": False, "mmap": _MMAP_CKPT_DEFAULT}
+
+
+class _TrainerCheckpointState:
+    """State-dict view over Trainer progress counters."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        return dict(self.trainer._get_state())
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.trainer.collected_frames = state_dict["collected_frames"]
+        self.trainer._last_log = state_dict["_last_log"]
+        self.trainer._last_save = state_dict["_last_save"]
+        self.trainer._optim_count = state_dict["_optim_count"]
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -312,6 +329,10 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+        checkpoint (Checkpoint, optional): unified checkpoint object used for
+            scheduled saves and restores. The trainer registers any missing
+            standard components on this object. When omitted, the legacy
+            ``CKPT_BACKEND`` path is retained during the compatibility window.
         async_collection (bool, optional): Whether to collect data asynchronously.
             This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
@@ -359,6 +380,7 @@ class Trainer:
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
@@ -394,6 +416,9 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.checkpoint = checkpoint
+        self._checkpoint_state = _TrainerCheckpointState(self)
+        self._checkpoint_skip_warnings: set[str] = set()
         self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
@@ -470,12 +495,93 @@ class Trainer:
             log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
             log_timing_hook.register(self)
 
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
             raise RuntimeError(
                 f"{module_name} is already registered, choose a different name."
             )
         self._modules[module_name] = module
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
+    @staticmethod
+    def _is_checkpointable(component: Any) -> bool:
+        return (
+            callable(getattr(component, "dump", None))
+            and callable(getattr(component, "load", None))
+        ) or (
+            callable(getattr(component, "state_dict", None))
+            and callable(getattr(component, "load_state_dict", None))
+        )
+
+    def _checkpoint_policy(self) -> Any | None:
+        for name in ("actor_network", "value_network", "local_value_network"):
+            policy = getattr(self.loss_module, name, None)
+            if policy is not None:
+                return policy
+        return None
+
+    def _sync_checkpoint_components(
+        self, checkpoint: Checkpoint | None = None
+    ) -> Checkpoint:
+        if checkpoint is None:
+            checkpoint = self.checkpoint
+        if checkpoint is None:
+            checkpoint = Checkpoint()
+
+        def register(name: str, component: Any) -> None:
+            if name in checkpoint or component is None:
+                return
+            if self._is_checkpointable(component):
+                checkpoint.register(name, component)
+            elif name not in self._checkpoint_skip_warnings:
+                torchrl_logger.warning(
+                    "Skipping non-checkpointable Trainer component %r (%s).",
+                    name,
+                    type(component).__name__,
+                )
+                self._checkpoint_skip_warnings.add(name)
+
+        register("policy", self._checkpoint_policy())
+        register("loss_module", self.loss_module)
+
+        optimizer = self.optimizer
+        if not self._is_checkpointable(optimizer):
+            optimizer_hook = self._modules.get("optimizer")
+            hook_optimizer = getattr(optimizer_hook, "optimizer", optimizer_hook)
+            optimizer = (
+                hook_optimizer
+                if self._is_checkpointable(hook_optimizer)
+                else optimizer_hook
+            )
+        register("optimizer", optimizer)
+
+        register("collector", self.collector)
+        replay_buffer = getattr(self, "replay_buffer", None)
+        if not self._is_checkpointable(replay_buffer):
+            replay_buffer_hook = self._modules.get("replay_buffer")
+            hook_replay_buffer = getattr(
+                replay_buffer_hook, "replay_buffer", replay_buffer_hook
+            )
+            replay_buffer = (
+                hook_replay_buffer
+                if self._is_checkpointable(hook_replay_buffer)
+                else replay_buffer_hook
+            )
+        register("replay_buffer", replay_buffer)
+        register("logger", self.logger)
+        register("exploration", getattr(self, "greedy_module", None))
+        register("exploration", getattr(self, "exploration_module", None))
+        register("target_updater", getattr(self, "target_net_updater", None))
+        register("trainer_state", self._checkpoint_state)
+        for name, module in self._modules.items():
+            if name in ("optimizer", "replay_buffer") and name in checkpoint:
+                continue
+            register(f"trainer_module.{name}", module)
+        return checkpoint
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
@@ -562,6 +668,22 @@ class Trainer:
         self._stop_reason = reason
 
     def _save_trainer(self) -> None:
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components().save(self.save_trainer_file)
+            return
+        warnings.warn(
+            "The default Trainer checkpoint format will change from the legacy "
+            "CKPT_BACKEND format to torchrl.checkpoint in v0.15. Pass "
+            "checkpoint=Checkpoint(...) to opt in now.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        warnings.warn(
+            "The legacy CKPT_BACKEND trainer checkpoint path is deprecated and "
+            "will be removed in v0.16. Use checkpoint=Checkpoint(...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if _CKPT_BACKEND == "torchsnapshot":
             if not _has_ts:
                 raise ImportError(
@@ -615,30 +737,64 @@ class Trainer:
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
 
-        Keyword arguments are passed to the :func:`~torch.load` function.
-        They are ignored when ``CKPT_BACKEND=memmap``.
+        Keyword arguments are passed to the :func:`~torch.load` function for
+        legacy torch checkpoints and unified components explicitly saved with
+        the torch state-dict payload format. Unified checkpoints additionally
+        accept ``strict`` to control missing or incompatible components.
+        Arguments are ignored when ``CKPT_BACKEND=memmap``.
 
         .. note::
-            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
+            Unified state-dict components use TensorDict storage by default and
+            do not invoke the pickle loader. For explicit torch payloads and
+            ``CKPT_BACKEND=torch`` checkpoints, ``weights_only=True`` is the
             default for safer deserialization. Pass ``weights_only=False``
-            explicitly only if you have custom (non-stdlib) objects in your
-            state dict. On torch < 2.4 the default is ``weights_only=False``
-            because the weights-only unpickler of those versions cannot
-            deserialize the ``torch.device`` instances contained in
-            TensorDict state-dicts.
+            explicitly only if the state dict contains custom objects. On
+            torch < 2.4 the default is ``weights_only=False`` because the
+            weights-only unpickler of those versions cannot deserialize the
+            ``torch.device`` instances contained in TensorDict state-dicts.
 
         .. note::
-            When ``CKPT_BACKEND=torch``, ``mmap=True`` is set by default so
-            the checkpoint is memory-mapped rather than materialized in RAM
-            at load time. Pass ``mmap=False`` if the checkpoint was saved
-            with the legacy (pre-zipfile) ``torch.save`` format or if
-            ``file`` is a file-like object rather than a path. On Windows
-            the default is ``mmap=False``: a mapped checkpoint would keep
-            the file locked, preventing it from being deleted or re-saved
-            while the loaded state is alive.
+            Explicit torch payloads and ``CKPT_BACKEND=torch`` checkpoints use
+            ``mmap=True`` by default. Pass ``mmap=False`` for legacy pre-zipfile
+            ``torch.save`` files or file-like objects. On Windows the default
+            is ``mmap=False`` because a mapped checkpoint keeps the file locked,
+            preventing deletion or re-save.
+
+        .. note::
+            Unified checkpoint tensors are mapped to CPU by default. Pass an
+            explicit ``map_location`` to select another device mapping.
+
+        .. note::
+            After restoring an independently registered policy component, the
+            trainer synchronizes the collector once so local policy copies and
+            remote workers observe the restored learner weights.
 
         """
-        if _CKPT_BACKEND == "torchsnapshot":
+        if Checkpoint.is_checkpoint(file):
+            checkpoint = self.checkpoint
+            if checkpoint is None:
+                checkpoint = Checkpoint()
+            map_location = kwargs.pop("map_location", "cpu")
+            strict = kwargs.pop("strict", None)
+            for key, value in _torch_load_defaults().items():
+                kwargs.setdefault(key, value)
+            result = self._sync_checkpoint_components(checkpoint).load(
+                file,
+                map_location=map_location,
+                tensor_load_kwargs=kwargs,
+                strict=strict,
+            )
+            if "policy" in result.loaded:
+                # The collector payload is restored before the independently
+                # registered policy component. Synchronize once more after all
+                # components have loaded so local copies, remote workers, and
+                # weight-transport caches observe the restored learner policy.
+                policy = checkpoint.components["policy"]
+                if policy is self._checkpoint_policy():
+                    self.collector.update_policy_weights_()
+                else:
+                    self.collector.update_policy_weights_(policy)
+        elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
@@ -2245,10 +2401,10 @@ class UpdateWeights(TrainerHookBase):
         )
 
     def state_dict(self) -> dict:
-        return {}
+        return {"counter": self.counter}
 
     def load_state_dict(self, state_dict) -> None:
-        return
+        self.counter = state_dict.get("counter", 0)
 
 
 class CountFramesLog(TrainerHookBase):

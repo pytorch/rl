@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import tensordict.utils
@@ -168,6 +168,19 @@ class CSVLogger(Logger):
         return CSVExperiment(
             log_dir, video_format=self.video_format, video_fps=self.video_fps
         )
+
+    def _checkpoint_state(self) -> dict[str, object]:
+        return {
+            "scalars": dict(self.experiment.scalars),
+            "videos_counter": dict(self.experiment.videos_counter),
+            "text_counter": dict(self.experiment.text_counter),
+        }
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, object]) -> None:
+        for name in ("scalars", "videos_counter", "text_counter"):
+            target = getattr(self.experiment, name)
+            target.clear()
+            target.update(state_dict.get(name, {}))
 
     def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.

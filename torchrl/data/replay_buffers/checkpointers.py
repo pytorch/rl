@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 import abc
+import gc
 import json
+import os
+import shutil
 import tempfile
 import warnings
 from pathlib import Path
@@ -21,7 +24,6 @@ from tensordict import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import _zip_strict
-from torch.utils._pytree import tree_map
 from torchrl._utils import _STRDTYPE2DTYPE
 
 from torchrl.data.replay_buffers.utils import (
@@ -33,6 +35,53 @@ from torchrl.data.replay_buffers.utils import (
     TED2Flat,
     TED2Nested,
 )
+
+
+def _map_metadata(function, metadata, *, is_leaf):
+    if is_leaf(metadata):
+        return function(metadata)
+    if isinstance(metadata, dict):
+        return {
+            key: _map_metadata(function, value, is_leaf=is_leaf)
+            for key, value in metadata.items()
+        }
+    if isinstance(metadata, list):
+        return [_map_metadata(function, value, is_leaf=is_leaf) for value in metadata]
+    if isinstance(metadata, tuple):
+        return tuple(
+            _map_metadata(function, value, is_leaf=is_leaf) for value in metadata
+        )
+    return function(metadata)
+
+
+def _write_compressed_data_to_memmap(compressed_data, path):
+    processed_data = []
+    for item in compressed_data:
+        if item is None:
+            processed_data.append(None)
+        elif isinstance(item, torch.Tensor):
+            processed_data.append(TensorDict({"data": item}, batch_size=[]))
+        elif isinstance(item, dict):
+            processed_data.append(TensorDict(item, batch_size=[]))
+        else:
+            processed_data.append(TensorDict({"data": item}, batch_size=[]))
+
+    non_none_data = [item for item in processed_data if item is not None]
+    if not non_none_data:
+        return []
+
+    stacked_data = lazy_stack(non_none_data)
+    stacked_data.memmap_(path / "compressed_data")
+
+    data_indices = []
+    current_idx = 0
+    for item in processed_data:
+        if item is None:
+            data_indices.append(None)
+        else:
+            data_indices.append(current_idx)
+            current_idx += 1
+    return data_indices
 
 
 class StorageCheckpointerBase:
@@ -54,6 +103,9 @@ class StorageCheckpointerBase:
     def register_load_hook(self, hook):
         """Registers a load hook for this checkpointer."""
         self._load_hooks.append(hook)
+
+    def _detach_from_load_path(self, storage):
+        del storage
 
     def _get_shift_from_last_cursor(self, last_cursor):
         """Computes shift from the last cursor position."""
@@ -149,47 +201,17 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
         # Create a temporary directory for processing
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
-
-            # Process compressed data for memmap storage
-            processed_data = []
-            for item in compressed_data:
-                if item is None:
-                    processed_data.append(None)
-                    continue
-
-                if isinstance(item, torch.Tensor):
-                    # For tensor data, create a TensorDict with the tensor
-                    processed_item = TensorDict({"data": item}, batch_size=[])
-                elif isinstance(item, dict):
-                    # For dict data (tensordict fields), convert to TensorDict
-                    processed_item = TensorDict(item, batch_size=[])
-                else:
-                    # For other types, wrap in TensorDict
-                    processed_item = TensorDict({"data": item}, batch_size=[])
-
-                processed_data.append(processed_item)
-
-            # Stack all non-None items into a single TensorDict for memmap
-            non_none_data = [item for item in processed_data if item is not None]
-            if non_none_data:
-                # Use lazy_stack to handle heterogeneous structures
-                stacked_data = lazy_stack(non_none_data)
-
-                # Save to memmap
-                stacked_data.memmap_(tmp_path / "compressed_data")
-
-                # Create index mapping for None values
-                data_indices = []
-                current_idx = 0
-                for item in processed_data:
-                    if item is None:
-                        data_indices.append(None)
-                    else:
-                        data_indices.append(current_idx)
-                        current_idx += 1
-            else:
-                # No data to save
-                data_indices = []
+            try:
+                data_indices = _write_compressed_data_to_memmap(
+                    compressed_data, tmp_path
+                )
+            finally:
+                # Windows cannot remove a file while a mapping is alive. The helper
+                # owns all temporary TensorDict references, so collecting after it
+                # returns releases any reference cycles before TemporaryDirectory
+                # removes the staging tree.
+                if os.name == "nt":
+                    gc.collect()
 
             # Process metadata for JSON serialization
             def is_leaf(item):
@@ -221,7 +243,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                     return {"__type__": "NonTensorData", "value": item.data}
                 return item
 
-            serializable_metadata = tree_map(
+            serializable_metadata = _map_metadata(
                 map_to_json_serializable, metadata, is_leaf=is_leaf
             )
 
@@ -235,8 +257,6 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                 json.dump(data_indices, f, indent=2)
 
             # Copy all files from temp directory to final destination
-            import shutil
-
             for item in tmp_path.iterdir():
                 if item.is_file():
                     shutil.copy2(item, path / item.name)
@@ -292,7 +312,7 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
                     return NonTensorData(item["value"])
             return item
 
-        metadata = tree_map(
+        metadata = _map_metadata(
             map_from_json_serializable, serializable_metadata, is_leaf=is_leaf
         )
 
@@ -321,6 +341,15 @@ class CompressedListStorageCheckpointer(StorageCheckpointerBase):
         # Load into storage
         storage._storage = compressed_data
         storage._metadata = metadata
+
+    def _detach_from_load_path(self, storage):
+        storage._storage = _map_metadata(
+            lambda item: item.clone() if isinstance(item, MemoryMappedTensor) else item,
+            storage._storage,
+            is_leaf=lambda item: isinstance(item, torch.Tensor),
+        )
+        if os.name == "nt":
+            gc.collect()
 
 
 class TensorStorageCheckpointer(StorageCheckpointerBase):

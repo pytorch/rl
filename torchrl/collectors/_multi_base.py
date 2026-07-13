@@ -2009,12 +2009,20 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "state_dict"))
         state_dict = OrderedDict()
+        traj_pool_state = None
         for idx in range(self.num_workers):
             _state_dict, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
             if msg != "state_dict":
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
+            worker_traj_pool_state = _state_dict.pop("traj_pool", None)
+            if traj_pool_state is None and worker_traj_pool_state is not None:
+                traj_pool_state = worker_traj_pool_state
             state_dict[f"worker{idx}"] = _state_dict
         state_dict.update({"frames": self._frames, "iter": self._iter})
+        if traj_pool_state is not None:
+            state_dict["traj_pool"] = traj_pool_state
+        if self.policy_version_tracker is not None:
+            state_dict["policy_version"] = self.policy_version
 
         return state_dict
 
@@ -2026,6 +2034,9 @@ also that the state dict is synchronised across processes if needed."""
                 ``{"worker0": state_dict0, "worker1": state_dict1}``.
 
         """
+        traj_pool_state = state_dict.get("traj_pool")
+        if traj_pool_state is not None:
+            self._traj_pool.load_state_dict(traj_pool_state)
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
@@ -2034,6 +2045,9 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        policy_version = state_dict.get("policy_version")
+        if policy_version is not None and self.policy_version_tracker is not None:
+            self.policy_version_tracker.version = policy_version
 
     def increment_version(self):
         """Increment the policy version."""

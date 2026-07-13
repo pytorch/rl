@@ -15,6 +15,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import Evaluator
 from torchrl.collectors._evaluator import (
     _extract_metrics_from_trajectories,
@@ -122,6 +123,26 @@ def _read_video_events(log_dir):
 
 
 class TestEvaluatorSync:
+    def test_checkpoint_state(self, tmp_path):
+        evaluator = Evaluator(_make_env(), _make_policy(), max_steps=50)
+        restored = Evaluator(_make_env(), _make_policy(), max_steps=50)
+        try:
+            evaluator._step_counter = 12
+            restored.load_state_dict(evaluator.state_dict())
+            assert restored._step_counter == 12
+            path = tmp_path / "evaluator"
+            Checkpoint(evaluator=evaluator).save(path)
+            restored._ready_results.append(object())
+            result = Checkpoint(strict="ignore", evaluator=restored).load(path)
+            assert "pending, queued, or unread" in result.incompatible["evaluator"]
+            restored._ready_results.clear()
+            evaluator._async_requests.append((None, 13))
+            with pytest.raises(RuntimeError, match="pending, queued, or unread"):
+                evaluator.state_dict()
+        finally:
+            evaluator.shutdown()
+            restored.shutdown()
+
     def test_evaluate_basic(self):
         env = _make_env()
         policy = _make_policy(env)
