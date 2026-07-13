@@ -76,6 +76,8 @@ class TestValues:
             {"value_chunk_size": 3},
             {"num_chunks": 3},
             {"num_chunk": 3},
+            {"value_chunk_size": 3, "value_chunk_dim": 1},
+            {"num_chunks": 3, "value_chunk_dim": 1},
         ],
     )
     def test_chunked_value_calls_match_unchunked(
@@ -163,6 +165,32 @@ class TestValues:
         empty_td = TensorDict({"obs": torch.randn(0, 3)}, [0])
         assert estimator._split_value_net_input(empty_td) == (empty_td,)
 
+    def test_value_chunk_dim_is_supported_and_validated(self):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        estimator = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            num_chunks=3,
+            value_chunk_dim=1,
+        )
+        td = TensorDict({"obs": torch.randn(4, 5, 3)}, [4, 5])
+        assert len(estimator._split_value_net_input(td)) == 3
+
+        bad_estimator = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            num_chunks=3,
+            value_chunk_dim=2,
+        )
+        with pytest.raises(ValueError, match="value_chunk_dim"):
+            bad_estimator._split_value_net_input(td)
+
     @pytest.mark.parametrize("vectorized", [False, True])
     @pytest.mark.parametrize("deactivate_vmap", [False, True])
     @pytest.mark.parametrize("method", ["forward", "value_estimate"])
@@ -172,6 +200,8 @@ class TestValues:
             {"value_chunk_size": 3},
             {"num_chunks": 3},
             {"num_chunk": 3},
+            {"value_chunk_size": 3, "value_chunk_dim": 1},
+            {"num_chunks": 3, "value_chunk_dim": 1},
         ],
     )
     def test_gae_chunked_functional_calls_match_unchunked(
