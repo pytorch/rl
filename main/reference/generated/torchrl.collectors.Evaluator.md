@@ -236,6 +236,10 @@ Extract detached, cloned, CPU weights from a policy.
 This is a convenience helper; the returned TensorDict is safe to
 pass across threads.
 
+load_state_dict(*state_dict: Mapping[str, Any]*) → None[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.load_state_dict)
+
+Restore evaluator progress when no asynchronous work is pending.
+
 *property*pending*: bool*
 
 Return `True` if an async evaluation is currently in progress.
@@ -258,6 +262,10 @@ Parameters:
 shutdown(*timeout: float = 5.0*) → None[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.shutdown)
 
 Cancel any running evaluation, clean up resources.
+
+state_dict() → dict[str, Any][[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.state_dict)
+
+Return evaluator progress when no asynchronous work is pending.
 
 trigger_eval(*weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *step: int | None = None*, ***, *weights_dict: dict[str, [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)] | None = None*) → bool[[source]](../../_modules/torchrl/collectors/_evaluator.html#Evaluator.trigger_eval)
 

@@ -1080,6 +1080,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/checkpoint.html">
+                  Checkpointing
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="reference/data.html">
                   torchrl.data package
                 </a>
@@ -1989,6 +1995,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.add_module">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError.add_note">add_note() (torchrl.checkpoint.CheckpointError method)</a>
+</li>
       <li><a href="reference/generated/torchrl.objectives.add_random_module.html#torchrl.objectives.add_random_module">add_random_module (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.render.add_step_counter.html#torchrl.render.add_step_counter">add_step_counter() (in module torchrl.render)</a>
@@ -3517,7 +3525,21 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.check_marl_grouping.html#torchrl.envs.check_marl_grouping">check_marl_grouping() (in module torchrl.envs)</a>
 </li>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint">Checkpoint (class in torchrl.checkpoint)</a>
+</li>
       <li><a href="reference/generated/torchrl.render.checkpoint_hash.html#torchrl.render.checkpoint_hash">checkpoint_hash() (in module torchrl.render)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter">CheckpointAdapter (class in torchrl.checkpoint)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError">CheckpointError (class in torchrl.checkpoint)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointFormat.html#torchrl.checkpoint.CheckpointFormat">CheckpointFormat (in module torchrl.checkpoint)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult">CheckpointLoadResult (class in torchrl.checkpoint)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions">CheckpointOptions (class in torchrl.checkpoint)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointStrictness.html#torchrl.checkpoint.CheckpointStrictness">CheckpointStrictness (in module torchrl.checkpoint)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.ChessEnv.html#torchrl.envs.ChessEnv">ChessEnv (class in torchrl.envs)</a>
 </li>
@@ -4017,6 +4039,8 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.collectors.CollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.CollectorConfig">CollectorConfig (class in torchrl.trainers.algorithms.configs.collectors)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.collectors">collectors (torchrl.collectors.distributed.DistributedWeightUpdater property)</a>
 
       <ul>
@@ -4035,8 +4059,6 @@ document.write(`
         <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.collectors">(torchrl.collectors.WeightUpdaterBase property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/glossary.html#term-compact_obs"><strong>compact_obs</strong></a>
 </li>
       <li><a href="reference/generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.compile">compile() (torchrl.data.llm.TopKRewardSelector method)</a>
@@ -4163,6 +4185,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss.compile">(torchrl.objectives.llm.SFTLoss method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.components">components (torchrl.checkpoint.Checkpoint property)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose">Compose (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.render.video.compose_frame_grid.html#torchrl.render.video.compose_frame_grid">compose_frame_grid() (in module torchrl.render.video)</a>
@@ -5729,6 +5753,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.dump">(torchrl.envs.llm.transforms.RayDataLoadingPrimer method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.html#torchrl.checkpoint.DumpLoadCheckpointAdapter">DumpLoadCheckpointAdapter (class in torchrl.checkpoint)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.dumps">dumps() (torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
 
       <ul>
@@ -9539,6 +9565,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector.getattr_rb">(torchrl.collectors.MultiSyncCollector method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState">GlobalRNGState (class in torchrl.checkpoint)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel">GPWorldModel (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.GrayScale.html#torchrl.envs.transforms.GrayScale">GrayScale (class in torchrl.envs.transforms)</a>
@@ -10495,6 +10523,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.services.Service.html#torchrl.services.Service.is_alive">(torchrl.services.Service property)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.is_checkpoint">is_checkpoint() (torchrl.checkpoint.Checkpoint class method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Composite.html#torchrl.data.Composite.is_empty">is_empty() (torchrl.data.Composite method)</a>
 
       <ul>
@@ -10657,10 +10687,12 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.JSONCallParser.html#torchrl.envs.llm.transforms.JSONCallParser">JSONCallParser (class in torchrl.envs.llm.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv">JumanjiEnv() (in module torchrl.envs)</a>
+      <li><a href="reference/generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter">JSONCheckpointAdapter (class in torchrl.checkpoint)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.envs.JumanjiEnv.html#torchrl.envs.JumanjiEnv">JumanjiEnv() (in module torchrl.envs)</a>
+</li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.envs_libs.JumanjiEnvConfig.html#torchrl.trainers.algorithms.configs.envs_libs.JumanjiEnvConfig">JumanjiEnvConfig (class in torchrl.trainers.algorithms.configs.envs_libs)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.JumanjiWrapper.html#torchrl.envs.JumanjiWrapper">JumanjiWrapper() (in module torchrl.envs)</a>
@@ -10809,9 +10841,19 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.LLMWrapperBase.html#torchrl.modules.llm.LLMWrapperBase">LLMWrapperBase (class in torchrl.modules.llm)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.load">load() (torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.load">load() (torchrl.checkpoint.Checkpoint method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter.load">(torchrl.checkpoint.CheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.html#torchrl.checkpoint.DumpLoadCheckpointAdapter.load">(torchrl.checkpoint.DumpLoadCheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter.load">(torchrl.checkpoint.JSONCheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter.load">(torchrl.checkpoint.StateDictCheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.load">(torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.load">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.load">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
@@ -11023,12 +11065,16 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.render.load_render_policy.html#torchrl.render.load_render_policy">load_render_policy() (in module torchrl.render)</a>
 </li>
-      <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.load_state_dict">load_state_dict() (torchrl.collectors.AsyncCollector method)</a>
+      <li><a href="reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState.load_state_dict">load_state_dict() (torchrl.checkpoint.GlobalRNGState method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.load_state_dict">(torchrl.collectors.AsyncCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.load_state_dict">(torchrl.collectors.Collector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.load_state_dict">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.load_state_dict">(torchrl.collectors.Evaluator method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.load_state_dict">(torchrl.collectors.llm.LLMCollector method)</a>
 </li>
@@ -11533,6 +11579,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker">make_vllm_worker (class in torchrl.modules.llm)</a>
 </li>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.manifest">manifest() (torchrl.checkpoint.Checkpoint class method)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector.map_fn">map_fn() (torchrl.collectors.AsyncBatchedCollector method)</a>
 
       <ul>
@@ -11881,6 +11929,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete.memoize_encode">(torchrl.data.UnboundedDiscrete method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions.merged">merged() (torchrl.checkpoint.CheckpointOptions method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay">MinariExperienceReplay (class in torchrl.data.datasets)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.missing_tolerance">missing_tolerance (torchrl.envs.llm.transforms.RayDataLoadingPrimer property)</a>
@@ -14419,9 +14469,11 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.refine_names">(torchrl.data.StackedComposite method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry.register">register() (torchrl.envs.llm.transforms.ToolRegistry method)</a>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.register">register() (torchrl.checkpoint.Checkpoint method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.envs.llm.transforms.ToolRegistry.html#torchrl.envs.llm.transforms.ToolRegistry.register">(torchrl.envs.llm.transforms.ToolRegistry method)</a>
+</li>
         <li><a href="reference/generated/torchrl.services.RayService.html#torchrl.services.RayService.register">(torchrl.services.RayService method)</a>
 </li>
         <li><a href="reference/generated/torchrl.services.ServiceBase.html#torchrl.services.ServiceBase.register">(torchrl.services.ServiceBase method)</a>
@@ -14459,6 +14511,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.trainers.ValueEstimatorHook.html#torchrl.trainers.ValueEstimatorHook.register">(torchrl.trainers.ValueEstimatorHook method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.register_adapter">register_adapter() (torchrl.checkpoint.Checkpoint method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.register_backward_hook">register_backward_hook() (torchrl.data.llm.TopKRewardSelector method)</a>
 
       <ul>
@@ -15685,6 +15739,8 @@ document.write(`
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.register_migration">register_migration() (torchrl.checkpoint.Checkpoint class method)</a>
+</li>
       <li><a href="reference/generated/torchrl.weight_update.llm.SGLangWeightSender.html#torchrl.weight_update.llm.SGLangWeightSender.register_model">register_model() (torchrl.weight_update.llm.SGLangWeightSender method)</a>
 
       <ul>
@@ -17331,9 +17387,19 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.SatelliteMacroAction.html#torchrl.envs.transforms.SatelliteMacroAction">SatelliteMacroAction (class in torchrl.envs.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.save">save() (torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
+      <li><a href="reference/generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.save">save() (torchrl.checkpoint.Checkpoint method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.checkpoint.CheckpointAdapter.html#torchrl.checkpoint.CheckpointAdapter.save">(torchrl.checkpoint.CheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.html#torchrl.checkpoint.DumpLoadCheckpointAdapter.save">(torchrl.checkpoint.DumpLoadCheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.checkpoint.JSONCheckpointAdapter.html#torchrl.checkpoint.JSONCheckpointAdapter.save">(torchrl.checkpoint.JSONCheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter.save">(torchrl.checkpoint.StateDictCheckpointAdapter method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.save">(torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.save">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.save">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
@@ -18981,12 +19047,16 @@ document.write(`
         <li><a href="reference/generated/torchrl.services.Service.html#torchrl.services.Service.start">(torchrl.services.Service method)</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.state_dict">state_dict() (torchrl.collectors.AsyncCollector method)</a>
+      <li><a href="reference/generated/torchrl.checkpoint.GlobalRNGState.html#torchrl.checkpoint.GlobalRNGState.state_dict">state_dict() (torchrl.checkpoint.GlobalRNGState method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.state_dict">(torchrl.collectors.AsyncCollector method)</a>
+</li>
         <li><a href="reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.state_dict">(torchrl.collectors.Collector method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.state_dict">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.state_dict">(torchrl.collectors.Evaluator method)</a>
 </li>
         <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.state_dict">(torchrl.collectors.llm.LLMCollector method)</a>
 </li>
@@ -19345,6 +19415,10 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv.state_spec_unbatched">(torchrl.envs.Walker2dEnv property)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.checkpoint.StateDictCheckpointAdapter.html#torchrl.checkpoint.StateDictCheckpointAdapter">StateDictCheckpointAdapter (class in torchrl.checkpoint)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.StateDictFormat.html#torchrl.checkpoint.StateDictFormat">StateDictFormat (in module torchrl.checkpoint)</a>
+</li>
       <li><a href="reference/generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group">stateless_init_process_group (class in torchrl.modules.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.stateless_init_process_group_async.html#torchrl.modules.llm.stateless_init_process_group_async">stateless_init_process_group_async (class in torchrl.modules.llm)</a>
@@ -21800,6 +21874,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase">WeightUpdaterBase (class in torchrl.collectors)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.ChatEnv.html#torchrl.envs.llm.ChatEnv.with_tokenizer">with_tokenizer() (torchrl.envs.llm.ChatEnv class method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError.with_traceback">with_traceback() (torchrl.checkpoint.CheckpointError method)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector.worker_idx">worker_idx (torchrl.collectors.AsyncBatchedCollector property)</a>
 

@@ -1085,6 +1085,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../checkpoint.html">
+                  Checkpointing
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../data.html">
                   torchrl.data package
                 </a>
@@ -1420,6 +1426,21 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.collectors.utils.split_trajectories.html">split_trajectories</a></li>
 </ul>
 </details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../checkpoint.html">Checkpointing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.Checkpoint.html">Checkpoint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointAdapter.html">CheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointError.html">CheckpointError</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointLoadResult.html">CheckpointLoadResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointOptions.html">CheckpointOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointFormat.html">CheckpointFormat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointStrictness.html">CheckpointStrictness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.DumpLoadCheckpointAdapter.html">DumpLoadCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.GlobalRNGState.html">GlobalRNGState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.JSONCheckpointAdapter.html">JSONCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictCheckpointAdapter.html">StateDictCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictFormat.html">StateDictFormat</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">torchrl.data package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2427,7 +2448,7 @@ document.write(`
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.render.checkpoint_hash">
 <span class="sig-prename descclassname"><span class="pre">torchrl.render.</span></span><span class="sig-name descname"><span class="pre">checkpoint_hash</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="../../_modules/torchrl/render/checkpoint.html#checkpoint_hash"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.render.checkpoint_hash" title="Link to this definition">#</a></dt>
-<dd><p>Computes the SHA256 digest of a local checkpoint file.</p>
+<dd><p>Compute a SHA256 digest over all checkpoint bytes.</p>
 </dd></dl>
 
 </section>
@@ -2802,7 +2823,7 @@ document.write(`
        "headline": "checkpoint_hash",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.render.checkpoint_hash.html",
-       "articleBody": "checkpoint_hash# torchrl.render.checkpoint_hash(path: str | Path) \u2192 str[source]# Computes the SHA256 digest of a local checkpoint file.",
+       "articleBody": "checkpoint_hash# torchrl.render.checkpoint_hash(path: str | Path) \u2192 str[source]# Compute a SHA256 digest over all checkpoint bytes.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

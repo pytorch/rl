@@ -1085,6 +1085,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../checkpoint.html">
+                  Checkpointing
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../data.html">
                   torchrl.data package
                 </a>
@@ -1420,6 +1426,21 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.collectors.utils.split_trajectories.html">split_trajectories</a></li>
 </ul>
 </details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../checkpoint.html">Checkpointing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.Checkpoint.html">Checkpoint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointAdapter.html">CheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointError.html">CheckpointError</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointLoadResult.html">CheckpointLoadResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointOptions.html">CheckpointOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointFormat.html">CheckpointFormat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointStrictness.html">CheckpointStrictness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.DumpLoadCheckpointAdapter.html">DumpLoadCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.GlobalRNGState.html">GlobalRNGState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.JSONCheckpointAdapter.html">JSONCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictCheckpointAdapter.html">StateDictCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictFormat.html">StateDictFormat</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">torchrl.data package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2426,13 +2447,16 @@ document.write(`
 <h1>load_checkpoint<a class="headerlink" href="#load-checkpoint" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.render.load_checkpoint">
-<span class="sig-prename descclassname"><span class="pre">torchrl.render.</span></span><span class="sig-name descname"><span class="pre">load_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">map_location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cpu'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/render/checkpoint.html#load_checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.render.load_checkpoint" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrl.render.</span></span><span class="sig-name descname"><span class="pre">load_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">map_location</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cpu'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../../_modules/torchrl/render/checkpoint.html#load_checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.render.load_checkpoint" title="Link to this definition">#</a></dt>
 <dd><p>Loads a local PyTorch checkpoint.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>path</strong> – Local checkpoint path.</p></li>
 <li><p><strong>map_location</strong> – Device mapping passed to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>.</p></li>
+<li><p><strong>weights_only</strong> – Whether payloads are restricted to safe weight-only
+types. Unified checkpoints default to <code class="docutils literal notranslate"><span class="pre">True</span></code>. Legacy payloads
+retain their historical <code class="docutils literal notranslate"><span class="pre">False</span></code> default for compatibility.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -2813,7 +2837,7 @@ document.write(`
        "headline": "load_checkpoint",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.render.load_checkpoint.html",
-       "articleBody": "load_checkpoint# torchrl.render.load_checkpoint(path: str | Path, map_location: str | device = \u0027cpu\u0027) \u2192 Any[source]# Loads a local PyTorch checkpoint. Parameters: path \u2013 Local checkpoint path. map_location \u2013 Device mapping passed to torch.load(). Returns: The checkpoint payload.",
+       "articleBody": "load_checkpoint# torchrl.render.load_checkpoint(path: str | Path, map_location: str | device = \u0027cpu\u0027, *, weights_only: bool | None = None) \u2192 Any[source]# Loads a local PyTorch checkpoint. Parameters: path \u2013 Local checkpoint path. map_location \u2013 Device mapping passed to torch.load(). weights_only \u2013 Whether payloads are restricted to safe weight-only types. Unified checkpoints default to True. Legacy payloads retain their historical False default for compatibility. Returns: The checkpoint payload.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

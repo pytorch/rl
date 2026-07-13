@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+CheckpointError
+===============
+
+.. autoclass:: CheckpointError
+    :members:
+    :inherited-members:

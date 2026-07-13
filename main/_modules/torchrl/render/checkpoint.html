@@ -1080,6 +1080,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/checkpoint.html">
+                  Checkpointing
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../../reference/data.html">
                   torchrl.data package
                 </a>
@@ -1493,12 +1499,15 @@ document.write(`
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.checkpoint</span> <span class="kn">import</span> <span class="n">Checkpoint</span><span class="p">,</span> <span class="n">CheckpointFormat</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;checkpoint_hash&quot;</span><span class="p">,</span>
@@ -1508,6 +1517,19 @@ document.write(`
 <span class="p">]</span>
 
 <span class="n">_STATE_DICT_KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;model_state_dict&quot;</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">_StateDictComponent</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">state_dict</span>
+
+    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No state dict has been assigned.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">state_dict</span>
 
 
 <div class="viewcode-block" id="save_render_checkpoint">
@@ -1521,6 +1543,7 @@ document.write(`
     <span class="n">metrics</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">extra</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="nb">format</span><span class="p">:</span> <span class="n">CheckpointFormat</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Writes a checkpoint in the layout expected by rlrender factories.</span>
 
@@ -1542,6 +1565,8 @@ document.write(`
 <span class="sd">        metrics: Scalar metrics recorded at checkpoint time.</span>
 <span class="sd">        config: JSON-serializable training configuration.</span>
 <span class="sd">        extra: Additional payload entries merged last.</span>
+<span class="sd">        format: Unified checkpoint container format. When omitted, writes the</span>
+<span class="sd">            legacy :func:`torch.save` payload during the compatibility window.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        The written checkpoint path, or ``None`` when checkpointing is disabled.</span>
@@ -1553,7 +1578,10 @@ document.write(`
 <span class="sd">        &gt;&gt;&gt; module = torch.nn.Linear(2, 2)</span>
 <span class="sd">        &gt;&gt;&gt; with tempfile.TemporaryDirectory() as tmpdir:</span>
 <span class="sd">        ...     path = save_render_checkpoint(</span>
-<span class="sd">        ...         f&quot;{tmpdir}/policy.pt&quot;, module, env_metadata={&quot;env_name&quot;: &quot;CartPole-v1&quot;}</span>
+<span class="sd">        ...         f&quot;{tmpdir}/policy.pt&quot;,</span>
+<span class="sd">        ...         module,</span>
+<span class="sd">        ...         env_metadata={&quot;env_name&quot;: &quot;CartPole-v1&quot;},</span>
+<span class="sd">        ...         format=&quot;archive&quot;,</span>
 <span class="sd">        ...     )</span>
 <span class="sd">        ...     payload = load_checkpoint(path)</span>
 <span class="sd">        &gt;&gt;&gt; payload[&quot;env_name&quot;]</span>
@@ -1561,33 +1589,74 @@ document.write(`
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">path</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">state_dict</span> <span class="o">=</span> <span class="n">model</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="k">else</span> <span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
-    <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;model_state_dict&quot;</span><span class="p">:</span> <span class="n">state_dict</span><span class="p">}</span>
-    <span class="k">if</span> <span class="n">env_metadata</span><span class="p">:</span>
-        <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">env_metadata</span><span class="p">))</span>
-    <span class="k">if</span> <span class="n">frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">metrics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
-        <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">extra</span><span class="p">))</span>
     <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
-    <span class="n">path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">path</span></div>
+    <span class="k">if</span> <span class="nb">format</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;The default save_render_checkpoint output will change from the &quot;</span>
+            <span class="s2">&quot;legacy torch.save payload to a unified TorchRL checkpoint in v0.15. &quot;</span>
+            <span class="s2">&quot;Pass format=&#39;archive&#39; or format=&#39;directory&#39; to opt in now.&quot;</span><span class="p">,</span>
+            <span class="ne">FutureWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;model_state_dict&quot;</span><span class="p">:</span> <span class="n">model</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">env_metadata</span><span class="p">:</span>
+            <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">env_metadata</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">metrics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">extra</span><span class="p">:</span>
+            <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">extra</span><span class="p">))</span>
+        <span class="n">path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">path</span>
+
+    <span class="n">policy</span> <span class="o">=</span> <span class="n">_StateDictComponent</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span> <span class="k">else</span> <span class="n">model</span>
+    <span class="n">components</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">policy</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">env_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">env_metadata</span><span class="p">)</span>
+        <span class="n">components</span><span class="p">[</span><span class="s2">&quot;environment_metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_StateDictComponent</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span> <span class="k">if</span> <span class="n">_contains_tensor</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span> <span class="k">else</span> <span class="n">metadata</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">components</span><span class="p">[</span><span class="s2">&quot;trainer_state&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;frames&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">frames</span><span class="p">)}</span>
+    <span class="k">if</span> <span class="n">metrics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">components</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">components</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">extra</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">extra_payload</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+        <span class="n">components</span><span class="p">[</span><span class="s2">&quot;extra&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_StateDictComponent</span><span class="p">(</span><span class="n">extra_payload</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_contains_tensor</span><span class="p">(</span><span class="n">extra_payload</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">extra_payload</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Checkpoint</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="nb">format</span><span class="p">,</span> <span class="o">**</span><span class="n">components</span><span class="p">)</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="load_checkpoint">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.render.load_checkpoint.html#torchrl.render.load_checkpoint">[docs]</a>
-<span class="k">def</span> <span class="nf">load_checkpoint</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span> <span class="n">map_location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">load_checkpoint</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">map_location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">weights_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Loads a local PyTorch checkpoint.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        path: Local checkpoint path.</span>
 <span class="sd">        map_location: Device mapping passed to :func:`torch.load`.</span>
+<span class="sd">        weights_only: Whether payloads are restricted to safe weight-only</span>
+<span class="sd">            types. Unified checkpoints default to ``True``. Legacy payloads</span>
+<span class="sd">            retain their historical ``False`` default for compatibility.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        The checkpoint payload.</span>
@@ -1600,7 +1669,17 @@ document.write(`
     <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Checkpoint path does not exist: </span><span class="si">{</span><span class="n">path</span><span class="si">!s}</span><span class="s2">.&quot;</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="n">map_location</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">Checkpoint</span><span class="o">.</span><span class="n">is_checkpoint</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">_load_unified_checkpoint</span><span class="p">(</span>
+                <span class="n">path</span><span class="p">,</span>
+                <span class="n">map_location</span><span class="p">,</span>
+                <span class="n">weights_only</span><span class="o">=</span><span class="kc">True</span> <span class="k">if</span> <span class="n">weights_only</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">weights_only</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+            <span class="n">path</span><span class="p">,</span>
+            <span class="n">map_location</span><span class="o">=</span><span class="n">map_location</span><span class="p">,</span>
+            <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span> <span class="k">if</span> <span class="n">weights_only</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">weights_only</span><span class="p">,</span>
+        <span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Could not load checkpoint </span><span class="si">{</span><span class="n">path</span><span class="si">!s}</span><span class="s2">. If this checkpoint uses a custom &quot;</span>
@@ -1612,14 +1691,96 @@ document.write(`
 <div class="viewcode-block" id="checkpoint_hash">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.render.checkpoint_hash.html#torchrl.render.checkpoint_hash">[docs]</a>
 <span class="k">def</span> <span class="nf">checkpoint_hash</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Computes the SHA256 digest of a local checkpoint file.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute a SHA256 digest over all checkpoint bytes.&quot;&quot;&quot;</span>
     <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Checkpoint path does not exist: </span><span class="si">{</span><span class="n">path</span><span class="si">!s}</span><span class="s2">.&quot;</span><span class="p">)</span>
     <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
-    <span class="k">with</span> <span class="n">path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">iter</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">),</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
-            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">]</span> <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="k">else</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">file_path</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">file_path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">file_path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">as_posix</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;</span><span class="se">\0</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">file_path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">iter</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">),</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+                <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span></div>
 
+
+
+<span class="k">def</span> <span class="nf">_load_unified_checkpoint</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">map_location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">weights_only</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="n">manifest</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="o">.</span><span class="n">manifest</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">policy</span> <span class="o">=</span> <span class="n">_StateDictComponent</span><span class="p">()</span>
+    <span class="n">environment_metadata</span> <span class="o">=</span> <span class="n">_restore_target</span><span class="p">(</span><span class="n">manifest</span><span class="p">,</span> <span class="s2">&quot;environment_metadata&quot;</span><span class="p">)</span>
+    <span class="n">trainer_state</span> <span class="o">=</span> <span class="n">_restore_target</span><span class="p">(</span><span class="n">manifest</span><span class="p">,</span> <span class="s2">&quot;trainer_state&quot;</span><span class="p">)</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">_restore_target</span><span class="p">(</span><span class="n">manifest</span><span class="p">,</span> <span class="s2">&quot;metrics&quot;</span><span class="p">)</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">_restore_target</span><span class="p">(</span><span class="n">manifest</span><span class="p">,</span> <span class="s2">&quot;config&quot;</span><span class="p">)</span>
+    <span class="n">extra</span> <span class="o">=</span> <span class="n">_restore_target</span><span class="p">(</span><span class="n">manifest</span><span class="p">,</span> <span class="s2">&quot;extra&quot;</span><span class="p">)</span>
+    <span class="n">checkpoint</span> <span class="o">=</span> <span class="n">Checkpoint</span><span class="p">(</span>
+        <span class="n">strict</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+        <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+        <span class="n">environment_metadata</span><span class="o">=</span><span class="n">environment_metadata</span><span class="p">,</span>
+        <span class="n">trainer_state</span><span class="o">=</span><span class="n">trainer_state</span><span class="p">,</span>
+        <span class="n">metrics</span><span class="o">=</span><span class="n">metrics</span><span class="p">,</span>
+        <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+        <span class="n">extra</span><span class="o">=</span><span class="n">extra</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">requested</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">components</span><span class="p">)</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">manifest</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">])</span>
+    <span class="n">checkpoint</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+        <span class="n">path</span><span class="p">,</span>
+        <span class="n">components</span><span class="o">=</span><span class="n">requested</span><span class="p">,</span>
+        <span class="n">map_location</span><span class="o">=</span><span class="n">map_location</span><span class="p">,</span>
+        <span class="n">tensor_load_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;weights_only&quot;</span><span class="p">:</span> <span class="n">weights_only</span><span class="p">,</span> <span class="s2">&quot;mmap&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+        <span class="n">strict</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">environment_metadata</span> <span class="o">=</span> <span class="n">_restored_mapping</span><span class="p">(</span><span class="n">environment_metadata</span><span class="p">)</span>
+    <span class="n">trainer_state</span> <span class="o">=</span> <span class="n">_restored_mapping</span><span class="p">(</span><span class="n">trainer_state</span><span class="p">)</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">_restored_mapping</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">_restored_mapping</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="n">extra</span> <span class="o">=</span> <span class="n">_restored_mapping</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">policy</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;model_state_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy</span><span class="o">.</span><span class="n">value</span>
+    <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">environment_metadata</span><span class="p">)</span>
+    <span class="n">frames</span> <span class="o">=</span> <span class="n">trainer_state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;frames&quot;</span><span class="p">,</span> <span class="n">trainer_state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collected_frames&quot;</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">frames</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">frames</span>
+    <span class="k">if</span> <span class="n">metrics</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metrics</span>
+    <span class="k">if</span> <span class="n">config</span><span class="p">:</span>
+        <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+    <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">extra</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">payload</span>
+
+
+<span class="k">def</span> <span class="nf">_restore_target</span><span class="p">(</span><span class="n">manifest</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">record</span> <span class="o">=</span> <span class="n">manifest</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;adapter&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;torchrl.state_dict&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_StateDictComponent</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">{}</span>
+
+
+<span class="k">def</span> <span class="nf">_restored_mapping</span><span class="p">(</span><span class="n">component</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">_StateDictComponent</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">component</span><span class="o">.</span><span class="n">value</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="k">return</span> <span class="n">component</span>
+
+
+<span class="k">def</span> <span class="nf">_contains_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">_contains_tensor</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">_contains_tensor</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">False</span>
 
 
 <div class="viewcode-block" id="infer_state_dict">
@@ -1923,7 +2084,7 @@ document.write(`
        "headline": "torchrl.render.checkpoint",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/render/checkpoint.html",
-       "articleBody": "Source code for torchrl.render.checkpoint # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import hashlib from collections.abc import Mapping from pathlib import Path from typing import Any import torch from torch import Tensor __all__ = [ \"checkpoint_hash\", \"infer_state_dict\", \"load_checkpoint\", \"save_render_checkpoint\", ] _STATE_DICT_KEYS = (\"model_state_dict\", \"policy\", \"state_dict\") [docs] def save_render_checkpoint( path: str | Path | None, model: Any, *, env_metadata: Mapping[str, Any] | None = None, frames: int | None = None, metrics: Mapping[str, Any] | None = None, config: Mapping[str, Any] | None = None, extra: Mapping[str, Any] | None = None, ) -\u003e Path | None: \"\"\"Writes a checkpoint in the layout expected by rlrender factories. The model weights are stored under the canonical ``\"model_state_dict\"`` key probed by :func:`infer_state_dict`, and ``env_metadata`` entries are merged at the top level of the payload so environment and policy factories can rebuild the training setup. Conventional environment metadata keys used by the sota-implementations factories are ``\"env_name\"``, ``\"env_backend\"``, ``\"env_config_overrides\"``, ``\"env_num_envs\"``, ``\"env_batch_mode\"``, ``\"normalize_observation\"``, and ``\"vecnorm\"`` (frozen observation normalization statistics). Args: path: Destination checkpoint path. ``None`` or ``\"\"`` disables checkpointing. model: Module exposing ``state_dict()``, or a ready state-dict mapping. env_metadata: Environment metadata merged into the payload. frames: Number of training frames collected so far. metrics: Scalar metrics recorded at checkpoint time. config: JSON-serializable training configuration. extra: Additional payload entries merged last. Returns: The written checkpoint path, or ``None`` when checkpointing is disabled. Examples: \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.render import load_checkpoint, save_render_checkpoint \u003e\u003e\u003e module = torch.nn.Linear(2, 2) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... path = save_render_checkpoint( ... f\"{tmpdir}/policy.pt\", module, env_metadata={\"env_name\": \"CartPole-v1\"} ... ) ... payload = load_checkpoint(path) \u003e\u003e\u003e payload[\"env_name\"] \u0027CartPole-v1\u0027 \"\"\" if path in (None, \"\"): return None state_dict = model if isinstance(model, Mapping) else model.state_dict() payload: dict[str, Any] = {\"model_state_dict\": state_dict} if env_metadata: payload.update(dict(env_metadata)) if frames is not None: payload[\"frames\"] = int(frames) if metrics is not None: payload[\"metrics\"] = dict(metrics) if config is not None: payload[\"config\"] = dict(config) if extra: payload.update(dict(extra)) path = Path(path).expanduser() path.parent.mkdir(parents=True, exist_ok=True) torch.save(payload, path) return path [docs] def load_checkpoint(path: str | Path, map_location: str | torch.device = \"cpu\") -\u003e Any: \"\"\"Loads a local PyTorch checkpoint. Args: path: Local checkpoint path. map_location: Device mapping passed to :func:`torch.load`. Returns: The checkpoint payload. \"\"\" if \"://\" in str(path): raise ValueError( f\"Only local checkpoint paths are supported in rlrender MVP, got {path!s}.\" ) path = Path(path).expanduser() if not path.exists(): raise FileNotFoundError(f\"Checkpoint path does not exist: {path!s}.\") try: return torch.load(path, map_location=map_location, weights_only=False) except Exception as err: raise RuntimeError( f\"Could not load checkpoint {path!s}. If this checkpoint uses a custom \" \"format, provide a policy factory that loads it directly.\" ) from err [docs] def checkpoint_hash(path: str | Path) -\u003e str: \"\"\"Computes the SHA256 digest of a local checkpoint file.\"\"\" path = Path(path).expanduser() digest = hashlib.sha256() with path.open(\"rb\") as file: for chunk in iter(lambda: file.read(1024 * 1024), b\"\"): digest.update(chunk) return digest.hexdigest() [docs] def infer_state_dict(payload: Any, key: str | None = None) -\u003e Mapping[str, Tensor]: \"\"\"Infers a model state dict from common checkpoint payload layouts. Args: payload: Checkpoint payload. key: Explicit state-dict key to read from mapping payloads. Returns: A mapping from parameter names to tensors. \"\"\" if key is not None: if not isinstance(payload, Mapping) or key not in payload: raise KeyError( f\"Checkpoint payload does not contain state-dict key {key!r}.\" ) payload = payload[key] elif isinstance(payload, Mapping): for candidate in _STATE_DICT_KEYS: value = payload.get(candidate) if _looks_like_state_dict(value): payload = value break if _looks_like_state_dict(payload): return payload raise TypeError( \"Could not infer a tensor state dict from checkpoint payload. Expected one \" \"of \u0027model_state_dict\u0027, \u0027policy\u0027, \u0027state_dict\u0027, or a direct mapping of tensors.\" ) def _looks_like_state_dict(value: Any) -\u003e bool: if not isinstance(value, Mapping) or not value: return False return all(isinstance(key, str) for key in value) and any( torch.is_tensor(item) for item in value.values() )",
+       "articleBody": "Source code for torchrl.render.checkpoint # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import hashlib import warnings from collections.abc import Mapping from pathlib import Path from typing import Any import torch from torch import Tensor from torchrl.checkpoint import Checkpoint, CheckpointFormat __all__ = [ \"checkpoint_hash\", \"infer_state_dict\", \"load_checkpoint\", \"save_render_checkpoint\", ] _STATE_DICT_KEYS = (\"model_state_dict\", \"policy\", \"state_dict\") class _StateDictComponent: def __init__(self, state_dict: Mapping[str, Any] | None = None) -\u003e None: self.value = state_dict def state_dict(self) -\u003e Mapping[str, Any]: if self.value is None: raise RuntimeError(\"No state dict has been assigned.\") return self.value def load_state_dict(self, state_dict: Mapping[str, Any]) -\u003e None: self.value = state_dict [docs] def save_render_checkpoint( path: str | Path | None, model: Any, *, env_metadata: Mapping[str, Any] | None = None, frames: int | None = None, metrics: Mapping[str, Any] | None = None, config: Mapping[str, Any] | None = None, extra: Mapping[str, Any] | None = None, format: CheckpointFormat | None = None, ) -\u003e Path | None: \"\"\"Writes a checkpoint in the layout expected by rlrender factories. The model weights are stored under the canonical ``\"model_state_dict\"`` key probed by :func:`infer_state_dict`, and ``env_metadata`` entries are merged at the top level of the payload so environment and policy factories can rebuild the training setup. Conventional environment metadata keys used by the sota-implementations factories are ``\"env_name\"``, ``\"env_backend\"``, ``\"env_config_overrides\"``, ``\"env_num_envs\"``, ``\"env_batch_mode\"``, ``\"normalize_observation\"``, and ``\"vecnorm\"`` (frozen observation normalization statistics). Args: path: Destination checkpoint path. ``None`` or ``\"\"`` disables checkpointing. model: Module exposing ``state_dict()``, or a ready state-dict mapping. env_metadata: Environment metadata merged into the payload. frames: Number of training frames collected so far. metrics: Scalar metrics recorded at checkpoint time. config: JSON-serializable training configuration. extra: Additional payload entries merged last. format: Unified checkpoint container format. When omitted, writes the legacy :func:`torch.save` payload during the compatibility window. Returns: The written checkpoint path, or ``None`` when checkpointing is disabled. Examples: \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.render import load_checkpoint, save_render_checkpoint \u003e\u003e\u003e module = torch.nn.Linear(2, 2) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmpdir: ... path = save_render_checkpoint( ... f\"{tmpdir}/policy.pt\", ... module, ... env_metadata={\"env_name\": \"CartPole-v1\"}, ... format=\"archive\", ... ) ... payload = load_checkpoint(path) \u003e\u003e\u003e payload[\"env_name\"] \u0027CartPole-v1\u0027 \"\"\" if path in (None, \"\"): return None path = Path(path).expanduser() if format is None: warnings.warn( \"The default save_render_checkpoint output will change from the \" \"legacy torch.save payload to a unified TorchRL checkpoint in v0.15. \" \"Pass format=\u0027archive\u0027 or format=\u0027directory\u0027 to opt in now.\", FutureWarning, stacklevel=2, ) payload: dict[str, Any] = { \"model_state_dict\": model if isinstance(model, Mapping) else model.state_dict() } if env_metadata: payload.update(dict(env_metadata)) if frames is not None: payload[\"frames\"] = int(frames) if metrics is not None: payload[\"metrics\"] = dict(metrics) if config is not None: payload[\"config\"] = dict(config) if extra: payload.update(dict(extra)) path.parent.mkdir(parents=True, exist_ok=True) torch.save(payload, path) return path policy = _StateDictComponent(model) if isinstance(model, Mapping) else model components: dict[str, Any] = {\"policy\": policy} if env_metadata is not None: metadata = dict(env_metadata) components[\"environment_metadata\"] = ( _StateDictComponent(metadata) if _contains_tensor(metadata) else metadata ) if frames is not None: components[\"trainer_state\"] = {\"frames\": int(frames)} if metrics is not None: components[\"metrics\"] = dict(metrics) if config is not None: components[\"config\"] = dict(config) if extra is not None: extra_payload = dict(extra) components[\"extra\"] = ( _StateDictComponent(extra_payload) if _contains_tensor(extra_payload) else extra_payload ) return Checkpoint(format=format, **components).save(path) [docs] def load_checkpoint( path: str | Path, map_location: str | torch.device = \"cpu\", *, weights_only: bool | None = None, ) -\u003e Any: \"\"\"Loads a local PyTorch checkpoint. Args: path: Local checkpoint path. map_location: Device mapping passed to :func:`torch.load`. weights_only: Whether payloads are restricted to safe weight-only types. Unified checkpoints default to ``True``. Legacy payloads retain their historical ``False`` default for compatibility. Returns: The checkpoint payload. \"\"\" if \"://\" in str(path): raise ValueError( f\"Only local checkpoint paths are supported in rlrender MVP, got {path!s}.\" ) path = Path(path).expanduser() if not path.exists(): raise FileNotFoundError(f\"Checkpoint path does not exist: {path!s}.\") try: if Checkpoint.is_checkpoint(path): return _load_unified_checkpoint( path, map_location, weights_only=True if weights_only is None else weights_only, ) return torch.load( path, map_location=map_location, weights_only=False if weights_only is None else weights_only, ) except Exception as err: raise RuntimeError( f\"Could not load checkpoint {path!s}. If this checkpoint uses a custom \" \"format, provide a policy factory that loads it directly.\" ) from err [docs] def checkpoint_hash(path: str | Path) -\u003e str: \"\"\"Compute a SHA256 digest over all checkpoint bytes.\"\"\" path = Path(path).expanduser() if not path.exists(): raise FileNotFoundError(f\"Checkpoint path does not exist: {path!s}.\") digest = hashlib.sha256() files = [path] if path.is_file() else sorted(path.rglob(\"*\")) for file_path in files: if not file_path.is_file(): continue if path.is_dir(): digest.update(file_path.relative_to(path).as_posix().encode()) digest.update(b\"\\0\") with file_path.open(\"rb\") as file: for chunk in iter(lambda: file.read(1024 * 1024), b\"\"): digest.update(chunk) return digest.hexdigest() def _load_unified_checkpoint( path: Path, map_location: str | torch.device, *, weights_only: bool, ) -\u003e dict[str, Any]: manifest = Checkpoint.manifest(path) policy = _StateDictComponent() environment_metadata = _restore_target(manifest, \"environment_metadata\") trainer_state = _restore_target(manifest, \"trainer_state\") metrics = _restore_target(manifest, \"metrics\") config = _restore_target(manifest, \"config\") extra = _restore_target(manifest, \"extra\") checkpoint = Checkpoint( strict=\"ignore\", policy=policy, environment_metadata=environment_metadata, trainer_state=trainer_state, metrics=metrics, config=config, extra=extra, ) requested = set(checkpoint.components).intersection(manifest[\"components\"]) checkpoint.load( path, components=requested, map_location=map_location, tensor_load_kwargs={\"weights_only\": weights_only, \"mmap\": True}, strict=\"ignore\", ) environment_metadata = _restored_mapping(environment_metadata) trainer_state = _restored_mapping(trainer_state) metrics = _restored_mapping(metrics) config = _restored_mapping(config) extra = _restored_mapping(extra) payload: dict[str, Any] = {} if policy.value is not None: payload[\"model_state_dict\"] = policy.value payload.update(environment_metadata) frames = trainer_state.get(\"frames\", trainer_state.get(\"collected_frames\")) if frames is not None: payload[\"frames\"] = frames if metrics: payload[\"metrics\"] = metrics if config: payload[\"config\"] = config payload.update(extra) return payload def _restore_target(manifest: Mapping[str, Any], name: str) -\u003e Any: record = manifest[\"components\"].get(name) if record is not None and record[\"adapter\"] == \"torchrl.state_dict\": return _StateDictComponent() return {} def _restored_mapping(component: Any) -\u003e dict[str, Any]: if isinstance(component, _StateDictComponent): return dict(component.value or {}) return component def _contains_tensor(value: Any) -\u003e bool: if isinstance(value, Tensor): return True if isinstance(value, Mapping): return any(_contains_tensor(item) for item in value.values()) if isinstance(value, (list, tuple)): return any(_contains_tensor(item) for item in value) return False [docs] def infer_state_dict(payload: Any, key: str | None = None) -\u003e Mapping[str, Tensor]: \"\"\"Infers a model state dict from common checkpoint payload layouts. Args: payload: Checkpoint payload. key: Explicit state-dict key to read from mapping payloads. Returns: A mapping from parameter names to tensors. \"\"\" if key is not None: if not isinstance(payload, Mapping) or key not in payload: raise KeyError( f\"Checkpoint payload does not contain state-dict key {key!r}.\" ) payload = payload[key] elif isinstance(payload, Mapping): for candidate in _STATE_DICT_KEYS: value = payload.get(candidate) if _looks_like_state_dict(value): payload = value break if _looks_like_state_dict(payload): return payload raise TypeError( \"Could not infer a tensor state dict from checkpoint payload. Expected one \" \"of \u0027model_state_dict\u0027, \u0027policy\u0027, \u0027state_dict\u0027, or a direct mapping of tensors.\" ) def _looks_like_state_dict(value: Any) -\u003e bool: if not isinstance(value, Mapping) or not value: return False return all(isinstance(key, str) for key in value) and any( torch.is_tensor(item) for item in value.values() )",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

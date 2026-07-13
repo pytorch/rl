@@ -123,6 +123,13 @@ and navigate to the previous ones whenever you want to learn more!
 - [Quick Example](reference/collectors.html#quick-example)
 - [Removed legacy names](reference/collectors.html#removed-legacy-names)
 - [Documentation Sections](reference/collectors.html#documentation-sections)
+- [Checkpointing](reference/checkpoint.html)
+
+- [Basic usage](reference/checkpoint.html#basic-usage)
+- [State-dict payload formats](reference/checkpoint.html#state-dict-payload-formats)
+- [Custom components](reference/checkpoint.html#custom-components)
+- [Compatibility](reference/checkpoint.html#compatibility)
+- [API](reference/checkpoint.html#api)
 - [torchrl.data package](reference/data.html)
 
 - [Key Features](reference/data.html#key-features)

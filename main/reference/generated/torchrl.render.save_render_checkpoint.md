@@ -1,6 +1,6 @@
 # save_render_checkpoint
 
-torchrl.render.save_render_checkpoint(*path: str | Path | None*, *model: Any*, ***, *env_metadata: Mapping[str, Any] | None = None*, *frames: int | None = None*, *metrics: Mapping[str, Any] | None = None*, *config: Mapping[str, Any] | None = None*, *extra: Mapping[str, Any] | None = None*) → Path | None[[source]](../../_modules/torchrl/render/checkpoint.html#save_render_checkpoint)
+torchrl.render.save_render_checkpoint(*path: str | Path | None*, *model: Any*, ***, *env_metadata: Mapping[str, Any] | None = None*, *frames: int | None = None*, *metrics: Mapping[str, Any] | None = None*, *config: Mapping[str, Any] | None = None*, *extra: Mapping[str, Any] | None = None*, *format: Literal['directory', 'archive'] | None = None*) → Path | None[[source]](../../_modules/torchrl/render/checkpoint.html#save_render_checkpoint)
 
 Writes a checkpoint in the layout expected by rlrender factories.
 
@@ -23,6 +23,8 @@ checkpointing.
 - **metrics** - Scalar metrics recorded at checkpoint time.
 - **config** - JSON-serializable training configuration.
 - **extra** - Additional payload entries merged last.
+- **format** - Unified checkpoint container format. When omitted, writes the
+legacy [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) payload during the compatibility window.
 
 Returns:
 
@@ -37,7 +39,10 @@ Examples
 >>> module = torch.nn.Linear(2, 2)
 >>> with tempfile.TemporaryDirectory() as tmpdir:
 ... path = save_render_checkpoint(
-... f"{tmpdir}/policy.pt", module, env_metadata={"env_name": "CartPole-v1"}
+... f"{tmpdir}/policy.pt",
+... module,
+... env_metadata={"env_name": "CartPole-v1"},
+... format="archive",
 ... )
 ... payload = load_checkpoint(path)
 >>> payload["env_name"]

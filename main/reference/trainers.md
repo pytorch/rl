@@ -7,8 +7,11 @@ loop the optimization steps.
 ## Key Features
 
 - **Modular hook system**: Customize training at 18 different points in the loop
-- **Checkpointing support**: Save and restore training state with `torch`, `torchsnapshot`, or `memmap` (set via the `CKPT_BACKEND` environment variable)
-- **Algorithm trainers**: High-level trainers for PPO, SAC, DQN, DDPG, IQL, CQL with Hydra configuration
+- **Checkpointing support**: Pass a [`torchrl.checkpoint.Checkpoint`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint) for
+the unified manifest format. Legacy `torch`, `torchsnapshot`, and
+`memmap` backends remain readable during the migration window.
+- **Algorithm trainers**: High-level trainers for PPO, A2C, REINFORCE, SAC,
+offline-to-online SAC, DQN, DDPG, IQL, CQL, and TD3 with Hydra configuration
 - **Builder helpers**: Utilities for constructing collectors, losses, and replay buffers
 
 ## Quick Example

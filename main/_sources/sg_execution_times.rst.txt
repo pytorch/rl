@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 27 files **from all galleries**:
+**00:00.028** total execution time for 28 files **from all galleries**:
 
 .. container::
 
@@ -32,6 +32,9 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_tutorials_checkpointing.py` (``reference/generated/tutorials/checkpointing.py``)
+     - 00:00.028
+     - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ddpg.py` (``reference/generated/tutorials/coding_ddpg.py``)
      - 00:00.000
      - 0.0

@@ -62,6 +62,11 @@ Task-specific policy in multi-task environments
 [Vision-Language-Action (VLA) policies with TorchRL](vla.html)
 
 Vision-Language-Action (VLA) policies with TorchRL
+![](../_images/sphx_glr_checkpointing_thumb.png)
+
+[Unified checkpointing in TorchRL](checkpointing.html)
+
+Unified checkpointing in TorchRL
 ![](../_images/sphx_glr_dqn_with_rnn_thumb.png)
 
 [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html)

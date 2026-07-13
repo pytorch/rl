@@ -1085,6 +1085,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../checkpoint.html">
+                  Checkpointing
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../data.html">
                   torchrl.data package
                 </a>
@@ -1420,6 +1426,21 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.collectors.utils.split_trajectories.html">split_trajectories</a></li>
 </ul>
 </details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../checkpoint.html">Checkpointing</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.Checkpoint.html">Checkpoint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointAdapter.html">CheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointError.html">CheckpointError</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointLoadResult.html">CheckpointLoadResult</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointOptions.html">CheckpointOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointFormat.html">CheckpointFormat</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.CheckpointStrictness.html">CheckpointStrictness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.DumpLoadCheckpointAdapter.html">DumpLoadCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.GlobalRNGState.html">GlobalRNGState</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.JSONCheckpointAdapter.html">JSONCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictCheckpointAdapter.html">StateDictCheckpointAdapter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.checkpoint.StateDictFormat.html">StateDictFormat</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../data.html">torchrl.data package</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2473,28 +2494,40 @@ data. This trainer therefore defaults to 1 epoch per batch.</p>
 <dt class="sig sig-object py" id="torchrl.trainers.algorithms.A2CTrainer.load_from_file">
 <span class="sig-name descname"><span class="pre">load_from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.trainers.Trainer.html#torchrl.trainers.Trainer" title="torchrl.trainers.trainers.Trainer"><span class="pre">Trainer</span></a></span></span><a class="headerlink" href="#torchrl.trainers.algorithms.A2CTrainer.load_from_file" title="Link to this definition">#</a></dt>
 <dd><p>Loads a file and its state-dict in the trainer.</p>
-<p>Keyword arguments are passed to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a> function.
-They are ignored when <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=memmap</span></code>.</p>
+<p>Keyword arguments are passed to the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code></a> function for
+legacy torch checkpoints and unified components explicitly saved with
+the torch state-dict payload format. Unified checkpoints additionally
+accept <code class="docutils literal notranslate"><span class="pre">strict</span></code> to control missing or incompatible components.
+Arguments are ignored when <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=memmap</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>When <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=torch</span></code>, <code class="docutils literal notranslate"><span class="pre">weights_only=True</span></code> is set by
+<p>Unified state-dict components use TensorDict storage by default and
+do not invoke the pickle loader. For explicit torch payloads and
+<code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=torch</span></code> checkpoints, <code class="docutils literal notranslate"><span class="pre">weights_only=True</span></code> is the
 default for safer deserialization. Pass <code class="docutils literal notranslate"><span class="pre">weights_only=False</span></code>
-explicitly only if you have custom (non-stdlib) objects in your
-state dict. On torch &lt; 2.4 the default is <code class="docutils literal notranslate"><span class="pre">weights_only=False</span></code>
-because the weights-only unpickler of those versions cannot
-deserialize the <code class="docutils literal notranslate"><span class="pre">torch.device</span></code> instances contained in
-TensorDict state-dicts.</p>
+explicitly only if the state dict contains custom objects. On
+torch &lt; 2.4 the default is <code class="docutils literal notranslate"><span class="pre">weights_only=False</span></code> because the
+weights-only unpickler of those versions cannot deserialize the
+<code class="docutils literal notranslate"><span class="pre">torch.device</span></code> instances contained in TensorDict state-dicts.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>When <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=torch</span></code>, <code class="docutils literal notranslate"><span class="pre">mmap=True</span></code> is set by default so
-the checkpoint is memory-mapped rather than materialized in RAM
-at load time. Pass <code class="docutils literal notranslate"><span class="pre">mmap=False</span></code> if the checkpoint was saved
-with the legacy (pre-zipfile) <code class="docutils literal notranslate"><span class="pre">torch.save</span></code> format or if
-<code class="docutils literal notranslate"><span class="pre">file</span></code> is a file-like object rather than a path. On Windows
-the default is <code class="docutils literal notranslate"><span class="pre">mmap=False</span></code>: a mapped checkpoint would keep
-the file locked, preventing it from being deleted or re-saved
-while the loaded state is alive.</p>
+<p>Explicit torch payloads and <code class="docutils literal notranslate"><span class="pre">CKPT_BACKEND=torch</span></code> checkpoints use
+<code class="docutils literal notranslate"><span class="pre">mmap=True</span></code> by default. Pass <code class="docutils literal notranslate"><span class="pre">mmap=False</span></code> for legacy pre-zipfile
+<code class="docutils literal notranslate"><span class="pre">torch.save</span></code> files or file-like objects. On Windows the default
+is <code class="docutils literal notranslate"><span class="pre">mmap=False</span></code> because a mapped checkpoint keeps the file locked,
+preventing deletion or re-save.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Unified checkpoint tensors are mapped to CPU by default. Pass an
+explicit <code class="docutils literal notranslate"><span class="pre">map_location</span></code> to select another device mapping.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>After restoring an independently registered policy component, the
+trainer synchronizes the collector once so local policy copies and
+remote workers observe the restored learner weights.</p>
 </div>
 </dd></dl>
 
@@ -2882,7 +2915,7 @@ while the loaded state is alive.</p>
        "headline": "A2CTrainer",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.trainers.algorithms.A2CTrainer.html",
-       "articleBody": "A2CTrainer# class torchrl.trainers.algorithms.A2CTrainer(*args, **kwargs)[source]# A2C (Advantage Actor-Critic) trainer implementation. See also A2CTrainerConfig for the Hydra configuration counterpart. Warning This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the A2C algorithm for training reinforcement learning agents. It extends OnPolicyTrainer with A2C-specific defaults; see that class for the full list of keyword arguments, covering advantage estimation (GAE), replay-buffer wiring, collector weight synchronization and logging. Entropy regularization is configured on the loss module (see A2CLoss). Unlike PPO, A2C performs a single optimization pass over each batch of collected data. This trainer therefore defaults to 1 epoch per batch. Examples \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.a2c import A2CTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import A2CTrainerConfig \u003e\u003e\u003e from hydra.utils import instantiate \u003e\u003e\u003e config = A2CTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() Note This trainer requires a configurable environment setup. See the configs module for configuration options. load_from_file(file: str | Path, **kwargs) \u2192 Trainer# Loads a file and its state-dict in the trainer. Keyword arguments are passed to the load() function. They are ignored when CKPT_BACKEND=memmap. Note When CKPT_BACKEND=torch, weights_only=True is set by default for safer deserialization. Pass weights_only=False explicitly only if you have custom (non-stdlib) objects in your state dict. On torch \u003c 2.4 the default is weights_only=False because the weights-only unpickler of those versions cannot deserialize the torch.device instances contained in TensorDict state-dicts. Note When CKPT_BACKEND=torch, mmap=True is set by default so the checkpoint is memory-mapped rather than materialized in RAM at load time. Pass mmap=False if the checkpoint was saved with the legacy (pre-zipfile) torch.save format or if file is a file-like object rather than a path. On Windows the default is mmap=False: a mapped checkpoint would keep the file locked, preventing it from being deleted or re-saved while the loaded state is alive. request_stop(reason: str | None = None) \u2192 None# Signal that training should stop at the next loop boundary.",
+       "articleBody": "A2CTrainer# class torchrl.trainers.algorithms.A2CTrainer(*args, **kwargs)[source]# A2C (Advantage Actor-Critic) trainer implementation. See also A2CTrainerConfig for the Hydra configuration counterpart. Warning This is an experimental/prototype feature. The API may change in future versions. Please report any issues or feedback to help improve this implementation. This trainer implements the A2C algorithm for training reinforcement learning agents. It extends OnPolicyTrainer with A2C-specific defaults; see that class for the full list of keyword arguments, covering advantage estimation (GAE), replay-buffer wiring, collector weight synchronization and logging. Entropy regularization is configured on the loss module (see A2CLoss). Unlike PPO, A2C performs a single optimization pass over each batch of collected data. This trainer therefore defaults to 1 epoch per batch. Examples \u003e\u003e\u003e # Basic usage with manual configuration \u003e\u003e\u003e from torchrl.trainers.algorithms.a2c import A2CTrainer \u003e\u003e\u003e from torchrl.trainers.algorithms.configs import A2CTrainerConfig \u003e\u003e\u003e from hydra.utils import instantiate \u003e\u003e\u003e config = A2CTrainerConfig(...) # Configure with required parameters \u003e\u003e\u003e trainer = instantiate(config) \u003e\u003e\u003e trainer.train() Note This trainer requires a configurable environment setup. See the configs module for configuration options. load_from_file(file: str | Path, **kwargs) \u2192 Trainer# Loads a file and its state-dict in the trainer. Keyword arguments are passed to the load() function for legacy torch checkpoints and unified components explicitly saved with the torch state-dict payload format. Unified checkpoints additionally accept strict to control missing or incompatible components. Arguments are ignored when CKPT_BACKEND=memmap. Note Unified state-dict components use TensorDict storage by default and do not invoke the pickle loader. For explicit torch payloads and CKPT_BACKEND=torch checkpoints, weights_only=True is the default for safer deserialization. Pass weights_only=False explicitly only if the state dict contains custom objects. On torch \u003c 2.4 the default is weights_only=False because the weights-only unpickler of those versions cannot deserialize the torch.device instances contained in TensorDict state-dicts. Note Explicit torch payloads and CKPT_BACKEND=torch checkpoints use mmap=True by default. Pass mmap=False for legacy pre-zipfile torch.save files or file-like objects. On Windows the default is mmap=False because a mapped checkpoint keeps the file locked, preventing deletion or re-save. Note Unified checkpoint tensors are mapped to CPU by default. Pass an explicit map_location to select another device mapping. Note After restoring an independently registered policy component, the trainer synchronizes the collector once so local policy copies and remote workers observe the restored learner weights. request_stop(reason: str | None = None) \u2192 None# Signal that training should stop at the next loop boundary.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

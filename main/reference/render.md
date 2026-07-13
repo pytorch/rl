@@ -45,9 +45,9 @@ uv run --extra rendering rlrender --help
 | [`write_render_artifact`](generated/torchrl.render.write_render_artifact.html#torchrl.render.write_render_artifact)(result, config) | Writes the configured render artifact and sidecar metadata. |
 | [`import_from_string`](generated/torchrl.render.import_from_string.html#torchrl.render.import_from_string)(spec) | Imports an object from a `"module:attribute"` string. |
 | [`call_with_supported_kwargs`](generated/torchrl.render.call_with_supported_kwargs.html#torchrl.render.call_with_supported_kwargs)(factory, ...) | Calls a user factory with a spec object or supported keyword arguments. |
-| [`load_checkpoint`](generated/torchrl.render.load_checkpoint.html#torchrl.render.load_checkpoint)(path[, map_location]) | Loads a local PyTorch checkpoint. |
+| [`load_checkpoint`](generated/torchrl.render.load_checkpoint.html#torchrl.render.load_checkpoint)(path[, map_location, ...]) | Loads a local PyTorch checkpoint. |
 | [`save_render_checkpoint`](generated/torchrl.render.save_render_checkpoint.html#torchrl.render.save_render_checkpoint)(path, model, *[, ...]) | Writes a checkpoint in the layout expected by rlrender factories. |
-| [`checkpoint_hash`](generated/torchrl.render.checkpoint_hash.html#torchrl.render.checkpoint_hash)(path) | Computes the SHA256 digest of a local checkpoint file. |
+| [`checkpoint_hash`](generated/torchrl.render.checkpoint_hash.html#torchrl.render.checkpoint_hash)(path) | Compute a SHA256 digest over all checkpoint bytes. |
 | [`infer_state_dict`](generated/torchrl.render.infer_state_dict.html#torchrl.render.infer_state_dict)(payload[, key]) | Infers a model state dict from common checkpoint payload layouts. |
 | [`parse_nested_key`](generated/torchrl.render.parse_nested_key.html#torchrl.render.parse_nested_key)(value) | Parses dotted strings into TensorDict nested keys. |
 | [`key_to_string`](generated/torchrl.render.key_to_string.html#torchrl.render.key_to_string)(key) | Formats a TensorDict nested key for config and metadata output. |
