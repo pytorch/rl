@@ -41,6 +41,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
+      upload-artifact: test-results-sota-shard-${{ matrix.shard }}
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
