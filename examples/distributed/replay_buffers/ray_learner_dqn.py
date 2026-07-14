@@ -35,7 +35,7 @@ from torchrl.envs import GymEnv
 from torchrl.modules import EGreedyModule, MLP, QValueActor
 from torchrl.objectives import DQNLoss
 from torchrl.objectives.utils import HardUpdate
-from torchrl.trainers import Learner, LearnerContext
+from torchrl.trainers import Learner
 from torchrl.trainers.algorithms import DQNTrainer
 from torchrl.trainers.distributed import RayLearnerGroup
 
@@ -60,18 +60,19 @@ def make_value_network(device: torch.device | str = "cpu") -> QValueActor:
 
 
 def make_learner(
-    context: LearnerContext,
+    replay_buffer,
+    data_parallel_context,
     *,
     learning_rate: float,
     target_update_interval: int,
 ) -> Learner:
     """Construct all trainable DQN state inside one Ray learner actor."""
-    value_network = make_value_network(context.device)
+    value_network = make_value_network(data_parallel_context.device)
     loss_module = DQNLoss(
         value_network=value_network,
         action_space="one-hot",
         delay_value=True,
-    ).to(context.device)
+    ).to(data_parallel_context.device)
     loss_module.make_value_estimator()
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=learning_rate)
     target_updater = HardUpdate(
@@ -79,10 +80,10 @@ def make_learner(
     )
     return Learner(
         loss_module,
-        context.replay_buffer,
+        replay_buffer,
         optimizer=optimizer,
         target_net_updater=target_updater,
-        data_parallel_context=context.data_parallel_context,
+        data_parallel_context=data_parallel_context,
         models={"policy": loss_module.value_network},
     )
 

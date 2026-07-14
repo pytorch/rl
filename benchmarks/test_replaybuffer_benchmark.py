@@ -29,7 +29,7 @@ from torchrl.data.replay_buffers import (
 )
 from torchrl.envs.transforms import ActionChunkTransform, CatFrames
 from torchrl.objectives import LossModule
-from torchrl.trainers import Learner, LearnerStepRequest
+from torchrl.trainers import Learner
 from torchrl.trainers.distributed import RayLearnerGroup
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
@@ -118,13 +118,13 @@ class _BenchmarkLearnerLoss(LossModule):
         )
 
 
-def _make_benchmark_learner(context):
-    loss_module = _BenchmarkLearnerLoss().to(context.device)
+def _make_benchmark_learner(replay_buffer, data_parallel_context):
+    loss_module = _BenchmarkLearnerLoss().to(data_parallel_context.device)
     return Learner(
         loss_module,
-        context.replay_buffer,
+        replay_buffer,
         optimizer=torch.optim.SGD(loss_module.parameters(), lr=1e-3),
-        data_parallel_context=context.data_parallel_context,
+        data_parallel_context=data_parallel_context,
         update_replay_priority=False,
     )
 
@@ -163,12 +163,9 @@ def test_ray_learner_group_update_throughput(benchmark, world_size):
         setup_timeout=60,
         command_timeout=60,
     )
-    round_id = 0
 
     def update():
-        nonlocal round_id
-        round_id += 1
-        return learner_group.step(LearnerStepRequest(round_id, 1, 128))
+        return learner_group.step()
 
     try:
         learner_group.start()

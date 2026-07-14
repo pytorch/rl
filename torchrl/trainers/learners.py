@@ -2,32 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Learner execution and its control-plane protocol.
+"""Learner execution and learner-group coordination.
 
-The learner data plane represents replay samples, loss metrics, and model
-parameters as :class:`~tensordict.TensorDictBase` objects. The four frozen
-dataclasses in this module carry lower-volume control-plane messages across four
-different boundaries:
-
-#. :class:`LearnerContext` is created once when a group starts a rank and injects
-   actor-local resources into the learner factory.
-#. :class:`LearnerStepRequest` is one immutable optimization command dispatched
-   to every rank.
-#. :class:`LearnerStepResult` is the completion receipt used to validate that
-   every rank completed the same command before controller counters advance.
-#. :class:`LearnerWeights` is requested separately when policy publication is
-   due, coupling a serialized snapshot to the model version that produced it.
-
-These records are separate because their lifetimes and destinations do not
-overlap. A context contains live process-group and replay handles and never
-returns to the controller; a request must remain small; a result must not carry
-model weights on every optimizer step; and a weight snapshot is not itself an
-optimization result. Combining them into one generic record would permit invalid
-states and would make every command pay for fields it cannot use. Plain keyword
-arguments or dictionaries would reduce the class count, but would lose the
-atomic command boundary and typed validation at the Ray serialization boundary.
-``frozen=True`` prevents accidental field rebinding after dispatch; it does not
-claim that referenced services or tensors are deeply immutable.
+Replay samples, optimization metrics, and model weights use TensorDict. Private
+frozen records are used only inside distributed learner groups to validate that
+all ranks executed the same command.
 """
 
 from __future__ import annotations
@@ -56,135 +35,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class LearnerContext:
-    """One-time actor-local dependencies passed to a learner factory.
-
-    A learner group creates one context per rank after it has established the
-    process group and rank-aware replay view. User code receives the context in
-    its factory and uses those already-owned resources to construct trainable
-    state; it should not create or manage the services itself. Bundling these
-    dependencies keeps the factory signature stable across local and Ray groups
-    and prevents distributed setup details from leaking into algorithm code.
-
-    This record exists only during learner construction. It is separate from a
-    :class:`LearnerStepRequest` because it contains live actor-local handles that
-    must never be sent back to the controller with each optimization command.
-
-    Args:
-        rank (int): Global data-parallel rank.
-        local_rank (int): Rank among workers on the same node.
-        world_size (int): Number of learner ranks.
-        device (torch.device): Device visible to the learner.
-        generation (int): Learner-group generation identifier.
-        replay_buffer (ReplayBuffer or DataParallelReplayBufferClient):
-            Actor-local replay buffer. Ray learner ranks receive a rank-aware
-            client view of the owner instead of owning the buffer directly.
-        data_parallel_context (DataParallelContext): Collective context.
-        seed (int, optional): Rank-specific seed.
-
-    Example:
-        A learner group creates the context and passes it to the factory. The
-        factory consumes the injected replay buffer and collective context, then
-        the resulting learner executes a command:
-
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-        >>> from torchrl.objectives import LossModule
-        >>> from torchrl.trainers import (
-        ...     Learner, LearnerStepRequest, LocalLearnerGroup
-        ... )
-        >>> class Loss(LossModule):
-        ...     def __init__(self):
-        ...         super().__init__()
-        ...         self.weight = torch.nn.Parameter(torch.ones(()))
-        ...     def forward(self, batch):
-        ...         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
-        >>> received_contexts = []
-        >>> def make_learner(context):
-        ...     received_contexts.append(context)
-        ...     loss = Loss().to(context.device)
-        ...     optimizer = torch.optim.SGD(loss.parameters(), lr=0.1)
-        ...     return Learner(
-        ...         loss,
-        ...         context.replay_buffer,
-        ...         optimizer=optimizer,
-        ...         data_parallel_context=context.data_parallel_context,
-        ...     )
-        >>> replay = TensorDictReplayBuffer(
-        ...     storage=LazyTensorStorage(4), batch_size=2
-        ... )
-        >>> _ = replay.extend(TensorDict({"x": torch.ones(4, 1)}, [4]))
-        >>> group = LocalLearnerGroup(
-        ...     make_learner, replay, global_batch_size=2
-        ... ).start()
-        >>> result = group.step(LearnerStepRequest(1, 1, 2))
-        >>> context = received_contexts[0]
-        >>> (
-        ...     context.rank,
-        ...     context.world_size,
-        ...     context.replay_buffer is replay,
-        ...     result.model_version,
-        ... )
-        (0, 1, True, 1)
-        >>> group.shutdown()
-    """
-
-    rank: int
-    local_rank: int
-    world_size: int
-    device: torch.device
-    generation: int
-    replay_buffer: ReplayBuffer | DataParallelReplayBufferClient
-    data_parallel_context: DataParallelContext
-    seed: int | None = None
-
-
-@dataclass(frozen=True)
-class LearnerStepRequest:
-    """One atomic optimization command sent to every learner rank.
-
-    The controller constructs one request and the group dispatches the same
-    immutable value to every rank. ``round_id`` and ``global_batch_size`` repeat
-    state known by the group on purpose: each rank validates them before sampling
-    or mutating optimizer state, which rejects stale, reordered, or
-    misconfigured commands before an ambiguous partial step can occur.
-
-    A request object is used instead of three loose ``step`` arguments so the
-    command has one serialization and validation boundary and can be logged as a
-    unit when a Ray generation fails. Learner state, metrics, and weights flow
-    back through their dedicated result and snapshot records.
-
-    Args:
-        round_id (int): Consecutive controller-assigned round, starting at one.
-        num_steps (int): Number of optimizer steps in this round.
-        global_batch_size (int): Batch size across all ranks.
-
-    Example:
-        A controller dispatches one request to all ranks. Each rank observes the
-        same round and step count and derives its local share of the global
-        batch:
-
-        >>> from torchrl.trainers import LearnerStepRequest
-        >>> def dispatch(request, world_size):
-        ...     if request.global_batch_size % world_size:
-        ...         raise ValueError("global batch must divide across ranks")
-        ...     return [
-        ...         {
-        ...             "rank": rank,
-        ...             "round": request.round_id,
-        ...             "steps": request.num_steps,
-        ...             "local_batch_size": request.global_batch_size // world_size,
-        ...         }
-        ...         for rank in range(world_size)
-        ...     ]
-        >>> request = LearnerStepRequest(
-        ...     round_id=4, num_steps=2, global_batch_size=128
-        ... )
-        >>> dispatch(request, world_size=2)
-        [{'rank': 0, 'round': 4, 'steps': 2, 'local_batch_size': 64}, {'rank': 1, 'round': 4, 'steps': 2, 'local_batch_size': 64}]
-    """
-
+class _LearnerStepCommand:
     round_id: int
     num_steps: int
     global_batch_size: int
@@ -204,127 +55,17 @@ class LearnerStepRequest:
 
 
 @dataclass(frozen=True)
-class LearnerStepResult:
-    """Completion receipt for one learner-group optimization command.
-
-    Every rank produces this receipt after a command. The group first compares
-    round, step count, model version, and metric structure across ranks; only a
-    consistent set is reduced and returned to the controller. The controller can
-    therefore advance authoritative counters without inferring progress from
-    metrics or actor liveness.
-
-    This is separate from :class:`LearnerStepRequest` because a request describes
-    intended work while a result certifies completed work. It is separate from
-    :class:`LearnerWeights` so ordinary optimization rounds return only small
-    scalar metrics instead of serializing the model at every step.
-
-    Args:
-        round_id (int): Completed controller round.
-        optim_steps (int): Number of optimizer steps completed in the round.
-        model_version (int): Version after the final completed step.
-        metrics (TensorDictBase): Detached CPU scalar metrics.
-
-    Example:
-        A controller applies a completed result to its authoritative counters
-        and logging state:
-
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from torchrl.trainers import LearnerStepResult
-        >>> def record_result(result, controller_state):
-        ...     expected_round = controller_state["round"] + 1
-        ...     if result.round_id != expected_round:
-        ...         raise RuntimeError("learner rounds must be consecutive")
-        ...     controller_state["round"] = result.round_id
-        ...     controller_state["optim_steps"] += result.optim_steps
-        ...     controller_state["model_version"] = result.model_version
-        ...     controller_state["metrics"] = result.metrics.to_dict()
-        >>> controller_state = {"round": 3, "optim_steps": 9, "model_version": 9}
-        >>> result = LearnerStepResult(
-        ...     round_id=4,
-        ...     optim_steps=3,
-        ...     model_version=12,
-        ...     metrics=TensorDict({"loss": torch.tensor(0.25)}, device="cpu"),
-        ... )
-        >>> record_result(result, controller_state)
-        >>> (
-        ...     controller_state["round"],
-        ...     controller_state["optim_steps"],
-        ...     controller_state["model_version"],
-        ...     float(controller_state["metrics"]["loss"]),
-        ... )
-        (4, 12, 12, 0.25)
-    """
-
+class _LearnerStepReceipt:
     round_id: int
     optim_steps: int
     model_version: int
     metrics: TensorDictBase
 
 
-@dataclass(frozen=True)
-class LearnerWeights:
-    """Atomic, versioned model snapshot exported for publication.
-
-    A controller requests this record only when collector publication or an
-    explicit inspection is due. Keeping ``model_id``, ``model_version``, and the
-    serialized TensorDict together prevents an unversioned or incorrectly named
-    snapshot from being published after a newer learner round completes.
-
-    Weights are not embedded in :class:`LearnerStepResult`: optimization and
-    publication have different cadences, and FSDP-style extraction may itself be
-    an expensive collective. The metadata remains ordinary Python control data,
-    while ``weights`` stays a TensorDict compatible with TorchRL weight-update
-    schemes.
-
-    Args:
-        model_id (str): Logical model identifier.
-        model_version (int): Learner version that produced the snapshot.
-        weights (TensorDictBase): Detached CPU weights.
-
-    Example:
-        Weight publication loads the serialized snapshot into a collector policy
-        and records the version received by that collector:
-
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from torchrl.trainers import LearnerWeights
-        >>> source_policy = torch.nn.Linear(2, 1)
-        >>> with torch.no_grad():
-        ...     _ = source_policy.weight.fill_(2.0)
-        ...     _ = source_policy.bias.fill_(0.5)
-        >>> snapshot = LearnerWeights(
-        ...     model_id="policy",
-        ...     model_version=7,
-        ...     weights=TensorDict.from_module(source_policy).detach().clone(),
-        ... )
-        >>> class Collector:
-        ...     def __init__(self):
-        ...         self.policy = torch.nn.Linear(2, 1)
-        ...     def update_policy_weights_(self, weights):
-        ...         weights.to_module(self.policy, preserve_module_state=True)
-        >>> def publish_weights(collector, snapshot):
-        ...     collector.update_policy_weights_(snapshot.weights)
-        ...     return snapshot.model_version
-        >>> collector = Collector()
-        >>> published_version = publish_weights(collector, snapshot)
-        >>> (
-        ...     published_version,
-        ...     torch.equal(collector.policy.weight, source_policy.weight),
-        ...     torch.equal(collector.policy.bias, source_policy.bias),
-        ... )
-        (7, True, True)
-    """
-
-    model_id: str
-    model_version: int
-    weights: TensorDictBase
-
-
-class LearnerBatchSource(Protocol):
+class _LearnerBatchSource(Protocol):
     """Internal seam that supplies one learner batch per optimizer step."""
 
-    def next(self, request: LearnerStepRequest) -> TensorDictBase:
+    def next(self, global_batch_size: int) -> TensorDictBase:
         ...
 
 
@@ -337,8 +78,8 @@ class _ReplayBatchSource:
         self.replay_buffer = replay_buffer
         self.device = device
 
-    def next(self, request: LearnerStepRequest) -> TensorDictBase:
-        batch = self.replay_buffer.sample(request.global_batch_size)
+    def next(self, global_batch_size: int) -> TensorDictBase:
+        batch = self.replay_buffer.sample(global_batch_size)
         if not isinstance(batch, TensorDictBase):
             raise TypeError(
                 "Learner replay sampling must return a TensorDictBase, got "
@@ -350,54 +91,47 @@ class _ReplayBatchSource:
 class Learner:
     """Actor-local owner of optimization state and bounded update commands.
 
-    A learner executes bounded optimization commands inside one process. It owns
-    model optimization, replay sampling, target updates, and RNG state. A
-    :class:`~torchrl.trainers.LearnerGroup` coordinates one or more learners,
-    while a :class:`~torchrl.trainers.Trainer` schedules group commands alongside
-    collection, logging, stopping, and shared-service lifecycle management.
+    A learner samples replay data and owns the loss module, optimizer, target
+    updater, and RNG state needed to execute optimization steps. A
+    :class:`~torchrl.trainers.LearnerGroup` coordinates one or more learners.
 
     Args:
         loss_module (LossModule): Actor-local TorchRL loss module.
-        replay_buffer (ReplayBuffer or DataParallelReplayBufferClient):
-            Actor-local replay buffer. Distributed ranks use a rank-aware client
-            view so sampling and priority updates reach the shared owner.
+        replay_buffer (ReplayBuffer or DataParallelReplayBufferClient): Replay
+            buffer used to sample optimization batches and update priorities.
         optimizer (Optimizer, optional): Default optimizer.
         optimization_stepper (OptimizationStepper, optional): Stepper used for
             each sampled batch. Defaults to :class:`DefaultOptimizationStepper`
             when an optimizer is provided.
         data_parallel_context (DataParallelContext, optional): Gradient
             collective context. Defaults to a single-process CPU context.
-        batch_source (LearnerBatchSource, optional): Custom internal batch
+        batch_source (_LearnerBatchSource, optional): Internal custom batch
             source. Defaults to replay-backed sampling.
-        target_net_updater (TargetNetUpdater, optional): Actor-local updater
-            constructed for ``loss_module``. In data-parallel groups, every rank
-            updates its target-network replica after the synchronized optimizer
-            step, keeping replicas aligned without a separate target collective.
-        clip_grad_norm (bool): Clipping mode used when ``clip_norm`` is set.
-            If ``True``, clips by total norm; otherwise clips individual gradient
-            values. Defaults to ``True``.
+        target_net_updater (TargetNetUpdater, optional): Updater constructed for
+            ``loss_module``. Every data-parallel rank applies the same update to
+            its local target-network replica after synchronized optimization.
+        clip_grad_norm (bool): If ``clip_norm`` is set, clip by total norm when
+            ``True`` and by individual gradient values otherwise. Defaults to
+            ``True``.
         clip_norm (float, optional): Gradient clipping threshold. ``None``
             disables clipping. Defaults to ``None``.
         models (mapping, optional): Named modules available to
             :meth:`get_weights`. ``"policy"`` is inferred when possible.
         update_replay_priority (bool): Whether to forward priorities written to
             the sampled batch by the loss module. Defaults to ``True`` so
-            prioritized replay works without separate hook registration;
-            non-prioritized ``TensorDictReplayBuffer`` instances ignore the
-            update. Set to ``False`` when the optimization stepper already
-            updates priorities or to avoid a no-op remote call.
+            prioritized replay works without another hook. Set to ``False`` if
+            another component performs the update.
 
     Example:
-        A DQN learner consumes transitions already written by a collector,
-        executes a bounded optimization command, and exposes a versioned policy
-        snapshot for publication:
+        A DQN learner consumes replay data, performs several updates, and
+        exports policy weights for a collector:
 
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
         >>> from torchrl.modules import QValueActor
         >>> from torchrl.objectives import DQNLoss, SoftUpdate
-        >>> from torchrl.trainers import Learner, LearnerStepRequest
+        >>> from torchrl.trainers import Learner
         >>> _ = torch.manual_seed(0)
         >>> policy = QValueActor(
         ...     torch.nn.Linear(4, 2),
@@ -431,19 +165,15 @@ class Learner:
         ...     optimizer=torch.optim.Adam(loss.parameters(), lr=0.01),
         ...     target_net_updater=SoftUpdate(loss, eps=0.95),
         ... ).initialize()
-        >>> weights_before = learner.get_weights().weights.clone()
-        >>> result = learner.step(
-        ...     LearnerStepRequest(round_id=1, num_steps=3, global_batch_size=4)
-        ... )
-        >>> (result.optim_steps, result.model_version)
-        (3, 3)
-        >>> set(result.metrics.keys()) == {"loss", "grad_norm"}
-        True
-        >>> snapshot = learner.get_weights()
-        >>> snapshot.model_version
+        >>> weights_before = learner.get_weights().clone()
+        >>> metrics = learner.step(num_steps=3)
+        >>> learner.model_version
         3
+        >>> set(metrics.keys()) == {"loss", "grad_norm"}
+        True
+        >>> weights_after = learner.get_weights(expected_version=3)
         >>> any(
-        ...     not torch.equal(weights_before.get(key), snapshot.weights.get(key))
+        ...     not torch.equal(weights_before.get(key), weights_after.get(key))
         ...     for key in weights_before.keys(True, True)
         ... )
         True
@@ -458,7 +188,7 @@ class Learner:
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: OptimizationStepper | None = None,
         data_parallel_context: DataParallelContext | None = None,
-        batch_source: LearnerBatchSource | None = None,
+        batch_source: _LearnerBatchSource | None = None,
         target_net_updater: TargetNetUpdater | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -514,7 +244,7 @@ class Learner:
         self._last_round = 0
         self._initialized = False
         self._closed = False
-        self._active_request: LearnerStepRequest | None = None
+        self._active_command: _LearnerStepCommand | None = None
         self._active_metrics: list[TensorDictBase] = []
 
         if models is None:
@@ -530,7 +260,7 @@ class Learner:
 
     @property
     def last_round(self) -> int:
-        """Last fully completed controller round."""
+        """Last fully completed optimization round."""
         return self._last_round
 
     def register_module(self, module_name: str, module: Any) -> None:
@@ -559,36 +289,54 @@ class Learner:
         self._initialized = True
         return self
 
-    def step(self, request: LearnerStepRequest) -> LearnerStepResult:
-        """Execute a consecutive bounded optimization round."""
-        self._begin_round(request)
-        for _ in range(request.num_steps):
+    def step(
+        self, num_steps: int = 1, *, batch_size: int | None = None
+    ) -> TensorDictBase:
+        """Run optimization steps and return their averaged scalar metrics.
+
+        Args:
+            num_steps (int): Number of consecutive optimizer steps. Defaults to
+                ``1``.
+            batch_size (int, optional): Global batch size. When omitted, use the
+                replay buffer's configured batch size.
+
+        Returns:
+            TensorDictBase: Detached CPU scalar metrics averaged across steps.
+        """
+        command = _LearnerStepCommand(
+            round_id=self.last_round + 1,
+            num_steps=num_steps,
+            global_batch_size=self._resolve_batch_size(batch_size),
+        )
+        return self._execute_round(command).metrics
+
+    def _execute_round(self, command: _LearnerStepCommand) -> _LearnerStepReceipt:
+        self._begin_round(command)
+        for _ in range(command.num_steps):
             self._step_round_once()
         return self._finish_round()
 
-    def _begin_round(self, request: LearnerStepRequest) -> None:
-        """Begin an ordered round for a learner-group implementation."""
+    def _begin_round(self, command: _LearnerStepCommand) -> None:
         self._ensure_ready()
-        if self._active_request is not None:
+        if self._active_command is not None:
             raise RuntimeError(
-                f"Round {self._active_request.round_id} is already in progress."
+                f"Round {self._active_command.round_id} is already in progress."
             )
         expected_round = self.last_round + 1
-        if request.round_id != expected_round:
+        if command.round_id != expected_round:
             raise RuntimeError(
-                f"Expected round_id={expected_round}, got {request.round_id}."
+                f"Expected round_id={expected_round}, got {command.round_id}."
             )
-        self._active_request = request
+        self._active_command = command
         self._active_metrics = []
 
-    def _step_round_once(self) -> LearnerStepResult:
-        """Execute one substep of the active round."""
-        request = self._active_request
-        if request is None:
+    def _step_round_once(self) -> _LearnerStepReceipt:
+        command = self._active_command
+        if command is None:
             raise RuntimeError("No learner round is active.")
-        if len(self._active_metrics) >= request.num_steps:
-            raise RuntimeError(f"Round {request.round_id} is already complete.")
-        batch = self.batch_source.next(request)
+        if len(self._active_metrics) >= command.num_steps:
+            raise RuntimeError(f"Round {command.round_id} is already complete.")
+        batch = self.batch_source.next(command.global_batch_size)
         metrics = self.optimization_stepper.step(self, batch)
         if self.update_replay_priority and hasattr(
             self.replay_buffer, "update_tensordict_priority"
@@ -599,38 +347,53 @@ class Learner:
         self._model_version += 1
         metrics = self._normalize_metrics(metrics)
         self._active_metrics.append(metrics)
-        return LearnerStepResult(
-            round_id=request.round_id,
+        return _LearnerStepReceipt(
+            round_id=command.round_id,
             optim_steps=1,
             model_version=self.model_version,
             metrics=metrics,
         )
 
-    def _finish_round(self) -> LearnerStepResult:
-        """Finish the active round after every requested substep completed."""
-        request = self._active_request
-        if request is None:
+    def _finish_round(self) -> _LearnerStepReceipt:
+        command = self._active_command
+        if command is None:
             raise RuntimeError("No learner round is active.")
-        if len(self._active_metrics) != request.num_steps:
+        if len(self._active_metrics) != command.num_steps:
             raise RuntimeError(
-                f"Round {request.round_id} completed {len(self._active_metrics)} "
-                f"of {request.num_steps} optimizer steps."
+                f"Round {command.round_id} completed {len(self._active_metrics)} "
+                f"of {command.num_steps} optimizer steps."
             )
         averaged_metrics = self._average_metrics(self._active_metrics)
-        self._last_round = request.round_id
-        result = LearnerStepResult(
-            round_id=request.round_id,
-            optim_steps=request.num_steps,
+        self._last_round = command.round_id
+        result = _LearnerStepReceipt(
+            round_id=command.round_id,
+            optim_steps=command.num_steps,
             model_version=self.model_version,
             metrics=averaged_metrics,
         )
-        self._active_request = None
+        self._active_command = None
         self._active_metrics = []
         return result
 
-    def get_weights(self, model_id: str = "policy") -> LearnerWeights:
-        """Return a detached CPU snapshot of a named model."""
+    def get_weights(
+        self,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+    ) -> TensorDictBase:
+        """Return detached CPU weights for a named model.
+
+        Args:
+            model_id (str): Logical model name. Defaults to ``"policy"``.
+            expected_version (int, optional): If provided, reject extraction
+                unless the learner is at this model version.
+        """
         self._ensure_ready()
+        if expected_version is not None and expected_version != self.model_version:
+            raise RuntimeError(
+                f"Expected model_version={expected_version}, got "
+                f"{self.model_version}."
+            )
         try:
             model = self.models[model_id]
         except KeyError as err:
@@ -643,15 +406,11 @@ class Learner:
             raise TypeError(
                 "The tensordict weight strategy must return TensorDictBase."
             )
-        return LearnerWeights(
-            model_id=model_id,
-            model_version=self.model_version,
-            weights=weights.detach().to("cpu"),
-        )
+        return weights.detach().to("cpu")
 
     def state_dict(self) -> dict[str, Any]:
         """Return learner optimization and RNG state."""
-        if self._active_request is not None:
+        if self._active_command is not None:
             raise RuntimeError("Cannot checkpoint a learner during an active round.")
         state: dict[str, Any] = {
             "loss_module": self.loss_module.state_dict(),
@@ -696,6 +455,22 @@ class Learner:
             return
         self.data_parallel_context.close()
         self._closed = True
+
+    def _resolve_batch_size(self, batch_size: int | None) -> int:
+        if batch_size is None:
+            batch_size = getattr(self.replay_buffer, "batch_size", None)
+            if batch_size is None:
+                raise ValueError(
+                    "batch_size must be provided when the replay buffer has no "
+                    "configured batch size."
+                )
+        if isinstance(batch_size, bool) or not isinstance(batch_size, int):
+            raise TypeError(
+                "batch_size must be an integer, got " f"{type(batch_size).__name__}."
+            )
+        if batch_size <= 0:
+            raise ValueError(f"batch_size must be positive, got {batch_size}.")
+        return batch_size
 
     @staticmethod
     def _infer_policy(loss_module: LossModule) -> nn.Module:
@@ -767,24 +542,22 @@ class Learner:
 
 
 class LearnerGroup(abc.ABC):
-    """Collective-safety boundary for one or more synchronized learners.
+    """Collective-safety boundary for synchronized learners.
+
+    The group owns round numbering, model-version validation, and the global
+    batch size. A controller only asks it for a number of optimization steps and
+    receives TensorDict metrics.
 
     Example:
-        A backend-neutral controller can command either a local or Ray group,
-        then publish the matching versioned weights:
+        A backend-neutral controller updates a learner group and publishes the
+        matching policy weights to a collector:
 
-        >>> from torchrl.trainers import LearnerStepRequest
         >>> def optimize_and_publish(group, collector):
-        ...     result = group.step(
-        ...         LearnerStepRequest(
-        ...             group.last_round + 1, 1, group.global_batch_size
-        ...         )
-        ...     )
-        ...     snapshot = group.get_weights()
-        ...     if snapshot.model_version != result.model_version:
-        ...         raise RuntimeError("stale learner weights")
-        ...     collector.update_policy_weights_(snapshot.weights)
-        ...     return result.metrics
+        ...     metrics = group.step(num_steps=2)
+        ...     version = group.model_version
+        ...     weights = group.get_weights(expected_version=version)
+        ...     collector.update_policy_weights_(weights)
+        ...     return metrics
     """
 
     @abc.abstractmethod
@@ -792,12 +565,17 @@ class LearnerGroup(abc.ABC):
         """Start every learner rank and wait for initial synchronization."""
 
     @abc.abstractmethod
-    def step(self, request: LearnerStepRequest) -> LearnerStepResult:
-        """Run one ordered optimization command on every rank."""
+    def step(self, num_steps: int = 1) -> TensorDictBase:
+        """Run consecutive optimization steps on every rank."""
 
     @abc.abstractmethod
-    def get_weights(self, model_id: str = "policy") -> LearnerWeights:
-        """Return a versioned rank-zero model snapshot."""
+    def get_weights(
+        self,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+    ) -> TensorDictBase:
+        """Return rank-zero weights for a named model."""
 
     @abc.abstractmethod
     def state_dict(self) -> dict[str, Any]:
@@ -826,6 +604,16 @@ class LearnerGroup(abc.ABC):
     def global_batch_size(self) -> int:
         """Batch size across every learner rank."""
 
+    @property
+    @abc.abstractmethod
+    def last_round(self) -> int:
+        """Last fully completed optimization round."""
+
+    @property
+    @abc.abstractmethod
+    def model_version(self) -> int:
+        """Version after the last completed optimizer step."""
+
     def __enter__(self) -> Self:
         return self.start()
 
@@ -837,10 +625,11 @@ class LocalLearnerGroup(LearnerGroup):
     """Single-process implementation of the learner-group contract.
 
     Args:
-        learner_factory (callable): Factory receiving a :class:`LearnerContext`.
+        learner_factory (callable): Factory receiving the replay buffer and
+            :class:`~torchrl.distributed.DataParallelContext`, in that order.
         replay_buffer (ReplayBuffer or DataParallelReplayBufferClient): Replay
             buffer used by the local learner.
-        global_batch_size (int): Batch size used by learner requests.
+        global_batch_size (int): Batch size across all learner ranks.
         device (DEVICE_TYPING): Learner device. Defaults to CPU.
         seed (int, optional): Learner seed.
 
@@ -849,9 +638,7 @@ class LocalLearnerGroup(LearnerGroup):
         >>> from tensordict import TensorDict
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
         >>> from torchrl.objectives import LossModule
-        >>> from torchrl.trainers import (
-        ...     Learner, LearnerStepRequest, LocalLearnerGroup
-        ... )
+        >>> from torchrl.trainers import Learner, LocalLearnerGroup
         >>> replay = TensorDictReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
         >>> _ = replay.extend(TensorDict({"x": torch.ones(4, 1)}, [4]))
         >>> class Loss(LossModule):
@@ -859,31 +646,42 @@ class LocalLearnerGroup(LearnerGroup):
         ...         super().__init__()
         ...         self.weight = torch.nn.Parameter(torch.ones(()))
         ...     def forward(self, batch):
-        ...         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
-        >>> def make_learner(context):
+        ...         return TensorDict({"loss": self.weight * batch["x"].mean()})
+        >>> def make_learner(replay_buffer, data_parallel_context):
         ...     loss = Loss()
-        ...     return Learner(loss, context.replay_buffer,
-        ...                    optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
-        ...                    data_parallel_context=context.data_parallel_context)
-        >>> group = LocalLearnerGroup(make_learner, replay, global_batch_size=2).start()
-        >>> result = group.step(LearnerStepRequest(1, 2, 2))
-        >>> result.optim_steps
-        2
-        >>> torch.testing.assert_close(
-        ...     group.get_weights().weights["weight"], torch.tensor(0.8)
-        ... )
+        ...     return Learner(
+        ...         loss,
+        ...         replay_buffer,
+        ...         optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+        ...         data_parallel_context=data_parallel_context,
+        ...     )
+        >>> group = LocalLearnerGroup(
+        ...     make_learner, replay, global_batch_size=2
+        ... ).start()
+        >>> metrics = group.step(num_steps=2)
+        >>> (group.last_round, group.model_version, metrics["loss"].ndim)
+        (1, 2, 0)
+        >>> weights = group.get_weights(expected_version=group.model_version)
+        >>> torch.testing.assert_close(weights["weight"], torch.tensor(0.8))
         >>> group.shutdown()
     """
 
     def __init__(
         self,
-        learner_factory: Callable[[LearnerContext], Learner],
+        learner_factory: Callable[
+            [ReplayBuffer | DataParallelReplayBufferClient, DataParallelContext],
+            Learner,
+        ],
         replay_buffer: ReplayBuffer | DataParallelReplayBufferClient,
         *,
         global_batch_size: int,
         device: DEVICE_TYPING = "cpu",
         seed: int | None = None,
     ) -> None:
+        if isinstance(global_batch_size, bool) or not isinstance(
+            global_batch_size, int
+        ):
+            raise TypeError("global_batch_size must be an integer.")
         if global_batch_size <= 0:
             raise ValueError("global_batch_size must be positive.")
         self.learner_factory = learner_factory
@@ -902,6 +700,14 @@ class LocalLearnerGroup(LearnerGroup):
         return self._global_batch_size
 
     @property
+    def last_round(self) -> int:
+        return self._require_learner().last_round
+
+    @property
+    def model_version(self) -> int:
+        return self._require_learner().model_version
+
+    @property
     def is_alive(self) -> bool:
         return self._learner is not None
 
@@ -916,17 +722,7 @@ class LocalLearnerGroup(LearnerGroup):
         replay_buffer = self.replay_buffer
         if hasattr(replay_buffer, "data_parallel"):
             replay_buffer = replay_buffer.data_parallel(rank=0, world_size=1)
-        factory_context = LearnerContext(
-            rank=0,
-            local_rank=0,
-            world_size=1,
-            device=context.device,
-            generation=0,
-            replay_buffer=replay_buffer,
-            data_parallel_context=context,
-            seed=self.seed,
-        )
-        learner = self.learner_factory(factory_context)
+        learner = self.learner_factory(replay_buffer, context)
         if not isinstance(learner, Learner):
             context.close()
             raise TypeError(
@@ -935,17 +731,20 @@ class LocalLearnerGroup(LearnerGroup):
         self._learner = learner.initialize()
         return self
 
-    def step(self, request: LearnerStepRequest) -> LearnerStepResult:
-        learner = self._require_learner()
-        if request.global_batch_size != self.global_batch_size:
-            raise ValueError(
-                "LearnerStepRequest.global_batch_size must match the group: "
-                f"{request.global_batch_size} != {self.global_batch_size}."
-            )
-        return learner.step(request)
+    def step(self, num_steps: int = 1) -> TensorDictBase:
+        return self._require_learner().step(
+            num_steps=num_steps, batch_size=self.global_batch_size
+        )
 
-    def get_weights(self, model_id: str = "policy") -> LearnerWeights:
-        return self._require_learner().get_weights(model_id)
+    def get_weights(
+        self,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+    ) -> TensorDictBase:
+        return self._require_learner().get_weights(
+            model_id, expected_version=expected_version
+        )
 
     def state_dict(self) -> dict[str, Any]:
         return {
@@ -975,12 +774,4 @@ class LocalLearnerGroup(LearnerGroup):
         return self._learner
 
 
-__all__ = [
-    "Learner",
-    "LearnerContext",
-    "LearnerGroup",
-    "LearnerStepRequest",
-    "LearnerStepResult",
-    "LearnerWeights",
-    "LocalLearnerGroup",
-]
+__all__ = ["Learner", "LearnerGroup", "LocalLearnerGroup"]

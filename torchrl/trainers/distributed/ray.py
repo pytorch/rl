@@ -20,12 +20,10 @@ from tensordict import TensorDict, TensorDictBase
 
 from torchrl.distributed import DataParallelContext
 from torchrl.trainers.learners import (
+    _LearnerStepCommand,
+    _LearnerStepReceipt,
     Learner,
-    LearnerContext,
     LearnerGroup,
-    LearnerStepRequest,
-    LearnerStepResult,
-    LearnerWeights,
 )
 
 if TYPE_CHECKING:
@@ -46,14 +44,12 @@ def _ray():
 class _RayLearnerWorker:
     def __init__(
         self,
-        learner_factory: Callable[[LearnerContext], Learner],
+        learner_factory: Callable[[Any, DataParallelContext], Learner],
         replay_buffer: Any,
-        generation: int,
         seed: int | None,
     ) -> None:
         self.learner_factory = learner_factory
         self.replay_buffer = replay_buffer
-        self.generation = generation
         self.seed = seed
         self.learner: Learner | None = None
 
@@ -100,18 +96,8 @@ class _RayLearnerWorker:
         replay_buffer = self.replay_buffer.data_parallel(
             rank=rank, world_size=world_size
         )
-        factory_context = LearnerContext(
-            rank=rank,
-            local_rank=local_rank,
-            world_size=world_size,
-            device=context.device,
-            generation=self.generation,
-            replay_buffer=replay_buffer,
-            data_parallel_context=context,
-            seed=rank_seed,
-        )
         try:
-            learner = self.learner_factory(factory_context)
+            learner = self.learner_factory(replay_buffer, context)
             if not isinstance(learner, Learner):
                 raise TypeError(
                     "learner_factory must return Learner, got "
@@ -129,17 +115,19 @@ class _RayLearnerWorker:
             "last_round": self.learner.last_round,
         }
 
-    def begin_round(self, request: LearnerStepRequest) -> None:
-        self._require_learner()._begin_round(request)
+    def begin_round(self, command: _LearnerStepCommand) -> None:
+        self._require_learner()._begin_round(command)
 
-    def step_round_once(self) -> LearnerStepResult:
+    def step_round_once(self) -> _LearnerStepReceipt:
         return self._require_learner()._step_round_once()
 
-    def finish_round(self) -> LearnerStepResult:
+    def finish_round(self) -> _LearnerStepReceipt:
         return self._require_learner()._finish_round()
 
-    def get_weights(self, model_id: str) -> LearnerWeights:
-        return self._require_learner().get_weights(model_id)
+    def get_weights(self, model_id: str, expected_version: int) -> TensorDictBase:
+        return self._require_learner().get_weights(
+            model_id, expected_version=expected_version
+        )
 
     def state_dict(self) -> dict[str, Any]:
         return self._require_learner().state_dict()
@@ -200,7 +188,6 @@ class RayLearnerGroup(LearnerGroup):
         A controller starts the gang, issues one global-batch command to every
         rank, and always tears the generation down as one unit:
 
-        >>> from torchrl.trainers import LearnerStepRequest
         >>> from torchrl.trainers.distributed import RayLearnerGroup
         >>> def run_one_round(learner_factory, replay_client):
         ...     group = RayLearnerGroup(
@@ -210,14 +197,18 @@ class RayLearnerGroup(LearnerGroup):
         ...         global_batch_size=256,
         ...     ).start()
         ...     try:
-        ...         return group.step(LearnerStepRequest(1, 1, 256))
+        ...         metrics = group.step(num_steps=1)
+        ...         weights = group.get_weights(
+        ...             expected_version=group.model_version
+        ...         )
+        ...         return metrics, weights
         ...     finally:
         ...         group.shutdown()
     """
 
     def __init__(
         self,
-        learner_factory: Callable[[LearnerContext], Learner],
+        learner_factory: Callable[[Any, DataParallelContext], Learner],
         replay_buffer: Any,
         *,
         world_size: int,
@@ -319,63 +310,66 @@ class RayLearnerGroup(LearnerGroup):
             self._model_version = 0
             return self
 
-    def step(self, request: LearnerStepRequest) -> LearnerStepResult:
+    def step(self, num_steps: int = 1) -> TensorDictBase:
         with self._lock:
             self._ensure_running()
-            if request.global_batch_size != self.global_batch_size:
-                raise ValueError(
-                    "LearnerStepRequest.global_batch_size must match the group."
-                )
-            expected_round = self.last_round + 1
-            if request.round_id != expected_round:
-                raise RuntimeError(
-                    f"Expected round_id={expected_round}, got {request.round_id}."
-                )
+            command = _LearnerStepCommand(
+                round_id=self.last_round + 1,
+                num_steps=num_steps,
+                global_batch_size=self.global_batch_size,
+            )
             ray = _ray()
             try:
                 self._get_ranked(
-                    [actor.begin_round.remote(request) for actor in self._actors],
+                    [actor.begin_round.remote(command) for actor in self._actors],
                     timeout=self.command_timeout,
                 )
-                for _ in range(request.num_steps):
-                    self._wait_for_replay(request.global_batch_size)
+                for _ in range(command.num_steps):
+                    self._wait_for_replay(command.global_batch_size)
                     substep_results = self._get_ranked(
                         [actor.step_round_once.remote() for actor in self._actors],
                         timeout=self.command_timeout,
                     )
                     self._validate_results(
-                        substep_results, request.round_id, expected_steps=1
+                        substep_results, command.round_id, expected_steps=1
                     )
                 results = self._get_ranked(
                     [actor.finish_round.remote() for actor in self._actors],
                     timeout=self.command_timeout,
                 )
                 self._validate_results(
-                    results, request.round_id, expected_steps=request.num_steps
+                    results, command.round_id, expected_steps=command.num_steps
                 )
             except BaseException as err:
                 self._mark_failed()
                 raise RuntimeError(
                     "Ray learner group failed: "
-                    f"generation={self.generation}, round={request.round_id}, "
+                    f"generation={self.generation}, round={command.round_id}, "
                     f"error={err}."
                 ) from err
             del ray
-            self._last_round = request.round_id
+            self._last_round = command.round_id
             self._model_version = results[0].model_version
-            return LearnerStepResult(
-                round_id=request.round_id,
-                optim_steps=request.num_steps,
-                model_version=self.model_version,
-                metrics=self._aggregate_metrics(results),
-            )
+            return self._aggregate_metrics(results)
 
-    def get_weights(self, model_id: str = "policy") -> LearnerWeights:
+    def get_weights(
+        self,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+    ) -> TensorDictBase:
         with self._lock:
             self._ensure_running()
+            if expected_version is None:
+                expected_version = self.model_version
+            elif expected_version != self.model_version:
+                raise RuntimeError(
+                    f"Expected model_version={expected_version}, got "
+                    f"{self.model_version}."
+                )
             try:
-                snapshot = self._get(
-                    self._actors[0].get_weights.remote(model_id),
+                weights = self._get(
+                    self._actors[0].get_weights.remote(model_id, expected_version),
                     timeout=self.command_timeout,
                 )
             except BaseException as err:
@@ -384,12 +378,7 @@ class RayLearnerGroup(LearnerGroup):
                     "Rank-zero weight extraction failed for learner group "
                     f"generation {self.generation}."
                 ) from err
-            if snapshot.model_version != self.model_version:
-                raise RuntimeError(
-                    "Rank-zero snapshot version does not match the learner group: "
-                    f"{snapshot.model_version} != {self.model_version}."
-                )
-            return snapshot
+            return weights
 
     def state_dict(self) -> dict[str, Any]:
         with self._lock:
@@ -542,7 +531,6 @@ class RayLearnerGroup(LearnerGroup):
             ).remote(
                 self.learner_factory,
                 self.replay_buffer,
-                self.generation,
                 self.seed,
             )
             self._actors.append(actor)
@@ -593,7 +581,7 @@ class RayLearnerGroup(LearnerGroup):
 
     @staticmethod
     def _validate_results(
-        results: list[LearnerStepResult], round_id: int, *, expected_steps: int
+        results: list[_LearnerStepReceipt], round_id: int, *, expected_steps: int
     ) -> None:
         if not results:
             raise RuntimeError("No learner results were returned.")
@@ -624,7 +612,7 @@ class RayLearnerGroup(LearnerGroup):
                     )
 
     @staticmethod
-    def _aggregate_metrics(results: list[LearnerStepResult]) -> TensorDictBase:
+    def _aggregate_metrics(results: list[_LearnerStepReceipt]) -> TensorDictBase:
         if not results:
             return TensorDict(device="cpu")
         output = results[0].metrics.clone()
@@ -691,7 +679,9 @@ class RayLearnerGroup(LearnerGroup):
             )
 
     @staticmethod
-    def _factory_id(factory: Callable[[LearnerContext], Learner]) -> str:
+    def _factory_id(
+        factory: Callable[[Any, DataParallelContext], Learner],
+    ) -> str:
         module = getattr(factory, "__module__", type(factory).__module__)
         qualname = getattr(factory, "__qualname__", type(factory).__qualname__)
         return f"{module}.{qualname}"
