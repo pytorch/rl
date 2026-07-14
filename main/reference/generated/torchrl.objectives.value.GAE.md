@@ -94,14 +94,16 @@ instead of `next_value` to bootstrap truncated episodes.
 - **deactivate_vmap** (*bool**,**optional*) - if `True`, no vmap call will be used, and
 vectorized maps will be replaced with simple for loops. Defaults to `False`.
 - **value_chunk_size** (*int**,**optional*) - if set, splits value-network calls
-into chunks of this many elements along the leading dimension.
+into chunks of this many elements along `value_chunk_dim`.
 Defaults to `None`.
 - **num_chunks** (*int**,**optional*) - if set, splits value-network calls into
-this many chunks along the leading dimension. Mutually exclusive
+this many chunks along `value_chunk_dim`. Mutually exclusive
 with `value_chunk_size`. `num_chunk` is accepted as an alias.
 Defaults to `None`.
 - **num_chunk** (*int**,**optional*) - alias for `num_chunks`. Cannot be set
 together with a different `num_chunks` value. Defaults to `None`.
+- **value_chunk_dim** (*int**,**optional*) - dimension used for chunked value-network
+calls. Defaults to `0`.
 - **shifted_budget** (*int**,**optional*) - number of extra value-network time slots
 used when `shifted=True`. `1` uses a `T+1`
 budget, `2` can represent one internal reset plus the rollout
