@@ -1763,6 +1763,23 @@ class _LearnerLoss(LossModule):
         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
 
 
+class _ActorCriticLearnerLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.actor_network = nn.Linear(1, 1, bias=False)
+        self.value_network = nn.Linear(1, 1, bias=False)
+
+    def forward(self, batch):
+        actor = self.actor_network(batch["x"])
+        critic = self.value_network(batch["x"])
+        return TensorDict(
+            {
+                "loss_actor": actor.square().mean(),
+                "loss_critic": (critic - batch["target"]).square().mean(),
+            }
+        )
+
+
 class _LearnerTargetUpdater(TargetNetUpdater):
     def __init__(self, loss_module):
         self.loss_module = loss_module
@@ -1863,6 +1880,37 @@ class TestLearnerGroup:
         restored.step()
         assert restored.model_version == 3
         restored.shutdown()
+
+    def test_actor_critic_loss_and_policy_publication(self):
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16), batch_size=4
+        )
+        replay_buffer.extend(
+            TensorDict(
+                {
+                    "x": torch.ones(16, 1),
+                    "target": torch.zeros(16, 1),
+                },
+                [16],
+            )
+        )
+        loss = _ActorCriticLearnerLoss()
+        actor_before = loss.actor_network.weight.detach().clone()
+        critic_before = loss.value_network.weight.detach().clone()
+        learner = Learner(
+            loss,
+            replay_buffer,
+            optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+        ).initialize()
+
+        metrics = learner.step(batch_size=4)
+        published = learner.get_weights(expected_version=1)
+
+        assert set(metrics.keys()) == {"loss_actor", "loss_critic", "grad_norm"}
+        assert not torch.equal(actor_before, loss.actor_network.weight)
+        assert not torch.equal(critic_before, loss.value_network.weight)
+        assert torch.equal(published["weight"], loss.actor_network.weight)
+        learner.close()
 
     @pytest.mark.parametrize("num_steps", [0, -1, True, 1.5])
     def test_rejects_invalid_num_steps(self, num_steps):
@@ -2065,6 +2113,63 @@ class TestLearnerGroupController:
         trainer.train()
         assert trainer._learner_round == 1
         assert trainer._optim_count == 1
+
+    @pytest.mark.parametrize("trainer_cls", [SACTrainer, DDPGTrainer, TD3Trainer])
+    def test_actor_critic_remote_mode_keeps_optimization_actor_owned(self, trainer_cls):
+        events = []
+        replay = _ControllerReplay(events)
+        collector = _ControllerCollector(events)
+        learner_group = _ControllerLearnerGroup(events, replay)
+        with pytest.warns(UserWarning, match="experimental/prototype"):
+            trainer = trainer_cls(
+                collector=collector,
+                total_frames=4,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                optimizer=None,
+                learner_group=learner_group,
+                replay_buffer=replay,
+                target_net_updater=None,
+                progress_bar=False,
+                enable_logging=False,
+            )
+
+        assert not trainer._optimizer_ops
+        assert not trainer._process_optim_batch_ops
+        assert not trainer._post_loss_ops
+        assert not trainer._post_optim_ops
+        trainer.train()
+        assert trainer._learner_round == 1
+        assert trainer._optim_count == 1
+
+    def test_td3_remote_publication_composes_controller_exploration(self):
+        events = []
+        replay = _ControllerReplay(events)
+        collector = _ControllerCollector(events)
+        learner_group = _ControllerLearnerGroup(events, replay)
+        exploration_module = nn.Linear(1, 1)
+        with pytest.warns(UserWarning, match="experimental/prototype"):
+            trainer = TD3Trainer(
+                collector=collector,
+                total_frames=4,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                learner_group=learner_group,
+                replay_buffer=replay,
+                exploration_module=exploration_module,
+                progress_bar=False,
+                enable_logging=False,
+            )
+
+        trainer.train()
+
+        initial_weights = collector.published_weights[0]
+        assert initial_weights["module", "0", "weight"].item() == 0
+        assert torch.equal(
+            initial_weights["module", "1", "weight"], exploration_module.weight
+        )
 
     def test_rejects_driver_owned_optimization(self):
         events = []

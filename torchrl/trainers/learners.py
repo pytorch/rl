@@ -480,7 +480,10 @@ class Learner:
 
     @staticmethod
     def _infer_policy(loss_module: LossModule) -> nn.Module:
-        for name in ("value_network", "local_value_network", "actor_network"):
+        # Actor-critic losses can expose both actor_network and value_network;
+        # collectors must receive the actor rather than the critic. DQN losses
+        # fall through to their value or local-value network.
+        for name in ("actor_network", "value_network", "local_value_network"):
             policy = getattr(loss_module, name, None)
             if isinstance(policy, nn.Module):
                 return policy

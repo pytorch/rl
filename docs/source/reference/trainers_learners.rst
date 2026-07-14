@@ -52,6 +52,27 @@ controller-owned exploration state with each versioned learner policy before
 publication. See ``examples/distributed/replay_buffers/ray_learner_dqn.py`` for
 a complete two-rank Ray example.
 
+Off-policy actor-critic learners
+--------------------------------
+
+The learner boundary is loss-agnostic: :class:`Learner` accepts any TorchRL
+:class:`~torchrl.objectives.LossModule`, and named models determine which
+weights a controller can publish. For SAC, DDPG, and TD3, construct the loss,
+optimizer or optimization stepper, and target updater inside the learner
+factory, then expose the actor as ``models={"policy": loss.actor_network}``.
+The learner owns both actor and critic optimization state while collectors
+receive only the actor weights.
+
+:class:`~torchrl.trainers.algorithms.SACTrainer`,
+:class:`~torchrl.trainers.algorithms.DDPGTrainer`, and
+:class:`~torchrl.trainers.algorithms.TD3Trainer` accept the same
+``learner_group`` controller mode as DQN. Their driver-side ``loss_module``,
+optimizer, optimization stepper, and target updater must be omitted. TD3 keeps
+exploration state on the controller and composes it with each published actor
+version, matching its local collector policy structure. This execution path is
+for replay-backed off-policy training; on-policy batch distribution is outside
+its current contract.
+
 Distributed checkpoints
 -----------------------
 

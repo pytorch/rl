@@ -1621,6 +1621,20 @@ class TestTrainerConfigs:
         ]
         assert field.default is None
 
+    @pytest.mark.parametrize(
+        "config_name",
+        [
+            "DDPGTrainerConfig",
+            "DQNTrainerConfig",
+            "SACTrainerConfig",
+            "TD3TrainerConfig",
+        ],
+    )
+    def test_off_policy_learner_group_config_parity(self, config_name):
+        fields = getattr(algorithm_configs, config_name).__dataclass_fields__
+        assert fields["learner_group"].default is None
+        assert fields["learner_poll_interval"].default == 0.05
+
     def test_nested_key_normalization_for_hydra_lists(self):
         from omegaconf import ListConfig
         from torchrl.trainers.algorithms.configs.common import (
@@ -1966,6 +1980,8 @@ class TestTrainerConfigs:
         assert cfg.total_frames == 200
         assert cfg.optim_steps_per_batch == 4
         assert cfg.async_collection is False
+        assert cfg.learner_group is None
+        assert cfg.learner_poll_interval == 0.05
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_iql_trainer_config(self):
@@ -2035,6 +2051,8 @@ class TestTrainerConfigs:
         assert cfg.optim_steps_per_batch == 1
         assert cfg.policy_update_delay == 2
         assert cfg.clip_grad_norm is True
+        assert cfg.learner_group is None
+        assert cfg.learner_poll_interval == 0.05
 
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")

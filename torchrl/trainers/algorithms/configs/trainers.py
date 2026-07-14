@@ -52,6 +52,34 @@ def _register_trainer_hooks(trainer: Any, hooks: list[Any] | None) -> None:
         hook.register(trainer)
 
 
+def _make_remote_learner_group(
+    algorithm: str,
+    learner_group: Any,
+    replay_buffer: Any,
+    **driver_owned: Any,
+) -> LearnerGroup | None:
+    if learner_group is None:
+        return None
+    owned_on_driver = [
+        name for name, value in driver_owned.items() if value is not None
+    ]
+    if owned_on_driver:
+        raise ValueError(
+            f"Remote {algorithm} configuration constructs trainable state inside "
+            "learners; remove driver-owned " + ", ".join(owned_on_driver) + "."
+        )
+    if replay_buffer is None:
+        raise ValueError("replay_buffer is required with learner_group.")
+    if isinstance(learner_group, LearnerGroup):
+        return learner_group
+    replay_client = (
+        replay_buffer.client()
+        if callable(getattr(replay_buffer, "client", None))
+        else replay_buffer
+    )
+    return learner_group(replay_buffer=replay_client)
+
+
 @dataclass
 class SACTrainerConfig(TrainerConfig):
     """Hydra configuration for :class:`~torchrl.trainers.algorithms.SACTrainer`.
@@ -67,6 +95,8 @@ class SACTrainerConfig(TrainerConfig):
     logger: Any
     save_trainer_file: Any
     replay_buffer: Any
+    learner_group: Any = None
+    learner_poll_interval: float = 0.05
     frame_skip: int = 1
     clip_grad_norm: bool = True
     clip_norm: float | None = None
@@ -118,6 +148,8 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     clip_norm = kwargs.pop("clip_norm")
     progress_bar = kwargs.pop("progress_bar", True)
     replay_buffer = kwargs.pop("replay_buffer")
+    learner_group = kwargs.pop("learner_group", None)
+    learner_poll_interval = kwargs.pop("learner_poll_interval", 0.05)
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
@@ -145,6 +177,16 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
     hooks = kwargs.pop("hooks", None)
 
+    remote_mode = learner_group is not None
+    learner_group = _make_remote_learner_group(
+        "SAC",
+        learner_group,
+        replay_buffer,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_net_updater=target_net_updater,
+    )
+
     # Instantiate networks first
     if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
@@ -165,24 +207,24 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
                 "replay_buffer must be provided when async_collection is True"
             )
 
-    if not isinstance(loss_module, LossModule):
+    if not remote_mode and not isinstance(loss_module, LossModule):
         # then it's a partial config
         loss_module = loss_module(
             actor_network=actor_network, critic_network=critic_network
         )
-    if not isinstance(target_net_updater, TargetNetUpdater):
+    if not remote_mode and not isinstance(target_net_updater, TargetNetUpdater):
         # target_net_updater must be a partial taking the loss as input
         target_net_updater = target_net_updater(loss_module)
-    if not isinstance(optimizer, torch.optim.Optimizer):
+    if not remote_mode and not isinstance(optimizer, torch.optim.Optimizer):
         # then it's a partial config
         optimizer = optimizer(params=loss_module.parameters())
 
     # Quick instance checks
     if not isinstance(collector, BaseCollector):
         raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
-    if not isinstance(loss_module, LossModule):
+    if not remote_mode and not isinstance(loss_module, LossModule):
         raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
-    if not isinstance(optimizer, torch.optim.Optimizer):
+    if not remote_mode and not isinstance(optimizer, torch.optim.Optimizer):
         raise ValueError(
             f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
         )
@@ -196,6 +238,8 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         optim_steps_per_batch=optim_steps_per_batch,
         loss_module=loss_module,
         optimizer=optimizer,
+        learner_group=learner_group,
+        learner_poll_interval=learner_poll_interval,
         logger=logger,
         clip_grad_norm=clip_grad_norm,
         clip_norm=clip_norm,
@@ -263,6 +307,12 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     clip_norm = kwargs.pop("clip_norm")
     progress_bar = kwargs.pop("progress_bar", True)
     replay_buffer = kwargs.pop("replay_buffer")
+    learner_group = kwargs.pop("learner_group", None)
+    kwargs.pop("learner_poll_interval", 0.05)
+    if learner_group is not None:
+        raise ValueError(
+            "OfflineToOnlineTrainer does not support remote learner groups."
+        )
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
@@ -785,23 +835,14 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
 
     remote_mode = learner_group is not None
-    if remote_mode:
-        owned_on_driver = [
-            name
-            for name, value in (
-                ("loss_module", loss_module),
-                ("optimizer", optimizer),
-                ("target_net_updater", target_net_updater),
-            )
-            if value is not None
-        ]
-        if owned_on_driver:
-            raise ValueError(
-                "Remote DQN configuration constructs trainable state inside learners; "
-                "remove driver-owned " + ", ".join(owned_on_driver) + "."
-            )
-        if replay_buffer is None:
-            raise ValueError("replay_buffer is required with learner_group.")
+    learner_group = _make_remote_learner_group(
+        "DQN",
+        learner_group,
+        replay_buffer,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_net_updater=target_net_updater,
+    )
 
     if value_network is not None and not isinstance(value_network, torch.nn.Module):
         value_network = value_network()
@@ -859,14 +900,6 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         target_net_updater = target_net_updater(loss_module)
     if not remote_mode and not isinstance(optimizer, torch.optim.Optimizer):
         optimizer = optimizer(params=loss_module.parameters())
-
-    if remote_mode and not isinstance(learner_group, LearnerGroup):
-        replay_client = (
-            replay_buffer.client()
-            if callable(getattr(replay_buffer, "client", None))
-            else replay_buffer
-        )
-        learner_group = learner_group(replay_buffer=replay_client)
 
     if not isinstance(collector, BaseCollector):
         raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
@@ -935,6 +968,8 @@ class DDPGTrainerConfig(TrainerConfig):
     logger: Any
     save_trainer_file: Any
     replay_buffer: Any
+    learner_group: Any = None
+    learner_poll_interval: float = 0.05
     frame_skip: int = 1
     clip_grad_norm: bool = True
     clip_norm: float | None = None
@@ -984,6 +1019,8 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     clip_norm = kwargs.pop("clip_norm")
     progress_bar = kwargs.pop("progress_bar", True)
     replay_buffer = kwargs.pop("replay_buffer")
+    learner_group = kwargs.pop("learner_group", None)
+    learner_poll_interval = kwargs.pop("learner_poll_interval", 0.05)
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
@@ -1010,6 +1047,16 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
     hooks = kwargs.pop("hooks", None)
 
+    remote_mode = learner_group is not None
+    learner_group = _make_remote_learner_group(
+        "DDPG",
+        learner_group,
+        replay_buffer,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        target_net_updater=target_net_updater,
+    )
+
     if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
     if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
@@ -1020,20 +1067,20 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         elif replay_buffer is not None:
             collector = collector(replay_buffer=replay_buffer)
 
-    if not isinstance(loss_module, LossModule):
+    if not remote_mode and not isinstance(loss_module, LossModule):
         loss_module = loss_module(
             actor_network=actor_network, value_network=critic_network
         )
-    if not isinstance(target_net_updater, TargetNetUpdater):
+    if not remote_mode and not isinstance(target_net_updater, TargetNetUpdater):
         target_net_updater = target_net_updater(loss_module)
-    if not isinstance(optimizer, torch.optim.Optimizer):
+    if not remote_mode and not isinstance(optimizer, torch.optim.Optimizer):
         optimizer = optimizer(params=loss_module.parameters())
 
     if not isinstance(collector, BaseCollector):
         raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
-    if not isinstance(loss_module, LossModule):
+    if not remote_mode and not isinstance(loss_module, LossModule):
         raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
-    if not isinstance(optimizer, torch.optim.Optimizer):
+    if not remote_mode and not isinstance(optimizer, torch.optim.Optimizer):
         raise ValueError(
             f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
         )
@@ -1047,6 +1094,8 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         optim_steps_per_batch=optim_steps_per_batch,
         loss_module=loss_module,
         optimizer=optimizer,
+        learner_group=learner_group,
+        learner_poll_interval=learner_poll_interval,
         logger=logger,
         clip_grad_norm=clip_grad_norm,
         clip_norm=clip_norm,
@@ -1370,6 +1419,8 @@ class TD3TrainerConfig(TrainerConfig):
     replay_buffer: Any
     save_trainer_file: Any
     optim_steps_per_batch: int | None = 1
+    learner_group: Any = None
+    learner_poll_interval: float = 0.05
     optimizer: Any | None = None
     optimizer_actor: Any | None = None
     optimizer_critic: Any | None = None
@@ -1425,6 +1476,8 @@ def _make_td3_trainer(*args, **kwargs):
     clip_norm = kwargs.pop("clip_norm")
     progress_bar = kwargs.pop("progress_bar", True)
     replay_buffer = kwargs.pop("replay_buffer")
+    learner_group = kwargs.pop("learner_group", None)
+    learner_poll_interval = kwargs.pop("learner_poll_interval", 0.05)
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
@@ -1446,6 +1499,18 @@ def _make_td3_trainer(*args, **kwargs):
     policy_update_delay = kwargs.pop("policy_update_delay", 2)
     value_estimator_gamma = kwargs.pop("value_estimator_gamma", None)
     hooks = kwargs.pop("hooks", None)
+
+    remote_mode = learner_group is not None
+    learner_group = _make_remote_learner_group(
+        "TD3",
+        learner_group,
+        replay_buffer,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        optimizer_actor=optimizer_actor,
+        optimizer_critic=optimizer_critic,
+        target_net_updater=target_net_updater,
+    )
 
     if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
@@ -1471,68 +1536,70 @@ def _make_td3_trainer(*args, **kwargs):
         elif replay_buffer is not None:
             collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
-    env = collector.env
-    action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
-    if hasattr(action_spec, "get"):
-        nested_action_spec = action_spec.get("action", default=None)
-        if nested_action_spec is not None:
-            action_spec = nested_action_spec
+    optimization_stepper = None
+    if not remote_mode:
+        env = collector.env
+        action_spec = getattr(env, "action_spec_unbatched", None) or env.action_spec
+        if hasattr(action_spec, "get"):
+            nested_action_spec = action_spec.get("action", default=None)
+            if nested_action_spec is not None:
+                action_spec = nested_action_spec
 
-    if not callable(loss_module):
-        # TD3Loss currently requires real action bounds from the environment. Therefore, we
-        # require it to be a partial for now.
-        raise TypeError(
-            "TD3Trainer currently expects loss_module to be a Hydra partial/callable. "
-            "Provide a partial loss config (e.g. loss._partial_=true) and let the "
-            "trainer inject actor_network, qvalue_network, and action_spec."
-        )
-    else:
+        if not callable(loss_module):
+            # TD3Loss currently requires real action bounds from the environment.
+            raise TypeError(
+                "TD3Trainer currently expects loss_module to be a Hydra "
+                "partial/callable. Provide a partial loss config (e.g. "
+                "loss._partial_=true) and let the trainer inject actor_network, "
+                "qvalue_network, and action_spec."
+            )
         loss_module = loss_module(
             action_spec=action_spec,
             actor_network=actor_network,
             qvalue_network=qvalue_network,
         )
 
-    if value_estimator_gamma is not None:
-        loss_module.make_value_estimator(gamma=value_estimator_gamma)
+        if value_estimator_gamma is not None:
+            loss_module.make_value_estimator(gamma=value_estimator_gamma)
 
-    if not isinstance(target_net_updater, TargetNetUpdater):
-        target_net_updater = target_net_updater(loss_module)
+        if not isinstance(target_net_updater, TargetNetUpdater):
+            target_net_updater = target_net_updater(loss_module)
 
-    if optimizer_actor is None and optimizer_critic is None:
-        optimizer_actor = optimizer
-        optimizer_critic = optimizer
-    elif optimizer_actor is None or optimizer_critic is None:
-        raise TypeError(
-            "TD3Trainer requires both optimizer_actor and optimizer_critic when overriding optimizer."
+        if optimizer_actor is None and optimizer_critic is None:
+            optimizer_actor = optimizer
+            optimizer_critic = optimizer
+        elif optimizer_actor is None or optimizer_critic is None:
+            raise TypeError(
+                "TD3Trainer requires both optimizer_actor and optimizer_critic "
+                "when overriding optimizer."
+            )
+
+        actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+        critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+
+        if not isinstance(optimizer_actor, torch.optim.Optimizer):
+            optimizer_actor = optimizer_actor(params=actor_params)
+        if not isinstance(optimizer_critic, torch.optim.Optimizer):
+            optimizer_critic = optimizer_critic(params=critic_params)
+
+        optimization_stepper = TD3OptimizationStepper(
+            optimizer_actor=optimizer_actor,
+            optimizer_critic=optimizer_critic,
+            policy_update_delay=policy_update_delay,
+            zero_grad_set_to_none=True,
         )
-
-    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
-    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
-
-    if not isinstance(optimizer_actor, torch.optim.Optimizer):
-        optimizer_actor = optimizer_actor(params=actor_params)
-    if not isinstance(optimizer_critic, torch.optim.Optimizer):
-        optimizer_critic = optimizer_critic(params=critic_params)
-
-    optimization_stepper = TD3OptimizationStepper(
-        optimizer_actor=optimizer_actor,
-        optimizer_critic=optimizer_critic,
-        policy_update_delay=policy_update_delay,
-        zero_grad_set_to_none=True,
-    )
 
     if not isinstance(collector, BaseCollector):
         raise TypeError(f"collector must be a BaseCollector, got {type(collector)}")
-    if not isinstance(loss_module, LossModule):
+    if not remote_mode and not isinstance(loss_module, LossModule):
         raise TypeError(f"loss_module must be a LossModule, got {type(loss_module)}")
-    if optimizer_actor is None or optimizer_critic is None:
+    if not remote_mode and (optimizer_actor is None or optimizer_critic is None):
         raise TypeError("TD3Trainer requires optimizer configuration.")
-    if not isinstance(optimizer_actor, torch.optim.Optimizer):
+    if not remote_mode and not isinstance(optimizer_actor, torch.optim.Optimizer):
         raise TypeError(
             f"TD3Trainer requires optimizer_actor to be a torch.optim.Optimizer, got {type(optimizer)}"
         )
-    if not isinstance(optimizer_critic, torch.optim.Optimizer):
+    if not remote_mode and not isinstance(optimizer_critic, torch.optim.Optimizer):
         raise TypeError(
             f"TD3Trainer requires optimizer_critic to be a torch.optim.Optimizer, got {type(optimizer)}"
         )
@@ -1547,6 +1614,8 @@ def _make_td3_trainer(*args, **kwargs):
         loss_module=loss_module,
         optimizer=None,
         optimization_stepper=optimization_stepper,
+        learner_group=learner_group,
+        learner_poll_interval=learner_poll_interval,
         logger=logger,
         clip_grad_norm=clip_grad_norm,
         clip_norm=clip_norm,
