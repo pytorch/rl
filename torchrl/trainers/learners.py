@@ -45,6 +45,7 @@ from torch import nn, optim
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.distributed import DataParallelContext
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.trainers.trainers import DefaultOptimizationStepper, OptimizationStepper
 from torchrl.weight_update.weight_sync_schemes import WeightStrategy
@@ -84,8 +85,9 @@ class LearnerContext:
 
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from torchrl.objectives import LossModule
         >>> from torchrl.trainers import Learner
-        >>> class Loss(torch.nn.Module):
+        >>> class Loss(LossModule):
         ...     def __init__(self):
         ...         super().__init__()
         ...         self.weight = torch.nn.Parameter(torch.ones(()))
@@ -271,7 +273,7 @@ class Learner:
     collection, logging, stopping, and shared-service lifecycle management.
 
     Args:
-        loss_module (nn.Module): Actor-local loss module.
+        loss_module (LossModule): Actor-local TorchRL loss module.
         replay_buffer: Rank-aware lifecycle-free replay client.
         optimizer (Optimizer, optional): Default optimizer.
         optimization_stepper (OptimizationStepper, optional): Stepper used for
@@ -294,8 +296,9 @@ class Learner:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> from torchrl.objectives import LossModule
         >>> from torchrl.trainers import Learner, LearnerStepRequest
-        >>> class Loss(torch.nn.Module):
+        >>> class Loss(LossModule):
         ...     def __init__(self):
         ...         super().__init__()
         ...         self.weight = torch.nn.Parameter(torch.ones(()))
@@ -320,7 +323,7 @@ class Learner:
 
     def __init__(
         self,
-        loss_module: nn.Module,
+        loss_module: LossModule,
         replay_buffer: Any,
         *,
         optimizer: optim.Optimizer | None = None,
@@ -333,6 +336,11 @@ class Learner:
         models: Mapping[str, nn.Module] | None = None,
         update_replay_priority: bool = True,
     ) -> None:
+        if not isinstance(loss_module, LossModule):
+            raise TypeError(
+                "loss_module must be a torchrl.objectives.LossModule, got "
+                f"{type(loss_module).__name__}."
+            )
         if optimization_stepper is None:
             if optimizer is None:
                 raise ValueError(
@@ -533,7 +541,7 @@ class Learner:
         self._closed = True
 
     @staticmethod
-    def _infer_policy(loss_module: nn.Module) -> nn.Module:
+    def _infer_policy(loss_module: LossModule) -> nn.Module:
         for name in ("value_network", "local_value_network", "actor_network"):
             policy = getattr(loss_module, name, None)
             if isinstance(policy, nn.Module):
@@ -682,12 +690,13 @@ class LocalLearnerGroup(LearnerGroup):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> from torchrl.objectives import LossModule
         >>> from torchrl.trainers import (
         ...     Learner, LearnerStepRequest, LocalLearnerGroup
         ... )
         >>> replay = TensorDictReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
         >>> _ = replay.extend(TensorDict({"x": torch.ones(4, 1)}, [4]))
-        >>> class Loss(torch.nn.Module):
+        >>> class Loss(LossModule):
         ...     def __init__(self):
         ...         super().__init__()
         ...         self.weight = torch.nn.Parameter(torch.ones(()))
