@@ -43,6 +43,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn, optim
 
+from torchrl.data.replay_buffers import DataParallelReplayBufferClient, ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.distributed import DataParallelContext
 from torchrl.objectives.common import LossModule
@@ -75,7 +76,9 @@ class LearnerContext:
         world_size (int): Number of learner ranks.
         device (torch.device): Device visible to the learner.
         generation (int): Learner-group generation identifier.
-        replay_buffer: Rank-aware, lifecycle-free replay client.
+        replay_buffer (ReplayBuffer or DataParallelReplayBufferClient):
+            Actor-local replay buffer. Ray learner ranks receive a rank-aware
+            client view of the owner instead of owning the buffer directly.
         data_parallel_context (DataParallelContext): Collective context.
         seed (int, optional): Rank-specific seed.
 
@@ -109,7 +112,7 @@ class LearnerContext:
     world_size: int
     device: torch.device
     generation: int
-    replay_buffer: Any
+    replay_buffer: ReplayBuffer | DataParallelReplayBufferClient
     data_parallel_context: DataParallelContext
     seed: int | None = None
 
@@ -249,7 +252,11 @@ class LearnerBatchSource(Protocol):
 
 
 class _ReplayBatchSource:
-    def __init__(self, replay_buffer: Any, device: torch.device) -> None:
+    def __init__(
+        self,
+        replay_buffer: ReplayBuffer | DataParallelReplayBufferClient,
+        device: torch.device,
+    ) -> None:
         self.replay_buffer = replay_buffer
         self.device = device
 
@@ -274,7 +281,9 @@ class Learner:
 
     Args:
         loss_module (LossModule): Actor-local TorchRL loss module.
-        replay_buffer: Rank-aware lifecycle-free replay client.
+        replay_buffer (ReplayBuffer or DataParallelReplayBufferClient):
+            Actor-local replay buffer. Distributed ranks use a rank-aware client
+            view so sampling and priority updates reach the shared owner.
         optimizer (Optimizer, optional): Default optimizer.
         optimization_stepper (OptimizationStepper, optional): Stepper used for
             each sampled batch. Defaults to :class:`DefaultOptimizationStepper`
@@ -324,7 +333,7 @@ class Learner:
     def __init__(
         self,
         loss_module: LossModule,
-        replay_buffer: Any,
+        replay_buffer: ReplayBuffer | DataParallelReplayBufferClient,
         *,
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: OptimizationStepper | None = None,
@@ -340,6 +349,14 @@ class Learner:
             raise TypeError(
                 "loss_module must be a torchrl.objectives.LossModule, got "
                 f"{type(loss_module).__name__}."
+            )
+        if not isinstance(
+            replay_buffer, (ReplayBuffer, DataParallelReplayBufferClient)
+        ):
+            raise TypeError(
+                "replay_buffer must be a ReplayBuffer or "
+                "DataParallelReplayBufferClient, got "
+                f"{type(replay_buffer).__name__}."
             )
         if optimization_stepper is None:
             if optimizer is None:
@@ -690,7 +707,8 @@ class LocalLearnerGroup(LearnerGroup):
 
     Args:
         learner_factory (callable): Factory receiving a :class:`LearnerContext`.
-        replay_buffer: Replay buffer or lifecycle-free replay client.
+        replay_buffer (ReplayBuffer or DataParallelReplayBufferClient): Replay
+            buffer used by the local learner.
         global_batch_size (int): Batch size used by learner requests.
         device (DEVICE_TYPING): Learner device. Defaults to CPU.
         seed (int, optional): Learner seed.
@@ -729,7 +747,7 @@ class LocalLearnerGroup(LearnerGroup):
     def __init__(
         self,
         learner_factory: Callable[[LearnerContext], Learner],
-        replay_buffer: Any,
+        replay_buffer: ReplayBuffer | DataParallelReplayBufferClient,
         *,
         global_batch_size: int,
         device: DEVICE_TYPING = "cpu",
