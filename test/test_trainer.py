@@ -35,13 +35,7 @@ from torchrl.envs.libs.gym import _has_gym
 from torchrl.objectives import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import (
-    Learner,
-    LearnerStepRequest,
-    LocalLearnerGroup,
-    LogValidationReward,
-    Trainer,
-)
+from torchrl.trainers import Learner, LocalLearnerGroup, LogValidationReward, Trainer
 from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
@@ -1779,13 +1773,13 @@ class _RecordingLearnerReplayBuffer(TensorDictReplayBuffer):
 class TestLearnerGroup:
     @staticmethod
     def _make_group(replay_buffer):
-        def learner_factory(context):
+        def learner_factory(replay_buffer, data_parallel_context):
             loss = _LearnerLoss()
             return Learner(
                 loss,
-                context.replay_buffer,
+                replay_buffer,
                 optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
-                data_parallel_context=context.data_parallel_context,
+                data_parallel_context=data_parallel_context,
             )
 
         return LocalLearnerGroup(learner_factory, replay_buffer, global_batch_size=4)
@@ -1834,7 +1828,7 @@ class TestLearnerGroup:
             **kwargs,
         ).initialize()
 
-        learner.step(LearnerStepRequest(1, 1, 4))
+        learner.step(batch_size=4)
 
         assert replay_buffer.priority_updates == int(update_replay_priority)
 
@@ -1845,32 +1839,34 @@ class TestLearnerGroup:
         replay_buffer.extend(TensorDict({"x": torch.ones(16, 1)}, [16]))
         group = self._make_group(replay_buffer).start()
 
-        result = group.step(LearnerStepRequest(1, 2, 4))
-        assert result.round_id == 1
-        assert result.optim_steps == 2
-        assert result.model_version == 2
-        assert result.metrics.device == torch.device("cpu")
-        assert result.metrics["loss"].ndim == 0
+        metrics = group.step(num_steps=2)
+        assert group.last_round == 1
+        assert group.model_version == 2
+        assert metrics.device == torch.device("cpu")
+        assert metrics["loss"].ndim == 0
 
         state = group.state_dict()
         weights = group.get_weights()
-        assert weights.model_version == 2
+        assert weights.device == torch.device("cpu")
         group.shutdown()
         group.shutdown()
 
         restored = self._make_group(replay_buffer).start()
         restored.load_state_dict(state)
-        assert restored.step(LearnerStepRequest(2, 1, 4)).model_version == 3
+        restored.step()
+        assert restored.model_version == 3
         restored.shutdown()
 
-    def test_rejects_nonconsecutive_round(self):
+    @pytest.mark.parametrize("num_steps", [0, -1, True, 1.5])
+    def test_rejects_invalid_num_steps(self, num_steps):
         replay_buffer = TensorDictReplayBuffer(
             storage=LazyTensorStorage(8), batch_size=4
         )
         replay_buffer.extend(TensorDict({"x": torch.ones(8, 1)}, [8]))
         group = self._make_group(replay_buffer).start()
-        with pytest.raises(RuntimeError, match="Expected round_id=1"):
-            group.step(LearnerStepRequest(2, 1, 4))
+        error = TypeError if isinstance(num_steps, (bool, float)) else ValueError
+        with pytest.raises(error):
+            group.step(num_steps=num_steps)
         group.shutdown()
 
 

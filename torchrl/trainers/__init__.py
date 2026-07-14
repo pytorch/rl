@@ -3,15 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .learners import (
-    Learner,
-    LearnerContext,
-    LearnerGroup,
-    LearnerStepRequest,
-    LearnerStepResult,
-    LearnerWeights,
-    LocalLearnerGroup,
-)
+from .learners import Learner, LearnerGroup, LocalLearnerGroup
 from .trainers import (
     BatchSubSampler,
     ClearCudaCache,
@@ -48,11 +40,7 @@ __all__ = [
     "LogValidationReward",
     "LRSchedulerHook",
     "Learner",
-    "LearnerContext",
     "LearnerGroup",
-    "LearnerStepRequest",
-    "LearnerStepResult",
-    "LearnerWeights",
     "LocalLearnerGroup",
     "mask_batch",
     "OptimizationContext",
