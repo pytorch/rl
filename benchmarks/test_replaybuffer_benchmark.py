@@ -28,6 +28,7 @@ from torchrl.data.replay_buffers import (
     SliceSampler,
 )
 from torchrl.envs.transforms import ActionChunkTransform, CatFrames
+from torchrl.objectives import LossModule
 from torchrl.trainers import Learner, LearnerStepRequest
 from torchrl.trainers.distributed import RayLearnerGroup
 
@@ -106,7 +107,7 @@ def test_ray_replay_buffer_rank_aware_sample(benchmark, rank_aware):
         ray.shutdown()
 
 
-class _BenchmarkLearnerLoss(torch.nn.Module):
+class _BenchmarkLearnerLoss(LossModule):
     def __init__(self):
         super().__init__()
         self.weight = torch.nn.Parameter(torch.ones(()))
