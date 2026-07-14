@@ -555,7 +555,7 @@ class Learner:
                 "OptimizationStepper.step must return TensorDictBase, got "
                 f"{type(metrics).__name__}."
             )
-        result = TensorDict({}, batch_size=[], device="cpu")
+        result = TensorDict(device="cpu")
         for key, value in metrics.items(True, True):
             if not isinstance(value, torch.Tensor):
                 value = torch.as_tensor(value)
@@ -570,7 +570,7 @@ class Learner:
     @staticmethod
     def _average_metrics(metrics: list[TensorDictBase]) -> TensorDictBase:
         if not metrics:
-            return TensorDict({}, batch_size=[], device="cpu")
+            return TensorDict(device="cpu")
         keys = set(metrics[0].keys(True, True))
         if any(set(item.keys(True, True)) != keys for item in metrics[1:]):
             raise RuntimeError("Learner metric keys changed within a round.")

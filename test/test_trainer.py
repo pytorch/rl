@@ -2130,7 +2130,7 @@ class TestTD3OptimizationStepper:
             def sync_gradients(self, optimizer):
                 events.append(f"sync_{optimizer.name}")
 
-        stepper.step(Context(), TensorDict({}, []))
+        stepper.step(Context(), TensorDict())
         assert events == [
             "sync_critic",
             "step_critic",

@@ -626,7 +626,7 @@ class RayLearnerGroup(LearnerGroup):
     @staticmethod
     def _aggregate_metrics(results: list[LearnerStepResult]) -> TensorDictBase:
         if not results:
-            return TensorDict({}, batch_size=[], device="cpu")
+            return TensorDict(device="cpu")
         output = results[0].metrics.clone()
         for key in output.keys(True, True):
             output.set(
