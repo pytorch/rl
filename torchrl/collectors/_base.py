@@ -1095,6 +1095,25 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             # No weight updater configured, try fallback
             self._maybe_fallback_update(policy_or_weights, model_id=model_id)
 
+    def _apply_weights_direct(
+        self,
+        weights: TensorDictBase | dict,
+        *,
+        model_id: str = "policy",
+    ) -> None:
+        """Apply actor-to-actor weights without consulting a parent receiver.
+
+        This internal entry point is used by learner actors publishing directly
+        to collector actors. It intentionally bypasses ``_receiver_schemes``,
+        which describe the parent controller's transport rather than the direct
+        learner transport. Nested collectors still cascade through their own
+        sender schemes via ``_weight_update_impl``.
+        """
+        self._weight_update_impl(
+            policy_or_weights=weights,
+            model_id=model_id,
+        )
+
     def _maybe_fallback_update(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,

@@ -1715,15 +1715,20 @@ class Trainer:
         model_version = self.learner_group.model_version
         if not force and model_version <= self._published_model_version:
             return
-        weights = self.learner_group.get_weights(
-            "policy", expected_version=model_version
+        model_weights_key, auxiliary_weights = self._learner_weight_publication()
+        self.learner_group.publish_weights(
+            self.collector,
+            "policy",
+            expected_version=model_version,
+            model_weights_key=model_weights_key,
+            auxiliary_weights=auxiliary_weights,
         )
-        weights = self._prepare_learner_weights(weights)
-        self.collector.update_policy_weights_(weights)
         self._published_model_version = model_version
 
-    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
-        return weights
+    def _learner_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        return None, None
 
     def _get_replay_write_count(self) -> int:
         write_count = self.replay_buffer.write_count

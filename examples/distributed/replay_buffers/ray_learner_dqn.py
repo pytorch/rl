@@ -144,6 +144,10 @@ def main() -> None:
             frames_per_batch=args.frames_per_batch,
             total_frames=args.total_frames,
             replay_buffer=replay_buffer,
+            # Learner rank zero publishes directly to collector actors. Disable
+            # the controller-owned Ray sender to avoid staging policy tensors in
+            # the controller process.
+            weight_sync_schemes={},
             sync=False,
             remote_configs={"num_cpus": 1, "num_gpus": 0},
         )

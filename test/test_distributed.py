@@ -108,6 +108,26 @@ def _make_ray_test_learner(replay_buffer, data_parallel_context):
     )
 
 
+class _RayCountingLearnerLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.actor_network = CountingPolicy()
+
+    def forward(self, batch):
+        prediction = self.actor_network.weight * batch["x"]
+        return TensorDict({"loss": (prediction - batch["y"]).square().mean()})
+
+
+def _make_ray_counting_learner(replay_buffer, data_parallel_context):
+    loss = _RayCountingLearnerLoss().to(data_parallel_context.device)
+    return Learner(
+        loss,
+        replay_buffer,
+        optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
+        data_parallel_context=data_parallel_context,
+    )
+
+
 class _RayCheckpointCollector:
     frames_per_batch = 8
     init_random_frames = 0
@@ -127,6 +147,27 @@ class _RayCheckpointCollector:
 
     def shutdown(self):
         pass
+
+
+class _RayDirectWeightTarget:
+    def __init__(self):
+        self.weights = None
+        self.model_id = None
+
+    def _apply_weights_direct(self, weights, *, model_id="policy"):
+        self.weights = weights.clone()
+        self.model_id = model_id
+
+    def published(self):
+        return self.model_id, self.weights
+
+
+class _RayDirectCollector:
+    def __init__(self, targets):
+        self.targets = targets
+
+    def _direct_weight_update_targets(self):
+        return self.targets
 
 
 class _FailingRayLearnerLoss(_RayLearnerLoss):
@@ -1331,6 +1372,64 @@ class TestRayLearnerGroup:
 
             assert ray.is_initialized()
         finally:
+            group.shutdown()
+            replay_buffer.close()
+
+    def test_rank_zero_publishes_directly_to_collector_actors(self):
+        import ray
+
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer).start()
+        target_cls = ray.remote(num_cpus=0)(_RayDirectWeightTarget)
+        targets = [target_cls.remote() for _ in range(2)]
+        collector = _RayDirectCollector(targets)
+        try:
+            group.step()
+            group.publish_weights(
+                collector,
+                expected_version=group.model_version,
+            )
+
+            published = ray.get([target.published.remote() for target in targets])
+            expected = group.get_weights(expected_version=group.model_version)
+            for model_id, weights in published:
+                assert model_id == "policy"
+                for key in expected.keys(True, True):
+                    torch.testing.assert_close(weights.get(key), expected.get(key))
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+    def test_direct_publication_updates_ray_collector_policy(self):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(
+            replay_buffer,
+            factory=_make_ray_counting_learner,
+        ).start()
+        collector = RayCollector(
+            [CountingEnv],
+            CountingPolicy(),
+            collector_class=Collector,
+            total_frames=4,
+            frames_per_batch=4,
+            sync=True,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            weight_sync_schemes={},
+        )
+        try:
+            group.step()
+            expected = group.get_weights(expected_version=group.model_version)["weight"]
+            group.publish_weights(
+                collector,
+                expected_version=group.model_version,
+            )
+
+            batch = next(iter(collector))
+            torch.testing.assert_close(
+                batch["action"], expected.expand_as(batch["action"])
+            )
+        finally:
+            collector.shutdown()
             group.shutdown()
             replay_buffer.close()
 

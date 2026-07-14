@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictSequential
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.checkpoint import Checkpoint
@@ -325,14 +326,15 @@ class TD3Trainer(Trainer):
         if self.enable_logging and learner_group is None:
             self._setup_td3_logging()
 
-    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
+    def _learner_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
         if self.exploration_module is None:
-            return weights
-        return TensorDict(
+            return None, None
+        auxiliary_weights = TensorDict(
             {
                 "module": TensorDict(
                     {
-                        "0": weights,
                         "1": TensorDict.from_module(self.exploration_module),
                     },
                     batch_size=[],
@@ -340,6 +342,7 @@ class TD3Trainer(Trainer):
             },
             batch_size=[],
         )
+        return ("module", "0"), auxiliary_weights
 
     def _setup_td3_logging(self):
         """Set up logging hooks for TD3-specific metrics."""

@@ -20,8 +20,10 @@ from typing import Any, cast, Protocol, TYPE_CHECKING
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import nn, optim
 
+from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers import DataParallelReplayBufferClient, ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.distributed import DataParallelContext
@@ -90,6 +92,33 @@ class _ReplayBatchSource:
                 f"{type(batch).__name__}."
             )
         return batch.to(self.device)
+
+
+def _compose_published_weights(
+    model_weights: TensorDictBase,
+    *,
+    model_weights_key: NestedKey | None,
+    auxiliary_weights: TensorDictBase | None,
+) -> TensorDictBase:
+    if model_weights_key is None:
+        if auxiliary_weights is not None:
+            raise ValueError(
+                "auxiliary_weights requires model_weights_key so the learner "
+                "weights have an unambiguous destination."
+            )
+        return model_weights
+    payload = (
+        TensorDict()
+        if auxiliary_weights is None
+        else auxiliary_weights.detach().to("cpu").clone()
+    )
+    if model_weights_key in payload.keys(True):
+        raise KeyError(
+            f"model_weights_key {model_weights_key!r} is already present in "
+            "auxiliary_weights."
+        )
+    payload.set(model_weights_key, model_weights)
+    return payload
 
 
 class Learner:
@@ -558,14 +587,13 @@ class LearnerGroup(abc.ABC):
     receives TensorDict metrics.
 
     Example:
-        A backend-neutral controller updates a learner group and publishes the
-        matching policy weights to a collector:
+        A backend-neutral controller updates a learner group and asks rank zero
+        to publish the matching policy directly to a collector:
 
         >>> def optimize_and_publish(group, collector):
         ...     metrics = group.step(num_steps=2)
         ...     version = group.model_version
-        ...     weights = group.get_weights(expected_version=version)
-        ...     collector.update_policy_weights_(weights)
+        ...     group.publish_weights(collector, expected_version=version)
         ...     return metrics
     """
 
@@ -584,7 +612,42 @@ class LearnerGroup(abc.ABC):
         *,
         expected_version: int | None = None,
     ) -> TensorDictBase:
-        """Return rank-zero weights for a named model."""
+        """Return rank-zero weights for inspection or checkpoint tooling.
+
+        Controller-driven collector updates should use :meth:`publish_weights`
+        instead, so distributed backends can keep the tensor payload off the
+        controller.
+        """
+
+    @abc.abstractmethod
+    def publish_weights(
+        self,
+        collector: BaseCollector,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+        model_weights_key: NestedKey | None = None,
+        auxiliary_weights: TensorDictBase | None = None,
+    ) -> None:
+        """Publish rank-zero weights without routing them through a controller.
+
+        ``model_weights_key`` and ``auxiliary_weights`` describe a collector
+        policy that wraps the learner-owned model, such as an actor followed by
+        a controller-owned exploration module.
+
+        Args:
+            collector (BaseCollector): Collector that will consume the weights.
+                A distributed learner group may resolve actor-local update
+                targets from it instead of serializing weights to this object.
+            model_id (str): Named learner model to publish. Defaults to
+                ``"policy"``.
+            expected_version (int, optional): Required learner model version.
+                Defaults to the group's current version.
+            model_weights_key (NestedKey, optional): Destination of learner
+                model weights inside a composite collector-policy payload.
+            auxiliary_weights (TensorDictBase, optional): Controller-owned
+                weights for the remainder of a composite collector policy.
+        """
 
     @abc.abstractmethod
     def state_dict(self) -> dict[str, Any]:
@@ -754,6 +817,23 @@ class LocalLearnerGroup(LearnerGroup):
         return self._require_learner().get_weights(
             model_id, expected_version=expected_version
         )
+
+    def publish_weights(
+        self,
+        collector: BaseCollector,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+        model_weights_key: NestedKey | None = None,
+        auxiliary_weights: TensorDictBase | None = None,
+    ) -> None:
+        weights = self.get_weights(model_id, expected_version=expected_version)
+        weights = _compose_published_weights(
+            weights,
+            model_weights_key=model_weights_key,
+            auxiliary_weights=auxiliary_weights,
+        )
+        collector.update_policy_weights_(weights, model_id=model_id)
 
     def state_dict(self) -> dict[str, Any]:
         return {

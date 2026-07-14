@@ -129,6 +129,44 @@ def _make_benchmark_learner(replay_buffer, data_parallel_context):
     )
 
 
+class _BenchmarkPublicationLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.actor_network = torch.nn.Linear(512, 512)
+        self.scale = torch.nn.Parameter(torch.ones(()))
+
+    def forward(self, batch):
+        return TensorDict({"loss": self.scale * batch["x"].mean()})
+
+
+def _make_benchmark_publication_learner(replay_buffer, data_parallel_context):
+    loss_module = _BenchmarkPublicationLoss().to(data_parallel_context.device)
+    return Learner(
+        loss_module,
+        replay_buffer,
+        optimizer=torch.optim.SGD([loss_module.scale], lr=1e-3),
+        data_parallel_context=data_parallel_context,
+        update_replay_priority=False,
+    )
+
+
+class _BenchmarkWeightTarget:
+    def __init__(self):
+        self.weights = None
+
+    def _apply_weights_direct(self, weights, *, model_id="policy"):
+        assert model_id == "policy"
+        self.weights = weights.clone()
+
+
+class _BenchmarkDirectCollector:
+    def __init__(self, targets):
+        self.targets = targets
+
+    def _direct_weight_update_targets(self):
+        return self.targets
+
+
 @pytest.mark.parametrize("world_size", [1, 2])
 def test_ray_learner_group_update_throughput(benchmark, world_size):
     ray = pytest.importorskip("ray")
@@ -170,6 +208,69 @@ def test_ray_learner_group_update_throughput(benchmark, world_size):
     try:
         learner_group.start()
         benchmark.pedantic(update, iterations=1, rounds=10)
+    finally:
+        learner_group.shutdown()
+        replay_buffer.shutdown()
+        ray.shutdown()
+
+
+@pytest.mark.parametrize("data_path", ["direct", "controller_staged"])
+def test_ray_learner_weight_publication_throughput(benchmark, data_path):
+    ray = pytest.importorskip("ray")
+    ray.shutdown()
+    benchmark_dir = os.path.dirname(__file__)
+    ray.init(
+        num_cpus=2,
+        include_dashboard=False,
+        runtime_env={
+            "working_dir": benchmark_dir,
+            "env_vars": {"PYTHONPATH": benchmark_dir},
+        },
+    )
+    replay_buffer = RayReplayBuffer(
+        replay_buffer_cls=TensorDictReplayBuffer,
+        storage=functools.partial(LazyTensorStorage, 1),
+        batch_size=1,
+        remote_config={"num_cpus": 0},
+    )
+    replay_buffer.extend(TensorDict({"x": torch.ones(1, 1)}, [1]))
+    learner_group = RayLearnerGroup(
+        _make_benchmark_publication_learner,
+        replay_buffer.client(),
+        world_size=1,
+        global_batch_size=1,
+        resources_per_rank={"num_cpus": 1, "num_gpus": 0},
+        setup_timeout=60,
+        command_timeout=60,
+    )
+    target_cls = ray.remote(num_cpus=0)(_BenchmarkWeightTarget)
+    targets = [target_cls.remote() for _ in range(2)]
+    collector = _BenchmarkDirectCollector(targets)
+
+    def publish_direct():
+        learner_group.publish_weights(
+            collector, expected_version=learner_group.model_version
+        )
+
+    def publish_through_controller():
+        weights = learner_group.get_weights(
+            expected_version=learner_group.model_version
+        )
+        weights_ref = ray.put(weights)
+        ray.get(
+            [
+                target._apply_weights_direct.remote(weights_ref, model_id="policy")
+                for target in targets
+            ]
+        )
+
+    try:
+        learner_group.start()
+        publish_direct()
+        publish = (
+            publish_direct if data_path == "direct" else publish_through_controller
+        )
+        benchmark.pedantic(publish, iterations=1, rounds=10)
     finally:
         learner_group.shutdown()
         replay_buffer.shutdown()

@@ -281,15 +281,16 @@ class DQNTrainer(Trainer):
         if self.enable_logging and learner_group is None:
             self._setup_dqn_logging()
 
-    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
+    def _learner_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
         if self.greedy_module is None:
-            return weights
+            return None, None
         self._step_greedy()
-        return TensorDict(
+        auxiliary_weights = TensorDict(
             {
                 "module": TensorDict(
                     {
-                        "0": weights,
                         "1": TensorDict.from_module(self.greedy_module),
                     },
                     batch_size=[],
@@ -297,6 +298,7 @@ class DQNTrainer(Trainer):
             },
             batch_size=[],
         )
+        return ("module", "0"), auxiliary_weights
 
     def _controller_checkpoint_state(self) -> dict[str, Any]:
         if self.greedy_module is None:

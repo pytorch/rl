@@ -17,9 +17,12 @@ from typing import Any, Literal, TYPE_CHECKING
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 
+from torchrl.collectors import BaseCollector
 from torchrl.distributed import DataParallelContext
 from torchrl.trainers.learners import (
+    _compose_published_weights,
     _LearnerStepCommand,
     _LearnerStepReceipt,
     Learner,
@@ -52,6 +55,7 @@ class _RayLearnerWorker:
         self.replay_buffer = replay_buffer
         self.seed = seed
         self.learner: Learner | None = None
+        self._weight_targets: list[Any] = []
 
     def probe(self) -> dict[str, Any]:
         ray = _ray()
@@ -129,6 +133,40 @@ class _RayLearnerWorker:
             model_id, expected_version=expected_version
         )
 
+    def configure_weight_targets(self, targets: list[Any]) -> int:
+        if not targets:
+            raise ValueError("Direct weight publication requires collector targets.")
+        self._weight_targets = list(targets)
+        return len(self._weight_targets)
+
+    def publish_weights(
+        self,
+        model_id: str,
+        expected_version: int,
+        model_weights_key: NestedKey | None,
+        auxiliary_weights: TensorDictBase | None,
+    ) -> dict[str, int]:
+        if not self._weight_targets:
+            raise RuntimeError("Direct weight publication targets are not configured.")
+        learner = self._require_learner()
+        weights = learner.get_weights(model_id, expected_version=expected_version)
+        weights = _compose_published_weights(
+            weights,
+            model_weights_key=model_weights_key,
+            auxiliary_weights=auxiliary_weights,
+        )
+        ray = _ray()
+        weights_ref = ray.put(weights)
+        updates = [
+            target._apply_weights_direct.remote(weights_ref, model_id=model_id)
+            for target in self._weight_targets
+        ]
+        ray.get(updates)
+        return {
+            "model_version": learner.model_version,
+            "num_targets": len(self._weight_targets),
+        }
+
     def state_dict(self) -> dict[str, Any]:
         return self._require_learner().state_dict()
 
@@ -152,6 +190,7 @@ class _RayLearnerWorker:
         if self.learner is not None:
             self.learner.close()
             self.learner = None
+        self._weight_targets = []
 
     def _require_learner(self) -> Learner:
         if self.learner is None:
@@ -165,6 +204,11 @@ class RayLearnerGroup(LearnerGroup):
     The group is the collective-safety boundary: callers never receive actor
     handles, all optimizer substeps are dispatched to every rank concurrently,
     and any rank failure invalidates the full generation.
+
+    Policy publication originates inside learner rank zero. When the target is
+    a :class:`~torchrl.collectors.distributed.RayCollector`, construct it with
+    ``weight_sync_schemes={}``; otherwise its controller-owned sender would
+    duplicate the direct learner-to-collector path.
 
     Args:
         learner_factory (callable): Picklable actor-local learner factory.
@@ -186,10 +230,10 @@ class RayLearnerGroup(LearnerGroup):
 
     Example:
         A controller starts the gang, issues one global-batch command to every
-        rank, and always tears the generation down as one unit:
+        rank, and lets rank zero publish directly to collector actors:
 
         >>> from torchrl.trainers.distributed import RayLearnerGroup
-        >>> def run_one_round(learner_factory, replay_client):
+        >>> def run_one_round(learner_factory, replay_client, ray_collector):
         ...     group = RayLearnerGroup(
         ...         learner_factory,
         ...         replay_client,
@@ -198,10 +242,11 @@ class RayLearnerGroup(LearnerGroup):
         ...     ).start()
         ...     try:
         ...         metrics = group.step(num_steps=1)
-        ...         weights = group.get_weights(
+        ...         group.publish_weights(
+        ...             ray_collector,
         ...             expected_version=group.model_version
         ...         )
-        ...         return metrics, weights
+        ...         return metrics
         ...     finally:
         ...         group.shutdown()
     """
@@ -255,6 +300,8 @@ class RayLearnerGroup(LearnerGroup):
         self._generation = 0
         self._last_round = 0
         self._model_version = 0
+        self._publication_collector_id: int | None = None
+        self._publication_target_count = 0
 
     @property
     def world_size(self) -> int:
@@ -308,6 +355,8 @@ class RayLearnerGroup(LearnerGroup):
             self._state = "running"
             self._last_round = 0
             self._model_version = 0
+            self._publication_collector_id = None
+            self._publication_target_count = 0
             return self
 
     def step(self, num_steps: int = 1) -> TensorDictBase:
@@ -379,6 +428,50 @@ class RayLearnerGroup(LearnerGroup):
                     f"generation {self.generation}."
                 ) from err
             return weights
+
+    def publish_weights(
+        self,
+        collector: BaseCollector,
+        model_id: str = "policy",
+        *,
+        expected_version: int | None = None,
+        model_weights_key: NestedKey | None = None,
+        auxiliary_weights: TensorDictBase | None = None,
+    ) -> None:
+        with self._lock:
+            self._ensure_running()
+            if expected_version is None:
+                expected_version = self.model_version
+            elif expected_version != self.model_version:
+                raise RuntimeError(
+                    f"Expected model_version={expected_version}, got "
+                    f"{self.model_version}."
+                )
+            self._configure_weight_targets(collector)
+            try:
+                result = self._get(
+                    self._actors[0].publish_weights.remote(
+                        model_id,
+                        expected_version,
+                        model_weights_key,
+                        auxiliary_weights,
+                    ),
+                    timeout=self.command_timeout,
+                )
+            except BaseException as err:
+                self._mark_failed()
+                raise RuntimeError(
+                    "Direct rank-zero weight publication failed for learner group "
+                    f"generation {self.generation}."
+                ) from err
+            if result != {
+                "model_version": expected_version,
+                "num_targets": self._publication_target_count,
+            }:
+                self._mark_failed()
+                raise RuntimeError(
+                    "Rank-zero weight publication returned inconsistent metadata."
+                )
 
     def state_dict(self) -> dict[str, Any]:
         with self._lock:
@@ -491,7 +584,33 @@ class RayLearnerGroup(LearnerGroup):
                     pass
             self._actors = []
             self._remove_placement_group()
+            self._publication_collector_id = None
+            self._publication_target_count = 0
             self._state = "stopped"
+
+    def _configure_weight_targets(self, collector: BaseCollector) -> None:
+        collector_id = id(collector)
+        if self._publication_collector_id is not None:
+            if self._publication_collector_id != collector_id:
+                raise RuntimeError(
+                    "A running RayLearnerGroup cannot change publication collectors."
+                )
+            return
+        get_targets = getattr(collector, "_direct_weight_update_targets", None)
+        if get_targets is None:
+            raise TypeError(
+                "RayLearnerGroup direct publication requires a RayCollector-like "
+                "collector exposing direct weight-update targets."
+            )
+        targets = list(get_targets())
+        target_count = self._get(
+            self._actors[0].configure_weight_targets.remote(targets),
+            timeout=self.command_timeout,
+        )
+        if target_count != len(targets):
+            raise RuntimeError("Rank zero registered an unexpected target count.")
+        self._publication_collector_id = collector_id
+        self._publication_target_count = target_count
 
     def _start_actors(self) -> None:
         ray = _ray()
@@ -660,6 +779,8 @@ class RayLearnerGroup(LearnerGroup):
                 pass
         self._actors = []
         self._remove_placement_group()
+        self._publication_collector_id = None
+        self._publication_target_count = 0
 
     def _remove_placement_group(self) -> None:
         if self._placement_group is None:

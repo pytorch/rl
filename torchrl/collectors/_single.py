@@ -1430,6 +1430,15 @@ class Collector(BaseCollector):
         #     Collector, so its update_policy_weights_ does NOT bump here.
         self.increment_version()
 
+    def _apply_weights_direct(
+        self,
+        weights: TensorDictBase | dict,
+        *,
+        model_id: str = "policy",
+    ) -> None:
+        super()._apply_weights_direct(weights, model_id=model_id)
+        self.increment_version()
+
     def _maybe_fallback_update(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,

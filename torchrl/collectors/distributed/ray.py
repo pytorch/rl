@@ -764,6 +764,16 @@ class RayCollector(BaseCollector):
             **kwargs,
         )
 
+    def _direct_weight_update_targets(self) -> tuple[Any, ...]:
+        """Return collector actors eligible for direct learner publication."""
+        if self._weight_sync_schemes:
+            raise RuntimeError(
+                "Direct learner-to-collector publication cannot coexist with a "
+                "controller-owned Ray weight-sync sender. Construct RayCollector "
+                "with weight_sync_schemes={} when using a RayLearnerGroup."
+            )
+        return tuple(self.remote_collectors)
+
     # def _send_weights_scheme(self, *, scheme, processed_weights, worker_ids, model_id):
     #     if not worker_ids:
     #         worker_ids = list(range(self.num_collectors))

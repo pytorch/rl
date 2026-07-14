@@ -1872,6 +1872,31 @@ class TestLearnerGroup:
         state = group.state_dict()
         weights = group.get_weights()
         assert weights.device == torch.device("cpu")
+        collector = _ControllerCollector([])
+        group.publish_weights(
+            collector,
+            expected_version=group.model_version,
+        )
+        assert torch.equal(
+            collector.published_weights[0]["weight"],
+            weights["weight"],
+        )
+        auxiliary_weights = TensorDict(
+            {"module": TensorDict({"1": TensorDict({"epsilon": torch.tensor(0.1)})})}
+        )
+        group.publish_weights(
+            collector,
+            expected_version=group.model_version,
+            model_weights_key=("module", "0"),
+            auxiliary_weights=auxiliary_weights,
+        )
+        assert torch.equal(
+            collector.published_weights[1]["module", "0", "weight"],
+            weights["weight"],
+        )
+        assert collector.published_weights[1][
+            "module", "1", "epsilon"
+        ].item() == pytest.approx(0.1)
         group.shutdown()
         group.shutdown()
 
@@ -1968,7 +1993,8 @@ class _ControllerCollector:
     def __iter__(self):
         return iter(self._batches)
 
-    def update_policy_weights_(self, weights):
+    def update_policy_weights_(self, weights, **kwargs):
+        del kwargs
         self.events.append("publish")
         self.published_weights.append(weights.clone())
 
@@ -2018,11 +2044,29 @@ class _ControllerLearnerGroup:
         )
 
     def get_weights(self, model_id="policy", *, expected_version=None):
+        raise AssertionError("The controller must not materialize learner weights.")
+
+    def publish_weights(
+        self,
+        collector,
+        model_id="policy",
+        *,
+        expected_version=None,
+        model_weights_key=None,
+        auxiliary_weights=None,
+    ):
         assert model_id == "policy"
         assert expected_version in (None, self.model_version)
-        return TensorDict(
-            {"weight": torch.tensor(float(self.model_version))},
-        )
+        weights = TensorDict({"weight": torch.tensor(float(self.model_version))})
+        if model_weights_key is not None:
+            weights = (
+                TensorDict() if auxiliary_weights is None else auxiliary_weights.clone()
+            )
+            weights.set(
+                model_weights_key,
+                TensorDict({"weight": torch.tensor(float(self.model_version))}),
+            )
+        collector.update_policy_weights_(weights)
 
     def shutdown(self):
         self.events.append("group_shutdown")

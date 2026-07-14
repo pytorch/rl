@@ -43,9 +43,18 @@ Passing a learner group and replay owner to
 path. Loss modules, optimizers, optimization steppers, target updaters, replay
 sampling, and priority updates remain learner-owned. The controller converts
 replay write progress into update credit, issues consecutive bounded rounds,
-publishes rank-zero policy weights to collectors, and remains the only process
-that logs or decides when the run stops. Driver-owned optimization objects and
-legacy learner-side hooks are rejected in this mode.
+triggers rank-zero policy publication, and remains the only process that logs or
+decides when the run stops. Policy tensors travel directly from learner rank
+zero to collector actors through one Ray object-store object; they are never
+materialized in the controller. Driver-owned optimization objects and legacy
+learner-side hooks are rejected in this mode.
+
+When using :class:`~torchrl.collectors.distributed.RayCollector`, pass
+``weight_sync_schemes={}`` so it does not construct a competing
+controller-owned Ray sender. The learner group registers the collector actor
+handles once, reuses them for later publications, and waits for every collector
+to acknowledge applying a version before the controller records it as
+published.
 
 :class:`~torchrl.trainers.algorithms.DQNTrainer` can additionally compose its
 controller-owned exploration state with each versioned learner policy before
@@ -91,9 +100,9 @@ The world size, global batch size, and learner factory identity must match.
 Ranks synchronize restored parameters and barrier before collection resumes.
 Recovery is explicit: a failed or timed-out optimizer command is never retried,
 and callers should construct a new group and load the last complete checkpoint.
-Policy snapshots currently travel through the controller before collector
-publication; direct learner-to-collector transport remains a follow-up if
-benchmarks show that round trip to be a bottleneck.
+Policy publication uses the same serialized learner-group command boundary as
+optimization and checkpointing, so no publication can overlap a rank-zero
+optimizer step.
 
 .. currentmodule:: torchrl.trainers.distributed
 

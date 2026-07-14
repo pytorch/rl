@@ -185,6 +185,19 @@ def test_weight_sync_scheme_from_backend_rejects_unknown():
         WeightSyncScheme.from_backend("unknown")
 
 
+def test_ray_collector_direct_targets_reject_controller_sender():
+    collector = object.__new__(RayCollector)
+    collector._remote_collectors = [object(), object()]
+    collector._weight_sync_schemes = {}
+    assert collector._direct_weight_update_targets() == tuple(
+        collector._remote_collectors
+    )
+
+    collector._weight_sync_schemes = {"policy": object()}
+    with pytest.raises(RuntimeError, match=r"weight_sync_schemes=\{\}"):
+        collector._direct_weight_update_targets()
+
+
 def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
     return tensordict.clear_device_()
 
