@@ -3001,6 +3001,12 @@ class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         return SamplerWithoutReplacement.load_state_dict(self, state_dict)
 
+    def dumps(self, path):
+        return SamplerWithoutReplacement.dumps(self, path)
+
+    def loads(self, path):
+        return SamplerWithoutReplacement.loads(self, path)
+
 
 class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     r"""Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
@@ -3473,6 +3479,10 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
     def state_dict(self):
         # no op for SliceSampler
         return PrioritizedSampler.state_dict(self)
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        # no op for SliceSampler
+        return PrioritizedSampler.load_state_dict(self, state_dict)
 
     def add(self, index: torch.Tensor) -> None:
         PrioritizedSampler.add(self, index)
