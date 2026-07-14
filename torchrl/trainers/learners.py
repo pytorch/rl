@@ -83,20 +83,26 @@ class LearnerContext:
         seed (int, optional): Rank-specific seed.
 
     Example:
-        A learner factory consumes the actor-local context instead of creating
-        process groups or replay clients itself:
+        A learner group creates the context and passes it to the factory. The
+        factory consumes the injected replay buffer and collective context, then
+        the resulting learner executes a command:
 
         >>> import torch
         >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
         >>> from torchrl.objectives import LossModule
-        >>> from torchrl.trainers import Learner
+        >>> from torchrl.trainers import (
+        ...     Learner, LearnerStepRequest, LocalLearnerGroup
+        ... )
         >>> class Loss(LossModule):
         ...     def __init__(self):
         ...         super().__init__()
         ...         self.weight = torch.nn.Parameter(torch.ones(()))
         ...     def forward(self, batch):
         ...         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
+        >>> received_contexts = []
         >>> def make_learner(context):
+        ...     received_contexts.append(context)
         ...     loss = Loss().to(context.device)
         ...     optimizer = torch.optim.SGD(loss.parameters(), lr=0.1)
         ...     return Learner(
@@ -105,6 +111,23 @@ class LearnerContext:
         ...         optimizer=optimizer,
         ...         data_parallel_context=context.data_parallel_context,
         ...     )
+        >>> replay = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(4), batch_size=2
+        ... )
+        >>> _ = replay.extend(TensorDict({"x": torch.ones(4, 1)}, [4]))
+        >>> group = LocalLearnerGroup(
+        ...     make_learner, replay, global_batch_size=2
+        ... ).start()
+        >>> result = group.step(LearnerStepRequest(1, 1, 2))
+        >>> context = received_contexts[0]
+        >>> (
+        ...     context.rank,
+        ...     context.world_size,
+        ...     context.replay_buffer is replay,
+        ...     result.model_version,
+        ... )
+        (0, 1, True, 1)
+        >>> group.shutdown()
     """
 
     rank: int
@@ -138,17 +161,28 @@ class LearnerStepRequest:
         global_batch_size (int): Batch size across all ranks.
 
     Example:
-        Controller code uses the group's current state to issue the next
-        consecutive, global-batch command:
+        A controller dispatches one request to all ranks. Each rank observes the
+        same round and step count and derives its local share of the global
+        batch:
 
         >>> from torchrl.trainers import LearnerStepRequest
-        >>> def run_two_updates(group):
-        ...     request = LearnerStepRequest(
-        ...         round_id=group.last_round + 1,
-        ...         num_steps=2,
-        ...         global_batch_size=group.global_batch_size,
-        ...     )
-        ...     return group.step(request)
+        >>> def dispatch(request, world_size):
+        ...     if request.global_batch_size % world_size:
+        ...         raise ValueError("global batch must divide across ranks")
+        ...     return [
+        ...         {
+        ...             "rank": rank,
+        ...             "round": request.round_id,
+        ...             "steps": request.num_steps,
+        ...             "local_batch_size": request.global_batch_size // world_size,
+        ...         }
+        ...         for rank in range(world_size)
+        ...     ]
+        >>> request = LearnerStepRequest(
+        ...     round_id=4, num_steps=2, global_batch_size=128
+        ... )
+        >>> dispatch(request, world_size=2)
+        [{'rank': 0, 'round': 4, 'steps': 2, 'local_batch_size': 64}, {'rank': 1, 'round': 4, 'steps': 2, 'local_batch_size': 64}]
     """
 
     round_id: int
@@ -194,6 +228,9 @@ class LearnerStepResult:
         A controller applies a completed result to its authoritative counters
         and logging state:
 
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.trainers import LearnerStepResult
         >>> def record_result(result, controller_state):
         ...     expected_round = controller_state["round"] + 1
         ...     if result.round_id != expected_round:
@@ -202,6 +239,21 @@ class LearnerStepResult:
         ...     controller_state["optim_steps"] += result.optim_steps
         ...     controller_state["model_version"] = result.model_version
         ...     controller_state["metrics"] = result.metrics.to_dict()
+        >>> controller_state = {"round": 3, "optim_steps": 9, "model_version": 9}
+        >>> result = LearnerStepResult(
+        ...     round_id=4,
+        ...     optim_steps=3,
+        ...     model_version=12,
+        ...     metrics=TensorDict({"loss": torch.tensor(0.25)}, device="cpu"),
+        ... )
+        >>> record_result(result, controller_state)
+        >>> (
+        ...     controller_state["round"],
+        ...     controller_state["optim_steps"],
+        ...     controller_state["model_version"],
+        ...     float(controller_state["metrics"]["loss"]),
+        ... )
+        (4, 12, 12, 0.25)
     """
 
     round_id: int
@@ -231,12 +283,37 @@ class LearnerWeights:
         weights (TensorDictBase): Detached CPU weights.
 
     Example:
-        Weight publication passes the serialized snapshot to the collector and
-        records the version that workers received:
+        Weight publication loads the serialized snapshot into a collector policy
+        and records the version received by that collector:
 
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.trainers import LearnerWeights
+        >>> source_policy = torch.nn.Linear(2, 1)
+        >>> with torch.no_grad():
+        ...     _ = source_policy.weight.fill_(2.0)
+        ...     _ = source_policy.bias.fill_(0.5)
+        >>> snapshot = LearnerWeights(
+        ...     model_id="policy",
+        ...     model_version=7,
+        ...     weights=TensorDict.from_module(source_policy).detach().clone(),
+        ... )
+        >>> class Collector:
+        ...     def __init__(self):
+        ...         self.policy = torch.nn.Linear(2, 1)
+        ...     def update_policy_weights_(self, weights):
+        ...         weights.to_module(self.policy, preserve_module_state=True)
         >>> def publish_weights(collector, snapshot):
         ...     collector.update_policy_weights_(snapshot.weights)
         ...     return snapshot.model_version
+        >>> collector = Collector()
+        >>> published_version = publish_weights(collector, snapshot)
+        >>> (
+        ...     published_version,
+        ...     torch.equal(collector.policy.weight, source_policy.weight),
+        ...     torch.equal(collector.policy.bias, source_policy.bias),
+        ... )
+        (7, True, True)
     """
 
     model_id: str
