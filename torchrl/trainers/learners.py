@@ -15,7 +15,7 @@ import abc
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import Any, cast, Protocol, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -27,7 +27,11 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.distributed import DataParallelContext
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.trainers.trainers import DefaultOptimizationStepper, OptimizationStepper
+from torchrl.trainers.trainers import (
+    DefaultOptimizationStepper,
+    OptimizationStepper,
+    Trainer,
+)
 from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
 if TYPE_CHECKING:
@@ -251,7 +255,9 @@ class Learner:
             policy = self._infer_policy(loss_module)
             models = {"policy": policy}
         self.models = dict(models)
-        self.optimization_stepper.register(self, name="optimization_stepper")
+        self.optimization_stepper.register(
+            cast(Trainer, self), name="optimization_stepper"
+        )
 
     @property
     def model_version(self) -> int:
@@ -337,7 +343,7 @@ class Learner:
         if len(self._active_metrics) >= command.num_steps:
             raise RuntimeError(f"Round {command.round_id} is already complete.")
         batch = self.batch_source.next(command.global_batch_size)
-        metrics = self.optimization_stepper.step(self, batch)
+        metrics = self.optimization_stepper._step(self, batch)
         if self.update_replay_priority and hasattr(
             self.replay_buffer, "update_tensordict_priority"
         ):
