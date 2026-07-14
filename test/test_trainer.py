@@ -1770,6 +1770,15 @@ class _LearnerTargetUpdater(TargetNetUpdater):
         self.loss_module = loss_module
 
 
+class _RecordingLearnerReplayBuffer(TensorDictReplayBuffer):
+    def __init__(self):
+        super().__init__(storage=LazyTensorStorage(8), batch_size=4)
+        self.priority_updates = 0
+
+    def update_tensordict_priority(self, data):
+        self.priority_updates += 1
+
+
 class TestLearnerGroup:
     @staticmethod
     def _make_group(replay_buffer):
@@ -1813,6 +1822,24 @@ class TestLearnerGroup:
                 optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
                 target_net_updater=_LearnerTargetUpdater(other_loss),
             )
+
+    @pytest.mark.parametrize("update_replay_priority", [True, False])
+    def test_priority_update_default(self, update_replay_priority):
+        replay_buffer = _RecordingLearnerReplayBuffer()
+        replay_buffer.extend(TensorDict({"x": torch.ones(8, 1)}, [8]))
+        replay_buffer.priority_updates = 0
+        loss = _LearnerLoss()
+        kwargs = {} if update_replay_priority else {"update_replay_priority": False}
+        learner = Learner(
+            loss,
+            replay_buffer,
+            optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            **kwargs,
+        ).initialize()
+
+        learner.step(LearnerStepRequest(1, 1, 4))
+
+        assert replay_buffer.priority_updates == int(update_replay_priority)
 
     def test_local_group_rounds_metrics_and_state(self):
         replay_buffer = TensorDictReplayBuffer(
