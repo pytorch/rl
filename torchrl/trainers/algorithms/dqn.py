@@ -35,7 +35,7 @@ from torchrl.trainers.trainers import (
 )
 
 if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup, LearnerWeights
+    from torchrl.trainers.learners import LearnerGroup
 
 
 class DQNTrainer(Trainer):
@@ -281,15 +281,15 @@ class DQNTrainer(Trainer):
         if self.enable_logging and learner_group is None:
             self._setup_dqn_logging()
 
-    def _prepare_learner_weights(self, snapshot: LearnerWeights) -> TensorDictBase:
+    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
         if self.greedy_module is None:
-            return snapshot.weights
+            return weights
         self._step_greedy()
         return TensorDict(
             {
                 "module": TensorDict(
                     {
-                        "0": snapshot.weights,
+                        "0": weights,
                         "1": TensorDict.from_module(self.greedy_module),
                     },
                     batch_size=[],

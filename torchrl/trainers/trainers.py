@@ -53,7 +53,7 @@ from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 
 if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup, LearnerWeights
+    from torchrl.trainers.learners import LearnerGroup
 
 try:
     from tqdm import tqdm
@@ -1446,43 +1446,41 @@ class Trainer:
         return bool(delta)
 
     def _drain_learner_updates(self) -> bool:
-        from torchrl.trainers.learners import LearnerStepRequest
-
         updated = False
         while self._update_credit >= 1 and not self._stop_training:
             global_batch_size = self.learner_group.global_batch_size
             if len(self.replay_buffer) < global_batch_size:
                 return updated
-            request = LearnerStepRequest(
-                round_id=self._learner_round + 1,
-                num_steps=self.optim_steps_per_batch * self.num_epochs,
-                global_batch_size=global_batch_size,
-            )
-            result = self.learner_group.step(request)
-            if result.round_id != request.round_id:
+            expected_round = self._learner_round + 1
+            num_steps = self.optim_steps_per_batch * self.num_epochs
+            metrics = self.learner_group.step(num_steps=num_steps)
+            if self.learner_group.last_round != expected_round:
                 raise RuntimeError(
                     "Learner group returned an unexpected round: "
-                    f"{result.round_id} != {request.round_id}."
+                    f"{self.learner_group.last_round} != {expected_round}."
                 )
-            self._learner_round = result.round_id
-            self._optim_count += result.optim_steps
+            self._learner_round = self.learner_group.last_round
+            self._optim_count += num_steps
             self._update_credit -= 1
-            metrics = result.metrics.flatten_keys(".").to_dict()
-            self._log(optim_steps=self._optim_count, **metrics)
+            metrics_dict = metrics.flatten_keys(".").to_dict()
+            self._log(optim_steps=self._optim_count, **metrics_dict)
             self._publish_learner_weights()
             updated = True
         return updated
 
     def _publish_learner_weights(self) -> None:
-        snapshot = self.learner_group.get_weights("policy")
-        if snapshot.model_version <= self._published_model_version:
+        model_version = self.learner_group.model_version
+        if model_version <= self._published_model_version:
             return
-        weights = self._prepare_learner_weights(snapshot)
+        weights = self.learner_group.get_weights(
+            "policy", expected_version=model_version
+        )
+        weights = self._prepare_learner_weights(weights)
         self.collector.update_policy_weights_(weights)
-        self._published_model_version = snapshot.model_version
+        self._published_model_version = model_version
 
-    def _prepare_learner_weights(self, snapshot: LearnerWeights) -> TensorDictBase:
-        return snapshot.weights
+    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
+        return weights
 
     def _get_replay_write_count(self) -> int:
         write_count = self.replay_buffer.write_count
