@@ -217,15 +217,24 @@ class DataParallelContext:
             A context that owns the process group initialized by this call.
 
         Example:
-            >>> context = DataParallelContext.from_rendezvous(
-            ...     rank=0,
-            ...     world_size=1,
-            ...     local_rank=0,
-            ...     device="cpu",
-            ...     backend="gloo",
-            ...     init_method="tcp://127.0.0.1:29500",
-            ... )
-            >>> context.close()
+            Each worker enters the same rendezvous, synchronizes the initial
+            policy, and leaves the process group through the context manager:
+
+            >>> import torch
+            >>> from torchrl.distributed import DataParallelContext
+            >>> def initialize_rank(rank, world_size, init_method):
+            ...     policy = torch.nn.Linear(3, 1)
+            ...     with DataParallelContext.from_rendezvous(
+            ...         rank=rank,
+            ...         world_size=world_size,
+            ...         local_rank=rank,
+            ...         device="cpu",
+            ...         backend="gloo",
+            ...         init_method=init_method,
+            ...     ) as context:
+            ...         context.broadcast_module(policy)
+            ...         context.barrier()
+            ...     return policy
         """
         cls._validate_rank_metadata(rank, local_rank, world_size)
         resolved_device = cls._resolve_device(device, local_rank)
