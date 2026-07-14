@@ -33,6 +33,7 @@ from torchrl.data import (
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.objectives import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import (
     Learner,
@@ -1761,6 +1762,11 @@ class _LearnerLoss(LossModule):
         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
 
 
+class _LearnerTargetUpdater(TargetNetUpdater):
+    def __init__(self, loss_module):
+        self.loss_module = loss_module
+
+
 class TestLearnerGroup:
     @staticmethod
     def _make_group(replay_buffer):
@@ -1791,6 +1797,18 @@ class TestLearnerGroup:
                 loss,
                 replay_buffer=object(),
                 optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            )
+
+    def test_target_updater_owns_loss_module(self):
+        loss = _LearnerLoss()
+        other_loss = _LearnerLoss()
+        replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(1))
+        with pytest.raises(ValueError, match="learner's loss_module"):
+            Learner(
+                loss,
+                replay_buffer,
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                target_net_updater=_LearnerTargetUpdater(other_loss),
             )
 
     def test_local_group_rounds_metrics_and_state(self):
