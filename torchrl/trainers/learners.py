@@ -303,8 +303,12 @@ class Learner:
             disables clipping. Defaults to ``None``.
         models (mapping, optional): Named modules available to
             :meth:`get_weights`. ``"policy"`` is inferred when possible.
-        update_replay_priority (bool): Whether to call
-            ``update_tensordict_priority`` after a step. Defaults to True.
+        update_replay_priority (bool): Whether to forward priorities written to
+            the sampled batch by the loss module. Defaults to ``True`` so
+            prioritized replay works without separate hook registration;
+            non-prioritized ``TensorDictReplayBuffer`` instances ignore the
+            update. Set to ``False`` when the optimization stepper already
+            updates priorities or to avoid a no-op remote call.
 
     Example:
         >>> import torch
