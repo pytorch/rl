@@ -1271,6 +1271,13 @@ class TestCollectorsConfig:
 )
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestLossConfigs:
+    def test_gae_config_value_chunk_dim(self):
+        from torchrl.trainers.algorithms.configs.objectives import GAEConfig
+
+        cfg = GAEConfig(value_chunk_dim=1)
+        assert cfg._target_ == "torchrl.objectives.value.GAE"
+        assert cfg.value_chunk_dim == 1
+
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):

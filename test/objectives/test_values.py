@@ -179,7 +179,12 @@ class TestValues:
             value_chunk_dim=1,
         )
         td = TensorDict({"obs": torch.randn(4, 5, 3)}, [4, 5])
-        assert len(estimator._split_value_net_input(td)) == 3
+        chunks = estimator._split_value_net_input(td)
+        assert [chunk.batch_size for chunk in chunks] == [
+            torch.Size([4, 2]),
+            torch.Size([4, 2]),
+            torch.Size([4, 1]),
+        ]
 
         bad_estimator = GAE(
             gamma=0.9,
