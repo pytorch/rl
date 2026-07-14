@@ -54,7 +54,7 @@ from torchrl.testing.dist_utils import (
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
-from torchrl.trainers import Learner, LearnerStepRequest
+from torchrl.trainers import Learner
 from torchrl.trainers.distributed import RayLearnerGroup
 
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -97,13 +97,13 @@ class _RayLearnerLoss(LossModule):
         )
 
 
-def _make_ray_test_learner(context):
-    loss = _RayLearnerLoss().to(context.device)
+def _make_ray_test_learner(replay_buffer, data_parallel_context):
+    loss = _RayLearnerLoss().to(data_parallel_context.device)
     return Learner(
         loss,
-        context.replay_buffer,
+        replay_buffer,
         optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
-        data_parallel_context=context.data_parallel_context,
+        data_parallel_context=data_parallel_context,
         models={"policy": loss.linear},
     )
 
@@ -113,13 +113,13 @@ class _FailingRayLearnerLoss(_RayLearnerLoss):
         raise RuntimeError("intentional learner failure")
 
 
-def _make_failing_ray_test_learner(context):
-    loss = _FailingRayLearnerLoss().to(context.device)
+def _make_failing_ray_test_learner(replay_buffer, data_parallel_context):
+    loss = _FailingRayLearnerLoss().to(data_parallel_context.device)
     return Learner(
         loss,
-        context.replay_buffer,
+        replay_buffer,
         optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
-        data_parallel_context=context.data_parallel_context,
+        data_parallel_context=data_parallel_context,
         models={"policy": loss.linear},
     )
 
@@ -1238,10 +1238,10 @@ class TestRayLearnerGroup:
         replay_buffer = self._make_replay_buffer()
         group = self._make_group(replay_buffer).start()
         try:
-            result = group.step(LearnerStepRequest(1, 1, 8))
-            assert result.round_id == 1
-            assert result.model_version == 1
-            assert result.metrics.device == torch.device("cpu")
+            metrics = group.step()
+            assert group.last_round == 1
+            assert group.model_version == 1
+            assert metrics.device == torch.device("cpu")
 
             torch.manual_seed(0)
             reference = _RayLearnerLoss()
@@ -1250,7 +1250,7 @@ class TestRayLearnerGroup:
             reference(batch)["loss"].backward()
             optimizer.step()
             expected = TensorDict.from_module(reference.linear)
-            actual = group.get_weights().weights
+            actual = group.get_weights(expected_version=group.model_version)
             for key in expected.keys(True, True):
                 torch.testing.assert_close(actual.get(key), expected.get(key))
 
@@ -1261,7 +1261,8 @@ class TestRayLearnerGroup:
 
             restored = self._make_group(replay_buffer).start()
             restored.load_state_dict(state)
-            assert restored.step(LearnerStepRequest(2, 1, 8)).model_version == 2
+            restored.step()
+            assert restored.model_version == 2
             restored.shutdown()
             assert replay_buffer.is_alive
             import ray
@@ -1278,7 +1279,7 @@ class TestRayLearnerGroup:
         group = self._make_group(replay_buffer, _make_failing_ray_test_learner).start()
         try:
             with pytest.raises(RuntimeError, match="generation=1, round=1") as error:
-                group.step(LearnerStepRequest(1, 1, 8))
+                group.step()
             assert isinstance(error.value.__cause__, Exception)
             assert not group.is_alive
             assert replay_buffer.is_alive
@@ -1295,8 +1296,8 @@ class TestRayLearnerGroup:
         replay_buffer = self._make_replay_buffer()
         group = self._make_group(replay_buffer, num_gpus=1).start()
         try:
-            result = group.step(LearnerStepRequest(1, 1, 8))
-            assert result.model_version == 1
+            group.step()
+            assert group.model_version == 1
         finally:
             group.shutdown()
             replay_buffer.close()
