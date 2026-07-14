@@ -296,8 +296,11 @@ class Learner:
             constructed for ``loss_module``. In data-parallel groups, every rank
             updates its target-network replica after the synchronized optimizer
             step, keeping replicas aligned without a separate target collective.
-        clip_grad_norm (bool): Whether to clip by total norm. Defaults to True.
-        clip_norm (float, optional): Gradient clipping threshold.
+        clip_grad_norm (bool): Clipping mode used when ``clip_norm`` is set.
+            If ``True``, clips by total norm; otherwise clips individual gradient
+            values. Defaults to ``True``.
+        clip_norm (float, optional): Gradient clipping threshold. ``None``
+            disables clipping. Defaults to ``None``.
         models (mapping, optional): Named modules available to
             :meth:`get_weights`. ``"policy"`` is inferred when possible.
         update_replay_priority (bool): Whether to call
