@@ -19,10 +19,7 @@ from _transforms_common import mp_ctx, TransformBase
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import assert_allclose_td
 from torch import nn
-from torchrl._utils import (
-    auto_unwrap_transformed_env,
-    set_auto_unwrap_transformed_env,
-)
+from torchrl._utils import auto_unwrap_transformed_env, set_auto_unwrap_transformed_env
 
 from torchrl.data import (
     Bounded,
