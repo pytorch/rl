@@ -114,7 +114,8 @@ class Sampler(ABC, metaclass=_SamplerMeta):
     _rng: torch.Generator | None = None
 
     @abstractmethod
-    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]: ...
+    def sample(self, storage: Storage, batch_size: int) -> tuple[Any, dict]:
+        ...
 
     def add(self, index: int) -> None:
         return
@@ -144,10 +145,12 @@ class Sampler(ABC, metaclass=_SamplerMeta):
         return 1.0
 
     @abstractmethod
-    def state_dict(self) -> dict[str, Any]: ...
+    def state_dict(self) -> dict[str, Any]:
+        ...
 
     @abstractmethod
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        ...
 
     @property
     def ran_out(self) -> bool:
@@ -155,13 +158,16 @@ class Sampler(ABC, metaclass=_SamplerMeta):
         return False
 
     @abstractmethod
-    def _empty(self): ...
+    def _empty(self):
+        ...
 
     @abstractmethod
-    def dumps(self, path): ...
+    def dumps(self, path):
+        ...
 
     @abstractmethod
-    def loads(self, path): ...
+    def loads(self, path):
+        ...
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
@@ -2703,7 +2709,8 @@ class SliceSampler(Sampler):
     def state_dict(self) -> dict[str, Any]:
         return {}
 
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None: ...
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        ...
 
 
 class SliceSamplerWithoutReplacement(SliceSampler, SamplerWithoutReplacement):
