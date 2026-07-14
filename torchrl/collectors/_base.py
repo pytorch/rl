@@ -978,6 +978,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         Raises:
             TypeError: If ``worker_ids`` is provided but no ``weight_updater`` is configured.
             ValueError: If conflicting parameters are provided.
+            RuntimeError: If the collector has no configured or local mechanism
+                that can apply the requested update.
 
         .. note:: Users should extend the ``WeightUpdaterBase`` classes to customize
             the weight update logic for specific use cases.
@@ -1123,8 +1125,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """Fallback weight update when no scheme is configured.
 
         Override in subclasses to provide custom fallback behavior.
-        By default, this is a no-op.
+        The base implementation raises because returning successfully would
+        incorrectly acknowledge an update that was not applied.
         """
+        raise RuntimeError(
+            f"{type(self).__name__} cannot update policy weights without a "
+            "weight updater, weight-sync scheme, or subclass implementation of "
+            "_maybe_fallback_update()."
+        )
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights

@@ -198,6 +198,32 @@ def test_ray_collector_direct_targets_reject_controller_sender():
         collector._direct_weight_update_targets()
 
 
+@pytest.mark.parametrize(
+    ("weights", "model_id", "match"),
+    [
+        (TensorDict({"weight": torch.ones(())}), "policy", "weight destination"),
+        (TensorDict(), "policy", "empty weight set"),
+        (None, "policy", "no weights were provided"),
+        (TensorDict({"weight": torch.ones(())}), "critic", "only exposes"),
+    ],
+)
+@pytest.mark.parametrize("direct", [False, True])
+def test_collector_weight_update_rejects_unapplied_updates(
+    weights, model_id, match, direct
+):
+    collector = object.__new__(Collector)
+    collector._weight_sync_schemes = {}
+    collector._weight_updater = None
+    collector._orig_policy_ref = None
+    collector._policy_w_state_dict = None
+
+    update = (
+        collector._apply_weights_direct if direct else collector.update_policy_weights_
+    )
+    with pytest.raises((KeyError, RuntimeError), match=match):
+        update(weights, model_id=model_id)
+
+
 def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
     return tensordict.clear_device_()
 

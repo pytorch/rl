@@ -51,7 +51,7 @@ from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
-from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
 
 
 def _cuda_sync_if_initialized():
@@ -1447,22 +1447,40 @@ class Collector(BaseCollector):
     ) -> None:
         """Copy weights from original policy to internal policy when no scheme configured."""
         if model_id is not None and model_id != "policy":
-            return
+            raise KeyError(
+                f"Collector only exposes the 'policy' model for local weight "
+                f"updates, but got model_id={model_id!r}."
+            )
 
         # Get source weights - either from argument or from original policy
+        strategy = WeightStrategy()
         if policy_or_weights is not None:
-            weights = self._extract_weights_if_needed(policy_or_weights, "policy")
+            weights = strategy.extract_weights(policy_or_weights)
         elif self._orig_policy is not None:
-            weights = TensorDict.from_module(self._orig_policy)
+            weights = strategy.extract_weights(self._orig_policy)
         else:
-            return
+            raise RuntimeError(
+                "Collector cannot update policy weights because no weights were "
+                "provided and the original policy is unavailable. Pass weights "
+                "explicitly or configure a weight updater or weight-sync scheme."
+            )
+
+        if weights is None or (
+            isinstance(weights, TensorDictBase) and weights.is_empty()
+        ):
+            raise RuntimeError(
+                "Collector cannot update policy weights from an empty weight set."
+            )
 
         # Apply to internal policy
-        if (
-            hasattr(self, "_policy_w_state_dict")
-            and self._policy_w_state_dict is not None
-        ):
-            TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
+        destination = getattr(self, "_policy_w_state_dict", None)
+        if destination is None:
+            raise RuntimeError(
+                "Collector cannot apply policy weights because its policy does not "
+                "expose a module-backed weight destination. Configure a weight "
+                "updater for callable or externally managed policies."
+            )
+        strategy.apply_weights(destination, weights)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
