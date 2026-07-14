@@ -18,7 +18,7 @@ import torch.multiprocessing as mp
 from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import RayReplayBuffer
+from torchrl.data import RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
@@ -26,6 +26,7 @@ from torchrl.data.replay_buffers.samplers import (
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
 RETRY_BACKOFF = 3
@@ -145,6 +146,20 @@ def _sample_from_buffer(buffer, batch_size):
     )
 
 
+def _make_mcadvantage_traj(group_id, rewards):
+    n_steps = len(rewards)
+    return TensorDict(
+        {
+            "group_id": torch.full((n_steps,), group_id),
+            ("next", "reward"): torch.tensor(rewards).reshape(n_steps, 1),
+            ("next", "done"): torch.tensor([False] * (n_steps - 1) + [True]).reshape(
+                n_steps, 1
+            ),
+        },
+        batch_size=[n_steps],
+    )
+
+
 @pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
 class TestRayRB:
     @pytest.fixture(autouse=True, scope="module")
@@ -217,8 +232,56 @@ class TestRayRB:
             storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
         )
         try:
-            remote_worker = ray.remote(Worker).remote(rb)
+            client = rb.client()
+            assert not hasattr(client, "shutdown")
+            assert not hasattr(client, "close")
+            remote_worker = ray.remote(Worker).remote(client)
             ray.get(remote_worker.run.remote())
+            assert len(rb) == 100
+        finally:
+            rb.close()
+
+    def test_construct_from_replay_buffer_service_backend(self):
+        rb = ReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            service_backend="ray",
+            service_backend_options={
+                "ray_init_config": {"num_cpus": 1},
+                "remote_config": {"num_cpus": 0},
+            },
+        )
+        try:
+            assert isinstance(rb, RayReplayBuffer)
+            assert isinstance(rb, ReplayBuffer)
+            assert rb.service_backend == "ray"
+            rb.extend(TensorDict({"x": torch.ones(4)}, batch_size=4))
+            assert len(rb.client()) == 4
+        finally:
+            rb.shutdown()
+        assert not rb.is_alive
+        rb.shutdown()
+
+    def test_ray_rb_mcadvantage_transform_factory(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 10),
+            transform_factory=partial(
+                MCAdvantage,
+                grpo_size=2,
+                prompt_key="group_id",
+                trajectory_return="sum",
+            ),
+            ray_init_config={"num_cpus": 1},
+            remote_config={"num_cpus": 0},
+            batch_size=2,
+        )
+        try:
+            rb.extend(_make_mcadvantage_traj(0, [0.0]))
+            assert len(rb) == 0
+            rb.extend(_make_mcadvantage_traj(0, [1.0]))
+            assert len(rb) == 2
+            sample = rb.sample()
+            assert sample.shape == (2,)
+            assert "advantage" in sample.keys()
         finally:
             rb.close()
 

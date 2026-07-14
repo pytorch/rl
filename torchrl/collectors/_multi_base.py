@@ -8,7 +8,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -34,7 +34,11 @@ from torchrl.collectors._constants import (
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _make_meta_policy_cm, _TrajectoryPool
+from torchrl.collectors.utils import (
+    _make_meta_policy_cm,
+    _TrajectoryPool,
+    _validate_traj_format,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -252,6 +256,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            With a multi-process collector writing to a shared replay buffer,
+            this marks the worker-batch seams that would otherwise be
+            invisible to a :class:`~torchrl.data.replay_buffers.SliceSampler`;
+            see :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            and :ref:`collectors_replay_trajs` for the trade-offs.
         trajs_per_batch (int, optional): When set together with ``replay_buffer``,
             trajectory assembly is delegated to each worker's inner
             :class:`~torchrl.collectors.Collector`.  Each worker calls
@@ -260,10 +269,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             last step has ``("next", "done") == True``) to the shared replay
             buffer as flat 1-D sequences — no padding, no accumulation.
 
-            When set *without* ``replay_buffer``, each worker assembles
-            trajectories and the multi-collector yields zero-padded batches
-            of shape ``(trajs_per_batch, max_traj_len)`` with a
-            ``("collector", "mask")`` boolean field.
+            When set *without* ``replay_buffer``, the multi-collector
+            assembles trajectories from the worker batches and yields
+            zero-padded batches of shape ``(trajs_per_batch, max_traj_len)``
+            with a ``("collector", "mask")`` boolean field, or flat unpadded
+            concatenations with ``traj_format="cat"``.
 
             Both the iteration pattern (``for data in collector``) and the
             async ``start()`` pattern are supported.
@@ -273,6 +283,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and replay-buffer
             storage contract.
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set without a ``replay_buffer``:
+            ``"padded"`` for zero-padded
+            ``(trajs_per_batch, max_traj_len)`` stacks with a
+            ``("collector", "mask")`` entry, ``"cat"`` for flat unpadded
+            concatenations along time (trajectories delimited by
+            ``("next", "done")`` and ``("collector", "traj_ids")``).
+            Replay-buffer writes are always flat. Raises if set without
+            ``trajs_per_batch``. Defaults to ``None``, which currently
+            resolves to ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -440,6 +462,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
@@ -450,6 +473,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -961,6 +987,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Warn when a SliceSampler is used without trajs_per_batch: workers
         # write batches independently so adjacent frames in the buffer can
         # come from different episodes without an intervening done signal.
+        # This hazard is specific to multi-process collectors: a single
+        # Collector writes batches in temporal order, so consecutive batches
+        # are contiguous continuations of the same trajectories and the only
+        # mid-trajectory edge is the live write cursor, which SliceSampler
+        # already resolves at read time (see the trajectory-boundary section
+        # of the replay-buffer docs).
         from torchrl.data.replay_buffers.samplers import SliceSampler
 
         if (
@@ -1050,6 +1082,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             )
         if getattr(storage, "shared_init", False):
             return
+        storage_device = getattr(storage, "device", None)
+        if (
+            storage_device is not None
+            and storage_device != "auto"
+            and torch.device(storage_device).type != "cpu"
+        ):
+            warnings.warn(
+                f"Worker-initialized replay buffers store data in a CPU "
+                f"memory-mapped tensordict; the storage device "
+                f"({storage_device}) cannot be honored and will be reset to "
+                f"'cpu' at initialization time."
+            )
         storage.shared_init = True
         storage._init_lock = mp.Lock()
         storage._init_event = mp.Event()
@@ -1133,7 +1177,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             == self.num_workers
         ):
             raise RuntimeError(
-                f"THe length of the devices does not match the number of workers: {self.num_workers}."
+                f"The length of the devices does not match the number of workers: {self.num_workers}."
             )
         storing_device, policy_device, env_device = zip(
             *[
@@ -1941,6 +1985,9 @@ also that the state dict is synchronised across processes if needed."""
 
         """
         _check_for_faulty_process(self.procs)
+        # drop parent-level trajectory-assembly state (trajs_per_batch
+        # without a replay buffer assembles trajectories on this process)
+        self._flush_trajectory_assembly()
 
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]
@@ -1962,12 +2009,20 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "state_dict"))
         state_dict = OrderedDict()
+        traj_pool_state = None
         for idx in range(self.num_workers):
             _state_dict, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
             if msg != "state_dict":
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
+            worker_traj_pool_state = _state_dict.pop("traj_pool", None)
+            if traj_pool_state is None and worker_traj_pool_state is not None:
+                traj_pool_state = worker_traj_pool_state
             state_dict[f"worker{idx}"] = _state_dict
         state_dict.update({"frames": self._frames, "iter": self._iter})
+        if traj_pool_state is not None:
+            state_dict["traj_pool"] = traj_pool_state
+        if self.policy_version_tracker is not None:
+            state_dict["policy_version"] = self.policy_version
 
         return state_dict
 
@@ -1979,6 +2034,9 @@ also that the state dict is synchronised across processes if needed."""
                 ``{"worker0": state_dict0, "worker1": state_dict1}``.
 
         """
+        traj_pool_state = state_dict.get("traj_pool")
+        if traj_pool_state is not None:
+            self._traj_pool.load_state_dict(traj_pool_state)
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
@@ -1987,6 +2045,9 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        policy_version = state_dict.get("policy_version")
+        if policy_version is not None and self.policy_version_tracker is not None:
+            self.policy_version_tracker.version = policy_version
 
     def increment_version(self):
         """Increment the policy version."""

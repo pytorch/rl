@@ -13,6 +13,13 @@
   - changed-files:
     - any-glob-to-any-file: ['torchrl/envs/libs/mujoco_playground.py']
 
+"Environments/mjlab":
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'torchrl/envs/libs/mjlab.py'
+      - 'test/libs/test_mjlab.py'
+      - '.github/unittest/linux_libs/scripts_mjlab/**'
+
 "Environments/dm_control":
   - changed-files:
     - any-glob-to-any-file: ['torchrl/envs/libs/dm_control.py']
@@ -36,6 +43,10 @@
 "Environments/jumanji":
   - changed-files:
     - any-glob-to-any-file: ['torchrl/envs/libs/jumanji.py']
+
+"Environments/libero":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/libero.py', 'test/libs/test_libero.py']
 
 "Environments/meltingpot":
   - changed-files:

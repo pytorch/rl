@@ -7,7 +7,7 @@ import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from textwrap import indent
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -17,7 +17,6 @@ from torch import nn
 from torchrl import compile_with_warmup
 from torchrl._utils import (
     _ends_with,
-    _make_ordinal_device,
     _maybe_record_function,
     _maybe_record_function_decorator,
     _replace_last,
@@ -31,7 +30,12 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
 )
-from torchrl.collectors.utils import _TrajectoryPool, split_trajectories
+from torchrl.collectors.utils import (
+    _maybe_normalize_replay_buffer_tensordict_device,
+    _TrajectoryPool,
+    _validate_traj_format,
+    split_trajectories,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
@@ -44,6 +48,7 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
+from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -167,13 +172,56 @@ class Collector(BaseCollector):
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
-            information.
+            information. Note that this splits and pads each fixed-frame
+            batch independently: trajectories spanning two batches remain
+            split across them. To receive only complete trajectories, see
+            ``trajs_per_batch``.
             Defaults to ``False``.
+        trajs_per_batch (int, optional): if set, the collector yields batches
+            of exactly this many *complete* trajectories instead of
+            fixed-frame batches: each yield has shape
+            ``(trajs_per_batch, max_traj_len)``, zero-padded along time, with
+            a ``("collector", "mask")`` entry marking the valid steps (see
+            ``traj_format`` for an unpadded alternative).
+            Episodes spanning internal collection steps are reassembled and
+            in-flight episodes are held back, so every row is a whole,
+            done-terminated trajectory (``frames_per_batch`` then only sets
+            the internal polling granularity). When combined with
+            ``replay_buffer``, complete trajectories are instead written to
+            the buffer as flat, unpadded 1-D sequences (and the collector
+            yields ``None``) -- the layout
+            :class:`~torchrl.data.replay_buffers.SliceSampler` expects.
+            See :ref:`collectors_replay_trajs`. The equivalent on
+            :class:`~torchrl.collectors.AsyncBatchedCollector` is the
+            ``yield_completed_trajectories`` flag.
+            Defaults to ``None`` (fixed-frame batches).
+        trajs_per_write (int, optional): together with ``trajs_per_batch``
+            and ``replay_buffer``, the number of complete trajectories
+            written to the buffer per extend call. Defaults to ``None``
+            (write every trajectory as soon as it completes).
+        traj_format (str, optional): layout of the batches yielded under
+            ``trajs_per_batch``. ``"padded"`` stacks trajectories
+            into ``(trajs_per_batch, max_traj_len)`` with zero padding and a
+            ``("collector", "mask")`` entry; ``"cat"`` concatenates them
+            along time into a flat, unpadded ``[sum_i T_i]`` batch in which
+            trajectories are contiguous and delimited by ``("next", "done")``
+            and ``("collector", "traj_ids")`` -- the same layout the
+            replay-buffer write path produces. Prefer ``"cat"`` when
+            trajectory lengths vary a lot or frames are large (e.g. images):
+            it avoids materializing the padding. Raises if set without
+            ``trajs_per_batch``; has no effect on replay-buffer writes
+            (always flat). Defaults to ``None``, which currently resolves to
+            ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
         track_traj_ids (bool, optional): if ``False``, the collector will not
             write ``("collector", "traj_ids")`` in the rollout nor update
             trajectory identifiers at every environment step. This is useful
             when trajectory splitting or trajectory-aware replay sampling is not
             needed. Defaults to ``True``.
+            The ids are the most robust trajectory-boundary marker for
+            replay-buffer consumers; see :ref:`the trajectory-boundary
+            documentation <ref_traj_boundaries>` before disabling them.
         exploration_type (ExplorationType, optional): interaction mode to be used when
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
@@ -194,6 +242,9 @@ class Collector(BaseCollector):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            See :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            for when these markers are needed to sample trajectories from a
+            replay buffer.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -414,6 +465,7 @@ class Collector(BaseCollector):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
@@ -424,6 +476,9 @@ class Collector(BaseCollector):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -1332,19 +1387,14 @@ class Collector(BaseCollector):
         env_device: torch.device,
         device: torch.device,
     ):
-        device = _make_ordinal_device(torch.device(device) if device else device)
-        storing_device = _make_ordinal_device(
-            torch.device(storing_device) if storing_device else device
+        resolved = _resolve_device_config(
+            device=device,
+            policy_device=policy_device,
+            env_device=env_device,
+            storing_device=storing_device,
+            collector_defaults=True,
         )
-        policy_device = _make_ordinal_device(
-            torch.device(policy_device) if policy_device else device
-        )
-        env_device = _make_ordinal_device(
-            torch.device(env_device) if env_device else device
-        )
-        if storing_device is None and (env_device == policy_device):
-            storing_device = env_device
-        return storing_device, policy_device, env_device
+        return resolved.storing_device, resolved.policy_device, resolved.env_device
 
     # for RPC
     def next(self):
@@ -1511,6 +1561,9 @@ class Collector(BaseCollector):
                         self.post_collect_hook(tensordict_out)
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
+                    tensordict_out = _maybe_normalize_replay_buffer_tensordict_device(
+                        tensordict_out, self.replay_buffer
+                    )
                     self.replay_buffer.extend(tensordict_out)
                     yield
                 else:
@@ -1969,7 +2022,13 @@ class Collector(BaseCollector):
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
-        """Resets the environments to a new initial state."""
+        """Resets the environments to a new initial state.
+
+        When ``trajs_per_batch`` is in use, also drops in-flight episodes and
+        completed-but-not-yet-yielded trajectories, so post-reset batches
+        contain only post-reset data.
+        """
+        self._flush_trajectory_assembly()
         if self.track_traj_ids:
             collector_metadata = self._carrier.get("collector").clone()
         if index is not None:
@@ -2073,6 +2132,10 @@ class Collector(BaseCollector):
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
         state_dict.update({"frames": self._frames, "iter": self._iter})
+        if self.track_traj_ids:
+            state_dict["traj_pool"] = self._traj_pool.state_dict()
+        if self.policy_version_tracker is not None:
+            state_dict["policy_version"] = self.policy_version
 
         return state_dict
 
@@ -2097,6 +2160,20 @@ class Collector(BaseCollector):
             )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        if self.track_traj_ids:
+            traj_pool_state = state_dict.get("traj_pool")
+            if traj_pool_state is not None:
+                self._traj_pool.load_state_dict(traj_pool_state)
+            # Runtime environment state is not generally serializable. The new
+            # carrier therefore starts a fresh trajectory whose identifier must
+            # be allocated after restoring the global trajectory counter.
+            traj_ids = self._traj_pool.get_traj_and_increment(
+                self.n_env, device=self.storing_device
+            ).view(self.env.batch_size)
+            self._carrier.set(("collector", "traj_ids"), traj_ids)
+        policy_version = state_dict.get("policy_version")
+        if policy_version is not None and self.policy_version_tracker is not None:
+            self.policy_version_tracker.version = policy_version
 
     def __repr__(self) -> str:
         try:

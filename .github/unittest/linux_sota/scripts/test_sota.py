@@ -15,6 +15,16 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
+  collector.groups_per_iter=2 \
+  collector.group_size=2 \
+  collector.total_iters=3 \
+  loss.mini_batch_size=8 \
+  logger.backend= \
+  logger.eval_iter=2 \
+  logger.eval_episodes=4 \
+  checkpoint.save_iter=2
+""",
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
   replay_buffer.dataset= \
@@ -45,6 +55,16 @@ commands = {
   loss.ppo_epochs=2 \
   logger.backend= \
   logger.test_interval=10
+""",
+    "rnd_mujoco": """python sota-implementations/rnd/rnd_mujoco.py \
+  env.env_name=HalfCheetah-v4 \
+  collector.total_frames=40 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=10 \
+  loss.ppo_epochs=2 \
+  logger.backend= \
+  logger.test_interval=40 \
+  logger.num_test_episodes=1
 """,
     "ppo_atari": """python sota-implementations/ppo/ppo_atari.py \
   collector.total_frames=80 \
@@ -326,6 +346,26 @@ commands = {
   networks.obs_embed_dim=8
 """,
 }
+
+# CI sharding: the smoke list runs as SOTA_NUM_SHARDS parallel jobs, each
+# selecting an interleaved slice of the sorted command list via SOTA_SHARD
+# (1-based). Interleaving keeps the heavy neighbors (dreamer/dreamer_v3) on
+# different shards. Both variables unset (the local default) runs everything.
+_num_shards = int(os.environ.get("SOTA_NUM_SHARDS", "1"))
+_shard = os.environ.get("SOTA_SHARD")
+if _num_shards > 1:
+    if _shard is None:
+        raise RuntimeError("SOTA_NUM_SHARDS is set but SOTA_SHARD is not.")
+    _shard_index = int(_shard) - 1
+    if not 0 <= _shard_index < _num_shards:
+        raise RuntimeError(
+            f"SOTA_SHARD={_shard} is out of range for SOTA_NUM_SHARDS={_num_shards}."
+        )
+    commands = {
+        algo: command
+        for index, (algo, command) in enumerate(sorted(commands.items()))
+        if index % _num_shards == _shard_index
+    }
 
 
 def run_command(command):

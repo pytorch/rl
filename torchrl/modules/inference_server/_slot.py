@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import itertools
 import threading
+import time
 
 from tensordict.base import TensorDictBase
 
@@ -79,6 +80,7 @@ class SlotTransport(InferenceTransport):
         # Per-slot readiness flag (True = observation ready for server)
         # Under CPython's GIL, bool assignment is atomic.
         self._obs_ready: list[bool] = [False] * num_slots
+        self._submitted_at: list[float | None] = [None] * num_slots
 
         # Per-slot action storage (written by server, read by env thread)
         self._actions: list[TensorDictBase | BaseException | None] = [None] * num_slots
@@ -106,6 +108,10 @@ class SlotTransport(InferenceTransport):
             self._obs_buffer[slot_id].update_(td)
         else:
             self._obs[slot_id] = td
+        # The ready flag is the release signal for the lock-free server-side
+        # read: write the timestamp first so the server never observes a
+        # ready slot with a stale timestamp.
+        self._submitted_at[slot_id] = time.monotonic()
         self._obs_ready[slot_id] = True
         with self._work_cond:
             self._work_cond.notify()
@@ -150,6 +156,13 @@ class SlotTransport(InferenceTransport):
 
     def drain(self, max_items: int) -> tuple[list[TensorDictBase], list[int]]:
         """Sweep slots and return (observations, slot_ids) for ready ones."""
+        items, slot_ids, _submitted_at = self.drain_with_timing(max_items)
+        return items, slot_ids
+
+    def drain_with_timing(
+        self, max_items: int
+    ) -> tuple[list[TensorDictBase], list[int], list[float | None]]:
+        """Sweep slots and include actor-side submission timestamps."""
         # Lazily initialise the pre-allocated buffer on the first drain
         # that finds ready observations.
         if self._preallocate and self._obs_buffer is None:
@@ -166,9 +179,12 @@ class SlotTransport(InferenceTransport):
 
         items: list[TensorDictBase] = []
         slot_ids: list[int] = []
+        submitted_at: list[float | None] = []
         for i in range(self._num_slots):
             if self._obs_ready[i]:
                 self._obs_ready[i] = False
+                submitted_at.append(self._submitted_at[i])
+                self._submitted_at[i] = None
                 if self._obs_buffer is not None:
                     # Flush first-time observations that arrived before the
                     # buffer existed into the buffer.
@@ -182,7 +198,7 @@ class SlotTransport(InferenceTransport):
                 slot_ids.append(i)
                 if len(slot_ids) >= max_items:
                     break
-        return items, slot_ids
+        return items, slot_ids, submitted_at
 
     def resolve(self, callback: int, result: TensorDictBase) -> None:
         """Write the action into the slot and wake the waiting env thread."""

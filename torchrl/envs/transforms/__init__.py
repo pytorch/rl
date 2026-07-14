@@ -16,7 +16,8 @@ from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
-from .rb_transforms import MultiStepTransform, NextStateReconstructor
+from .rb_transforms import MultiStepTransform, NextStateReconstructor, PolicyAgeFilter
+from .rnd import RNDTransform, RunningMeanStd
 from .transforms import (
     ActionChunkTransform,
     ActionDiscretizer,
@@ -94,6 +95,7 @@ from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
 _UR_PRIMITIVE_EXPORTS = {
+    "CartesianSolver",
     "RobotMacroAction",
     "RobotMacroActionMode",
     "URScriptPrimitive",
@@ -137,6 +139,7 @@ __all__ = [
     "BatchSizeTransform",
     "BinarizeReward",
     "BurnInTransform",
+    "CartesianSolver",
     "CatFrames",
     "CatTensors",
     "CenterCrop",
@@ -176,6 +179,7 @@ __all__ = [
     "MultiStepTransform",
     "NextObservationDelta",
     "NextStateReconstructor",
+    "PolicyAgeFilter",
     "NoopResetEnv",
     "ObservationNorm",
     "ObservationTransform",
@@ -188,10 +192,12 @@ __all__ = [
     "RemoveEmptySpecs",
     "RenameTransform",
     "Resize",
+    "RNDTransform",
     "Reward2GoTransform",
     "RewardClipping",
     "RewardScaling",
     "RewardSum",
+    "RunningMeanStd",
     "SelectTransform",
     "SignTransform",
     "SqueezeTransform",

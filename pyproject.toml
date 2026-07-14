@@ -39,7 +39,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
-    "pyvers",
+    "pyvers>=0.2.3",
     "hoptorch>=0.1.4",
     "numpy",
     "packaging",
@@ -54,6 +54,7 @@ dev = [
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
     "imageio",
+    "moviepy",
     "mujoco",
     "mujoco-torch",
     "pre-commit",
@@ -65,6 +66,12 @@ dev = [
 
 [tool.uv]
 prerelease = "allow"
+conflicts = [
+    [
+        { extra = "mjlab" },
+        { extra = "genesis" },
+    ],
+]
 
 [[tool.uv.index]]
 name = "pytorch-nightly"
@@ -74,6 +81,7 @@ explicit = true
 [tool.uv.sources]
 tensordict = { git = "https://github.com/pytorch/tensordict" }
 torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
+torchvision = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
 
 [[tool.uv.dependency-metadata]]
 name = "lerobot"
@@ -89,8 +97,8 @@ video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
-vla = ["lerobot>=0.5.0; python_version >= '3.12'"]
-rendering = ["moviepy", "torchcodec>=0.10.0"]
+vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
+rendering = ["moviepy", "pygame", "pyyaml", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
@@ -135,6 +143,7 @@ marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
 mujoco_playground = ["jax>=0.7.0; python_version>='3.11'", "playground; python_version>='3.11'"]
+mjlab = ["mjlab>=1.4.0; python_version<'3.14'"]
 genesis = ["genesis-world"]
 procgen = ["procgen; python_version<'3.10'"]
 pilco = [
@@ -189,6 +198,10 @@ dev = [
     "pre-commit",
     "autoflake",
 ]
+
+[project.scripts]
+rlrender = "torchrl.render.cli:main"
+torchrl-render = "torchrl.render.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/pytorch/rl"

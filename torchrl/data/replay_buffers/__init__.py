@@ -14,6 +14,14 @@ from .checkpointers import (
     TensorStorageCheckpointer,
 )
 from .her import HERReplayBuffer, HindsightStrategy
+from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
+from .query import (
+    filter_trajectories,
+    iter_trajectories,
+    traj,
+    Trajectory,
+    TrajectoryPredicate,
+)
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -24,8 +32,10 @@ from .replay_buffers import (
     TensorDictReplayBuffer,
 )
 from .samplers import (
+    ConsumingSampler,
     PrioritizedSampler,
     PrioritizedSliceSampler,
+    PromptGroupSampler,
     RandomSampler,
     Sampler,
     SamplerEnsemble,
@@ -45,7 +55,16 @@ from .storages import (
     StoreStorage,
     TensorStorage,
 )
-from .utils import Flat2TED, H5Combine, H5Split, Nested2TED, TED2Flat, TED2Nested
+from .utils import (
+    DEFAULT_DONE_KEYS,
+    find_start_stop_traj,
+    Flat2TED,
+    H5Combine,
+    H5Split,
+    Nested2TED,
+    TED2Flat,
+    TED2Nested,
+)
 from .writers import (
     ImmutableDatasetWriter,
     RoundRobinWriter,
@@ -56,6 +75,11 @@ from .writers import (
 )
 
 __all__ = [
+    "filter_trajectories",
+    "iter_trajectories",
+    "traj",
+    "Trajectory",
+    "TrajectoryPredicate",
     "HERReplayBuffer",
     "HindsightStrategy",
     "CompressedListStorage",
@@ -74,8 +98,10 @@ __all__ = [
     "ReplayBufferEnsemble",
     "TensorDictPrioritizedReplayBuffer",
     "TensorDictReplayBuffer",
+    "ConsumingSampler",
     "PrioritizedSampler",
     "PrioritizedSliceSampler",
+    "PromptGroupSampler",
     "RandomSampler",
     "Sampler",
     "SamplerEnsemble",
@@ -91,6 +117,8 @@ __all__ = [
     "StorageEnsemble",
     "StoreStorage",
     "TensorStorage",
+    "DEFAULT_DONE_KEYS",
+    "find_start_stop_traj",
     "Flat2TED",
     "H5Combine",
     "H5Split",
@@ -98,6 +126,8 @@ __all__ = [
     "TED2Flat",
     "TED2Nested",
     "ImmutableDatasetWriter",
+    "OfflineToOnlineReplayBuffer",
+    "prefill_replay_buffer",
     "RoundRobinWriter",
     "TensorDictMaxValueWriter",
     "TensorDictRoundRobinWriter",

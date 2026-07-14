@@ -48,15 +48,24 @@ warnings.filterwarnings("ignore")
 # ------------------
 #
 # Structurally, a VLA is a vision-language model (VLM) with an *action head*.
-# The backbone -- a pretrained multimodal transformer such as PaliGemma (pi0),
-# SmolVLM (SmolVLA) or Llama/SigLIP stacks (OpenVLA) -- encodes the camera
-# images and the instruction; a comparatively small head turns that
-# representation into robot actions. Two head families dominate:
+# The backbone -- a pretrained multimodal transformer such as
+# `PaliGemma <https://huggingface.co/google/paligemma-3b-pt-224>`__ (used by
+# `pi0 <https://github.com/Physical-Intelligence/openpi>`__),
+# `SmolVLM <https://huggingface.co/HuggingFaceTB/SmolVLM-Instruct>`__ (used by
+# `SmolVLA <https://huggingface.co/lerobot/smolvla_base>`__) or the
+# `OpenVLA <https://github.com/openvla/openvla>`__ Llama/SigLIP stack --
+# encodes the camera images and the instruction; a comparatively small head
+# turns that representation into robot actions. Two head families dominate:
 #
-# - **token heads** (RT-2, OpenVLA): actions are discretized into tokens and
-#   emitted through the language-model head, autoregressively -- which is what
-#   makes LLM-style RL objectives applicable to robotics;
-# - **continuous chunk heads** (ACT, OpenVLA-OFT, pi0, SmolVLA): a regression,
+# - **token heads** (`RT-2 <https://robotics-transformer2.github.io/>`__,
+#   `OpenVLA <https://huggingface.co/openvla/openvla-7b>`__): actions are
+#   discretized into tokens and emitted through the language-model head,
+#   autoregressively -- which is what makes LLM-style RL objectives applicable
+#   to robotics;
+# - **continuous chunk heads** (`ACT <https://github.com/tonyzhaozh/act>`__,
+#   `OpenVLA-OFT <https://github.com/moojink/openvla-oft>`__,
+#   `pi0 <https://huggingface.co/lerobot/pi0_base>`__,
+#   `SmolVLA <https://huggingface.co/lerobot/smolvla_base>`__): a regression,
 #   diffusion or flow-matching head predicts a short horizon of ``H`` future
 #   actions (an *action chunk*) in one forward pass.
 #
@@ -160,6 +169,7 @@ def make_observation(batch=batch):
 
 
 obs = make_observation()
+obs
 
 ##############################################################################
 # Action chunking and normalization
@@ -167,9 +177,11 @@ obs = make_observation()
 #
 # :class:`~torchrl.envs.transforms.ActionChunkTransform` turns a per-step action
 # tensor ``[*B, T, action_dim]`` into the chunked training target
-# ``action_chunk`` ``[*B, T, H, action_dim]`` (plus an ``action_is_pad`` mask):
-# for every step ``t`` it gathers the next ``H`` actions. This is the training
-# target of modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
+# ``("vla_action", "chunk")`` ``[*B, T, H, action_dim]`` (plus an
+# ``action_is_pad`` mask): for every step ``t`` it gathers the next ``H``
+# actions, stopping (padding and masking) at the trajectory boundaries when
+# the sampled window carries its done state. This is the training target of
+# modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
 #
 # Chunks mean different things on the two sides of the pipeline, and keeping
 # the two pictures apart avoids a classic confusion::
@@ -210,7 +222,7 @@ from torchrl.envs.transforms import ActionChunkTransform, ActionScaling
 T, H = 6, 4
 window = TensorDict({"action": torch.randn(2, T, action_dim)}, batch_size=[2, T])
 chunked = ActionChunkTransform(chunk_size=H)(window)
-chunked["action_chunk"].shape  # [2, T, H, action_dim]
+chunked["vla_action", "chunk"].shape  # [2, T, H, action_dim]
 
 ##############################################################################
 # :class:`~torchrl.envs.transforms.ActionScaling` handles action normalization.
@@ -240,7 +252,7 @@ normalized["action"]  # all ones
 from torchrl.modules.vla import TinyVLA
 
 policy = TinyVLA(action_dim=action_dim, chunk_size=H, hidden_dim=64)
-policy(make_observation())["action_chunk"].shape  # [batch, H, action_dim]
+policy(make_observation())["vla_action", "chunk"].shape  # [batch, H, action_dim]
 
 ##############################################################################
 # Behavior cloning
@@ -259,10 +271,11 @@ data = make_observation()
 expert = (
     data["observation", "state"] @ torch.randn(state_dim, H * action_dim)
 ).reshape(batch, H, action_dim)
-data["action_chunk"] = expert
+data["vla_action", "chunk"] = expert
+data["action_is_pad"] = torch.zeros(batch, H, dtype=torch.bool)
 
 bc_loss = BCLoss(policy, loss_function="l1")
-bc_loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+bc_loss.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
 initial = bc_loss(data)["loss_bc"].item()
 optimizer = torch.optim.Adam(bc_loss.parameters(), lr=1e-2)
 for _ in range(100):
@@ -317,50 +330,32 @@ base_env.observation_spec
 base_env.action_spec
 
 ##############################################################################
-# The wrapper expects its actor to write the *env action key* with a leading
-# time dimension, so we append a one-line rename of the policy's
-# ``action_chunk``; ``InitTracker`` provides the ``is_init`` flag the wrapper
-# uses to re-plan on resets. We also count the policy calls to see the
-# receding horizon at work.
+# The wrapper auto-discovers the policy's ``("vla_action", "chunk")`` output
+# and serves the base env's ``"action"`` key from it. ``InitTracker`` provides
+# the ``is_init`` flag the wrapper uses to re-plan on resets.
 
-from tensordict.nn import TensorDictModule, TensorDictSequential, WrapModule
 from torchrl.envs.transforms import InitTracker, TransformedEnv
 from torchrl.modules import MultiStepActorWrapper
 
-policy_calls = []
-
-
-def counted_policy(td):
-    policy_calls.append(1)
-    return policy(td)
-
-
-chunk_as_action = TensorDictModule(
-    lambda chunk: chunk, in_keys=["action_chunk"], out_keys=["action"]
-)
-actor = MultiStepActorWrapper(
-    TensorDictSequential(WrapModule(counted_policy), chunk_as_action),
-    n_steps=H,
-    replan_interval=2,
-)
+actor = MultiStepActorWrapper(policy, n_steps=H, replan_interval=2)
 env = TransformedEnv(base_env, InitTracker())
 
 ##############################################################################
 # A plain :meth:`~torchrl.envs.EnvBase.rollout` runs the interaction loop. The
-# executed per-step actions are recorded under ``action``; the policy itself
-# only ran on the re-plan steps (0, 2 and 4 -- three calls for six steps,
-# instead of six).
+# executed per-step actions are recorded under ``action``. The wrapper counter
+# shows the receding-horizon cadence: with ``replan_interval=2`` it serves two
+# actions from the cache, then re-plans.
 
 eval_rollout = env.rollout(6, actor)
 eval_rollout["action"].shape  # [2, 6, action_dim]: the executed actions
 
 ##############################################################################
-# The call count proves the skipping, and the env's state echo confirms the
-# executed cadence matches what the wrapper served from its cache:
-
-len(policy_calls)  # 3: the wrapped policy ran every replan_interval=2 steps
+eval_rollout["counter"][0, :, 0]  # tensor([1, 2, 1, 2, 1, 2])
 
 ##############################################################################
+# The env's state echo confirms that the executed cadence matches what the
+# wrapper served from its cache:
+
 executed = eval_rollout["next", "observation", "state"][..., :action_dim]
 torch.allclose(executed, eval_rollout["action"])  # True: echo of what env got
 
@@ -379,6 +374,7 @@ torch.allclose(executed, eval_rollout["action"])  # True: echo of what env got
 # behavior-policy log-probabilities, attach a (here synthetic) advantage, then
 # take one optimization step.
 
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import ClipPPOLoss
 
 token_policy = TinyVLA(
@@ -386,19 +382,25 @@ token_policy = TinyVLA(
     chunk_size=H,
     action_head="tokens",
     vocab_size=64,
-    mode="sample",
 )
-rollout = token_policy(make_observation())  # writes action_tokens + log_probs
+# The token head follows the ambient exploration context: collectors roll out
+# under ``ExplorationType.RANDOM`` (so actions are sampled), while greedy
+# evaluation uses ``set_exploration_type(ExplorationType.DETERMINISTIC)``. We
+# sample here to mimic a behavior-policy rollout -- no policy mutation needed.
+with set_exploration_type(ExplorationType.RANDOM):
+    rollout = token_policy(make_observation())  # writes nested tokens + log-probs
 # one advantage per sample, with the trailing singleton value-dim the PPO
 # losses expect (a flat [batch] advantage would silently broadcast wrong)
 rollout["advantage"] = torch.randn(batch, 1)
-rollout["log_probs"] = rollout["log_probs"].detach()  # behavior log-probs are fixed
+rollout["vla_action", "log_probs"] = rollout["vla_action", "log_probs"].detach()
 
 grpo_loss = ClipPPOLoss(
     token_policy, critic_network=None, entropy_bonus=False, clip_epsilon=0.2
 )
 grpo_loss.set_keys(
-    action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+    action=("vla_action", "tokens"),
+    sample_log_prob=("vla_action", "log_probs"),
+    advantage="advantage",
 )
 grpo_optimizer = torch.optim.Adam(grpo_loss.parameters(), lr=1e-3)
 grpo_optimizer.zero_grad()

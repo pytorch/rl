@@ -31,6 +31,7 @@ from torchrl.trainers.algorithms.configs.collectors import (
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.configs.data import (
+    ConsumingSamplerConfig,
     LazyMemmapStorageConfig,
     LazyStackStorageConfig,
     LazyTensorStorageConfig,
@@ -61,6 +62,7 @@ from torchrl.trainers.algorithms.configs.envs_libs import (
     IsaacGymEnvConfig,
     JumanjiEnvConfig,
     MeltingpotEnvConfig,
+    MJLabEnvConfig,
     MOGymEnvConfig,
     MujocoPlaygroundEnvConfig,
     MultiThreadedEnvConfig,
@@ -105,6 +107,7 @@ from torchrl.trainers.algorithms.configs.modules import (
     VDNMixerNetworkConfig,
 )
 from torchrl.trainers.algorithms.configs.objectives import (
+    A2CLossConfig,
     CQLLossConfig,
     DDPGLossConfig,
     DQNLossConfig,
@@ -114,16 +117,21 @@ from torchrl.trainers.algorithms.configs.objectives import (
     LossConfig,
     PPOLossConfig,
     QMixerLossConfig,
+    ReinforceLossConfig,
     SACLossConfig,
     SoftUpdateConfig,
     TD3LossConfig,
 )
 from torchrl.trainers.algorithms.configs.trainers import (
+    A2CTrainerConfig,
     CQLTrainerConfig,
     DDPGTrainerConfig,
     DQNTrainerConfig,
     IQLTrainerConfig,
+    OfflineToOnlineTrainerConfig,
+    OnPolicyTrainerConfig,
     PPOTrainerConfig,
+    ReinforceTrainerConfig,
     SACTrainerConfig,
     TD3TrainerConfig,
     TrainerConfig,
@@ -274,6 +282,7 @@ __all__ = [
     "JumanjiEnvConfig",
     "MeltingpotEnvConfig",
     "MOGymEnvConfig",
+    "MJLabEnvConfig",
     "MujocoPlaygroundEnvConfig",
     "MultiThreadedEnvConfig",
     "OpenMLEnvConfig",
@@ -375,12 +384,14 @@ __all__ = [
     "TensorDictReplayBufferConfig",
     "TensorStorageConfig",
     # Samplers
+    "ConsumingSamplerConfig",
     "PrioritizedSamplerConfig",
     "RandomSamplerConfig",
     "SamplerWithoutReplacementConfig",
     "SliceSamplerConfig",
     "SliceSamplerWithoutReplacementConfig",
     # Losses
+    "A2CLossConfig",
     "CQLLossConfig",
     "DDPGLossConfig",
     "DQNLossConfig",
@@ -388,16 +399,21 @@ __all__ = [
     "LossConfig",
     "PPOLossConfig",
     "QMixerLossConfig",
+    "ReinforceLossConfig",
     "SACLossConfig",
     "TD3LossConfig",
     # Value functions
     "GAEConfig",
     # Trainers
+    "A2CTrainerConfig",
     "CQLTrainerConfig",
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
     "IQLTrainerConfig",
+    "OfflineToOnlineTrainerConfig",
+    "OnPolicyTrainerConfig",
     "PPOTrainerConfig",
+    "ReinforceTrainerConfig",
     "SACTrainerConfig",
     "TD3TrainerConfig",
     "TrainerConfig",
@@ -469,6 +485,7 @@ def _register_configs():
     cs.store(group="env", name="jumanji", node=JumanjiEnvConfig)
     cs.store(group="env", name="meltingpot", node=MeltingpotEnvConfig)
     cs.store(group="env", name="mo_gym", node=MOGymEnvConfig)
+    cs.store(group="env", name="mjlab", node=MJLabEnvConfig)
     cs.store(group="env", name="multi_threaded", node=MultiThreadedEnvConfig)
     cs.store(group="env", name="openml", node=OpenMLEnvConfig)
     cs.store(group="env", name="openspiel", node=OpenSpielEnvConfig)
@@ -603,12 +620,14 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="loss", name="base", node=LossConfig)
+    cs.store(group="loss", name="a2c", node=A2CLossConfig)
     cs.store(group="loss", name="cql", node=CQLLossConfig)
     cs.store(group="loss", name="ddpg", node=DDPGLossConfig)
     cs.store(group="loss", name="dqn", node=DQNLossConfig)
     cs.store(group="loss", name="iql", node=IQLLossConfig)
     cs.store(group="loss", name="ppo", node=PPOLossConfig)
     cs.store(group="loss", name="mixer", node=QMixerLossConfig)
+    cs.store(group="loss", name="reinforce", node=ReinforceLossConfig)
     cs.store(group="loss", name="sac", node=SACLossConfig)
     cs.store(group="loss", name="td3", node=TD3LossConfig)
 
@@ -634,6 +653,7 @@ def _register_configs():
         group="replay_buffer", name="tensordict", node=TensorDictReplayBufferConfig
     )
     cs.store(group="sampler", name="random", node=RandomSamplerConfig)
+    cs.store(group="sampler", name="consuming", node=ConsumingSamplerConfig)
     cs.store(
         group="sampler",
         name="without_replacement",
@@ -667,11 +687,18 @@ def _register_configs():
     # =============================================================================
 
     cs.store(group="trainer", name="base", node=TrainerConfig)
+    cs.store(group="trainer", name="a2c", node=A2CTrainerConfig)
     cs.store(group="trainer", name="cql", node=CQLTrainerConfig)
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
+    cs.store(
+        group="trainer",
+        name="offline_to_online",
+        node=OfflineToOnlineTrainerConfig,
+    )
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
+    cs.store(group="trainer", name="reinforce", node=ReinforceTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
 

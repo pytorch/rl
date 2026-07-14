@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import abc
 import re
+from copy import copy
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
+import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Binary, Bounded, Composite, Unbounded
@@ -30,6 +32,75 @@ from torchrl.envs.custom.mujoco._backends import (
 )
 
 _ASSETS_DIR = Path(__file__).parent / "assets"
+
+
+def _normalize_mujoco_index(
+    item: Any,
+    num_envs: int,
+    device: torch.device | None,
+) -> tuple[slice | torch.Tensor, int]:
+    if isinstance(item, bool):
+        raise NotImplementedError("Boolean masks are not supported for MuJoCo envs.")
+    if isinstance(item, int):
+        item = item + num_envs if item < 0 else item
+        if item < 0 or item >= num_envs:
+            raise IndexError(f"index {item} is out of bounds for {num_envs} envs.")
+        return torch.tensor([item], device=device, dtype=torch.long), 1
+    if isinstance(item, slice):
+        indexed_num_envs = len(range(num_envs)[item])
+        if indexed_num_envs == 0:
+            raise IndexError("Empty MuJoCo env indexing is not supported.")
+        return item, indexed_num_envs
+    if isinstance(item, np.ndarray):
+        if item.dtype == np.bool_:
+            raise NotImplementedError(
+                "Boolean masks are not supported for MuJoCo envs."
+            )
+        if item.ndim == 0:
+            return _normalize_mujoco_index(int(item), num_envs, device)
+        item = torch.as_tensor(item, dtype=torch.long, device=device)
+    elif isinstance(item, torch.Tensor):
+        if item.dtype == torch.bool:
+            raise NotImplementedError(
+                "Boolean masks are not supported for MuJoCo envs."
+            )
+        if item.ndim == 0:
+            return _normalize_mujoco_index(int(item.item()), num_envs, device)
+        item = item.to(device=device, dtype=torch.long)
+    else:
+        try:
+            item = torch.as_tensor(item, device=device)
+        except (TypeError, ValueError) as err:
+            raise TypeError(
+                "MuJoCo env indices must be integers, slices, integer NumPy "
+                f"arrays, or integer torch tensors, got {type(item).__name__}."
+            ) from err
+        if item.dtype == torch.bool:
+            raise NotImplementedError(
+                "Boolean masks are not supported for MuJoCo envs."
+            )
+        item = item.to(dtype=torch.long)
+
+    if item.ndim != 1:
+        raise IndexError(
+            f"MuJoCo env indices must be scalar or 1D, got shape {item.shape}."
+        )
+    if item.numel() == 0:
+        raise IndexError("Empty MuJoCo env indexing is not supported.")
+    item = torch.where(item < 0, item + num_envs, item)
+    out_of_bounds = (item < 0) | (item >= num_envs)
+    if bool(out_of_bounds.any()):
+        bad = int(item[out_of_bounds][0].item())
+        raise IndexError(f"index {bad} is out of bounds for {num_envs} envs.")
+    return item, int(item.numel())
+
+
+def _clone_generator(rng: torch.Generator | None, device: torch.device | None):
+    if rng is None:
+        return None
+    cloned = torch.Generator() if device is None else torch.Generator(device=device)
+    cloned.set_state(rng.get_state())
+    return cloned
 
 
 class _MujocoMeta(_EnvPostInit):
@@ -138,6 +209,13 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             Requires ``from_pixels=True``.
         render_width: pixel observation width used when ``from_pixels=True``.
         render_height: pixel observation height used when ``from_pixels=True``.
+        render_every: render a fresh frame every ``render_every`` steps and
+            reuse the previous frame in between; resets always render fresh.
+            Rendering often dominates step cost, so consumers that subsample
+            frames anyway (e.g. :class:`~torchrl.record.VideoRecorder` with
+            ``skip``) should set this to the same stride instead of paying
+            for frames that are dropped. Defaults to ``1`` (render every
+            step).
         camera_id: MuJoCo camera id used for pixel observations and by
             :meth:`render` when no camera override is provided.
 
@@ -188,6 +266,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         pixels_only: bool = False,
         render_width: int = 64,
         render_height: int = 64,
+        render_every: int = 1,
         camera_id: int = 0,
     ) -> None:
         super().__init__(device=device, batch_size=torch.Size([num_envs]))
@@ -207,6 +286,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             raise ValueError("pixels_only=True requires from_pixels=True.")
         self.render_width = int(render_width)
         self.render_height = int(render_height)
+        self.render_every = int(render_every)
+        if self.render_every < 1:
+            raise ValueError(f"render_every must be >= 1, got {render_every}.")
+        self._last_pixels: torch.Tensor | None = None
+        self._render_counter = 0
         self.camera_id = int(camera_id)
 
         xml_string = self._load_xml(xml_path)
@@ -394,18 +478,37 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     # Spec construction
     # ------------------------------------------------------------------
 
+    def _render_pixels(self) -> torch.Tensor:
+        """Render the pixel observation, honoring ``render_every``.
+
+        Off-cadence steps return the previous frame unchanged (the cached
+        tensor is replaced, never mutated in place, so handing it out
+        repeatedly is safe). ``_reset`` clears the cache so the first frame
+        of an episode is always fresh.
+        """
+        last = self._last_pixels
+        if (
+            self.render_every <= 1
+            or last is None
+            or last.shape[0] != self.num_envs
+            or self._render_counter % self.render_every == 0
+        ):
+            last = self._backend.render(
+                camera_id=self.camera_id,
+                width=self.render_width,
+                height=self.render_height,
+                background=self.RENDER_BACKGROUND,
+            )
+            self._last_pixels = last
+        return last
+
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         """Assemble the obs dict, including ``pixels`` when ``from_pixels``."""
         out: dict[str, torch.Tensor] = {}
         if not self.pixels_only:
             out["observation"] = self._make_obs(state)
         if self.from_pixels:
-            out["pixels"] = self._backend.render(
-                camera_id=self.camera_id,
-                width=self.render_width,
-                height=self.render_height,
-                background=self.RENDER_BACKGROUND,
-            )
+            out["pixels"] = self._render_pixels()
         return out
 
     def _make_specs(self) -> None:
@@ -480,6 +583,92 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             device=self.device,
         )
 
+    def get_state(self) -> TensorDict:
+        """Return a detached snapshot of the MuJoCo simulator state.
+
+        Returns:
+            A TensorDict containing ``qpos``, ``qvel``, and ``time`` with the
+            environment batch size.
+        """
+        return self._state_td().clone()
+
+    def _index_extra_state(self, index: slice | torch.Tensor) -> dict[str, Any]:
+        """Return subclass-owned batched state for an indexed env snapshot."""
+        del index
+        return {}
+
+    def _load_indexed_extra_state(self, state: dict[str, Any]) -> None:
+        """Load subclass-owned state into an indexed env snapshot."""
+        del state
+
+    def _set_indexed_extra_state(
+        self,
+        index: slice | torch.Tensor,
+        source: MujocoEnv,
+    ) -> None:
+        """Write subclass-owned state from an indexed snapshot into ``self``."""
+        del index, source
+
+    def __getitem__(self, item: Any) -> MujocoEnv:
+        """Return a detached snapshot of one or more environments in the batch.
+
+        The returned environment starts from the selected simulator state but is
+        independent from the parent. Assign it back with ``env[item] = sub_env``
+        to explicitly write its state back into the parent batch.
+        """
+        index, indexed_num_envs = _normalize_mujoco_index(
+            item, self.num_envs, self.device
+        )
+        env = copy(self)
+        was_locked = env.is_spec_locked
+        if was_locked:
+            env.set_spec_lock_(False)
+        env.num_envs = indexed_num_envs
+        env.__dict__["_input_spec"] = self.input_spec[index].clone()
+        env.__dict__["_output_spec"] = self.output_spec[index].clone()
+        env.batch_size = torch.Size([indexed_num_envs])
+        env._backend = self._backend.clone_batch(index, indexed_num_envs)
+        env._step_count = self._step_count[index].clone()
+        env.rng = _clone_generator(self.rng, self.device)
+        env._load_indexed_extra_state(self._index_extra_state(index))
+        env.__dict__["_cache"] = {}
+        if was_locked:
+            env.set_spec_lock_(True)
+        return env
+
+    def __setitem__(self, item: Any, source: MujocoEnv) -> None:
+        """Write an indexed MuJoCo env snapshot back into this env batch."""
+        if not isinstance(source, MujocoEnv):
+            raise TypeError(
+                f"Expected a MujocoEnv source, got {type(source).__name__}."
+            )
+        index, indexed_num_envs = _normalize_mujoco_index(
+            item, self.num_envs, self.device
+        )
+        if source.num_envs != indexed_num_envs:
+            raise ValueError(
+                "The source env batch does not match the indexed destination: "
+                f"got source.num_envs={source.num_envs} and index selects "
+                f"{indexed_num_envs} envs."
+            )
+        if self.backend_name != source.backend_name:
+            raise TypeError(
+                "Cannot write back a MuJoCo env snapshot from backend "
+                f"{source.backend_name!r} into backend {self.backend_name!r}."
+            )
+        if (
+            self._backend.nq != source._backend.nq
+            or self._backend.nv != source._backend.nv
+        ):
+            raise ValueError(
+                "Cannot write back MuJoCo envs with different state sizes."
+            )
+        self._backend.set_batch(index, source._backend)
+        self._step_count[index] = source._step_count.to(
+            device=self._step_count.device, dtype=self._step_count.dtype
+        )
+        self._set_indexed_extra_state(index, source)
+
     # ------------------------------------------------------------------
     # EnvBase interface
     # ------------------------------------------------------------------
@@ -525,6 +714,10 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             )
             self._on_reset_mask(reset_mask, tensordict)
 
+        # Force a fresh render on the first frame of the episode.
+        self._render_counter = 0
+        self._last_pixels = None
+
         state = self._state_td()
         obs = self._build_obs_dict(state)
         zero_flag = torch.zeros(self.num_envs, 1, dtype=torch.bool, device=self.device)
@@ -567,6 +760,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         self._backend.step(ctrl, self.frame_skip)
         next_state = self._state_td()
         self._step_count += 1
+        self._render_counter += 1
 
         reward = self._compute_reward(state, action, next_state).to(self.dtype)
         if reward.ndim == 1:

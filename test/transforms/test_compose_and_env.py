@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import itertools
+import os
 
 from copy import copy
 from functools import partial
@@ -18,7 +19,7 @@ from _transforms_common import mp_ctx, TransformBase
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import assert_allclose_td
 from torch import nn
-from torchrl._utils import set_auto_unwrap_transformed_env
+from torchrl._utils import auto_unwrap_transformed_env, set_auto_unwrap_transformed_env
 
 from torchrl.data import (
     Bounded,
@@ -224,6 +225,22 @@ class TestTransformedEnv:
 
         with set_auto_unwrap_transformed_env(False):
             test_wrap()
+
+    def test_auto_unwrap_env_var_restored_on_exit(self, monkeypatch):
+        # Regression test: exiting set_auto_unwrap_transformed_env when the
+        # setting was previously unset used to write the literal string
+        # "None" into os.environ. Subprocesses spawned afterwards (collector
+        # workers) inherited it and crashed with "Invalid truth value 'none'"
+        # when parsing the value with strtobool.
+        monkeypatch.setattr("torchrl._utils._AUTO_UNWRAP", None)
+        monkeypatch.delenv("AUTO_UNWRAP_TRANSFORMED_ENV", raising=False)
+
+        with set_auto_unwrap_transformed_env(False):
+            assert os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] == "False"
+        assert "AUTO_UNWRAP_TRANSFORMED_ENV" not in os.environ
+        # The parse path a fresh subprocess takes must not raise.
+        assert auto_unwrap_transformed_env() is True
+        assert auto_unwrap_transformed_env(allow_none=True) is None
 
     def test_attr_error(self):
         class BuggyTransform(Transform):

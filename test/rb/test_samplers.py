@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pickle
 import warnings
 
 import numpy as np
@@ -13,15 +14,21 @@ import pytest
 import torch
 from _rb_common import _has_snapshot, TORCH_VERSION
 from packaging import version
-from tensordict import TensorDict
-
+from tensordict import NonTensorStack, TensorDict
 from torchrl._utils import _replace_last
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
+from torchrl.data import (
+    DEFAULT_DONE_KEYS,
+    find_start_stop_traj,
+    TED2Flat,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
+    PromptGroupSampler,
     RandomSampler,
     Sampler,
     SamplerWithoutReplacement,
@@ -36,6 +43,7 @@ from torchrl.data.replay_buffers.scheduler import (
 )
 from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
 )
@@ -75,6 +83,131 @@ def test_samplerwithoutrep(size, samples, drop_last):
         assert visited
     else:
         assert not visited
+
+
+def test_samplerwithoutrep_load_state_dict_decouples_from_source():
+    # loading a state dict must clone the incoming tensors so that mutating
+    # the source afterwards does not corrupt the sampler state (e.g. tensors
+    # mmap-backed by a checkpoint file loaded with torch.load(mmap=True))
+    torch.manual_seed(0)
+    storage = ListStorage(10)
+    storage.set(range(10), range(10))
+    sampler = SamplerWithoutReplacement()
+    sampler.sample(storage, 4)
+    sd = sampler.state_dict()
+    sampler2 = SamplerWithoutReplacement()
+    sampler2.load_state_dict(sd)
+    before = sampler2._sample_list.clone()
+    sd["_sample_list"].fill_(-1)
+    assert (sampler2._sample_list == before).all()
+
+
+def test_prioritized_sampler_load_state_dict_decouples_from_source():
+    sampler = PrioritizedSampler(max_capacity=10, alpha=0.7, beta=0.9)
+    sampler.extend(torch.arange(5))
+    sampler.update_priority(torch.arange(5), torch.arange(1.0, 6.0))
+    sd = sampler.state_dict()
+    sampler2 = PrioritizedSampler(max_capacity=10, alpha=0.7, beta=0.9)
+    sampler2.load_state_dict(sd)
+    # the source state dict is left intact (keys are not popped)
+    assert "_sum_tree" in sd
+    assert "_min_tree" in sd
+    # the trees are decoupled from the source state dict
+    assert sampler2._sum_tree is not sd["_sum_tree"]
+    assert sampler2._min_tree is not sd["_min_tree"]
+    before = sampler2._sum_tree[0]
+    sd["_sum_tree"][0] = before + 1000.0
+    assert sampler2._sum_tree[0] == before
+
+
+def _slice_data(size=20, episode_len=5):
+    return TensorDict(
+        {
+            "a": torch.arange(size),
+            "episode": torch.arange(size) // episode_len,
+            ("next", "done"): (torch.arange(size) % episode_len == episode_len - 1)
+            .unsqueeze(-1)
+            .bool(),
+        },
+        batch_size=[size],
+    )
+
+
+def test_prioritized_slice_sampler_load_state_dict_restores_priorities():
+    # PrioritizedSliceSampler resolves load_state_dict through the MRO. Without an
+    # explicit forwarder it lands on SliceSampler.load_state_dict, a no-op, and the
+    # sum/min trees serialized by state_dict() are silently discarded on restore.
+    def build():
+        sampler = PrioritizedSliceSampler(
+            max_capacity=20, num_slices=2, alpha=0.7, beta=0.9
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20), sampler=sampler, batch_size=4
+        )
+        rb.extend(_slice_data())
+        return sampler, rb
+
+    sampler, rb = build()
+    rb.update_priority(torch.arange(20), torch.arange(1.0, 21.0))
+    sd = rb.state_dict()
+
+    sampler2, rb2 = build()
+    rb2.load_state_dict(sd)
+
+    assert sampler2._max_priority[0] == sampler._max_priority[0]
+    assert sampler2._max_priority[1] == sampler._max_priority[1]
+    torch.testing.assert_close(
+        torch.as_tensor(sampler2._sum_tree.query(0, 20)),
+        torch.as_tensor(sampler._sum_tree.query(0, 20)),
+    )
+
+
+def test_prioritized_slice_sampler_load_state_dict_decouples_from_source():
+    sampler = PrioritizedSliceSampler(
+        max_capacity=20, num_slices=2, alpha=0.7, beta=0.9
+    )
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(20), sampler=sampler, batch_size=4
+    )
+    rb.extend(_slice_data())
+    rb.update_priority(torch.arange(20), torch.arange(1.0, 21.0))
+    sd = sampler.state_dict()
+
+    sampler2 = PrioritizedSliceSampler(
+        max_capacity=20, num_slices=2, alpha=0.7, beta=0.9
+    )
+    sampler2.load_state_dict(sd)
+    # guard against a vacuous pass: if load_state_dict were a no-op nothing would be
+    # loaded, and the decoupling assertions below would hold trivially.
+    assert sampler2._max_priority[0] == sampler._max_priority[0]
+    assert sampler2._sum_tree is not sd["_sum_tree"]
+    before = sampler2._sum_tree[0]
+    sd["_sum_tree"][0] = before + 1000.0
+    assert sampler2._sum_tree[0] == before
+
+
+def test_slice_sampler_without_replacement_dumps_restores_cursor(tmp_path):
+    # SliceSamplerWithoutReplacement overrides state_dict/load_state_dict but its
+    # dumps/loads used to fall through to the SliceSampler no-ops, so the memmap
+    # checkpoint path silently dropped the without-replacement cursor.
+    def build():
+        sampler = SliceSamplerWithoutReplacement(num_slices=2)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20), sampler=sampler, batch_size=4
+        )
+        rb.extend(_slice_data())
+        return sampler, rb
+
+    sampler, rb = build()
+    rb.sample()
+    before = sampler._sample_list.clone()
+
+    rb.dumps(tmp_path)
+    sampler2, rb2 = build()
+    rb2.loads(tmp_path)
+
+    assert sampler2._sample_list is not None
+    torch.testing.assert_close(sampler2._sample_list, before)
 
 
 class TestSamplers:
@@ -1150,41 +1283,49 @@ class TestSamplers:
             assert found_traj_0
 
     @pytest.mark.parametrize("max_priority_within_buffer", [True, False])
-    def test_prb_update_max_priority(self, max_priority_within_buffer):
+    @pytest.mark.parametrize("alpha", [1.0, 0.6])
+    def test_prb_update_max_priority(self, max_priority_within_buffer, alpha):
+        # alpha < 1 makes raw and transformed priorities numerically distinct,
+        # so these assertions pin that _max_priority stays in the RAW domain
+        # while the sum-tree holds (p + eps) ** alpha.
         rb = ReplayBuffer(
             storage=LazyTensorStorage(11),
             sampler=PrioritizedSampler(
                 max_capacity=11,
-                alpha=1.0,
+                alpha=alpha,
                 beta=1.0,
                 max_priority_within_buffer=max_priority_within_buffer,
             ),
         )
+        eps = rb.sampler._eps
         for data in torch.arange(20):
             idx = rb.add(data)
             rb.update_priority(idx, 21 - data)
-            if data <= 10:
-                # The max is always going to be the first value
-                assert rb.sampler._max_priority[0] == 21
-                assert rb.sampler._max_priority[1] == 0
-            elif not max_priority_within_buffer:
-                # The max is the historical max, which was at idx 0
-                assert rb.sampler._max_priority[0] == 21
+            if data <= 10 or not max_priority_within_buffer:
+                # The max is (or remains, historically) the first value
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
                 assert rb.sampler._max_priority[1] == 0
             else:
-                # the max is the current max. Find it and compare
+                # the max is the current max: the oldest item still in the buffer
+                expected_raw = float(31 - data)
+                assert float(rb.sampler._max_priority[0]) == pytest.approx(
+                    expected_raw, rel=1e-4
+                )
+                assert rb.sampler._max_priority[1] == data - 10
                 sumtree = torch.as_tensor(
                     [rb.sampler._sum_tree[i] for i in range(rb.sampler._max_capacity)]
                 )
-                assert rb.sampler._max_priority[0] == sumtree.max()
-                assert rb.sampler._max_priority[1] == sumtree.argmax()
+                assert float(sumtree.max()) == pytest.approx(
+                    (expected_raw + eps) ** alpha, rel=1e-4
+                )
+                assert sumtree.argmax() == data - 10
         idx = rb.extend(torch.arange(10))
         rb.update_priority(idx, 12)
         if max_priority_within_buffer:
-            assert rb.sampler._max_priority[0] == 12
+            assert float(rb.sampler._max_priority[0]) == pytest.approx(12, rel=1e-4)
             assert rb.sampler._max_priority[1] == 0
         else:
-            assert rb.sampler._max_priority[0] == 21
+            assert float(rb.sampler._max_priority[0]) == pytest.approx(21, rel=1e-4)
             assert rb.sampler._max_priority[1] == 0
 
     @pytest.mark.skipif(
@@ -1821,6 +1962,374 @@ class TestStalenessAwareSampler:
         assert batch.shape[0] == 8
 
 
+class TestPromptGroupSampler:
+    @staticmethod
+    def _make_rb(sampler, batch_size, max_size=100):
+        return ReplayBuffer(
+            storage=LazyStackStorage(max_size),
+            sampler=sampler,
+            batch_size=batch_size,
+        )
+
+    def test_basic_grouping(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="prompt"), batch_size=8
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2])},
+                batch_size=[12],
+            )
+        )
+        sample = rb.sample()
+        assert sample.shape[0] == 8
+        prompts, counts = sample["prompt"].unique(return_counts=True)
+        assert prompts.numel() == 2
+        assert (counts == 4).all()
+
+    def test_samples_per_group_inference(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(samples_per_group=3, group_key="prompt"), batch_size=6
+        )
+        rb.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 0, 1, 1, 1])}, batch_size=[6])
+        )
+        sample = rb.sample()
+        _, counts = sample["prompt"].unique(return_counts=True)
+        assert sample.shape[0] == 6
+        assert (counts == 3).all()
+
+    def test_string_keys(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="q"), batch_size=4
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "q": NonTensorStack("a", "a", "a", "b", "b", "b", "c", "c", "c"),
+                    "v": torch.arange(9),
+                },
+                batch_size=[9],
+            )
+        )
+        sample = rb.sample()
+        assert len(set(sample["q"])) == 2
+
+    def test_nested_key(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key=("text", "prompt")),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "text": TensorDict(
+                        {"prompt": torch.tensor([0, 0, 1, 1, 2, 2])}, batch_size=[6]
+                    ),
+                    "v": torch.arange(6),
+                },
+                batch_size=[6],
+            )
+        )
+        sample = rb.sample()
+        assert sample["text", "prompt"].unique().numel() == 2
+
+    def test_strategy_recency(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(
+                samples_per_group=2, group_key="prompt", strategy="recency"
+            ),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.tensor([5, 5, 5, 5]), "id": torch.arange(4)},
+                batch_size=[4],
+            )
+        )
+        sample = rb.sample()
+        assert sorted(sample["id"].tolist()) == [2, 3]
+
+    def test_strategy_recency_after_wraparound(self):
+        rb = self._make_rb(
+            PromptGroupSampler(
+                samples_per_group=2, group_key="prompt", strategy="recency"
+            ),
+            batch_size=2,
+            max_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.zeros(4, dtype=torch.long), "id": torch.arange(4)},
+                batch_size=[4],
+            )
+        )
+        rb.add(TensorDict({"prompt": 0, "id": 4}, batch_size=[]))
+        assert sorted(rb.sample()["id"].tolist()) == [3, 4]
+
+    def test_strategy_reward(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(
+                samples_per_group=2, group_key="prompt", strategy="reward"
+            ),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "prompt": torch.tensor([0, 0, 0, 1, 1, 1]),
+                    "next": TensorDict(
+                        {"reward": torch.tensor([1.0, 2.0, 3.0, 9.0, 8.0, 7.0])},
+                        batch_size=[6],
+                    ),
+                },
+                batch_size=[6],
+            )
+        )
+        rewards = rb.sample()["next", "reward"].tolist()
+        assert 1.0 not in rewards
+        assert 7.0 not in rewards
+
+    def test_strategy_variance(self):
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=1, group_key="prompt", strategy="variance"),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "prompt": torch.zeros(4, dtype=torch.long),
+                    "next": TensorDict(
+                        {"reward": torch.tensor([0.0, 0.0, 1.0, 1.0])},
+                        batch_size=[4],
+                    ),
+                },
+                batch_size=[4],
+            )
+        )
+        assert sorted(rb.sample()["next", "reward"].tolist()) == [0.0, 1.0]
+
+    def test_strategy_variance_breaks_ties_by_reward(self):
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=1, group_key="prompt", strategy="variance"),
+            batch_size=3,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "prompt": torch.zeros(4, dtype=torch.long),
+                    "next": TensorDict(
+                        {"reward": torch.tensor([2.0, -7.0, 10.0, 1.0])},
+                        batch_size=[4],
+                    ),
+                },
+                batch_size=[4],
+            )
+        )
+        assert sorted(rb.sample()["next", "reward"].tolist()) == [-7.0, 2.0, 10.0]
+
+    def test_reward_strategy_requires_tensor_reward(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(
+                num_groups=1, group_key="prompt", strategy="reward", reward_key="r"
+            ),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.tensor([0, 0]), "r": NonTensorStack("x", "y")},
+                batch_size=[2],
+            )
+        )
+        with pytest.raises(TypeError, match="requires reward_key"):
+            rb.sample()
+
+    def test_cache_invalidation_on_extend(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=1, group_key="prompt"), batch_size=2
+        )
+        rb.extend(TensorDict({"prompt": torch.tensor([7, 7])}, batch_size=[2]))
+        rb.sample()
+        rb.extend(TensorDict({"prompt": torch.tensor([9, 9])}, batch_size=[2]))
+        seen = set()
+        for _ in range(20):
+            seen.update(rb.sample()["prompt"].tolist())
+        assert seen == {7, 9}
+
+    def test_cache_hit_does_not_read_full_storage(self, monkeypatch):
+        sampler = PromptGroupSampler(num_groups=1, group_key="prompt")
+        rb = self._make_rb(sampler, batch_size=2)
+        rb.extend(TensorDict({"prompt": torch.tensor([0, 0, 1, 1])}, batch_size=[4]))
+        sampler.sample(rb._storage, 2)
+
+        calls = []
+        get = rb._storage.get
+
+        def tracked_get(index):
+            calls.append(index)
+            return get(index)
+
+        monkeypatch.setattr(rb._storage, "get", tracked_get)
+        sampler.sample(rb._storage, 2)
+        assert not calls
+
+    def test_shared_storage_update_invalidates_cache(self):
+        storage = LazyTensorStorage(6)
+        reader = ReplayBuffer(
+            storage=storage,
+            sampler=PromptGroupSampler(num_groups=2, group_key="prompt"),
+            batch_size=4,
+        )
+        writer = ReplayBuffer(
+            storage=storage,
+            sampler=PromptGroupSampler(num_groups=2, group_key="prompt"),
+            batch_size=4,
+        )
+        writer.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 0, 1, 1, 1])}, batch_size=[6])
+        )
+        reader.sample()
+        writer.add(TensorDict({"prompt": 1}, batch_size=[]))
+
+        _, counts = reader.sample()["prompt"].unique(return_counts=True)
+        assert counts.tolist() == [2, 2]
+
+    def test_load_state_dict_invalidates_cache(self):
+        source = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="prompt"), batch_size=4
+        )
+        destination = self._make_rb(
+            PromptGroupSampler(num_groups=2, group_key="prompt"), batch_size=4
+        )
+        source.extend(
+            TensorDict({"prompt": torch.tensor([0, 1, 0, 1])}, batch_size=[4])
+        )
+        destination.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 1, 1])}, batch_size=[4])
+        )
+        destination.sample()
+        destination.load_state_dict(source.state_dict())
+
+        _, counts = destination.sample()["prompt"].unique(return_counts=True)
+        assert counts.tolist() == [2, 2]
+
+    def test_plain_list_storage_raises(self):
+        rb = ReplayBuffer(
+            storage=ListStorage(4),
+            sampler=PromptGroupSampler(num_groups=1, group_key="prompt"),
+            batch_size=2,
+        )
+        rb.extend(TensorDict({"prompt": torch.tensor([0, 0, 1, 1])}, batch_size=[4]))
+        with pytest.raises(TypeError, match="Plain ListStorage is not supported"):
+            rb.sample()
+
+    def test_small_group_warns_and_fills(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(samples_per_group=4, group_key="prompt"), batch_size=4
+        )
+        rb.extend(TensorDict({"prompt": torch.tensor([3, 3])}, batch_size=[2]))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sample = rb.sample()
+        assert sample.shape[0] == 4
+        assert any("with replacement" in str(w.message) for w in caught)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"num_groups": 2, "samples_per_group": 2},
+            {"num_groups": 2, "strategy": "bogus"},
+            {"num_groups": 0},
+            {"num_groups": -1},
+            {"num_groups": True},
+            {"num_groups": 1.5},
+            {"samples_per_group": 0},
+        ],
+    )
+    def test_construction_errors(self, kwargs):
+        with pytest.raises((TypeError, ValueError)):
+            PromptGroupSampler(**kwargs)
+
+    def test_non_divisible_batch_raises(self):
+        torch.manual_seed(0)
+        rb = self._make_rb(
+            PromptGroupSampler(num_groups=3, group_key="prompt"), batch_size=8
+        )
+        rb.extend(
+            TensorDict({"prompt": torch.tensor([0, 0, 1, 1, 2, 2])}, batch_size=[6])
+        )
+        with pytest.raises(ValueError, match="divisible"):
+            rb.sample()
+
+    def test_ndim_gt_one_raises(self):
+        torch.manual_seed(0)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100, ndim=2),
+            sampler=PromptGroupSampler(num_groups=1, group_key="prompt"),
+            batch_size=2,
+        )
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.zeros(4, 5, dtype=torch.long)}, batch_size=[4, 5]
+            )
+        )
+        with pytest.raises(NotImplementedError):
+            rb.sample()
+
+    def test_state_dict_and_pickle_drop_cache(self, tmp_path):
+        sampler = PromptGroupSampler(num_groups=2, group_key="prompt")
+        assert sampler.state_dict() == {}
+        sampler.load_state_dict({})
+        sampler.dumps(tmp_path)
+        sampler.loads(tmp_path)
+        sampler._group_index = {0: torch.tensor([0])}
+        restored = pickle.loads(pickle.dumps(sampler))
+        assert restored._group_index is None
+
+    def test_recency_state_roundtrip(self, tmp_path):
+        sampler = PromptGroupSampler(
+            samples_per_group=2, group_key="prompt", strategy="recency"
+        )
+        rb = self._make_rb(sampler, batch_size=2, max_size=4)
+        rb.extend(
+            TensorDict(
+                {"prompt": torch.zeros(4, dtype=torch.long), "id": torch.arange(4)},
+                batch_size=[4],
+            )
+        )
+        rb.add(TensorDict({"prompt": 0, "id": 4}, batch_size=[]))
+
+        restored = PromptGroupSampler(
+            samples_per_group=2, group_key="prompt", strategy="recency"
+        )
+        restored.load_state_dict(sampler.state_dict())
+        index, _ = restored.sample(rb._storage, 2)
+        assert sorted(rb._storage[index]["id"].tolist()) == [3, 4]
+
+        sampler.dumps(tmp_path)
+        restored.loads(tmp_path)
+        index, _ = restored.sample(rb._storage, 2)
+        assert sorted(rb._storage[index]["id"].tolist()) == [3, 4]
+
+    def test_persistence_independence(self):
+        torch.manual_seed(0)
+        sampler = PromptGroupSampler(num_groups=1, group_key="prompt")
+        source = sampler.state_dict()
+        source["poisoned"] = True
+        sampler.load_state_dict(sampler.state_dict())
+        assert not hasattr(sampler, "poisoned")
+
+
 def test_prioritized_slice_sampler_doc_example():
     sampler = PrioritizedSliceSampler(max_capacity=9, num_slices=3, alpha=0.7, beta=0.9)
     rb = TensorDictReplayBuffer(
@@ -1975,22 +2484,279 @@ def test_prioritized_parameter_scheduler(
     for i in range(total_steps):
         curr_alpha = rb.sampler.alpha
         torch.testing.assert_close(
-            curr_alpha
-            if torch.is_tensor(curr_alpha)
-            else torch.tensor(curr_alpha).float(),
+            (
+                curr_alpha
+                if torch.is_tensor(curr_alpha)
+                else torch.tensor(curr_alpha).float()
+            ),
             expected_alpha_vals[i],
             msg=f"expected {expected_alpha_vals[i]}, got {curr_alpha}",
         )
         curr_beta = rb.sampler.beta
         torch.testing.assert_close(
-            curr_beta
-            if torch.is_tensor(curr_beta)
-            else torch.tensor(curr_beta).float(),
+            (
+                curr_beta
+                if torch.is_tensor(curr_beta)
+                else torch.tensor(curr_beta).float()
+            ),
             expected_beta_vals[i],
             msg=f"expected {expected_beta_vals[i]}, got {curr_beta}",
         )
         rb.sample(20)
         scheduler.step()
+
+
+class TestFindStartStopTraj:
+    """Tests for the shared trajectory-boundary recovery utility.
+
+    ``find_start_stop_traj`` is the module-level extraction of
+    ``SliceSampler._find_start_stop_traj``; these tests pin down its contract
+    (wraparound, cursor-as-implicit-truncation, time-first layout) and its
+    equivalence with the sampler's method.
+    """
+
+    def test_end_flags_wraparound_cursor(self):
+        # Full circular storage, ends at rows 2 and 7, write cursor at row 4:
+        # the trajectory starting at row 8 spans the wrap point down to row 2.
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
+
+    @pytest.mark.parametrize("cursor_type", ["int", "tensor", "scalar_tensor", "range"])
+    def test_cursor_types(self, cursor_type):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        cursor = {
+            "int": 4,
+            "tensor": torch.tensor([2, 3, 4]),
+            "scalar_tensor": torch.tensor(4),
+            "range": range(2, 5),
+        }[cursor_type]
+        start, stop, lengths = find_start_stop_traj(
+            end=end, at_capacity=True, cursor=cursor
+        )
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+
+    @pytest.mark.parametrize(
+        "cursor",
+        [torch.tensor([], dtype=torch.long), range(0)],
+        ids=["tensor", "range"],
+    )
+    def test_empty_cursor_raises(self, cursor):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = True
+        with pytest.raises(RuntimeError, match="cursor must not be"):
+            find_start_stop_traj(end=end, at_capacity=True, cursor=cursor)
+
+    @pytest.mark.parametrize("at_capacity", [True, False])
+    def test_single_step_trajectory(self, at_capacity):
+        # A T=1 input holds exactly one (single-step) trajectory.
+        trajectory = torch.tensor([3])
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=at_capacity
+        )
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [0]
+        assert lengths.tolist() == [1]
+        end = torch.zeros(1, dtype=torch.bool)
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=at_capacity)
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [0]
+        assert lengths.tolist() == [1]
+
+    def test_empty_input_raises(self):
+        with pytest.raises(RuntimeError, match="empty"):
+            find_start_stop_traj(
+                trajectory=torch.zeros(0, dtype=torch.long), at_capacity=False
+            )
+        with pytest.raises(RuntimeError, match="empty"):
+            find_start_stop_traj(end=torch.zeros(0, dtype=torch.bool), at_capacity=True)
+
+    def test_trajectory_ids_match_end_flags(self):
+        # The same boundaries expressed as trajectory ids: id changes at
+        # rows 2->3, 4->5 and 7->8; ids wrap seamlessly at the storage edge.
+        trajectory = torch.tensor([5, 5, 5, 0, 0, 1, 1, 1, 5, 5])
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=True
+        )
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
+
+    def test_not_at_capacity_forces_last_end(self):
+        # When the storage is not full, the last valid element is always an
+        # end (the write head is an implicit truncation) and the input is not
+        # mutated.
+        end = torch.zeros(6, dtype=torch.bool)
+        end[2] = True
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=False)
+        assert start.squeeze(-1).tolist() == [0, 3]
+        assert stop.squeeze(-1).tolist() == [2, 5]
+        assert lengths.tolist() == [3, 3]
+        assert not end[5], "input end flags must not be mutated"
+
+    def test_at_capacity_no_end_flag(self):
+        # A full storage without any end flag holds a single trajectory that
+        # is forced to end at the last row.
+        end = torch.zeros(4, dtype=torch.bool)
+        start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True)
+        assert start.squeeze(-1).tolist() == [0]
+        assert stop.squeeze(-1).tolist() == [3]
+        assert lengths.tolist() == [4]
+
+    def test_multidim_time_first(self):
+        # [T, B] layout: time along dim 0, one column per batch element.
+        # Boundary rows are [time_idx, batch_idx], grouped by batch.
+        trajectory = torch.tensor(
+            [
+                [0, 3],
+                [0, 3],
+                [1, 3],
+                [1, 4],
+                [1, 4],
+            ]
+        )
+        start, stop, lengths = find_start_stop_traj(
+            trajectory=trajectory, at_capacity=False
+        )
+        assert start.tolist() == [[0, 0], [2, 0], [0, 1], [3, 1]]
+        assert stop.tolist() == [[1, 0], [4, 0], [2, 1], [4, 1]]
+        assert lengths.tolist() == [2, 3, 3, 2]
+
+    def test_exclusive_args(self):
+        end = torch.zeros(4, dtype=torch.bool)
+        trajectory = torch.zeros(4)
+        with pytest.raises(TypeError, match="Exactly one"):
+            find_start_stop_traj(at_capacity=True)
+        with pytest.raises(TypeError, match="Exactly one"):
+            find_start_stop_traj(trajectory=trajectory, end=end, at_capacity=True)
+
+    @pytest.mark.parametrize("use_traj", [True, False])
+    @pytest.mark.parametrize("at_capacity", [True, False])
+    def test_matches_slice_sampler(self, use_traj, at_capacity):
+        # SliceSampler._find_start_stop_traj must behave exactly like the
+        # module-level function it delegates to.
+        torch.manual_seed(0)
+        trajectory = torch.tensor([0, 0, 0, 1, 1, 2, 2, 2, 2, 0])
+        end = torch.zeros(10, dtype=torch.bool)
+        end[[2, 4, 8]] = True
+        sampler = SliceSampler(num_slices=2)
+        if use_traj:
+            kwargs = {"trajectory": trajectory}
+        else:
+            kwargs = {"end": end}
+        expected = find_start_stop_traj(at_capacity=at_capacity, **kwargs)
+        result = sampler._find_start_stop_traj(at_capacity=at_capacity, **kwargs)
+        for r, e in zip(result, expected):
+            assert (r == e).all()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_device_kwarg(self):
+        # The computation device is a scratch device: results come back on
+        # the input's device.
+        end = torch.zeros(10, dtype=torch.bool)
+        end[[2, 7]] = True
+        ref = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        out = find_start_stop_traj(
+            end=end, at_capacity=True, cursor=4, device=torch.device("cuda:0")
+        )
+        for r, o in zip(ref, out):
+            assert o.device == end.device
+            assert (r == o).all()
+
+    def test_default_done_keys_constant(self):
+        assert DEFAULT_DONE_KEYS == ("done", "truncated", "terminated")
+        # TED2Flat consumes the shared constant as its default.
+        assert TED2Flat().done_keys == set(DEFAULT_DONE_KEYS)
+
+    def test_subclass_end_to_start_stop_override(self):
+        # SliceSampler._find_start_stop_traj dispatches through
+        # self._end_to_start_stop so that subclasses overriding it keep
+        # affecting boundary recovery.
+        calls = []
+
+        class MySampler(SliceSampler):
+            def _end_to_start_stop(self, end, length):
+                calls.append(length)
+                return super()._end_to_start_stop(end, length)
+
+        sampler = MySampler(num_slices=2)
+        trajectory = torch.tensor([0, 0, 1, 1, 1])
+        sampler._find_start_stop_traj(trajectory=trajectory, at_capacity=False)
+        assert calls == [5]
+
+    def test_end_keys_union(self):
+        # Boundaries marked only by `truncated`: a single default end_key
+        # (("next", "done")) misses them, the end_keys union recovers them.
+        truncated = torch.zeros(10, 1, dtype=torch.bool)
+        truncated[4] = truncated[9] = True
+        td = TensorDict(
+            {
+                "obs": torch.arange(10),
+                ("next", "done"): torch.zeros(10, 1, dtype=torch.bool),
+                ("next", "truncated"): truncated,
+            },
+            [10],
+        )
+        end_keys = [("next", key) for key in DEFAULT_DONE_KEYS]
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=2, end_keys=end_keys),
+        )
+        rb.extend(td)
+        start, stop, lengths = rb._sampler._get_stop_and_length(rb._storage)
+        assert stop.squeeze(-1).tolist() == [4, 9]
+        assert lengths.tolist() == [5, 5]
+
+        # slices never cross the truncated boundary at index 4
+        for _ in range(20):
+            sample = rb.sample(4)
+            obs = sample["obs"].view(-1, 2)
+            assert (obs[:, 1] == obs[:, 0] + 1).all()
+            assert (obs[:, 0] != 4).all()
+
+        # the documented hazard: with the default single end_key the two
+        # trajectories are silently merged
+        rb_single = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=2),
+        )
+        rb_single.extend(td)
+        _, stop_single, _ = rb_single._sampler._get_stop_and_length(rb_single._storage)
+        assert stop_single.squeeze(-1).tolist() == [9]
+
+    def test_end_keys_exclusive_with_end_key(self):
+        with pytest.raises(RuntimeError, match="exclusive"):
+            SliceSampler(
+                slice_len=2,
+                end_key=("next", "done"),
+                end_keys=[("next", "done"), ("next", "truncated")],
+            )
+
+    def test_end_keys_all_missing_falls_back(self):
+        # None of the end_keys present, but trajectory ids are: the sampler
+        # falls back to trajectory-id-based recovery.
+        td = TensorDict(
+            {
+                "obs": torch.arange(10),
+                "episode": torch.tensor([0, 0, 0, 0, 0, 1, 1, 1, 1, 1]),
+            },
+            [10],
+        )
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(
+                slice_len=2, end_keys=[("next", "done"), ("next", "truncated")]
+            ),
+        )
+        rb.extend(td)
+        start, stop, lengths = rb._sampler._get_stop_and_length(rb._storage)
+        assert stop.squeeze(-1).tolist() == [4, 9]
 
 
 if __name__ == "__main__":

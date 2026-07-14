@@ -102,6 +102,28 @@ CPU and GPU paths via parametrization (e.g.
 `device = "cpu" if torch.cuda.device_count() == 0 else "cuda"`); those
 must continue to run on the CPU side.
 
+### 7b. PR-gated CI suites: `ci/olddeps` and `ci/optdeps` labels
+
+Two expensive suites in `.github/workflows/test-linux.yml` do NOT run on
+pull requests by default. They run fully on every push to main and on the
+nightly orchestrator, so breakage still surfaces there -- but a PR that
+needs their signal must opt in via a label:
+
+- **`ci/olddeps`** runs `tests-olddeps` (oldest supported stable torch,
+  cu118, gym 0.13). Add this label whenever your change uses a torch API
+  that was added recently (anything you would only find in the current
+  stable/nightly torch, e.g. a new `torch.*` function, kwarg, or behavior
+  flag). If in doubt whether the oldest supported torch has it, add the
+  label. Without it, an incompatibility lands on main and only fails
+  post-merge.
+- **`ci/optdeps`** runs the full `tests-optdeps` suite (~2h). Add it when
+  your change touches optional-dependency integrations or their import
+  paths. PRs otherwise get `tests-optdeps-smoke`, which only builds the
+  optional-deps environment and checks imports.
+
+Adding a label does NOT retrigger CI: apply the label first, then push a
+commit or re-run the workflow so the gate sees it.
+
 ## 8. Documentation
 
 - Every new public class / function referenced in `docs/source/reference/*.rst`.
@@ -129,7 +151,9 @@ correctness fixes don't need one.
 ## 11. SOTA implementations
 
 New algorithm needs: a runnable script under `sota-implementations/<algo>/`
-with a Hydra config, plus an entry in `sota-check/`.
+with a Hydra config, plus entries in `sota-check/` and in the
+`test-linux-sota` CI smoke list at
+`.github/unittest/linux_sota/scripts/test_sota.py`.
 
 ## 12. Backwards compatibility & deprecations
 

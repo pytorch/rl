@@ -29,6 +29,7 @@ from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
 )
@@ -61,6 +62,7 @@ from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 
 from torchrl.collectors.utils import (
     _make_policy_factory,
+    _maybe_normalize_replay_buffer_tensordict_device,
     _traj_chunk_ends_done,
     _traj_emit,
     _traj_ingest,
@@ -134,9 +136,14 @@ from torchrl.testing.mocking_classes import (
 from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
+    DistributedWeightSyncScheme,
     MultiProcessWeightSyncScheme,
+    NoWeightSyncScheme,
+    RayWeightSyncScheme,
+    RPCWeightSyncScheme,
     SharedMemTransport,
     SharedMemWeightSyncScheme,
+    WeightSyncScheme,
 )
 
 # torch.set_default_dtype(torch.double)
@@ -146,6 +153,40 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+@pytest.mark.parametrize(
+    ("backend", "scheme_cls"),
+    [
+        ("none", NoWeightSyncScheme),
+        ("direct", NoWeightSyncScheme),
+        ("shared", SharedMemWeightSyncScheme),
+        ("thread", SharedMemWeightSyncScheme),
+        ("process", MultiProcessWeightSyncScheme),
+        ("multiprocessing", MultiProcessWeightSyncScheme),
+        ("distributed", DistributedWeightSyncScheme),
+        ("rpc", RPCWeightSyncScheme),
+        ("ray", RayWeightSyncScheme),
+    ],
+)
+def test_weight_sync_scheme_from_backend(backend, scheme_cls):
+    scheme = WeightSyncScheme.from_backend(backend)
+    assert isinstance(scheme, scheme_cls)
+
+
+def test_weight_sync_scheme_from_backend_forwards_kwargs():
+    scheme = WeightSyncScheme.from_backend("shared", sync=False)
+    assert isinstance(scheme, SharedMemWeightSyncScheme)
+    assert not scheme.sync
+
+
+def test_weight_sync_scheme_from_backend_rejects_unknown():
+    with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
+        WeightSyncScheme.from_backend("unknown")
+
+
+def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
+    return tensordict.clear_device_()
 
 
 @implement_for("torch", "2.5")
@@ -978,12 +1019,14 @@ class TestCollectorGeneric:
         collector_frames = collector._frames
         collector_iter = collector._iter
         collector_state_dict = collector.state_dict()
+        saved_traj_id = collector_state_dict["traj_pool"]["traj_id"].item()
         collector.shutdown()
 
         collector = collector_class(**collector_kwargs)
         collector.load_state_dict(collector_state_dict)
         assert collector._frames == collector_frames
         assert collector._iter == collector_iter
+        assert collector.state_dict()["traj_pool"]["traj_id"].item() > saved_traj_id
         for _ in enumerate(collector):
             raise AssertionError
         collector.shutdown()
@@ -4349,6 +4392,77 @@ class TestPolicyVersion:
         finally:
             collector.shutdown()
 
+    def test_single_collector_restores_policy_version(self):
+        """Collector state preserves its policy revision across reconstruction."""
+        collector = Collector(
+            self._Env,
+            policy=self._make_policy(),
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            collector.update_policy_weights_()
+            collector.update_policy_weights_()
+            state_dict = collector.state_dict()
+            saved_version = collector.policy_version
+        finally:
+            collector.shutdown()
+
+        restored = Collector(
+            self._Env,
+            policy=self._make_policy(),
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            restored.load_state_dict(state_dict)
+            assert restored.policy_version == saved_version
+            restored.update_policy_weights_()
+            assert restored.policy_version == saved_version + 1
+        finally:
+            restored.shutdown()
+
+    def test_multi_collector_restores_worker_policy_versions(self):
+        """Multiprocess restore preserves each worker's policy revision."""
+        collector = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            collector.update_policy_weights_()
+            collector.update_policy_weights_()
+            state_dict = collector.state_dict()
+            saved_versions = [
+                state_dict[f"worker{idx}"]["policy_version"] for idx in range(2)
+            ]
+        finally:
+            collector.shutdown()
+
+        restored = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            restored.load_state_dict(state_dict)
+            restored_state = restored.state_dict()
+            assert [
+                restored_state[f"worker{idx}"]["policy_version"] for idx in range(2)
+            ] == saved_versions
+        finally:
+            restored.shutdown()
+
     @pytest.mark.parametrize(
         "collector_cls",
         [
@@ -5522,6 +5636,36 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    def test_multi_async_replay_buffer_device_metadata(self):
+        probe = CountingEnv()
+        try:
+            policy = RandomPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(128, device="cpu"),
+            batch_size=4,
+            shared=True,
+        )
+
+        collector = MultiAsyncCollector(
+            [CountingEnv, CountingEnv],
+            policy,
+            replay_buffer=rb,
+            total_frames=32,
+            frames_per_batch=16,
+            postproc=_clear_tensordict_device,
+        )
+        try:
+            for data in collector:
+                assert data is None
+        finally:
+            collector.shutdown()
+
+        assert rb.write_count >= 32
+        assert len(rb) > 0
+        assert rb.storage[: len(rb)].device == torch.device("cpu")
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize(
         "collector_class", [MultiSyncCollector, MultiAsyncCollector]
@@ -6077,6 +6221,13 @@ class TestAsyncCollection:
                     break
             else:
                 raise RuntimeError("RB is empty")
+            with collector.pause():
+                worker_lengths = collector.map_fn("replay_buffer.__len__")
+                worker_write_counts = collector.get_distant_attr(
+                    "replay_buffer.write_count"
+                )
+                assert worker_lengths == [len(rb)] * 2
+                assert worker_write_counts == [rb.write_count] * 2
         finally:
             collector.async_shutdown()
             del collector
@@ -6488,6 +6639,20 @@ class TestCollectorProfiling:
         assert (tmp_path / "trace_1.json").exists()
 
 
+class _VersionStampModule(nn.Module):
+    """Emits a constant unit action and stamps the module's current version."""
+
+    def __init__(self, action_spec):
+        super().__init__()
+        self.action_spec = action_spec
+        self.version = 0
+
+    def forward(self, obs):
+        action = torch.ones_like(self.action_spec.zero())
+        version = torch.full_like(obs, self.version)
+        return action, version
+
+
 class TestTrajsPerBatch:
     """Tests for the ``trajs_per_batch`` kwarg on collectors."""
 
@@ -6510,6 +6675,184 @@ class TestTrajsPerBatch:
     # ------------------------------------------------------------------
     # Unit tests for the private helpers
     # ------------------------------------------------------------------
+
+    def test_emit_preserves_non_tensor_entries(self):
+        """_traj_emit pads NonTensor leaves by hand (tensordict.pad drops them).
+
+        Regression: language-instruction-style NonTensorStack entries came
+        out of the padded trajectory batch as empty TensorDicts, valid steps
+        included. Padded slots repeat the last element; the mask marks
+        validity.
+        """
+
+        def make_traj(length, instruction):
+            return TensorDict(
+                {
+                    "obs": torch.zeros(length, 1),
+                    "instr": NonTensorStack(*[instruction] * length),
+                },
+                batch_size=[length],
+            )
+
+        out = _traj_emit([make_traj(4, "pick"), make_traj(2, "place")], 2)
+        assert out.batch_size == torch.Size([2, 4])
+        instr = out.get("instr")
+        assert isinstance(instr, NonTensorStack)
+        assert [item.data for item in instr[0]] == ["pick"] * 4
+        assert [item.data for item in instr[1]] == ["place"] * 4
+        assert out["collector", "mask"].tolist() == [
+            [True, True, True, True],
+            [True, True, False, False],
+        ]
+
+    def test_emit_cat_format(self):
+        """traj_format="cat" concatenates trajectories: flat, unpadded, no mask.
+
+        NonTensor entries survive untouched (no padding is involved), and the
+        trajectories stay contiguous in completion order with done flags at
+        their last steps.
+        """
+
+        def make_traj(length, instruction, done_last=True):
+            return TensorDict(
+                {
+                    "obs": torch.arange(length, dtype=torch.float).unsqueeze(-1),
+                    "instr": NonTensorStack(*[instruction] * length),
+                    ("next", "done"): torch.tensor(
+                        [False] * (length - 1) + [done_last]
+                    ),
+                },
+                batch_size=[length],
+            )
+
+        out = _traj_emit(
+            [make_traj(4, "pick"), make_traj(2, "place")], 2, traj_format="cat"
+        )
+        assert out.batch_size == torch.Size([6])
+        assert ("collector", "mask") not in out.keys(True)
+        assert out["next", "done"].tolist() == [
+            False,
+            False,
+            False,
+            True,
+            False,
+            True,
+        ]
+        assert [item.data for item in out.get("instr")] == ["pick"] * 4 + ["place"] * 2
+        assert out["obs"].squeeze(-1).tolist() == [0.0, 1.0, 2.0, 3.0, 0.0, 1.0]
+
+    def test_traj_format_default_future_warning(self):
+        """Omitting traj_format under trajs_per_batch warns about the v0.16 flip.
+
+        The default currently resolves to "padded". The warning only fires
+        when the layout choice matters: explicit formats, fixed-frame
+        collection and replay-buffer writes stay silent.
+        """
+        env = CountingEnv(max_steps=4)
+        policy = RandomPolicy(env.action_spec)
+        try:
+            with pytest.warns(
+                FutureWarning, match="will change to 'cat' in torchrl v0.16"
+            ):
+                collector = Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    trajs_per_batch=2,
+                )
+            assert collector.traj_format == "padded"
+            collector.shutdown(close_env=False)
+            for kwargs in (
+                {"trajs_per_batch": 2, "traj_format": "cat"},
+                {"trajs_per_batch": 2, "traj_format": "padded"},
+                {},
+                {
+                    "trajs_per_batch": 2,
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(100)),
+                },
+            ):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    collector = Collector(
+                        env,
+                        policy,
+                        frames_per_batch=8,
+                        total_frames=16,
+                        **kwargs,
+                    )
+                collector.shutdown(close_env=False)
+                assert not any("traj_format" in str(w.message) for w in caught), kwargs
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_reset_flushes_assembly_state(self):
+        """collector.reset() drops in-flight and queued-but-unyielded episodes.
+
+        Regression: the assembly queues survived reset(), so post-reset
+        batches led with pre-reset episodes (stale data straddling a policy
+        update), partial chunks of killed episodes leaked, and a stale
+        partial could merge with a later episode reusing a rebased traj id.
+        """
+        env = CountingEnv(max_steps=2)
+        inner = _VersionStampModule(env.full_action_spec[env.action_key].clone())
+        policy = TensorDictModule(
+            inner,
+            in_keys=["observation"],
+            out_keys=["action", "policy_version"],
+        )
+        # 3-step episodes, 10-frame polls: the first poll completes 3
+        # episodes (one yielded batch of 2, one queued surplus) and leaves a
+        # fourth in flight
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=-1,
+            trajs_per_batch=2,
+            traj_format="padded",
+        )
+        try:
+            it = iter(collector)
+            b1 = next(it)
+            assert (b1["policy_version"] == 0).all()
+            partial, complete = collector._traj_assembly
+            # the fixture genuinely exercises both queues
+            assert len(complete) == 1
+            assert len(partial) == 1
+            inner.version = 1
+            collector.reset()
+            assert not partial and not complete
+            b2 = next(it)
+            assert (b2["policy_version"] == 1).all()
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+    def test_traj_format_validation(self):
+        """traj_format is validated eagerly: bad value or missing trajs_per_batch."""
+        env = CountingEnv(max_steps=4)
+        try:
+            policy = RandomPolicy(env.action_spec)
+            with pytest.raises(ValueError, match="must be 'padded' or 'cat'"):
+                Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    trajs_per_batch=2,
+                    traj_format="flat",
+                )
+            with pytest.raises(ValueError, match="trajs_per_batch"):
+                Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    traj_format="cat",
+                )
+        finally:
+            env.close(raise_if_closed=False)
 
     def test_ingest_single_batch_complete(self):
         """_traj_ingest routes completed trajectories into complete_trajs."""
@@ -6631,6 +6974,7 @@ class TestTrajsPerBatch:
                 frames_per_batch=max_steps * 4,
                 total_frames=max_steps * 16,
                 trajs_per_batch=2,
+                traj_format="padded",
             )
         else:
             env = env_fn()
@@ -6640,6 +6984,7 @@ class TestTrajsPerBatch:
                 frames_per_batch=max_steps * 3,
                 total_frames=max_steps * 9,
                 trajs_per_batch=2,
+                traj_format="padded",
             )
 
         try:
@@ -6656,6 +7001,78 @@ class TestTrajsPerBatch:
                     last_valid = mask[i].sum().item() - 1
                     done = b[i, last_valid][("next", "done")]
                     assert done.any(), f"traj {i} last valid step is not done"
+        finally:
+            collector.shutdown()
+            if not multi:
+                env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize(
+        "collector_cls,multi",
+        [
+            (Collector, False),
+            (functools.partial(MultiSyncCollector, cat_results="stack"), True),
+            (MultiAsyncCollector, True),
+        ],
+    )
+    def test_traj_format_cat_integration(self, collector_cls, multi):
+        """traj_format="cat" yields flat batches of whole trajectories.
+
+        Each batch is 1-D, holds exactly trajs_per_batch done flags, carries
+        no ("collector", "mask"), and its trajectories are contiguous: within
+        a traj_ids segment the step counter increases by one and the segment
+        ends with done=True.
+        """
+        max_steps = 4
+        trajs_per_batch = 2
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe_env = env_fn()
+        try:
+            policy = RandomPolicy(probe_env.action_spec)
+        finally:
+            probe_env.close(raise_if_closed=False)
+
+        if multi:
+            collector = collector_cls(
+                [env_fn, env_fn],
+                policy,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=trajs_per_batch,
+                traj_format="cat",
+            )
+        else:
+            env = env_fn()
+            collector = collector_cls(
+                env,
+                policy,
+                frames_per_batch=max_steps * 3,
+                total_frames=max_steps * 9,
+                trajs_per_batch=trajs_per_batch,
+                traj_format="cat",
+            )
+
+        try:
+            batches = list(collector)
+            assert len(batches) > 0
+            for b in batches:
+                assert b.ndim == 1
+                assert ("collector", "mask") not in b.keys(True)
+                done = b["next", "done"].reshape(-1)
+                assert done.sum().item() == trajs_per_batch
+                # trajectories are contiguous segments delimited by traj_ids
+                traj_ids = b["collector", "traj_ids"]
+                segment_ends = done.nonzero().reshape(-1).tolist()
+                start = 0
+                for end in segment_ends:
+                    segment = b[start : end + 1]
+                    assert (traj_ids[start : end + 1] == traj_ids[start]).all()
+                    steps = segment["step_count"].reshape(-1)
+                    assert (steps[1:] - steps[:-1] == 1).all()
+                    start = end + 1
+                # the batch holds nothing past the last trajectory
+                assert start == b.shape[0]
         finally:
             collector.shutdown()
             if not multi:
@@ -6715,6 +7132,51 @@ class TestTrajsPerBatchReplayBuffer:
       ``done=True`` — partial trajectories never leak into the buffer.
     * **SliceSampler integration**: sampled slices respect episode boundaries.
     """
+
+    def test_replay_buffer_tensordict_device_metadata_normalization(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        data0 = TensorDict({"obs": torch.zeros(4, 3)}, [4])
+        data1 = TensorDict({"obs": torch.ones(4, 3)}, [4])
+        assert data0.device is None
+        assert data1.device is None
+
+        rb.extend(_maybe_normalize_replay_buffer_tensordict_device(data0, rb))
+        rb.extend(_maybe_normalize_replay_buffer_tensordict_device(data1, rb))
+
+        stored = rb.storage.get(slice(0, len(rb)))
+        assert stored.device == torch.device("cpu")
+        assert len(rb) == 8
+
+    def test_replay_buffer_tensordict_device_metadata_uses_storage_payload(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        rb.extend(TensorDict({"obs": torch.zeros(4, 3)}, [4]))
+        rb.storage.device = None
+
+        data = TensorDict({"obs": torch.ones(4, 3)}, [4])
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 8
+
+    def test_replay_buffer_tensordict_device_metadata_normalizes_nested(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        data = TensorDict(
+            {
+                "obs": torch.zeros(4, 3),
+                "next": TensorDict({"obs": torch.ones(4, 3)}, [4]),
+            },
+            [4],
+            device="cpu",
+        )
+        data["next"].clear_device_()
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        assert data["next"].device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 4
 
     @staticmethod
     def _make_env_and_policy(max_steps=4):
@@ -6841,6 +7303,75 @@ class TestTrajsPerBatchReplayBuffer:
         assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
         assert ("collector", "traj_ids") in sample.keys(True)
         self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_replay_buffer_device_metadata(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200, device="cpu"))
+        extend_devices = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_devices.append(td.device)
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+            trajs_per_write=1,
+            postproc=_clear_tensordict_device,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(extend_devices) >= 2
+        assert all(device == torch.device("cpu") for device in extend_devices)
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_replay_buffer_device_normalization_uses_initialized_storage(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10, device="cpu"))
+        rb.extend(TensorDict({"obs": torch.zeros(2)}, batch_size=[2]))
+        assert rb.storage._storage.device == torch.device("cpu")
+
+        rb.storage.device = None
+        data = TensorDict({"obs": torch.ones(3)}, batch_size=[3])
+        assert data.device is None
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 5
+
+    def test_replay_buffer_device_normalization_normalizes_nested_metadata(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10, device="cpu"))
+        data = TensorDict(
+            {
+                "obs": torch.zeros(3),
+                "next": TensorDict({"obs": torch.ones(3)}, batch_size=[3]),
+            },
+            batch_size=[3],
+            device="cpu",
+        )
+        data["next"].clear_device_()
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        assert data["next"].device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 3
 
     def test_trajs_per_write_batches_replay_buffer_extends(self):
         max_steps = 4
@@ -7335,6 +7866,29 @@ class TestTrajsPerBatchReplayBuffer:
         assert len(rb) > 0, "replay buffer must be non-empty"
         assert ("collector", "traj_ids") in rb.sample(2).keys(True)
         self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_multi_async_collector_empty_rb_ack(self):
+        """MultiAsyncCollector handles replay-buffer ACKs before any complete traj."""
+        max_steps = 10
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=1,
+            total_frames=1,
+            trajs_per_batch=1,
+            cat_results="stack",
+        )
+        try:
+            collector_iter = iter(collector)
+            out = next(collector_iter)
+        finally:
+            collector.shutdown()
+
+        assert out is None
+        assert len(rb) == 0
 
     def test_multi_async_probabilistic_actor_writes_log_prob_to_rb(self):
         max_steps = 4

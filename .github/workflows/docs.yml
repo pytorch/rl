@@ -66,13 +66,13 @@ jobs:
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
           # Use stable PyTorch for releases (tags and release/* branches)
           python -m pip install torch torchvision --quiet --root-user-action=ignore
-          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0" --quiet --root-user-action=ignore
+          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
           python -m pip install tensordict --no-deps --quiet --root-user-action=ignore
           python -m pip install torchcodec --quiet --root-user-action=ignore
         else
           # Use nightly PyTorch for main, nightly, and PRs
           python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0" --quiet --root-user-action=ignore
+          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
           python -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --quiet --root-user-action=ignore
           torchcodec_dir=$(mktemp -d)
           git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
@@ -115,6 +115,55 @@ jobs:
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
 
+        # 10b. Sphinx-gallery cache: restore the executed gallery output from
+        # the docs-gallery-cache branch so sphinx-gallery's .md5 checksums
+        # skip re-executing tutorials whose source is unchanged. Restored on
+        # pull requests and pushes to main only:
+        # - never on schedule (the nightly orchestrator's docs build is the
+        #   daily full rebuild that catches tutorials broken by library
+        #   changes and refreshes the cache);
+        # - never on tags/release branches (they build with stable torch and
+        #   must not inherit outputs executed under nightly torch).
+        # The cache key folds in conf.py, docs/requirements.txt and the
+        # resolved torch/sphinx-gallery versions; tensordict/torchrl source
+        # is deliberately excluded (staleness is bounded to <=24h by the
+        # nightly writer). Published pages for unchanged tutorials therefore
+        # show outputs from an older build. Set TORCHRL_DOCS_GALLERY_CACHE=0
+        # to disable.
+        GH_EVENT_NAME="${{ github.event_name }}"
+        GH_REF_TYPE="${{ github.ref_type }}"
+        GH_REF_NAME="${{ github.ref_name }}"
+        gallery_cache_key=$(
+          {
+            sha256sum docs/source/conf.py docs/requirements.txt
+            python -c "import torch, sphinx_gallery; print(f'torch={torch.__version__} sphinx-gallery={sphinx_gallery.__version__}')"
+          } | sha256sum | cut -d' ' -f1
+        )
+        echo "sphinx-gallery cache key: ${gallery_cache_key}"
+        gallery_cache_restore=0
+        if [[ "${TORCHRL_DOCS_GALLERY_CACHE:-1}" == "1" ]]; then
+          if [[ "${GH_EVENT_NAME}" == "pull_request" ]] || { [[ "${GH_EVENT_NAME}" == "push" && "${GH_REF_TYPE}" == "branch" && "${GH_REF_NAME}" == "main" ]]; }; then
+            gallery_cache_restore=1
+          fi
+        fi
+        if [[ "${gallery_cache_restore}" == "1" ]]; then
+          gallery_cache_dir=$(mktemp -d)
+          if git clone --quiet --depth 1 --branch docs-gallery-cache https://github.com/pytorch/rl.git "${gallery_cache_dir}" 2>/dev/null; then
+            if [[ "$(cat "${gallery_cache_dir}/cache-key.txt" 2>/dev/null)" == "${gallery_cache_key}" && -d "${gallery_cache_dir}/tutorials" ]]; then
+              mkdir -p docs/source/tutorials
+              cp -r "${gallery_cache_dir}/tutorials/." docs/source/tutorials/
+              echo "Restored sphinx-gallery cache"
+            else
+              echo "sphinx-gallery cache key mismatch or unexpected layout; full rebuild"
+            fi
+          else
+            echo "No docs-gallery-cache branch yet; full rebuild"
+          fi
+          rm -rf "${gallery_cache_dir}"
+        else
+          echo "sphinx-gallery cache restore disabled for this event (${GH_EVENT_NAME})"
+        fi
+
         # 11. Fetch the MuJoCo Menagerie assets used by the macro-control tutorial.
         # MuJoCo Menagerie is a model repository, not an installable Python package,
         # so we keep the docs dependency as a sparse checkout instead of adding it
@@ -129,15 +178,36 @@ jobs:
         # 12. Build doc
         export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
         export BATCHED_PIPE_TIMEOUT=180
+        # Reduced tutorial workloads in CI (fewer rollouts, smaller renders);
+        # see the TUTORIAL_FAST blocks in tutorials/sphinx-tutorials/.
+        export TORCHRL_TUTORIALS_FAST=1
         cd ./docs
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl TORCHRL_CONSOLE_STREAM=stdout sphinx-build ./source _local_build -v -j 4
         cd ..
 
+        # 13. Per-example time budget: fail loudly when a tutorial regresses
+        # the build (a single tutorial once tripled it, unnoticed for weeks).
+        python .github/scripts/check_tutorial_time_budget.py docs/source/tutorials/sg_execution_times.rst
+
+        # 14. Stage the executed gallery output for the cache-writer job on
+        # the events that update the docs-gallery-cache branch: pushes to
+        # main and the nightly (schedule) full rebuild. The upload job strips
+        # this directory before publishing to gh-pages.
+        if [[ "${GH_EVENT_NAME}" == "schedule" ]] || { [[ "${GH_EVENT_NAME}" == "push" && "${GH_REF_TYPE}" == "branch" && "${GH_REF_NAME}" == "main" ]]; }; then
+          mkdir -p "${RUNNER_ARTIFACT_DIR}/sphinx-gallery-cache"
+          cp -r docs/source/tutorials "${RUNNER_ARTIFACT_DIR}/sphinx-gallery-cache/"
+          echo "${gallery_cache_key}" > "${RUNNER_ARTIFACT_DIR}/sphinx-gallery-cache/cache-key.txt"
+          echo "Staged sphinx-gallery cache for the writer job"
+        fi
+
         cp -r docs/_local_build/* "${RUNNER_ARTIFACT_DIR}"
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
-        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
+        # Note: previously written as `if [[ ${{ github.event_name == 'pull_request' }} ]]`,
+        # which renders to `[[ true ]]` / `[[ false ]]` -- both truthy -- so
+        # the copy ran on every event.
+        if [[ "${GH_EVENT_NAME}" == "pull_request" ]]; then
           cp -r docs/_local_build/* "${RUNNER_DOCS_DIR}"
         fi
 
@@ -185,6 +255,10 @@ jobs:
         mkdir -p "${TARGET_FOLDER}"
         rm -rf "${TARGET_FOLDER}"/*
 
+        # The build job stages the sphinx-gallery cache in the artifact for
+        # the update-gallery-cache job; it must not land on the docs site.
+        rm -rf "${RUNNER_ARTIFACT_DIR}/sphinx-gallery-cache"
+
         echo $(ls "${RUNNER_ARTIFACT_DIR}")
         rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
         git add "${TARGET_FOLDER}" || true
@@ -203,3 +277,43 @@ jobs:
         git config http.postBuffer 524288000
         git commit -m "auto-generating sphinx docs" || true
         git push
+
+  # Refresh the docs-gallery-cache branch from the executed gallery output.
+  # Writers: pushes to main (tutorial edits refresh their own entries) and
+  # the nightly schedule run (a full rebuild, bounding cache staleness with
+  # respect to torch/tensordict/torchrl to <=24h). The branch holds a single
+  # force-pushed orphan commit, so it never grows.
+  update-gallery-cache:
+    needs: build-docs
+    if: github.repository == 'pytorch/rl' &&
+      ((github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name == 'main') || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      # docs.yml's own concurrency group is per-sha on main, so two builds
+      # can finish concurrently; serialize the writers instead of racing.
+      group: docs-gallery-cache
+      cancel-in-progress: false
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: docs-artifact
+      - name: Force-push the cache branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -d docs-artifact/sphinx-gallery-cache/tutorials ]; then
+            echo "No sphinx-gallery cache in the docs artifact; nothing to update."
+            exit 0
+          fi
+          cd docs-artifact/sphinx-gallery-cache
+          git init --initial-branch=docs-gallery-cache --quiet
+          git config user.name 'pytorchbot'
+          git config user.email 'soumith+bot@pytorch.org'
+          git add tutorials cache-key.txt
+          git commit --quiet -m "sphinx-gallery cache from ${GITHUB_SHA}"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" docs-gallery-cache

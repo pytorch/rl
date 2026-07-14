@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import pickle
+import subprocess
 import sys
 
 import pytest
@@ -553,6 +554,29 @@ class TestComposableBuffers:
         assert rb.__dict__.keys() == rb2.__dict__.keys()
         for key in sorted(rb.__dict__.keys()):
             assert isinstance(rb.__dict__[key], type(rb2.__dict__[key]))
+
+
+def test_pickable_fresh_interpreter_after_first_collate():
+    # Regression test: implement_for used to resolve _stack_anything lazily,
+    # so in a fresh interpreter a ReplayBuffer captured the pre-dispatch
+    # wrapper as collate_fn while the first sample() swapped the module
+    # attribute, and pickling the buffer failed with
+    # "it's not the same object as ...storages._stack_anything".
+    # A subprocess guarantees pristine dispatch state regardless of which
+    # tests ran earlier in this process.
+    script = """
+import pickle
+import torch
+from tensordict import TensorDict
+from torchrl.data import ListStorage, ReplayBuffer
+
+rb = ReplayBuffer(storage=ListStorage(10), batch_size=2)
+rb.extend(TensorDict({"a": torch.zeros(4, 1)}, [4]))
+rb.sample()
+rb2 = pickle.loads(pickle.dumps(rb))
+rb2.sample()
+"""
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=120)
 
 
 if __name__ == "__main__":

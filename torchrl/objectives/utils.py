@@ -8,7 +8,7 @@ import functools
 import importlib
 import re
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from copy import copy
 from enum import Enum
 from typing import Any, TypeVar
@@ -507,6 +507,19 @@ class TargetNetUpdater:
     def _step(self, p_source: Tensor, p_target: Tensor) -> None:
         raise NotImplementedError
 
+    def state_dict(self) -> dict[str, Any]:
+        """Return target-update progress not already owned by the loss module."""
+        state = {"initialized": self.initialized}
+        if hasattr(self, "counter"):
+            state["counter"] = self.counter
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore target-update progress."""
+        self.initialized = state_dict.get("initialized", self.initialized)
+        if "counter" in state_dict and hasattr(self, "counter"):
+            self.counter = state_dict["counter"]
+
     def __repr__(self) -> str:
         string = (
             f"{self.__class__.__name__}(sources={self._sources}, targets="
@@ -943,6 +956,34 @@ def _clip_value_loss(
     # Chose the most pessimistic value prediction between clipped and non-clipped
     loss_value = torch.maximum(loss_value, loss_value_clipped)
     return loss_value, clip_fraction
+
+
+def _validate_clip_epsilon(
+    clip_epsilon: float | tuple[float, float]
+) -> tuple[float, float]:
+    """Normalize and validate a PPO clip threshold.
+
+    Accepts a float (symmetric clipping) or a ``(eps_low, eps_high)`` pair
+    (asymmetric, DAPO Clip-Higher style) and returns the validated
+    ``(eps_low, eps_high)`` bounds.
+    """
+    if isinstance(clip_epsilon, (tuple, list)):
+        if len(clip_epsilon) != 2:
+            raise ValueError(
+                f"clip_epsilon tuple must have length 2, got {clip_epsilon}."
+            )
+        eps_low, eps_high = (float(clip_epsilon[0]), float(clip_epsilon[1]))
+    else:
+        eps_low = eps_high = float(clip_epsilon)
+    if eps_low < 0 or eps_high < 0:
+        raise ValueError(
+            f"clip_epsilon values must be non-negative, got ({eps_low}, {eps_high})."
+        )
+    if eps_low >= 1.0:
+        raise ValueError(
+            f"clip_epsilon low must be < 1 (to keep 1 - eps_low > 0), got {eps_low}."
+        )
+    return eps_low, eps_high
 
 
 def _get_default_device(net):

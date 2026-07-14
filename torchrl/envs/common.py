@@ -30,6 +30,7 @@ from torchrl._utils import (
     _make_ordinal_device,
     _maybe_record_function_decorator,
     _replace_last,
+    DEFAULT_DONE_KEYS,
     implement_for,
     prod,
     seed_generator,
@@ -835,7 +836,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 output_spec = output_spec[0]
 
         if done_key is None:
-            done_key = ["done", "terminated", "truncated"]
+            done_key = list(DEFAULT_DONE_KEYS)
         full_done_spec = output_spec.separates(*done_key, default=None)
         if full_done_spec is not None:
             self.full_done_spec = full_done_spec
@@ -3524,6 +3525,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 ``done_spec``, an exception is raised.
                 Truncated keys can be set through ``env.add_truncated_keys``.
                 Defaults to ``False``.
+            out (TensorDict, optional): output tensordict where rollout data is
+                written. Defaults to ``None``.
             trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
                 assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
                 and ``False`` otherwise.

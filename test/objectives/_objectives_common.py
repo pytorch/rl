@@ -24,16 +24,10 @@ from torch import nn
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase
 
-_has_functorch = True
-try:
-    import functorch as ft  # noqa
-
-    make_functional_with_buffers = ft.make_functional_with_buffers
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
-    make_functional_with_buffers = None
+_has_functorch = (
+    hasattr(torch, "vmap") or importlib.util.find_spec("functorch") is not None
+)
+FUNCTORCH_ERR = ""
 
 _has_transformers = bool(importlib.util.find_spec("transformers"))
 _has_botorch = bool(importlib.util.find_spec("botorch"))

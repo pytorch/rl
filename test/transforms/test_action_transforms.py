@@ -25,7 +25,7 @@ from _transforms_common import (
 )
 from packaging import version
 from tensordict import NonTensorData, TensorDict, TensorDictBase
-from tensordict.nn import WrapModule
+from tensordict.nn import TensorDictModuleBase, TensorDictSequential, WrapModule
 from torch import nn
 
 from torchrl.data import (
@@ -40,10 +40,16 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
-from torchrl.data.vla import RobotDatasetMetadata, UniformActionTokenizer
+from torchrl.data.vla import (
+    ACTION_CHUNK_KEY,
+    ACTION_TOKENS_KEY,
+    RobotDatasetMetadata,
+    UniformActionTokenizer,
+)
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
+    CartesianSolver,
     Compose,
     ConditionalPolicySwitch,
     ConditionalSkip,
@@ -62,6 +68,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetMacroAction,
+    ToyVLAEnv,
     TransformedEnv,
     URScriptPrimitive,
     URScriptPrimitiveTransform,
@@ -1270,6 +1277,221 @@ class TestMacroPrimitiveTransform:
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[..., -1], torch.full((1, 4), 154.0))
 
+    @staticmethod
+    def _recording_ik_solver(calls):
+        def solver(
+            target_pose,
+            start_action,
+            *,
+            orientation_mask=None,
+            waypoints=None,
+        ):
+            calls.append(
+                {
+                    "target_pose": target_pose,
+                    "orientation_mask": orientation_mask,
+                    "waypoints": waypoints,
+                }
+            )
+            if waypoints is not None:
+                out = (
+                    start_action.unsqueeze(-2)
+                    .expand(
+                        start_action.shape[:-1] + (waypoints, start_action.shape[-1])
+                    )
+                    .clone()
+                )
+                out[..., :6] = torch.arange(1, waypoints + 1, dtype=out.dtype).reshape(
+                    (1,) * (start_action.ndim - 1) + (waypoints, 1)
+                )
+                return out
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        return solver
+
+    def test_cartesian_solver_protocol(self):
+        calls = []
+        assert isinstance(self._ik_solver(), CartesianSolver)
+        assert isinstance(self._recording_ik_solver(calls), CartesianSolver)
+
+    def test_reach_pose_orientation_mask_passed_to_solver(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    orientation_mask=(1.0, 1.0, 0.0),
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        transform.inv(td)
+        assert len(calls) == 1
+        torch.testing.assert_close(
+            calls[0]["orientation_mask"], torch.tensor([[1.0, 1.0, 0.0]])
+        )
+        torch.testing.assert_close(
+            calls[0]["target_pose"][..., 3:],
+            torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+        )
+        assert calls[0]["waypoints"] is None
+
+    def test_reach_pose_without_mask_passes_none(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]), steps=2
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        transform.inv(td)
+        assert calls[0]["orientation_mask"] is None
+        torch.testing.assert_close(calls[0]["target_pose"][..., 3:], torch.zeros(1, 4))
+
+    @pytest.mark.parametrize(
+        ("reach_pose_kwargs", "match"),
+        [
+            ({"orientation_mask": (1.0, 1.0, 0.0)}, "orientation_mask"),
+            ({"path": "cartesian"}, "path='cartesian'"),
+        ],
+    )
+    def test_reach_pose_constraint_without_solver_raises(
+        self, reach_pose_kwargs, match
+    ):
+        transform = URScriptPrimitiveTransform(macro_steps=2)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    steps=2,
+                    **reach_pose_kwargs,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match=match):
+            transform.inv(td)
+
+    def test_reach_pose_orientation_mask_legacy_solver_raises(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    orientation_mask=(1.0, 1.0, 0.0),
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match="orientation_mask"):
+            transform.inv(td)
+
+    def test_reach_pose_cartesian_path_uses_waypoints(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=3, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    path="cartesian",
+                    gripper="closed",
+                    steps=3,
+                    settle_steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 5, 7])
+        # the endpoint solve plus the per-waypoint solve
+        assert [call["waypoints"] for call in calls] == [None, 3]
+        # arm columns follow the solver-provided waypoints, and the settle
+        # segment holds the final waypoint
+        torch.testing.assert_close(
+            action[0, :, 0], torch.tensor([1.0, 2.0, 3.0, 3.0, 3.0])
+        )
+        # the gripper column still follows the interpolated gripper command
+        torch.testing.assert_close(action[0, -1, -1], torch.tensor(255.0))
+
+    def test_reach_pose_cartesian_path_legacy_solver_raises(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    path="cartesian",
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match="waypoints"):
+            transform.inv(td)
+
+    def test_reach_pose_invalid_path_raises(self):
+        with pytest.raises(ValueError, match="path must be"):
+            RobotMacroAction.reach_pose(position=torch.zeros(1, 3), path="linear")
+
+    def test_reach_pose_cartesian_path_nested_action_key(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"),
+            macro_steps=2,
+            cartesian_solver=self._recording_ik_solver(calls),
+        )
+        td = TensorDict(
+            {
+                ("agent", "action"): RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    orientation_mask=(0.0, 1.0, 1.0),
+                    path="cartesian",
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)[("agent", "action")]
+        assert action.shape == torch.Size([1, 2, 7])
+        assert calls[-1]["waypoints"] == 2
+        torch.testing.assert_close(
+            calls[-1]["orientation_mask"], torch.tensor([[0.0, 1.0, 1.0]])
+        )
+        torch.testing.assert_close(action[0, :, 0], torch.tensor([1.0, 2.0]))
+
     def test_close_gripper_keeps_arm(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)
         robot_qpos = torch.arange(6, dtype=torch.float32).view(1, 6)
@@ -1629,6 +1851,198 @@ class TestMultiAction(TransformBase):
 
     def test_transform_inverse(self):
         return
+
+    def test_extra_policy_outputs_ride_outer_step(self):
+        # the chunk-decision data path of VLA RL recipes: extra policy
+        # outputs (action tokens, behavior log-probs) written next to the
+        # action chunk must survive on the outer (macro-step) transition
+        h, a = 3, 2
+
+        class ChunkPolicy(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action", "action_tokens", "log_probs"]
+
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def forward(self, td):
+                self.calls += 1
+                td.set("action", torch.zeros(*td.batch_size, h, a))
+                td.set("action_tokens", torch.full((*td.batch_size, h, a), self.calls))
+                td.set("log_probs", torch.full((*td.batch_size,), float(self.calls)))
+                return td
+
+        env = TransformedEnv(ToyVLAEnv(action_dim=a, state_dim=2 * a), MultiAction())
+        check_env_specs(env)
+        rollout = env.rollout(4, ChunkPolicy())
+        assert rollout["action"].shape == (4, h, a)
+        assert rollout["action_tokens"].shape == (4, h, a)
+        assert rollout["log_probs"].shape == (4,)
+        # each outer step carries the policy outputs of the chunk decided at
+        # that step
+        torch.testing.assert_close(rollout["log_probs"], torch.arange(1.0, 5.0))
+        assert (rollout["action_tokens"][:, 0, 0] == torch.arange(1, 5)).all()
+        # one reward slot per executed base step
+        assert rollout["next", "reward"].shape == (4, h, 1)
+
+    def test_action_chunk_key(self):
+        h, a = 3, 2
+
+        class ChunkPolicy(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = [ACTION_CHUNK_KEY]
+
+            def forward(self, td):
+                chunk = torch.zeros(*td.batch_size, h, a)
+                td.set(ACTION_CHUNK_KEY, chunk)
+                return td
+
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=a, state_dim=2 * a),
+            MultiAction.from_vla(),
+        )
+        check_env_specs(env)
+        assert env.full_action_spec[ACTION_CHUNK_KEY].shape == torch.Size([-1, a])
+        rollout = env.rollout(4, ChunkPolicy())
+        assert rollout[ACTION_CHUNK_KEY].shape == (4, h, a)
+        assert rollout["next", "reward"].shape == (4, h, 1)
+
+    def test_missing_vla_chunk_key_error(self):
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=2, state_dim=4),
+            MultiAction.from_vla(),
+        )
+        td = env.reset()
+        with pytest.raises(KeyError, match="MultiAction.from_vla"):
+            env.step(td)
+
+    @pytest.mark.parametrize("batch_size", [(), (1,)])
+    def test_token_policy_pipeline(self, batch_size):
+        # token-head policy: emits only action tokens + log-probs; the
+        # tokenizer transform decodes the tokens into the continuous chunk on
+        # the inverse path before MultiAction unbinds and executes it. The
+        # batched variant guards the spec path: the tokenizer must preserve
+        # MultiAction's dynamic chunk dim on a batched env.
+        h, a = 3, 2
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+
+        class TokenPolicy(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = [ACTION_TOKENS_KEY, "log_probs"]
+
+            def forward(self, td):
+                target = td.get(("observation", "state"))[..., a : 2 * a]
+                chunk = target.unsqueeze(-2).expand(*td.batch_size, h, a)
+                td.set(ACTION_TOKENS_KEY, tok.encode(chunk))
+                td.set("log_probs", torch.full((*td.batch_size,), 0.5))
+                return td
+
+        env = TransformedEnv(
+            ToyVLAEnv(
+                action_dim=a,
+                state_dim=2 * a,
+                success_steps=2 * h,
+                batch_size=batch_size,
+                seed=0,
+            ),
+            Compose(MultiAction(), ActionTokenizerTransform(tok)),
+        )
+        # the policy-facing action spec is the token interface with the
+        # dynamic chunk dim
+        token_spec = env.full_action_spec[ACTION_TOKENS_KEY]
+        assert token_spec.shape == torch.Size([*batch_size, -1, a])
+        assert token_spec.dtype == torch.long
+        check_env_specs(env)
+        rollout = env.rollout(2, TokenPolicy())
+        assert rollout.batch_size == (*batch_size, 2)
+        assert rollout[ACTION_TOKENS_KEY].shape == (*batch_size, 2, h, a)
+        assert rollout["log_probs"].shape == (*batch_size, 2)
+        # the tracking task succeeds through the decode path: 2 * h
+        # in-tolerance base steps reached exactly at the 2nd chunk boundary
+        assert rollout["next", "success"][..., -1, :].all()
+        assert rollout["next", "done"][..., -1, :].all()
+        assert not rollout["next", "done"][..., 0, :].any()
+
+    def test_done_inside_chunk_truncates(self):
+        # done fires at the 2nd of 4 base steps: the remaining steps are
+        # skipped, and the reward stack holds the executed steps' rewards
+        # plus a single zero-filled slot for the skipped remainder
+        h, a = 4, 2
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=a, state_dim=2 * a, success_steps=2, seed=0),
+            MultiAction(),
+        )
+
+        class OffsetOracle(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action"]
+
+            def forward(self, td):
+                target = td.get(("observation", "state"))[..., a : 2 * a]
+                offsets = torch.tensor([0.2, 0.1, 0.05, 0.0]).reshape(h, 1)
+                chunk = (target.unsqueeze(-2) + offsets).clamp(-1.0, 1.0)
+                td.set("action", chunk.expand(*td.batch_size, h, a))
+                return td
+
+        rollout = env.rollout(3, OffsetOracle())
+        assert rollout.batch_size == (1,)
+        assert rollout["next", "done"].all()
+        assert rollout["next", "success"].all()
+        reward = rollout["next", "reward"].squeeze(-1)
+        assert reward.shape == (1, 3)
+        # two executed in-tolerance steps, then the zero-filled skipped slot
+        expected = -torch.tensor([[0.2, 0.1, 0.0]]) * (a**0.5)
+        torch.testing.assert_close(reward, expected)
+
+    def test_done_inside_chunk_reward_slots_batch_unlocked(self):
+        # batch-unlocked env where done fires for a subset of envs mid-chunk:
+        # the done env's trailing slot must be zero-filled (not a stale copy
+        # of its last executed reward), and the in-place bookkeeping must not
+        # corrupt the alive env's stacked history
+        class RewardingCounter(StateLessCountingEnv):
+            def _step(self, tensordict):
+                out = super()._step(tensordict)
+                out.set("reward", out.get("count").to(torch.float))
+                return out
+
+        env = TransformedEnv(RewardingCounter(), MultiAction())
+        td = env.reset().expand(2).clone()
+        td["max_count"] = torch.tensor([[2], [10]], dtype=torch.int32)
+        td["action"] = torch.ones(2, 4, 1, dtype=torch.int32)
+        out = env.step(td)["next"]
+        reward = out["reward"].squeeze(-1)
+        expected = torch.tensor([[1.0, 2.0, 0.0, 0.0], [1.0, 2.0, 3.0, 4.0]])
+        torch.testing.assert_close(reward, expected)
+        assert out["done"].squeeze(-1).tolist() == [True, False]
+
+    def test_stack_rewards_false_uniform_outer_steps(self):
+        # mixing full and truncated chunks makes stacked rewards ragged; with
+        # stack_rewards=False the outer transition stays dense and uniform -
+        # the configuration to use when the per-chunk reward is derived from
+        # the outer transition (e.g. SuccessReward appended after MultiAction)
+        h, a = 4, 2
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=a, state_dim=2 * a, success_steps=h + 1, seed=0),
+            MultiAction(stack_rewards=False),
+        )
+
+        class Oracle(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action"]
+
+            def forward(self, td):
+                target = td.get(("observation", "state"))[..., a : 2 * a]
+                td.set("action", target.unsqueeze(-2).expand(*td.batch_size, h, a))
+                return td
+
+        rollout = env.rollout(3, Oracle())
+        # first chunk executes fully (streak h), the second truncates at its
+        # first base step; the outer transitions remain dense
+        assert rollout.batch_size == (2,)
+        assert rollout["next", "reward"].shape == (2, 1)
+        assert rollout["next", "done"].squeeze(-1).tolist() == [False, True]
+        assert rollout["next", "success"].squeeze(-1).tolist() == [False, True]
 
 
 @pytest.mark.skipif(IS_WIN, reason="Test is flaky on Windows")
@@ -2344,7 +2758,7 @@ class TestActionChunkTransform(TransformBase):
         env = self._env()
         check_env_specs(env)
         assert "action" in env.full_action_spec.keys(True, True)
-        assert "action_chunk" not in env.full_action_spec.keys(True, True)
+        assert ACTION_CHUNK_KEY not in env.full_action_spec.keys(True, True)
 
     def test_serial_trans_env_check(self):
         env = SerialEnv(2, self._env)
@@ -2383,14 +2797,14 @@ class TestActionChunkTransform(TransformBase):
     def test_transform_no_env(self):
         t = ActionChunkTransform(chunk_size=4)
         out = t(TensorDict({"action": torch.randn(2, 6, 3)}, batch_size=[2, 6]))
-        assert out["action_chunk"].shape == torch.Size([2, 6, 4, 3])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([2, 6, 4, 3])
         assert out["action_is_pad"].shape == torch.Size([2, 6, 4])
         assert out["action_is_pad"].dtype == torch.bool
 
     def test_transform_compose(self):
         t = Compose(ActionChunkTransform(chunk_size=2))
         out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
-        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([5, 2, 3])
         assert out["action_is_pad"].shape == torch.Size([5, 2])
 
     def test_transform_env(self):
@@ -2409,7 +2823,7 @@ class TestActionChunkTransform(TransformBase):
         env.step(td)
         torch.testing.assert_close(captured["action"], td["action"])
         r = env.rollout(3)
-        assert "action_chunk" not in r.keys()
+        assert ACTION_CHUNK_KEY not in r.keys(True, True)
 
     def test_transform_model(self):
         t = ActionChunkTransform(chunk_size=3)
@@ -2419,7 +2833,7 @@ class TestActionChunkTransform(TransformBase):
         expected_chunk = torch.tensor(
             [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
         ).float()
-        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
         expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
         assert torch.equal(out["action_is_pad"][0], expected_pad)
 
@@ -2433,9 +2847,9 @@ class TestActionChunkTransform(TransformBase):
         # no-op, and the chunks are built on the sample path only
         rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
         stored = rb._storage._storage
-        assert "action_chunk" not in stored.keys()
+        assert ACTION_CHUNK_KEY not in stored.keys(True, True)
         sample = rb.sample()
-        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
+        assert sample[ACTION_CHUNK_KEY].shape[-2:] == torch.Size([3, 2])
         assert sample["action_is_pad"].shape[-1] == 3
 
     def test_transform_inverse(self):
@@ -2444,7 +2858,7 @@ class TestActionChunkTransform(TransformBase):
         action = torch.randn(2, 5)
         td = t.inv(TensorDict({"action": action}, batch_size=[2]))
         torch.testing.assert_close(td["action"], action)
-        assert "action_chunk" not in td.keys()
+        assert ACTION_CHUNK_KEY not in td.keys(True, True)
 
     # ActionChunkTransform-specific tests
     def test_values_and_padding(self):
@@ -2454,20 +2868,20 @@ class TestActionChunkTransform(TransformBase):
         expected_chunk = torch.tensor(
             [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
         ).float()
-        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
         expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
         assert torch.equal(out["action_is_pad"][0], expected_pad)
 
     def test_no_batch_dim(self):
         t = ActionChunkTransform(chunk_size=2)
         out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
-        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([5, 2, 3])
         assert out["action_is_pad"].shape == torch.Size([5, 2])
 
     def test_chunk_larger_than_horizon(self):
         t = ActionChunkTransform(chunk_size=10)
         out = t(TensorDict({"action": torch.arange(3).view(1, 3, 1).float()}, [1, 3]))
-        assert out["action_chunk"].shape == torch.Size([1, 3, 10, 1])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([1, 3, 10, 1])
         # first chunk: steps 0,1,2 valid then padded
         assert not out["action_is_pad"][0, 0, :3].any()
         assert out["action_is_pad"][0, 0, 3:].all()
@@ -2502,7 +2916,7 @@ class TestActionChunkTransform(TransformBase):
         )
         windows = flat.reshape(2, 4)
         out = ActionChunkTransform(3)(windows)
-        chunk = out["action_chunk"][..., 0]
+        chunk = out[ACTION_CHUNK_KEY][..., 0]
         # neither slice pulls the other slice's actions across the boundary
         assert chunk[0].max() <= 3
         assert chunk[1].min() >= 10
@@ -2515,14 +2929,93 @@ class TestActionChunkTransform(TransformBase):
         with pytest.raises(ValueError, match="immediately follow"):
             t(TensorDict({"action": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
 
-    def test_compile_build_chunk(self):
+    @staticmethod
+    def _reference_gather(action, H):
+        # the pre-0.14 dedicated gather (arange + clamp + index_select), kept
+        # as the ground truth the CatFrames recipe must reproduce exactly
+        T = action.shape[-2]
+        idx = torch.arange(T).unsqueeze(-1) + torch.arange(H).unsqueeze(0)
+        is_pad = idx >= T
+        idx = idx.clamp_max(T - 1).reshape(-1)
+        chunk = action.index_select(-2, idx).unflatten(-2, (T, H))
+        is_pad = is_pad.expand(chunk.shape[:-1]).contiguous()
+        return chunk, is_pad
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (3, 2)])
+    @pytest.mark.parametrize("chunk_size", [1, 3, 7])
+    def test_equivalence_with_reference_gather(self, batch_size, chunk_size):
+        torch.manual_seed(0)
+        action = torch.randn(*batch_size, 5, 4)
+        t = ActionChunkTransform(chunk_size=chunk_size)
+        out = t(TensorDict({"action": action}, batch_size=batch_size))
+        ref_chunk, ref_pad = self._reference_gather(action, chunk_size)
+        # byte-identical: the recipe copies the same source elements
+        assert torch.equal(out[ACTION_CHUNK_KEY], ref_chunk)
+        assert torch.equal(out["action_is_pad"], ref_pad)
+
+    def test_done_aware_chunking(self):
+        # a done inside the window: chunks must not cross the trajectory
+        # boundary (steps past it are padded with the last valid action)
+        action = torch.arange(4.0).view(1, 4, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True  # boundary between steps 1 and 2
+        td = TensorDict({"action": action, ("next", "done"): done}, batch_size=[1, 4])
+        out = ActionChunkTransform(3)(td)
+        expected_chunk = torch.tensor(
+            [[0, 1, 1], [1, 1, 1], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
+        expected_pad = torch.tensor([[0, 0, 1], [0, 1, 1], [0, 0, 1], [0, 1, 1]]).bool()
+        assert torch.equal(out["action_is_pad"][0], expected_pad)
+
+    def test_done_key_none_ignores_dones(self):
+        action = torch.arange(4.0).view(1, 4, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True
+        td = TensorDict({"action": action, ("next", "done"): done}, batch_size=[1, 4])
+        out = ActionChunkTransform(3, done_key=None)(td)
+        # the boundary is ignored: the chunk at t=0 reads across the done
+        expected_chunk = torch.tensor(
+            [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
+
+    def test_done_shape_mismatch_raises(self):
+        td = TensorDict(
+            {
+                "action": torch.randn(2, 4, 3),
+                ("next", "done"): torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        with pytest.raises(ValueError, match="does not line up"):
+            ActionChunkTransform(2)(td)
+
+    def test_clone_keeps_recipe(self):
+        t = ActionChunkTransform(
+            chunk_size=3, action_key=("data", "action"), done_key=None
+        ).clone()
+        assert isinstance(t, ActionChunkTransform)
+        assert t.chunk_size == 3
+        assert t.action_key == ("data", "action")
+        assert t.done_key is None
+        td = TensorDict({"data": {"action": torch.randn(2, 4, 3)}}, batch_size=[2, 4])
+        assert t(td)[ACTION_CHUNK_KEY].shape == torch.Size([2, 4, 3, 3])
+
+    @pytest.mark.skipif(IS_WIN, reason="torch.compile requires a C++ compiler")
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"),
+        reason="requires torch>=2.5 (old dynamo cannot trace the tensordict-based "
+        "transform stack, e.g. InternalTorchDynamoError: next on torch 2.1)",
+    )
+    def test_compile(self):
         t = ActionChunkTransform(chunk_size=3)
-        action = torch.randn(2, 5, 2)
-        eager_chunk, eager_pad = t._build_chunk(action)
-        compiled = torch.compile(t._build_chunk, fullgraph=True)
-        c_chunk, c_pad = compiled(action)
-        torch.testing.assert_close(c_chunk, eager_chunk)
-        assert torch.equal(c_pad, eager_pad)
+        td = TensorDict({"action": torch.randn(2, 5, 2)}, batch_size=[2, 5])
+        eager = t(td.clone())
+        compiled = torch.compile(t)
+        out = compiled(td.clone())
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY], eager[ACTION_CHUNK_KEY])
+        assert torch.equal(out["action_is_pad"], eager["action_is_pad"])
 
 
 class TestActionTokenizerTransform(TransformBase):
@@ -2537,7 +3030,7 @@ class TestActionTokenizerTransform(TransformBase):
         env = self._env()
         check_env_specs(env)
         # the policy-facing action spec is the token interface
-        token_spec = env.full_action_spec["action_tokens"]
+        token_spec = env.full_action_spec[ACTION_TOKENS_KEY]
         assert isinstance(token_spec, Categorical)
         assert token_spec.shape == torch.Size([7])
         assert token_spec.dtype == torch.long
@@ -2563,7 +3056,7 @@ class TestActionTokenizerTransform(TransformBase):
             SerialEnv(2, ContinuousActionVecMockEnv), ActionTokenizerTransform(tok)
         )
         check_env_specs(env)
-        assert env.full_action_spec["action_tokens"].shape == torch.Size([2, 7])
+        assert env.full_action_spec[ACTION_TOKENS_KEY].shape == torch.Size([2, 7])
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
@@ -2583,13 +3076,13 @@ class TestActionTokenizerTransform(TransformBase):
         tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
         t = ActionTokenizerTransform(tok)
         td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
-        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+        assert td[ACTION_TOKENS_KEY].tolist() == [[0, 128, 255]]
 
     def test_transform_compose(self):
         tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
         t = Compose(ActionTokenizerTransform(tok))
         td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
-        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+        assert td[ACTION_TOKENS_KEY].tolist() == [[0, 128, 255]]
 
     def test_transform_env(self):
         captured = {}
@@ -2602,13 +3095,15 @@ class TestActionTokenizerTransform(TransformBase):
 
         env = TransformedEnv(CaptureEnv(), ActionTokenizerTransform(tok))
         td = env.reset()
-        td["action_tokens"] = torch.arange(7, dtype=torch.long)
+        td[ACTION_TOKENS_KEY] = torch.arange(7, dtype=torch.long)
         env.step(td)
         # the base env consumes the decoded (continuous) action
-        torch.testing.assert_close(captured["action"], tok.decode(td["action_tokens"]))
+        torch.testing.assert_close(
+            captured["action"], tok.decode(td[ACTION_TOKENS_KEY])
+        )
         r = env.rollout(3)
-        assert r["action_tokens"].dtype == torch.long
-        assert (r["action_tokens"] < 16).all()
+        assert r[ACTION_TOKENS_KEY].dtype == torch.long
+        assert (r[ACTION_TOKENS_KEY] < 16).all()
 
     def test_transform_model(self):
         tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
@@ -2617,7 +3112,35 @@ class TestActionTokenizerTransform(TransformBase):
         td = model(
             TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1])
         )
-        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+        assert td[ACTION_TOKENS_KEY].tolist() == [[0, 128, 255]]
+
+    def test_transform_decode_model(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok, mode="decode")
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        tokens = tok.encode(action)
+        td = t(TensorDict({ACTION_TOKENS_KEY: tokens.clone()}, batch_size=[1]))
+        torch.testing.assert_close(td["action"], tok.decode(tokens))
+        assert t.in_keys == [ACTION_TOKENS_KEY]
+        assert t.out_keys == ["action"]
+        inv = t.inv(TensorDict({"action": action.clone()}, batch_size=[1]))
+        torch.testing.assert_close(inv[ACTION_TOKENS_KEY], tok.encode(action))
+
+    def test_transform_decode_tensordict_sequential(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        tokens = tok.encode(action)
+        policy = TensorDictSequential(ActionTokenizerTransform(tok, mode="decode"))
+        td = policy(TensorDict({ACTION_TOKENS_KEY: tokens.clone()}, batch_size=[1]))
+        torch.testing.assert_close(td["action"], tok.decode(tokens))
+
+    def test_decode_mode_does_not_rewrite_env_action_spec(self):
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), ActionTokenizerTransform(tok, mode="decode")
+        )
+        assert "action" in env.full_action_spec.keys(True, True)
+        assert ACTION_TOKENS_KEY not in env.full_action_spec.keys(True, True)
 
     def test_transform_rb(self):
         tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
@@ -2630,10 +3153,10 @@ class TestActionTokenizerTransform(TransformBase):
         # tokens are built on the sample path only
         rb.extend(TensorDict({"action": torch.rand(10, 3) * 2 - 1}, batch_size=[10]))
         stored = rb._storage._storage
-        assert "action_tokens" not in stored.keys()
+        assert ACTION_TOKENS_KEY not in stored.keys(True, True)
         sample = rb.sample()
-        assert sample["action_tokens"].dtype == torch.long
-        assert (sample["action_tokens"] < 16).all()
+        assert sample[ACTION_TOKENS_KEY].dtype == torch.long
+        assert (sample[ACTION_TOKENS_KEY] < 16).all()
 
     def test_transform_inverse(self):
         # forward encodes, inv decodes (within half a bin)
@@ -2641,11 +3164,13 @@ class TestActionTokenizerTransform(TransformBase):
         t = ActionTokenizerTransform(tok)
         action = torch.tensor([[-0.5, 0.25, 0.5]])
         enc = t(TensorDict({"action": action}, batch_size=[1]))
-        dec = t.inv(TensorDict({"action_tokens": enc["action_tokens"]}, batch_size=[1]))
+        dec = t.inv(
+            TensorDict({ACTION_TOKENS_KEY: enc[ACTION_TOKENS_KEY]}, batch_size=[1])
+        )
         assert (dec["action"] - action).abs().max() <= (2.0 / (2 * 256)) + 1e-5
         # absent tokens: the inverse is a no-op
         td = t.inv(TensorDict({"action": action}, batch_size=[1]))
-        assert "action_tokens" not in td.keys()
+        assert ACTION_TOKENS_KEY not in td.keys(True, True)
 
     # ActionTokenizerTransform-specific tests
     def test_decode_via_tokenizer(self):
@@ -2654,7 +3179,7 @@ class TestActionTokenizerTransform(TransformBase):
         assert t.tokenizer is tok
         action = torch.tensor([[-0.5, 0.25, 0.5]])
         td = t(TensorDict({"action": action}, batch_size=[1]))
-        recon = t.tokenizer.decode(td["action_tokens"])
+        recon = t.tokenizer.decode(td[ACTION_TOKENS_KEY])
         assert (recon - action).abs().max() <= (2.0 / (2 * 256)) + 1e-5
 
     def test_nested_keys_and_chunk(self):
@@ -2694,12 +3219,25 @@ class TestActionTokenizerTransform(TransformBase):
         env = self._env()
         td = env.reset()
         td["action"] = torch.zeros(7)
-        with pytest.raises(KeyError, match="action_tokens"):
+        with pytest.raises(KeyError, match="vla_action.*tokens"):
             env.step(td)
+
+    def test_flat_out_key_compatibility(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok, out_key="action_tokens")
+        td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+        dec = t.inv(TensorDict({"action_tokens": td["action_tokens"]}, batch_size=[1]))
+        assert dec["action"].shape == torch.Size([1, 3])
 
     def test_requires_tokenizer(self):
         with pytest.raises(TypeError, match="ActionTokenizerBase"):
             ActionTokenizerTransform(object())
+
+    def test_invalid_mode(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        with pytest.raises(ValueError, match="mode"):
+            ActionTokenizerTransform(tok, mode="invalid")
 
 
 if __name__ == "__main__":

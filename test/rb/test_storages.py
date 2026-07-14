@@ -163,6 +163,50 @@ class TestStorages:
             storage2.get(range(10))
         )
 
+    @staticmethod
+    def _zero_state_dict_tensors(sd):
+        for value in sd.values():
+            if isinstance(value, torch.Tensor):
+                value.zero_()
+            elif isinstance(value, dict):
+                TestStorages._zero_state_dict_tensors(value)
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict"])
+    def test_load_state_dict_decouples_from_source(self, data_type):
+        # loading a state dict onto an uninitialized storage must clone the
+        # incoming tensors: aliasing them keeps e.g. mmap-backed tensors from
+        # torch.load(mmap=True) alive in the storage and leaks later mutations
+        # of the source state dict into the loaded data
+        if data_type == "tensor":
+            data = self._get_tensor()
+        else:
+            data = self._get_tensordict()
+        storage = TensorStorage(data)
+        sd = storage.state_dict()
+        storage2 = LazyTensorStorage(max_size=data.shape[0])
+        storage2.load_state_dict(sd)
+        before = storage2.get(range(10)).clone()
+        self._zero_state_dict_tensors(sd)
+        after = storage2.get(range(10))
+        if data_type == "tensor":
+            assert (after == before).all()
+        else:
+            assert_allclose_td(after, before)
+
+    def test_list_storage_load_state_dict_decouples_from_source(self):
+        storage = ListStorage(10)
+        storage.set(0, torch.randn(3))
+        storage.set(1, TensorDict({"a": torch.randn(3)}, [3]))
+        sd = storage.state_dict()
+        storage2 = ListStorage(10)
+        storage2.load_state_dict(sd)
+        before_tensor = storage2.get(0).clone()
+        before_td = storage2.get(1).clone()
+        sd["_storage"][0].zero_()
+        self._zero_state_dict_tensors(sd["_storage"][1])
+        assert (storage2.get(0) == before_tensor).all()
+        assert_allclose_td(storage2.get(1), before_td)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(),
@@ -870,6 +914,18 @@ class TestSharedStorageInit:
         assert expected.issubset(values)
         assert len(storage) >= 8
 
+    def test_shared_init_reconciles_non_cpu_device(self):
+        """Shared init installs a CPU memmap backing; a non-cpu storage device
+        must be reconciled (else samplers build indices on the wrong device)."""
+        storage = LazyTensorStorage(max_size=8, device="meta", shared_init=True)
+        rb = ReplayBuffer(storage=storage, batch_size=2)
+        data = TensorDict({"x": torch.arange(4, dtype=torch.float32)}, batch_size=(4,))
+        with pytest.warns(UserWarning, match="cannot be honored"):
+            rb.extend(data)
+        assert torch.device(storage.device).type == "cpu"
+        sample = rb.sample(2)
+        assert sample["x"].device.type == "cpu"
+
     def prioritized_collector_worker(self, rb, worker_id, queue):
         data = TensorDict(
             {
@@ -926,6 +982,18 @@ class TestSharedStorageInit:
         learner_rb.update_tensordict_priority(sample)
         sample = learner_rb.sample()
         assert sample["index"].device.type == "cpu"
+
+
+def test_compressed_storage_checkpointing_releases_staging_memmaps(tmp_path):
+    storage = CompressedListStorage(max_size=4)
+    storage.set(0, TensorDict({"observation": torch.randn(3)}, batch_size=[]))
+
+    checkpoint_path = tmp_path / "checkpoint"
+    storage.dumps(checkpoint_path)
+
+    assert (checkpoint_path / "compressed_data").is_dir()
+    assert (checkpoint_path / "metadata.json").is_file()
+    assert (checkpoint_path / "data_indices.json").is_file()
 
 
 @pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")

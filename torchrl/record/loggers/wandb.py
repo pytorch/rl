@@ -11,7 +11,7 @@ import json
 import os
 import platform
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from tensordict import TensorDictBase
@@ -53,6 +53,8 @@ def _collect_env_metadata() -> dict[str, Any]:
 
 class WandbLogger(Logger):
     """Wrapper for the wandb logger.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.WandbLoggerConfig`.
 
     The keyword arguments are mainly based on the :func:`wandb.init` kwargs.
     See the doc `here <https://docs.wandb.ai/ref/python/init>`__.
@@ -135,6 +137,22 @@ class WandbLogger(Logger):
                 self.experiment.config.update({"env": _collect_env_metadata()})
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "step_registry": dict(self._step_registry),
+            "defined_step_metrics": sorted(self._defined_step_metrics),
+            "defined_metrics": sorted(self._defined_metrics),
+        }
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
+        if "id" in state_dict:
+            self.id = state_dict["id"]
+        self._step_registry.clear()
+        self._step_registry.update(state_dict.get("step_registry", {}))
+        self._defined_step_metrics = set(state_dict.get("defined_step_metrics", ()))
+        self._defined_metrics = set(state_dict.get("defined_metrics", ()))
 
     def _create_experiment(self):
         """Creates a wandb experiment.
@@ -308,6 +326,9 @@ class WandbLogger(Logger):
             step: Optional step value for all metrics.
             keys_sep: Separator used to flatten nested TensorDict keys into strings.
                 Defaults to "/". Only used for TensorDict inputs.
+            override_global_step: If ``True``, bypasses per-group step injection
+                and forwards ``step`` to wandb's global ``step`` argument.
+                Defaults to ``False``.
 
         Returns:
             The converted metrics dictionary (with tensors converted to Python types).

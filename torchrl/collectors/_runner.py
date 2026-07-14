@@ -23,6 +23,7 @@ from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
     _map_to_cpu_if_needed,
+    _maybe_normalize_replay_buffer_tensordict_device,
     _TrajectoryPool,
 )
 from torchrl.data import ReplayBuffer
@@ -246,11 +247,33 @@ def _main_async_collector(
                     run_free = False
                 if msg == "pause":
                     queue_out.put((idx, "paused"), timeout=_TIMEOUT)
-                    while not pipe_child.poll(1e-2):
-                        continue
-                    data_in, msg = pipe_child.recv()
-                    if msg != "restart":
-                        raise RuntimeError(f"Expected msg='restart', got {msg=}")
+                    while True:
+                        while not pipe_child.poll(1e-2):
+                            continue
+                        data_in, msg = pipe_child.recv()
+                        if msg == "restart":
+                            break
+                        if msg == "cascade_execute":
+                            attr_path, args, kwargs = data_in
+                            try:
+                                result = inner_collector.cascade_execute(
+                                    attr_path, *args, **kwargs
+                                )
+                                pipe_child.send((result, "cascade_execute"))
+                            except Exception as err:
+                                pipe_child.send((err, "cascade_execute"))
+                            continue
+                        if msg == "get_distant_attr":
+                            try:
+                                result = inner_collector.get_distant_attr(data_in)
+                                pipe_child.send((result, "get_distant_attr"))
+                            except Exception as err:
+                                pipe_child.send((err, "get_distant_attr"))
+                            continue
+                        raise RuntimeError(
+                            "Expected a paused-worker control message or "
+                            f"msg='restart', got {msg=}."
+                        )
                     msg = "continue"
             else:
                 data_in = None
@@ -313,6 +336,9 @@ def _main_async_collector(
             if replay_buffer is not None:
                 if extend_buffer and next_data is not None:
                     next_data.names = None
+                    next_data = _maybe_normalize_replay_buffer_tensordict_device(
+                        next_data, replay_buffer
+                    )
                     replay_buffer.extend(next_data)
 
                 if run_free:

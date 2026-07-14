@@ -93,6 +93,13 @@ We actively welcome your pull requests.
 
 When submitting a PR, we encourage you to link it to the related issue (if any) and add some tags to it.
 
+The health of the CI is tracked on public dashboards:
+[CI timing](https://pytorch.github.io/rl/ci-timing/) (wall-clock trend of each
+workflow), [flaky tests](https://pytorch.github.io/rl/flaky/) and
+[benchmarks](https://pytorch.github.io/rl/dev/bench/). They can help you tell
+apart a slowdown or failure introduced by your PR from one that ships with
+`main`.
+
 ## Contributor License Agreement ("CLA")
 In order to accept your pull request, we need you to submit a CLA. You only need
 to do this once to work on any of Facebook's open source projects.
