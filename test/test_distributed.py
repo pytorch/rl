@@ -47,6 +47,7 @@ from torchrl.data import (
 from torchrl.distributed import DataParallelContext
 from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
+from torchrl.objectives import LossModule
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
     snapshot_python_processes,
@@ -85,7 +86,7 @@ class CountingPolicy(TensorDictModuleBase):
         return tensordict
 
 
-class _RayLearnerLoss(nn.Module):
+class _RayLearnerLoss(LossModule):
     def __init__(self):
         super().__init__()
         self.linear = nn.Linear(1, 1)
