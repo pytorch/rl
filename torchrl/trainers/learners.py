@@ -4,10 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 """Learner execution and its control-plane protocol.
 
-The learner data plane is intentionally small: replay samples, loss metrics, and
-model parameters are :class:`~tensordict.TensorDictBase` objects. The four
-frozen dataclasses in this module belong to the lower-volume control plane and
-mark four different boundaries:
+The learner data plane represents replay samples, loss metrics, and model
+parameters as :class:`~tensordict.TensorDictBase` objects. The four frozen
+dataclasses in this module carry lower-volume control-plane messages across four
+different boundaries:
 
 #. :class:`LearnerContext` is created once when a group starts a rank and injects
    actor-local resources into the learner factory.
@@ -124,8 +124,8 @@ class LearnerStepRequest:
 
     A request object is used instead of three loose ``step`` arguments so the
     command has one serialization and validation boundary and can be logged as a
-    unit when a Ray generation fails. It does not include learner state, metrics,
-    or weights because those flow in the opposite direction.
+    unit when a Ray generation fails. Learner state, metrics, and weights flow
+    back through their dedicated result and snapshot records.
 
     Args:
         round_id (int): Consecutive controller-assigned round, starting at one.
@@ -264,10 +264,11 @@ class _ReplayBatchSource:
 class Learner:
     """Actor-local owner of optimization state and bounded update commands.
 
-    A learner is deliberately not a :class:`~torchrl.trainers.Trainer`: it owns
-    model optimization, replay sampling, target updates, and RNG state, but it
-    does not collect data, log a run, decide when to stop, or own shared service
-    lifecycles.
+    A learner executes bounded optimization commands inside one process. It owns
+    model optimization, replay sampling, target updates, and RNG state. A
+    :class:`~torchrl.trainers.LearnerGroup` coordinates one or more learners,
+    while a :class:`~torchrl.trainers.Trainer` schedules group commands alongside
+    collection, logging, stopping, and shared-service lifecycle management.
 
     Args:
         loss_module (nn.Module): Actor-local loss module.
