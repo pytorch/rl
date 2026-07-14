@@ -197,9 +197,22 @@ class RayLearnerGroup(LearnerGroup):
             not already initialized. Group teardown never calls ``ray.shutdown``.
 
     Example:
+        A controller starts the gang, issues one global-batch command to every
+        rank, and always tears the generation down as one unit:
+
+        >>> from torchrl.trainers import LearnerStepRequest
         >>> from torchrl.trainers.distributed import RayLearnerGroup
-        >>> RayLearnerGroup.__name__
-        'RayLearnerGroup'
+        >>> def run_one_round(learner_factory, replay_client):
+        ...     group = RayLearnerGroup(
+        ...         learner_factory,
+        ...         replay_client,
+        ...         world_size=2,
+        ...         global_batch_size=256,
+        ...     ).start()
+        ...     try:
+        ...         return group.step(LearnerStepRequest(1, 1, 256))
+        ...     finally:
+        ...         group.shutdown()
     """
 
     def __init__(

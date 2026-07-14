@@ -40,20 +40,27 @@ class LearnerContext:
         seed (int, optional): Rank-specific seed.
 
     Example:
+        A learner factory consumes the actor-local context instead of creating
+        process groups or replay clients itself:
+
         >>> import torch
-        >>> from torchrl.distributed import DataParallelContext
-        >>> from torchrl.trainers import LearnerContext
-        >>> context = LearnerContext(
-        ...     rank=0,
-        ...     local_rank=0,
-        ...     world_size=1,
-        ...     device=torch.device("cpu"),
-        ...     generation=0,
-        ...     replay_buffer=None,
-        ...     data_parallel_context=DataParallelContext(device="cpu"),
-        ... )
-        >>> context.rank
-        0
+        >>> from tensordict import TensorDict
+        >>> from torchrl.trainers import Learner
+        >>> class Loss(torch.nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.weight = torch.nn.Parameter(torch.ones(()))
+        ...     def forward(self, batch):
+        ...         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
+        >>> def make_learner(context):
+        ...     loss = Loss().to(context.device)
+        ...     optimizer = torch.optim.SGD(loss.parameters(), lr=0.1)
+        ...     return Learner(
+        ...         loss,
+        ...         context.replay_buffer,
+        ...         optimizer=optimizer,
+        ...         data_parallel_context=context.data_parallel_context,
+        ...     )
     """
 
     rank: int
@@ -76,10 +83,17 @@ class LearnerStepRequest:
         global_batch_size (int): Batch size across all ranks.
 
     Example:
+        Controller code uses the group's current state to issue the next
+        consecutive, global-batch command:
+
         >>> from torchrl.trainers import LearnerStepRequest
-        >>> request = LearnerStepRequest(1, 2, 64)
-        >>> request.num_steps
-        2
+        >>> def run_two_updates(group):
+        ...     request = LearnerStepRequest(
+        ...         round_id=group.last_round + 1,
+        ...         num_steps=2,
+        ...         global_batch_size=group.global_batch_size,
+        ...     )
+        ...     return group.step(request)
     """
 
     round_id: int
@@ -111,11 +125,17 @@ class LearnerStepResult:
         metrics (TensorDictBase): Detached CPU scalar metrics.
 
     Example:
-        >>> from tensordict import TensorDict
-        >>> from torchrl.trainers import LearnerStepResult
-        >>> result = LearnerStepResult(1, 1, 1, TensorDict({"loss": 1.0}, []))
-        >>> result.model_version
-        1
+        A controller applies a completed result to its authoritative counters
+        and logging state:
+
+        >>> def record_result(result, controller_state):
+        ...     expected_round = controller_state["round"] + 1
+        ...     if result.round_id != expected_round:
+        ...         raise RuntimeError("learner rounds must be consecutive")
+        ...     controller_state["round"] = result.round_id
+        ...     controller_state["optim_steps"] += result.optim_steps
+        ...     controller_state["model_version"] = result.model_version
+        ...     controller_state["metrics"] = result.metrics.to_dict()
     """
 
     round_id: int
@@ -134,11 +154,12 @@ class LearnerWeights:
         weights (TensorDictBase): Detached CPU weights.
 
     Example:
-        >>> from tensordict import TensorDict
-        >>> from torchrl.trainers import LearnerWeights
-        >>> snapshot = LearnerWeights("policy", 3, TensorDict({}, []))
-        >>> snapshot.model_id
-        'policy'
+        Weight publication passes the serialized snapshot to the collector and
+        records the version that workers received:
+
+        >>> def publish_weights(collector, snapshot):
+        ...     collector.update_policy_weights_(snapshot.weights)
+        ...     return snapshot.model_version
     """
 
     model_id: str
@@ -216,8 +237,12 @@ class Learner:
         ...     optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
         ... )
         >>> _ = learner.initialize()
-        >>> learner.step(LearnerStepRequest(1, 1, 2)).model_version
-        1
+        >>> weight_before = loss.weight.detach().clone()
+        >>> result = learner.step(LearnerStepRequest(1, 1, 2))
+        >>> result.metrics["loss"].item()
+        1.0
+        >>> bool(loss.weight < weight_before)
+        True
     """
 
     def __init__(
@@ -516,9 +541,21 @@ class LearnerGroup(abc.ABC):
     """Collective-safety boundary for one or more synchronized learners.
 
     Example:
-        >>> from torchrl.trainers import LearnerGroup
-        >>> isinstance(LearnerGroup, type)
-        True
+        A backend-neutral controller can command either a local or Ray group,
+        then publish the matching versioned weights:
+
+        >>> from torchrl.trainers import LearnerStepRequest
+        >>> def optimize_and_publish(group, collector):
+        ...     result = group.step(
+        ...         LearnerStepRequest(
+        ...             group.last_round + 1, 1, group.global_batch_size
+        ...         )
+        ...     )
+        ...     snapshot = group.get_weights()
+        ...     if snapshot.model_version != result.model_version:
+        ...         raise RuntimeError("stale learner weights")
+        ...     collector.update_policy_weights_(snapshot.weights)
+        ...     return result.metrics
     """
 
     @abc.abstractmethod
@@ -581,7 +618,9 @@ class LocalLearnerGroup(LearnerGroup):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-        >>> from torchrl.trainers import Learner, LocalLearnerGroup
+        >>> from torchrl.trainers import (
+        ...     Learner, LearnerStepRequest, LocalLearnerGroup
+        ... )
         >>> replay = TensorDictReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
         >>> _ = replay.extend(TensorDict({"x": torch.ones(4, 1)}, [4]))
         >>> class Loss(torch.nn.Module):
@@ -596,8 +635,12 @@ class LocalLearnerGroup(LearnerGroup):
         ...                    optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
         ...                    data_parallel_context=context.data_parallel_context)
         >>> group = LocalLearnerGroup(make_learner, replay, global_batch_size=2).start()
-        >>> group.is_alive
-        True
+        >>> result = group.step(LearnerStepRequest(1, 2, 2))
+        >>> result.optim_steps
+        2
+        >>> torch.testing.assert_close(
+        ...     group.get_weights().weights["weight"], torch.tensor(0.8)
+        ... )
         >>> group.shutdown()
     """
 
