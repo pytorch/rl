@@ -50,6 +50,8 @@ class TD3OptimizationStepper(OptimizationStepper):
         the critic update using TD error from ``value_loss``.
     """
 
+    supports_data_parallel = True
+
     def __init__(
         self,
         optimizer_actor: optim.Optimizer,
@@ -98,6 +100,7 @@ class TD3OptimizationStepper(OptimizationStepper):
 
         q_loss, q_metadata = trainer.loss_module.value_loss(sub_batch)
         q_loss.backward()
+        trainer.sync_gradients(self.optimizer_critic)
 
         critic_params = list(self._params(self.optimizer_critic))
         if clip_grad_norm and clip_norm is not None:
@@ -112,6 +115,7 @@ class TD3OptimizationStepper(OptimizationStepper):
         if do_actor:
             actor_loss, *_ = trainer.loss_module.actor_loss(sub_batch)
             actor_loss.backward()
+            trainer.sync_gradients(self.optimizer_actor)
 
             actor_params = list(self._params(self.optimizer_actor))
             if clip_grad_norm and clip_norm is not None:

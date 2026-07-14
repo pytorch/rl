@@ -42,15 +42,20 @@ from torchrl.data import (
     ReplayBuffer,
     RoundRobinWriter,
     SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
 )
+from torchrl.distributed import DataParallelContext
 from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
+from torchrl.objectives import LossModule
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
     snapshot_python_processes,
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+from torchrl.trainers import Learner, Trainer
+from torchrl.trainers.distributed import RayLearnerGroup
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -79,6 +84,65 @@ class CountingPolicy(TensorDictModuleBase):
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
         return tensordict
+
+
+class _RayLearnerLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(1, 1)
+
+    def forward(self, batch):
+        return TensorDict(
+            {"loss": (self.linear(batch["x"]) - batch["y"]).square().mean()}, []
+        )
+
+
+def _make_ray_test_learner(replay_buffer, data_parallel_context):
+    loss = _RayLearnerLoss().to(data_parallel_context.device)
+    return Learner(
+        loss,
+        replay_buffer,
+        optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
+        data_parallel_context=data_parallel_context,
+        models={"policy": loss.linear},
+    )
+
+
+class _RayCheckpointCollector:
+    frames_per_batch = 8
+    init_random_frames = 0
+
+    def __init__(self):
+        self.state_value = 0
+        self.collected_frames = 0
+
+    def state_dict(self):
+        return {"state_value": self.state_value}
+
+    def load_state_dict(self, state_dict):
+        self.state_value = state_dict["state_value"]
+
+    def update_policy_weights_(self, weights):
+        del weights
+
+    def shutdown(self):
+        pass
+
+
+class _FailingRayLearnerLoss(_RayLearnerLoss):
+    def forward(self, batch):
+        raise RuntimeError("intentional learner failure")
+
+
+def _make_failing_ray_test_learner(replay_buffer, data_parallel_context):
+    loss = _FailingRayLearnerLoss().to(data_parallel_context.device)
+    return Learner(
+        loss,
+        replay_buffer,
+        optimizer=torch.optim.SGD(loss.parameters(), lr=0.05),
+        data_parallel_context=data_parallel_context,
+        models={"policy": loss.linear},
+    )
 
 
 class DistributedCollectorBase:
@@ -924,6 +988,47 @@ class TestRayCollector(DistributedCollectorBase):
         finally:
             rb.close()
 
+    def test_background_pause_drains_writes_and_resumes(self):
+        env = ContinuousActionVecMockEnv
+        policy = RandomPolicy(env().action_spec)
+        replay_buffer = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 1000),
+            batch_size=16,
+            remote_config={"num_cpus": 0},
+        )
+        collector = RayCollector(
+            [env, env],
+            policy,
+            total_frames=100_000,
+            frames_per_batch=16,
+            sync=False,
+            replay_buffer=replay_buffer,
+            **self.distributed_kwargs(),
+        )
+        try:
+            collector.start()
+            deadline = time.monotonic() + 30
+            while replay_buffer.write_count == 0 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert replay_buffer.write_count > 0
+
+            with collector.pause(timeout=30):
+                paused_count = replay_buffer.write_count
+                time.sleep(0.2)
+                assert replay_buffer.write_count == paused_count
+
+            deadline = time.monotonic() + 30
+            while (
+                replay_buffer.write_count == paused_count
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            assert replay_buffer.write_count > paused_count
+        finally:
+            collector.shutdown()
+            replay_buffer.shutdown()
+
     # class CustomCollectorCls(Collector):
     #     def __init__(self, create_env_fn, **kwargs):
     #         policy = lambda td: td.set("action", torch.full(td.shape, 2))
@@ -1035,6 +1140,397 @@ class TestRayTrajsPerBatch:
                 ray_init_config=ray_init_config,
                 remote_configs=remote_configs,
             )
+
+
+class _GradientSyncTestModule(nn.Module):
+    def __init__(self, rank: int = 0):
+        super().__init__()
+        self.weight = nn.Parameter(torch.tensor([0.25, -0.5]) + 10 * rank)
+        self.bias = nn.Parameter(torch.tensor(0.125 + 10 * rank))
+        self.rank_only = nn.Parameter(torch.tensor(-0.75 + 10 * rank))
+        self.never_used = nn.Parameter(torch.tensor(3.0 + 10 * rank))
+
+    def forward(self, value, *, use_rank_only: bool):
+        result = value @ self.weight + self.bias
+        if use_rank_only:
+            result = result + value[:, 0] * self.rank_only
+        return result
+
+
+def _gradient_sync_data(rank):
+    if rank == 0:
+        return (
+            torch.tensor([[1.0, 2.0], [-1.0, 0.5]]),
+            torch.tensor([0.4, -0.2]),
+        )
+    return (
+        torch.tensor([[0.3, -0.7], [2.0, 1.0]]),
+        torch.tensor([0.1, 1.5]),
+    )
+
+
+def _gloo_gradient_sync_worker(rank, world_size, init_method, output_dir):
+    dist.init_process_group(
+        "gloo",
+        init_method=init_method,
+        rank=rank,
+        world_size=world_size,
+    )
+    try:
+        context = DataParallelContext.from_process_group(device="cpu", local_rank=rank)
+        module = _GradientSyncTestModule(rank)
+        context.broadcast_module(module)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.05)
+        value, target = _gradient_sync_data(rank)
+        loss = (module(value, use_rank_only=rank == 0) - target).square().mean()
+        loss.backward()
+        if rank == 0:
+            assert module.rank_only.grad is not None
+        else:
+            assert module.rank_only.grad is None
+        assert module.never_used.grad is None
+        context.sync_gradients(optimizer)
+        assert module.rank_only.grad is not None
+        assert module.never_used.grad is None
+        optimizer.step()
+        torch.save(module.state_dict(), os.path.join(output_dir, f"rank-{rank}.pt"))
+        context.close()
+        context.close()
+        assert dist.is_initialized()
+    finally:
+        dist.destroy_process_group()
+
+
+def _nccl_gradient_sync_worker(rank, world_size, init_method, output_dir):
+    torch.cuda.set_device(rank)
+    dist.init_process_group(
+        "nccl",
+        init_method=init_method,
+        rank=rank,
+        world_size=world_size,
+    )
+    try:
+        context = DataParallelContext.from_process_group(
+            device=torch.device("cuda", rank), local_rank=rank
+        )
+        module = nn.Linear(2, 1).to(context.device)
+        with torch.no_grad():
+            module.weight.fill_(rank + 1.0)
+            module.bias.fill_(rank + 2.0)
+        context.broadcast_module(module)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        module(torch.full((2, 2), rank + 1.0, device=context.device)).sum().backward()
+        context.sync_gradients(optimizer)
+        optimizer.step()
+        torch.save(
+            {key: value.cpu() for key, value in module.state_dict().items()},
+            os.path.join(output_dir, f"nccl-rank-{rank}.pt"),
+        )
+        context.close()
+    finally:
+        dist.destroy_process_group()
+
+
+def _torchrun_context_worker(rank, world_size, init_method, output_dir):
+    os.environ["RANK"] = str(rank)
+    os.environ["LOCAL_RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+    context = DataParallelContext.from_torchrun(
+        backend="gloo", device="cpu", init_method=init_method
+    )
+    assert dist.is_initialized()
+    assert context.rank == rank
+    assert context.local_rank == rank
+    assert context.world_size == world_size
+    context.barrier()
+    context.close()
+    context.close()
+    assert not dist.is_initialized()
+    torch.save(True, os.path.join(output_dir, f"torchrun-rank-{rank}.pt"))
+
+
+@pytest.mark.skipif(
+    not _has_ray, reason="Ray not found. Ray may be badly configured or not installed."
+)
+class TestRayLearnerGroup:
+    @pytest.fixture(autouse=True)
+    def start_ray(self):
+        import ray
+
+        ray.shutdown()
+        ray.init(
+            num_cpus=4,
+            include_dashboard=False,
+            runtime_env={
+                "working_dir": os.path.dirname(__file__),
+                "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            },
+        )
+        yield
+        ray.shutdown()
+
+    @staticmethod
+    def _make_replay_buffer():
+        replay_buffer = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=LazyTensorStorage(64),
+            batch_size=8,
+        )
+        replay_buffer.extend(
+            TensorDict({"x": torch.ones(64, 1), "y": torch.zeros(64, 1)}, [64])
+        )
+        return replay_buffer
+
+    @staticmethod
+    def _make_group(
+        replay_buffer, factory=_make_ray_test_learner, *, num_gpus: float = 0
+    ):
+        return RayLearnerGroup(
+            factory,
+            replay_buffer.client(),
+            world_size=2,
+            global_batch_size=8,
+            resources_per_rank={"num_cpus": 1, "num_gpus": num_gpus},
+            setup_timeout=60,
+            command_timeout=60,
+            seed=0,
+        )
+
+    def test_gloo_step_matches_global_batch_and_restores(self):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer).start()
+        try:
+            metrics = group.step()
+            assert group.last_round == 1
+            assert group.model_version == 1
+            assert metrics.device == torch.device("cpu")
+
+            torch.manual_seed(0)
+            reference = _RayLearnerLoss()
+            optimizer = torch.optim.SGD(reference.parameters(), lr=0.05)
+            batch = TensorDict({"x": torch.ones(8, 1), "y": torch.zeros(8, 1)}, [8])
+            reference(batch)["loss"].backward()
+            optimizer.step()
+            expected = TensorDict.from_module(reference.linear)
+            actual = group.get_weights(expected_version=group.model_version)
+            for key in expected.keys(True, True):
+                torch.testing.assert_close(actual.get(key), expected.get(key))
+
+            state = group.state_dict()
+            assert len(state["rng_by_rank"]) == 2
+            group.shutdown()
+            group.shutdown()
+
+            restored = self._make_group(replay_buffer).start()
+            restored.load_state_dict(state)
+            restored.step()
+            assert restored.model_version == 2
+            restored.shutdown()
+            assert replay_buffer.is_alive
+            import ray
+
+            assert ray.is_initialized()
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+    def test_controller_checkpoint_restores_new_generation(self, tmp_path):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer).start()
+        collector = _RayCheckpointCollector()
+        checkpoint_root = tmp_path / "ray-checkpoints"
+        try:
+            group.step()
+            trainer = Trainer(
+                collector=collector,
+                total_frames=64,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                optimizer=None,
+                learner_group=group,
+                replay_buffer=replay_buffer,
+                progress_bar=False,
+                save_trainer_file=checkpoint_root,
+            )
+            trainer.collected_frames = 8
+            trainer._optim_count = 1
+            trainer._learner_round = group.last_round
+            trainer._published_model_version = group.model_version
+            collector.state_value = 17
+            trainer._save_distributed_checkpoint()
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+        restored_replay = self._make_replay_buffer()
+        restored_group = self._make_group(restored_replay)
+        restored_collector = _RayCheckpointCollector()
+        try:
+            restored = Trainer(
+                collector=restored_collector,
+                total_frames=64,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                optimizer=None,
+                learner_group=restored_group,
+                replay_buffer=restored_replay,
+                progress_bar=False,
+            ).load_from_file(checkpoint_root)
+            assert restored._learner_round == 1
+            assert restored._optim_count == 1
+            assert restored_group.model_version == 1
+            assert restored_collector.state_value == 17
+            assert len(restored_replay) == 64
+            restored_group.step()
+            assert restored_group.model_version == 2
+        finally:
+            restored_group.shutdown()
+            restored_replay.close()
+
+    def test_rank_failure_invalidates_the_group_only(self):
+        import ray
+
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer, _make_failing_ray_test_learner).start()
+        try:
+            with pytest.raises(RuntimeError, match="generation=1, round=1") as error:
+                group.step()
+            assert isinstance(error.value.__cause__, Exception)
+            assert not group.is_alive
+            assert replay_buffer.is_alive
+            assert ray.is_initialized()
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(
+        torch.cuda.device_count() < 2, reason="two CUDA devices are required"
+    )
+    def test_nccl_smoke(self):
+        replay_buffer = self._make_replay_buffer()
+        group = self._make_group(replay_buffer, num_gpus=1).start()
+        try:
+            group.step()
+            assert group.model_version == 1
+        finally:
+            group.shutdown()
+            replay_buffer.close()
+
+
+class TestDataParallelContext:
+    @pytest.fixture(autouse=True)
+    def reset_process_group(self):
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        yield
+        if dist.is_initialized():
+            dist.destroy_process_group()
+
+    def test_from_rendezvous_single_process(self):
+        context = DataParallelContext.from_rendezvous(
+            rank=0,
+            world_size=1,
+            local_rank=0,
+            device="cpu",
+            backend="gloo",
+            init_method="tcp://127.0.0.1:29500",
+        )
+        assert context.rank == 0
+        assert context.device == torch.device("cpu")
+        context.close()
+
+    def test_from_torchrun_single_process(self, monkeypatch):
+        monkeypatch.setenv("RANK", "0")
+        monkeypatch.setenv("LOCAL_RANK", "3")
+        monkeypatch.setenv("WORLD_SIZE", "1")
+        context = DataParallelContext.from_torchrun(device="cpu")
+        assert context.rank == 0
+        assert context.local_rank == 3
+        assert context.world_size == 1
+        assert context.device == torch.device("cpu")
+        assert context.is_rank_zero
+        context.barrier()
+        context.close()
+        context.close()
+        assert context.is_closed
+        with pytest.raises(RuntimeError, match="closed"):
+            context.barrier()
+
+    def test_from_torchrun_requires_environment(self, monkeypatch):
+        monkeypatch.delenv("RANK", raising=False)
+        monkeypatch.delenv("WORLD_SIZE", raising=False)
+        with pytest.raises(RuntimeError, match="RANK is not set"):
+            DataParallelContext.from_torchrun(device="cpu")
+
+    def test_sparse_gradients_fail_explicitly(self):
+        module = nn.Embedding(4, 2, sparse=True)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        module(torch.tensor([0, 1])).sum().backward()
+        with pytest.raises(RuntimeError, match="sparse or non-strided"):
+            DataParallelContext().sync_gradients(optimizer)
+
+    def test_gloo_updates_match_global_batch_reference(self, tmp_path):
+        init_path = tmp_path / "gloo-init"
+        init_method = f"file://{init_path}"
+        mp.spawn(
+            _gloo_gradient_sync_worker,
+            args=(2, init_method, str(tmp_path)),
+            nprocs=2,
+            join=True,
+        )
+
+        reference = _GradientSyncTestModule(rank=0)
+        optimizer = torch.optim.SGD(reference.parameters(), lr=0.05)
+        loss_sum = 0.0
+        for rank in range(2):
+            value, target = _gradient_sync_data(rank)
+            loss_sum = (
+                loss_sum
+                + (reference(value, use_rank_only=rank == 0) - target).square().sum()
+            )
+        (loss_sum / 4).backward()
+        optimizer.step()
+
+        reference_state = reference.state_dict()
+        rank_states = [torch.load(tmp_path / f"rank-{rank}.pt") for rank in range(2)]
+        for rank_state in rank_states:
+            for key, expected in reference_state.items():
+                torch.testing.assert_close(rank_state[key], expected)
+        for key in reference_state:
+            torch.testing.assert_close(rank_states[0][key], rank_states[1][key])
+
+    def test_from_torchrun_initializes_and_owns_group(self, tmp_path):
+        init_path = tmp_path / "torchrun-init"
+        mp.spawn(
+            _torchrun_context_worker,
+            args=(2, f"file://{init_path}", str(tmp_path)),
+            nprocs=2,
+            join=True,
+        )
+        for rank in range(2):
+            assert torch.load(tmp_path / f"torchrun-rank-{rank}.pt")
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(
+        torch.cuda.device_count() < 2, reason="two CUDA devices are required"
+    )
+    def test_nccl_smoke(self, tmp_path):
+        init_path = tmp_path / "nccl-init"
+        init_method = f"file://{init_path}"
+        mp.spawn(
+            _nccl_gradient_sync_worker,
+            args=(2, init_method, str(tmp_path)),
+            nprocs=2,
+            join=True,
+        )
+        rank_states = [
+            torch.load(tmp_path / f"nccl-rank-{rank}.pt") for rank in range(2)
+        ]
+        for key in rank_states[0]:
+            torch.testing.assert_close(rank_states[0][key], rank_states[1][key])
 
 
 if __name__ == "__main__":

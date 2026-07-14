@@ -15,6 +15,7 @@ from torchrl.data import (
     LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
+    RayReplayBuffer,
     ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
@@ -27,6 +28,9 @@ from torchrl.data.replay_buffers import (
     SliceSampler,
 )
 from torchrl.envs.transforms import ActionChunkTransform, CatFrames
+from torchrl.objectives import LossModule
+from torchrl.trainers import Learner
+from torchrl.trainers.distributed import RayLearnerGroup
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
     TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9
@@ -80,6 +84,96 @@ def test_replay_buffer_direct_client_identity(benchmark):
     replay_buffer = ReplayBuffer(storage=ListStorage(1))
     client = benchmark(replay_buffer.client)
     assert client is replay_buffer
+
+
+@pytest.mark.parametrize("rank_aware", [False, True])
+def test_ray_replay_buffer_rank_aware_sample(benchmark, rank_aware):
+    ray = pytest.importorskip("ray")
+    ray.shutdown()
+    ray.init(num_cpus=1)
+    replay_buffer = RayReplayBuffer(
+        storage=functools.partial(LazyTensorStorage, 4096),
+        batch_size=256 if rank_aware else 128,
+        remote_config={"num_cpus": 0},
+    )
+    try:
+        replay_buffer.extend(torch.arange(4096))
+        client = replay_buffer.client()
+        if rank_aware:
+            client = client.data_parallel(rank=0, world_size=2)
+        benchmark.pedantic(client.sample, iterations=1, rounds=20)
+    finally:
+        replay_buffer.close()
+        ray.shutdown()
+
+
+class _BenchmarkLearnerLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.ones(()))
+
+    def forward(self, batch):
+        return TensorDict(
+            {"loss": (self.weight * batch["x"] - batch["y"]).square().mean()}, []
+        )
+
+
+def _make_benchmark_learner(replay_buffer, data_parallel_context):
+    loss_module = _BenchmarkLearnerLoss().to(data_parallel_context.device)
+    return Learner(
+        loss_module,
+        replay_buffer,
+        optimizer=torch.optim.SGD(loss_module.parameters(), lr=1e-3),
+        data_parallel_context=data_parallel_context,
+        update_replay_priority=False,
+    )
+
+
+@pytest.mark.parametrize("world_size", [1, 2])
+def test_ray_learner_group_update_throughput(benchmark, world_size):
+    ray = pytest.importorskip("ray")
+    ray.shutdown()
+    benchmark_dir = os.path.dirname(__file__)
+    ray.init(
+        num_cpus=world_size + 1,
+        include_dashboard=False,
+        runtime_env={
+            "working_dir": benchmark_dir,
+            "env_vars": {"PYTHONPATH": benchmark_dir},
+        },
+    )
+    replay_buffer = RayReplayBuffer(
+        replay_buffer_cls=TensorDictReplayBuffer,
+        storage=functools.partial(LazyTensorStorage, 4096),
+        batch_size=128,
+        remote_config={"num_cpus": 0},
+    )
+    replay_buffer.extend(
+        TensorDict(
+            {"x": torch.randn(4096, 8), "y": torch.randn(4096, 8)},
+            batch_size=[4096],
+        )
+    )
+    learner_group = RayLearnerGroup(
+        _make_benchmark_learner,
+        replay_buffer.client(),
+        world_size=world_size,
+        global_batch_size=128,
+        resources_per_rank={"num_cpus": 1, "num_gpus": 0},
+        setup_timeout=60,
+        command_timeout=60,
+    )
+
+    def update():
+        return learner_group.step()
+
+    try:
+        learner_group.start()
+        benchmark.pedantic(update, iterations=1, rounds=10)
+    finally:
+        learner_group.shutdown()
+        replay_buffer.shutdown()
+        ray.shutdown()
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):
