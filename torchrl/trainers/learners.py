@@ -436,7 +436,7 @@ class Learner:
 
         self._last_round = request.round_id
         if averaged_metrics is None:
-            averaged_metrics = TensorDict({}, batch_size=[], device="cpu")
+            averaged_metrics = TensorDict(device="cpu")
         return LearnerStepResult(
             round_id=request.round_id,
             optim_steps=request.num_steps,
@@ -517,7 +517,7 @@ class Learner:
                 "OptimizationStepper.step must return TensorDictBase, got "
                 f"{type(metrics).__name__}."
             )
-        result = TensorDict({}, batch_size=[], device="cpu")
+        result = TensorDict(device="cpu")
         for key, value in metrics.items(True, True):
             if not isinstance(value, torch.Tensor):
                 value = torch.as_tensor(value)
