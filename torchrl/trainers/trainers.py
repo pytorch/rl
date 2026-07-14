@@ -178,9 +178,15 @@ class OptimizationContext(Protocol):
     convention.
 
     Example:
-        >>> from torchrl.trainers import OptimizationContext
-        >>> isinstance(OptimizationContext, type)
-        True
+        A custom execution boundary can accept any trainer or learner that
+        implements this protocol while preserving the stepper call contract:
+
+        >>> from torchrl.trainers import (
+        ...     DefaultOptimizationStepper, OptimizationContext
+        ... )
+        >>> def optimize_batch(context: OptimizationContext, batch):
+        ...     stepper = DefaultOptimizationStepper()
+        ...     return stepper.step(context, batch)
     """
 
     loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase]
