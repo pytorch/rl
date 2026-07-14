@@ -27,13 +27,13 @@ independent learner implementations:
   name and version. It is fetched only at publication cadence rather than being
   attached to every optimization result.
 
-A single generic message was deliberately avoided: startup handles are invalid
-in step commands, requested work is not completed work, and carrying weights in
-every result would introduce unnecessary serialization and collectives. Using
-plain dictionaries or keyword arguments would create fewer named classes but
-would remove the typed, atomic boundary checked before and after every Ray
-command. TensorDict remains the data-plane representation for samples, metrics,
-and weights; the dataclasses carry low-volume control metadata and references.
+The records remain separate so each boundary carries only valid data: startup
+handles stay out of step commands, requested work remains distinct from
+completed work, and weights are serialized only when requested. Plain
+dictionaries or keyword arguments would create fewer named classes but would
+remove the typed, atomic boundary checked before and after every Ray command.
+TensorDict remains the data-plane representation for samples, metrics, and
+weights; the dataclasses carry low-volume control metadata and references.
 
 .. autosummary::
     :toctree: generated/
