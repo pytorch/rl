@@ -173,7 +173,7 @@ assert restored_cursor.offset == 7
 temporary_directory.cleanup()
 ```
 
-**Total running time of the script:** (0 minutes 0.028 seconds)
+**Total running time of the script:** (0 minutes 0.024 seconds)
 
 [`Download Jupyter notebook: checkpointing.ipynb`](../_downloads/26cf00cb704350993d9dd3b2a504087b/checkpointing.ipynb)
 
