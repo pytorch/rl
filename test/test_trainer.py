@@ -15,6 +15,7 @@ from collections import OrderedDict
 from copy import deepcopy
 from os import path, walk
 from time import sleep
+from typing import get_type_hints
 
 import pytest
 import torch
@@ -1475,6 +1476,11 @@ class _CountingStepper(OptimizationStepper):
 
 
 class TestOptimizationStepper:
+    def test_released_step_signature(self):
+        signature = inspect.signature(OptimizationStepper.step)
+        assert tuple(signature.parameters) == ("self", "trainer", "sub_batch")
+        assert get_type_hints(OptimizationStepper.step)["trainer"] is Trainer
+
     def _make_trainer(self, loss_module, optimization_stepper=None, optimizer=None):
         trainer = Trainer(
             collector=MockingCollector(),
