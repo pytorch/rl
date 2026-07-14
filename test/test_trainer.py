@@ -1786,6 +1786,15 @@ class TestLearnerGroup:
                 optimizer=torch.optim.SGD(module.parameters(), lr=0.1),
             )
 
+    def test_requires_replay_buffer(self):
+        loss = _LearnerLoss()
+        with pytest.raises(TypeError, match="ReplayBuffer"):
+            Learner(
+                loss,
+                replay_buffer=object(),
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            )
+
     def test_local_group_rounds_metrics_and_state(self):
         replay_buffer = TensorDictReplayBuffer(
             storage=LazyTensorStorage(16), batch_size=4
