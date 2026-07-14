@@ -32,6 +32,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.objectives import LossModule
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import (
     Learner,
@@ -1751,7 +1752,7 @@ class TestDefaultOptimizationStepper:
         assert events == ["sync", "step"]
 
 
-class _LearnerLoss(nn.Module):
+class _LearnerLoss(LossModule):
     def __init__(self):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(()))
@@ -1773,6 +1774,15 @@ class TestLearnerGroup:
             )
 
         return LocalLearnerGroup(learner_factory, replay_buffer, global_batch_size=4)
+
+    def test_requires_loss_module(self):
+        module = nn.Linear(1, 1)
+        with pytest.raises(TypeError, match="torchrl.objectives.LossModule"):
+            Learner(
+                module,
+                replay_buffer=None,
+                optimizer=torch.optim.SGD(module.parameters(), lr=0.1),
+            )
 
     def test_local_group_rounds_metrics_and_state(self):
         replay_buffer = TensorDictReplayBuffer(
