@@ -281,6 +281,7 @@ class GAEConfig(LossConfig):
     value_chunk_size: int | None = None
     num_chunks: int | None = None
     num_chunk: int | None = None
+    value_chunk_dim: int = 0
     shifted_budget: int = 1
     _target_: str = "torchrl.objectives.value.GAE"
     _partial_: bool = False
