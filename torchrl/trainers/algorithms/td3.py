@@ -15,7 +15,6 @@ from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
     LogScalar,
-    OptimizationContext,
     OptimizationStepper,
     ReplayBufferTrainer,
     TargetNetUpdaterHook,
@@ -90,7 +89,7 @@ class TD3OptimizationStepper(OptimizationStepper):
 
     def step(
         self,
-        trainer: OptimizationContext,
+        trainer: Trainer,
         sub_batch: TensorDictBase,
     ) -> TensorDictBase:
         self._update_counter += 1
