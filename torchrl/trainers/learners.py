@@ -2,6 +2,34 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""Learner execution and its control-plane protocol.
+
+The learner data plane is intentionally small: replay samples, loss metrics, and
+model parameters are :class:`~tensordict.TensorDictBase` objects. The four
+frozen dataclasses in this module belong to the lower-volume control plane and
+mark four different boundaries:
+
+#. :class:`LearnerContext` is created once when a group starts a rank and injects
+   actor-local resources into the learner factory.
+#. :class:`LearnerStepRequest` is one immutable optimization command dispatched
+   to every rank.
+#. :class:`LearnerStepResult` is the completion receipt used to validate that
+   every rank completed the same command before controller counters advance.
+#. :class:`LearnerWeights` is requested separately when policy publication is
+   due, coupling a serialized snapshot to the model version that produced it.
+
+These records are separate because their lifetimes and destinations do not
+overlap. A context contains live process-group and replay handles and never
+returns to the controller; a request must remain small; a result must not carry
+model weights on every optimizer step; and a weight snapshot is not itself an
+optimization result. Combining them into one generic record would permit invalid
+states and would make every command pay for fields it cannot use. Plain keyword
+arguments or dictionaries would reduce the class count, but would lose the
+atomic command boundary and typed validation at the Ray serialization boundary.
+``frozen=True`` prevents accidental field rebinding after dispatch; it does not
+claim that referenced services or tensors are deeply immutable.
+"""
+
 from __future__ import annotations
 
 import abc
@@ -27,7 +55,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class LearnerContext:
-    """Actor-local inputs passed to a learner factory.
+    """One-time actor-local dependencies passed to a learner factory.
+
+    A learner group creates one context per rank after it has established the
+    process group and rank-aware replay view. User code receives the context in
+    its factory and uses those already-owned resources to construct trainable
+    state; it should not create or manage the services itself. Bundling these
+    dependencies keeps the factory signature stable across local and Ray groups
+    and prevents distributed setup details from leaking into algorithm code.
+
+    This record exists only during learner construction. It is separate from a
+    :class:`LearnerStepRequest` because it contains live actor-local handles that
+    must never be sent back to the controller with each optimization command.
 
     Args:
         rank (int): Global data-parallel rank.
@@ -75,7 +114,18 @@ class LearnerContext:
 
 @dataclass(frozen=True)
 class LearnerStepRequest:
-    """Bounded optimization command sent to every learner rank.
+    """One atomic optimization command sent to every learner rank.
+
+    The controller constructs one request and the group dispatches the same
+    immutable value to every rank. ``round_id`` and ``global_batch_size`` repeat
+    state known by the group on purpose: each rank validates them before sampling
+    or mutating optimizer state, which rejects stale, reordered, or
+    misconfigured commands before an ambiguous partial step can occur.
+
+    A request object is used instead of three loose ``step`` arguments so the
+    command has one serialization and validation boundary and can be logged as a
+    unit when a Ray generation fails. It does not include learner state, metrics,
+    or weights because those flow in the opposite direction.
 
     Args:
         round_id (int): Consecutive controller-assigned round, starting at one.
@@ -116,7 +166,18 @@ class LearnerStepRequest:
 
 @dataclass(frozen=True)
 class LearnerStepResult:
-    """Result of one learner-group optimization command.
+    """Completion receipt for one learner-group optimization command.
+
+    Every rank produces this receipt after a command. The group first compares
+    round, step count, model version, and metric structure across ranks; only a
+    consistent set is reduced and returned to the controller. The controller can
+    therefore advance authoritative counters without inferring progress from
+    metrics or actor liveness.
+
+    This is separate from :class:`LearnerStepRequest` because a request describes
+    intended work while a result certifies completed work. It is separate from
+    :class:`LearnerWeights` so ordinary optimization rounds return only small
+    scalar metrics instead of serializing the model at every step.
 
     Args:
         round_id (int): Completed controller round.
@@ -146,7 +207,18 @@ class LearnerStepResult:
 
 @dataclass(frozen=True)
 class LearnerWeights:
-    """Versioned model weights exported by rank zero.
+    """Atomic, versioned model snapshot exported for publication.
+
+    A controller requests this record only when collector publication or an
+    explicit inspection is due. Keeping ``model_id``, ``model_version``, and the
+    serialized TensorDict together prevents an unversioned or incorrectly named
+    snapshot from being published after a newer learner round completes.
+
+    Weights are not embedded in :class:`LearnerStepResult`: optimization and
+    publication have different cadences, and FSDP-style extraction may itself be
+    an expensive collective. The metadata remains ordinary Python control data,
+    while ``weights`` stays a TensorDict compatible with TorchRL weight-update
+    schemes.
 
     Args:
         model_id (str): Logical model identifier.
