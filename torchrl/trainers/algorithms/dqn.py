@@ -9,10 +9,11 @@ import pathlib
 import warnings
 
 from collections.abc import Callable
-
 from functools import partial
+from typing import Any, TYPE_CHECKING
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictSequential
 from tensordict.utils import NestedKey
 from torch import optim
 
@@ -32,6 +33,9 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     UTDRHook,
 )
+
+if TYPE_CHECKING:
+    from torchrl.trainers.learners import LearnerGroup
 
 
 class DQNTrainer(Trainer):
@@ -54,7 +58,8 @@ class DQNTrainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable): The DQN loss module or a callable that computes losses.
+        loss_module (LossModule | Callable, optional): The DQN loss module or a callable that
+            computes losses. Must be omitted when ``learner_group`` owns optimization state.
         optimizer (optim.Optimizer, optional): The optimizer for training.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
@@ -94,6 +99,10 @@ class DQNTrainer(Trainer):
             Defaults to ``"action"``.
         observation_key (NestedKey, optional): Key for observations used by logging. Defaults to
             ``"observation"``.
+        learner_group (LearnerGroup, optional): Remotely owned learner group. When provided,
+            replay sampling, loss evaluation, optimization, and target updates run inside learners.
+        learner_poll_interval (float): Controller polling interval while asynchronous collectors
+            populate replay. Defaults to ``0.05`` seconds.
 
     Example:
         >>> from torchrl.collectors import Collector
@@ -134,8 +143,10 @@ class DQNTrainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
         optimizer: optim.Optimizer | None = None,
+        learner_group: LearnerGroup | None = None,
+        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -170,6 +181,14 @@ class DQNTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if learner_group is not None and target_net_updater is not None:
+            raise ValueError(
+                "target_net_updater must be constructed inside remote learners."
+            )
+        if learner_group is not None and mixing_strategy is not None:
+            raise ValueError(
+                "mixing_strategy is not supported by remote DQN learner groups."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -177,6 +196,9 @@ class DQNTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            learner_group=learner_group,
+            replay_buffer=replay_buffer,
+            learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -190,7 +212,6 @@ class DQNTrainer(Trainer):
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
         )
-        self.replay_buffer = replay_buffer
         self.async_collection = async_collection
         self.mixing_strategy = mixing_strategy
         self.done_key = done_key
@@ -202,7 +223,7 @@ class DQNTrainer(Trainer):
         self.action_key = action_key
         self.observation_key = observation_key
 
-        if replay_buffer is not None:
+        if replay_buffer is not None and learner_group is None:
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -217,30 +238,31 @@ class DQNTrainer(Trainer):
             self.register_op("post_loss", rb_trainer.update_priority)
 
         self.target_net_updater = target_net_updater
-        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+        if learner_group is None:
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         self.greedy_module = greedy_module
-        if hasattr(self.loss_module, "value_network"):
-            weights_source = self.loss_module.value_network
-        elif hasattr(self.loss_module, "local_value_network"):
-            weights_source = self.loss_module.local_value_network
-        else:
-            raise AttributeError(
-                "loss_module must expose either `value_network` or `local_value_network` "
-                "to sync policy weights with the collector."
-            )
         if greedy_module is not None:
-            from tensordict.nn import TensorDictSequential
-
-            weights_source = TensorDictSequential(weights_source, greedy_module)
             self._greedy_last_frames = 0
-            self.register_op("post_steps", self._step_greedy)
+        if learner_group is None:
+            if hasattr(self.loss_module, "value_network"):
+                weights_source = self.loss_module.value_network
+            elif hasattr(self.loss_module, "local_value_network"):
+                weights_source = self.loss_module.local_value_network
+            else:
+                raise AttributeError(
+                    "loss_module must expose either `value_network` or "
+                    "`local_value_network` to sync policy weights with the collector."
+                )
+            if greedy_module is not None:
+                weights_source = TensorDictSequential(weights_source, greedy_module)
+                self.register_op("post_steps", self._step_greedy)
 
-        policy_weights_getter = partial(TensorDict.from_module, weights_source)
-        update_weights = UpdateWeights(
-            self.collector, 1, policy_weights_getter=policy_weights_getter
-        )
-        self.register_op("post_steps", update_weights)
+            policy_weights_getter = partial(TensorDict.from_module, weights_source)
+            update_weights = UpdateWeights(
+                self.collector, 1, policy_weights_getter=policy_weights_getter
+            )
+            self.register_op("post_steps", update_weights)
 
         self.enable_logging = enable_logging
         self.log_rewards = log_rewards
@@ -256,8 +278,44 @@ class DQNTrainer(Trainer):
                 )
             self.register_op("batch_process", self._aggregate_agent_rewards)
 
-        if self.enable_logging:
+        if self.enable_logging and learner_group is None:
             self._setup_dqn_logging()
+
+    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
+        if self.greedy_module is None:
+            return weights
+        self._step_greedy()
+        return TensorDict(
+            {
+                "module": TensorDict(
+                    {
+                        "0": weights,
+                        "1": TensorDict.from_module(self.greedy_module),
+                    },
+                    batch_size=[],
+                )
+            },
+            batch_size=[],
+        )
+
+    def _controller_checkpoint_state(self) -> dict[str, Any]:
+        if self.greedy_module is None:
+            return {}
+        return {
+            "greedy_module": self.greedy_module.state_dict(),
+            "greedy_last_frames": self._greedy_last_frames,
+        }
+
+    def _load_controller_checkpoint_state(self, state_dict: dict[str, Any]) -> None:
+        if self.greedy_module is None:
+            if state_dict:
+                raise ValueError(
+                    "Checkpoint contains exploration state but this DQNTrainer "
+                    "has no greedy_module."
+                )
+            return
+        self.greedy_module.load_state_dict(state_dict["greedy_module"])
+        self._greedy_last_frames = int(state_dict["greedy_last_frames"])
 
     def _step_greedy(self):
         """Advance epsilon-greedy annealing by the number of frames collected since last call."""

@@ -11,6 +11,7 @@ import warnings
 from collections.abc import Callable
 
 from functools import partial
+from typing import TYPE_CHECKING
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -31,6 +32,9 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     UTDRHook,
 )
+
+if TYPE_CHECKING:
+    from torchrl.trainers.learners import LearnerGroup
 
 
 class SACTrainer(Trainer):
@@ -56,8 +60,13 @@ class SACTrainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable): The SAC loss module or a callable that computes losses.
+        loss_module (LossModule | Callable, optional): The SAC loss module or a
+            callable that computes losses. Must be omitted when ``learner_group``
+            owns optimization state.
         optimizer (optim.Optimizer, optional): The optimizer for training. If None, must be configured elsewhere.
+        learner_group (LearnerGroup, optional): Remotely owned learner group.
+        learner_poll_interval (float): Controller polling interval while an
+            asynchronous collector populates replay. Defaults to ``0.05``.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
         clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.
@@ -119,8 +128,10 @@ class SACTrainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
         optimizer: optim.Optimizer | None = None,
+        learner_group: LearnerGroup | None = None,
+        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -153,8 +164,13 @@ class SACTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
-        # try to get the action spec
-        self._pass_action_spec_from_collector_to_loss(collector, loss_module)
+        if learner_group is not None and target_net_updater is not None:
+            raise ValueError(
+                "target_net_updater must be constructed inside remote learners."
+            )
+        if learner_group is None:
+            # Try to get the action spec for a driver-owned loss module.
+            self._pass_action_spec_from_collector_to_loss(collector, loss_module)
 
         super().__init__(
             collector=collector,
@@ -163,6 +179,9 @@ class SACTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            learner_group=learner_group,
+            replay_buffer=replay_buffer,
+            learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -181,7 +200,7 @@ class SACTrainer(Trainer):
 
         # Note: SAC can use any sampler type, unlike PPO which requires SamplerWithoutReplacement
 
-        if replay_buffer is not None:
+        if replay_buffer is not None and learner_group is None:
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -195,15 +214,16 @@ class SACTrainer(Trainer):
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
         self.target_net_updater = target_net_updater
-        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+        if learner_group is None:
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
-        policy_weights_getter = partial(
-            TensorDict.from_module, self.loss_module.actor_network
-        )
-        update_weights = UpdateWeights(
-            self.collector, 1, policy_weights_getter=policy_weights_getter
-        )
-        self.register_op("post_steps", update_weights)
+            policy_weights_getter = partial(
+                TensorDict.from_module, self.loss_module.actor_network
+            )
+            update_weights = UpdateWeights(
+                self.collector, 1, policy_weights_getter=policy_weights_getter
+            )
+            self.register_op("post_steps", update_weights)
 
         # Store logging configuration
         self.enable_logging = enable_logging
@@ -217,7 +237,7 @@ class SACTrainer(Trainer):
         self.action_key = action_key
         self.observation_key = observation_key
 
-        if hasattr(self.loss_module, "set_keys"):
+        if learner_group is None and hasattr(self.loss_module, "set_keys"):
             self.loss_module.set_keys(
                 reward=reward_key,
                 done=done_key,
@@ -226,7 +246,7 @@ class SACTrainer(Trainer):
             )
 
         # Set up comprehensive logging for SAC training
-        if self.enable_logging:
+        if self.enable_logging and learner_group is None:
             self._setup_sac_logging()
 
     def _pass_action_spec_from_collector_to_loss(

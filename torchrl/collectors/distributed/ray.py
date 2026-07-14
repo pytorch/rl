@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import threading
+import time
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 import torch
@@ -538,6 +540,12 @@ class RayCollector(BaseCollector):
         self._sync = sync
         self._collection_thread = None
         self._stop_event = threading.Event()
+        self._pause_requested = threading.Event()
+        self._paused_event = threading.Event()
+        self._resume_event = threading.Event()
+        self._resume_event.set()
+        self._pause_lock = threading.Lock()
+        self._pause_depth = 0
 
         if self._sync:
             if frames_per_batch % self.num_collectors != 0:
@@ -1085,7 +1093,9 @@ class RayCollector(BaseCollector):
 
                 self.collected_frames += out_td.numel()
                 yield out_td
+            self._wait_if_paused()
 
+        self._wait_if_paused()
         # Only auto-shutdown if not running in a background thread.
         # When using replay buffer, users should explicitly manage shutdown order.
         if self._collection_thread is None:
@@ -1109,10 +1119,69 @@ class RayCollector(BaseCollector):
             )
         if self._collection_thread is None or not self._collection_thread.is_alive():
             self._stop_event.clear()
+            self._pause_requested.clear()
+            self._paused_event.clear()
+            self._resume_event.set()
             self._collection_thread = threading.Thread(
                 target=self._run_collection_loop, daemon=True
             )
             self._collection_thread.start()
+
+    @contextmanager
+    def pause(self, timeout: float | None = None) -> Iterator[None]:
+        """Pause background collection at a drained replay-write boundary.
+
+        All already-dispatched collection calls finish before this context is
+        entered. Remote collector actors remain alive and collection resumes
+        when the outermost pause context exits.
+
+        Args:
+            timeout (float, optional): Maximum seconds to wait for in-flight
+                collection calls. Defaults to 30 seconds.
+
+        Yields:
+            A quiescent interval in which collector and replay state can be
+            serialized consistently.
+        """
+        thread = self._collection_thread
+        if thread is None or not thread.is_alive():
+            yield
+            return
+
+        timeout = 30.0 if timeout is None else float(timeout)
+        if timeout <= 0:
+            raise ValueError("timeout must be positive.")
+        with self._pause_lock:
+            self._pause_depth += 1
+            first_pause = self._pause_depth == 1
+            if first_pause:
+                self._resume_event.clear()
+                self._pause_requested.set()
+        try:
+            deadline = time.monotonic() + timeout
+            while thread.is_alive() and not self._paused_event.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self._paused_event.wait(min(remaining, 0.05))
+            if thread.is_alive() and not self._paused_event.is_set():
+                raise TimeoutError(
+                    "Timed out waiting for RayCollector to drain in-flight writes."
+                )
+            yield
+        finally:
+            with self._pause_lock:
+                self._pause_depth -= 1
+                if self._pause_depth == 0:
+                    self._pause_requested.clear()
+                    self._resume_event.set()
+
+    def _wait_if_paused(self) -> None:
+        if not self._pause_requested.is_set():
+            return
+        self._paused_event.set()
+        self._resume_event.wait()
+        self._paused_event.clear()
 
     async def async_shutdown(self, shutdown_ray: bool = False):
         """Finishes processes started by the collector during async execution.
@@ -1125,6 +1194,7 @@ class RayCollector(BaseCollector):
 
         """
         self._stop_event.set()
+        self._resume_event.set()
         if self._collection_thread is not None and self._collection_thread.is_alive():
             self._collection_thread.join(timeout=5.0)
         self.stop_remote_collectors()
@@ -1166,13 +1236,39 @@ class RayCollector(BaseCollector):
                 torchrl_logger.debug(f"Updating weights on worker {collector_index}")
                 self.update_policy_weights_(worker_ids=collector_index)
 
-            # Schedule a new collection task
-            future = collector.next.remote()
-            pending_tasks[future] = collector_index
+            if self._pause_requested.is_set():
+                # Other workers may still be collecting. Drain every one before
+                # reporting the pause boundary so replay cannot mutate inside
+                # the context manager.
+                for pending_future, pending_index in list(pending_tasks.items()):
+                    pending_td = ray.get(pending_future)
+                    ray.internal.free([pending_future])
+                    self.collected_frames += self.frames_per_batch
+                    yield pending_td
+                    if (
+                        self.update_after_each_batch
+                        or self.max_weight_update_interval > -1
+                    ):
+                        self.update_policy_weights_(worker_ids=pending_index)
+                pending_tasks.clear()
+                self._wait_if_paused()
+                if self._stop_event.is_set():
+                    break
+                for pending_index, pending_collector in enumerate(
+                    self.remote_collectors
+                ):
+                    pending_future = pending_collector.next.remote()
+                    pending_tasks[pending_future] = pending_index
+            else:
+                # Schedule a new collection task
+                future = collector.next.remote()
+                pending_tasks[future] = collector_index
 
         # Wait for the in-process collections tasks to finish.
         refs = list(pending_tasks.keys())
-        ray.wait(refs, num_returns=len(refs))
+        if refs:
+            ray.wait(refs, num_returns=len(refs))
+        self._wait_if_paused()
 
         # Cancel the in-process collections tasks
         # for ref in refs:
@@ -1201,10 +1297,20 @@ class RayCollector(BaseCollector):
         """Calls parent method for each remote collector."""
         if isinstance(state_dict, OrderedDict):
             state_dicts = [state_dict]
-        if len(state_dict) == 1:
-            state_dicts = state_dict * len(self.remote_collectors)
-        for collector, state_dict in zip(self.remote_collectors, state_dicts):
+        else:
+            state_dicts = list(state_dict)
+        if len(state_dicts) == 1:
+            state_dicts = state_dicts * len(self.remote_collectors)
+        if len(state_dicts) != len(self.remote_collectors):
+            raise ValueError(
+                "Collector checkpoint count does not match remote collectors: "
+                f"{len(state_dicts)} != {len(self.remote_collectors)}."
+            )
+        futures = [
             collector.load_state_dict.remote(state_dict)
+            for collector, state_dict in zip(self.remote_collectors, state_dicts)
+        ]
+        ray.get(futures)
 
     def shutdown(
         self, timeout: float | None = None, shutdown_ray: bool = False
@@ -1220,6 +1326,7 @@ class RayCollector(BaseCollector):
 
         """
         self._stop_event.set()
+        self._resume_event.set()
         if self._collection_thread is not None and self._collection_thread.is_alive():
             self._collection_thread.join(
                 timeout=timeout if timeout is not None else 5.0

@@ -11,6 +11,7 @@ import warnings
 from collections.abc import Callable
 
 from functools import partial
+from typing import TYPE_CHECKING
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -31,6 +32,9 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     UTDRHook,
 )
+
+if TYPE_CHECKING:
+    from torchrl.trainers.learners import LearnerGroup
 
 
 class DDPGTrainer(Trainer):
@@ -53,8 +57,12 @@ class DDPGTrainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable): The DDPG loss module.
+        loss_module (LossModule | Callable, optional): The DDPG loss module. Must
+            be omitted when ``learner_group`` owns optimization state.
         optimizer (optim.Optimizer, optional): The optimizer for training.
+        learner_group (LearnerGroup, optional): Remotely owned learner group.
+        learner_poll_interval (float): Controller polling interval while an
+            asynchronous collector populates replay. Defaults to ``0.05``.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
         clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.
@@ -91,8 +99,10 @@ class DDPGTrainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
         optimizer: optim.Optimizer | None = None,
+        learner_group: LearnerGroup | None = None,
+        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -124,6 +134,10 @@ class DDPGTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if learner_group is not None and target_net_updater is not None:
+            raise ValueError(
+                "target_net_updater must be constructed inside remote learners."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -131,6 +145,9 @@ class DDPGTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            learner_group=learner_group,
+            replay_buffer=replay_buffer,
+            learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -144,10 +161,9 @@ class DDPGTrainer(Trainer):
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
         )
-        self.replay_buffer = replay_buffer
         self.async_collection = async_collection
 
-        if replay_buffer is not None:
+        if replay_buffer is not None and learner_group is None:
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -162,15 +178,16 @@ class DDPGTrainer(Trainer):
             self.register_op("post_loss", rb_trainer.update_priority)
 
         self.target_net_updater = target_net_updater
-        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+        if learner_group is None:
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
-        policy_weights_getter = partial(
-            TensorDict.from_module, self.loss_module.actor_network
-        )
-        update_weights = UpdateWeights(
-            self.collector, 1, policy_weights_getter=policy_weights_getter
-        )
-        self.register_op("post_steps", update_weights)
+            policy_weights_getter = partial(
+                TensorDict.from_module, self.loss_module.actor_network
+            )
+            update_weights = UpdateWeights(
+                self.collector, 1, policy_weights_getter=policy_weights_getter
+            )
+            self.register_op("post_steps", update_weights)
 
         self.enable_logging = enable_logging
         self.log_rewards = log_rewards
@@ -183,14 +200,14 @@ class DDPGTrainer(Trainer):
         self.action_key = action_key
         self.observation_key = observation_key
 
-        if hasattr(self.loss_module, "set_keys"):
+        if learner_group is None and hasattr(self.loss_module, "set_keys"):
             self.loss_module.set_keys(
                 reward=reward_key,
                 done=done_key,
                 terminated=terminated_key,
             )
 
-        if self.enable_logging:
+        if self.enable_logging and learner_group is None:
             self._setup_ddpg_logging()
 
     def _setup_ddpg_logging(self):
