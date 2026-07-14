@@ -22,7 +22,7 @@ from torch import multiprocessing as mp, nn
 
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import Collector, MultiSyncCollector
-from torchrl.data.tensor_specs import Composite
+from torchrl.data.tensor_specs import Composite, NonTensor
 from torchrl.envs import (
     CatFrames,
     CatTensors,
@@ -50,9 +50,36 @@ from torchrl.testing.mocking_classes import (
     CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
+    EnvWithMetadata,
     MockBatchedLockedEnv,
     NestedCountingEnv,
 )
+
+
+class _InstructionEnv(EnvWithMetadata):
+    """Metadata env whose non-tensor spec and value carry an instruction."""
+
+    def __init__(self, instruction):
+        super().__init__()
+        self.instruction = instruction
+        instruction_spec = NonTensor(shape=(), example_data=instruction)
+        self.observation_spec["non_tensor"] = instruction_spec
+        self.state_spec["non_tensor"] = instruction_spec.clone()
+        self._saved_obs_spec = self.observation_spec.clone()
+        self._saved_state_spec = self.state_spec.clone()
+
+    def _reset(self, tensordict):
+        data = self._saved_obs_spec.zero()
+        data.set_non_tensor("non_tensor", self.instruction)
+        data.update(self.full_done_spec.zero())
+        return data
+
+    def _step(self, tensordict):
+        data = self._saved_obs_spec.zero()
+        data.set_non_tensor("non_tensor", self.instruction)
+        data.update(self.full_done_spec.zero())
+        data.update(self._saved_full_reward_spec.zero())
+        return data
 
 
 class TestParallel:
@@ -1324,19 +1351,17 @@ def test_heterogeneous_non_tensor_workers(cls, maybe_fork_ParallelEnv):
     # instructions) stack their specs into a Stacked spec: the batched env
     # must still register the entry as non-tensor and route it through the
     # non-tensor channel instead of the shared buffers
-    from torchrl.envs import ToyVLAEnv
-
     if cls is ParallelEnv:
         cls = maybe_fork_ParallelEnv
 
     def make(instruction):
-        return lambda: ToyVLAEnv(action_dim=2, state_dim=2, instruction=instruction)
+        return lambda: _InstructionEnv(instruction=instruction)
 
     env = cls(2, [make("pick up the apple"), make("pick up the pear")])
     try:
         rollout = env.rollout(3)
-        assert "language_instruction" in env._non_tensor_keys
-        instructions = rollout["language_instruction"]
+        assert "non_tensor" in env._non_tensor_keys
+        instructions = rollout["non_tensor"]
         assert instructions[0][0] == "pick up the apple"
         assert instructions[1][0] == "pick up the pear"
     finally:
