@@ -292,8 +292,10 @@ class Learner:
             collective context. Defaults to a single-process CPU context.
         batch_source (LearnerBatchSource, optional): Custom internal batch
             source. Defaults to replay-backed sampling.
-        target_net_updater (TargetNetUpdater, optional): Target updater run
-            after every completed optimizer step.
+        target_net_updater (TargetNetUpdater, optional): Actor-local updater
+            constructed for ``loss_module``. In data-parallel groups, every rank
+            updates its target-network replica after the synchronized optimizer
+            step, keeping replicas aligned without a separate target collective.
         clip_grad_norm (bool): Whether to clip by total norm. Defaults to True.
         clip_norm (float, optional): Gradient clipping threshold.
         models (mapping, optional): Named modules available to
@@ -358,6 +360,17 @@ class Learner:
                 "DataParallelReplayBufferClient, got "
                 f"{type(replay_buffer).__name__}."
             )
+        if target_net_updater is not None:
+            if not isinstance(target_net_updater, TargetNetUpdater):
+                raise TypeError(
+                    "target_net_updater must be a TargetNetUpdater, got "
+                    f"{type(target_net_updater).__name__}."
+                )
+            if target_net_updater.loss_module is not loss_module:
+                raise ValueError(
+                    "target_net_updater must be constructed with the learner's "
+                    "loss_module."
+                )
         if optimization_stepper is None:
             if optimizer is None:
                 raise ValueError(
