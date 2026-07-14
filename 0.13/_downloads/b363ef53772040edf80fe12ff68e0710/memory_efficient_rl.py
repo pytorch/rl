@@ -494,9 +494,7 @@ print("any -inf or +inf?", torch.isinf(out["advantage"]).any().item())
 # identical parameters at ``t`` and ``t + 1`` (no distinct target
 # network) and is unsupported with multi-step returns.
 
-gae_shifted = GAE(
-    gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True
-)
+gae_shifted = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True)
 shifted_out = gae_shifted(sample.reshape(-1, 20).clone())
 print(
     "shifted GAE advantage finite?",

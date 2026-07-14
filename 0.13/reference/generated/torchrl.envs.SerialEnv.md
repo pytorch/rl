@@ -74,6 +74,22 @@ one of the environment has dynamic specs.
 > 
 > 
 > Learn more about dynamic specs and environments [here](../envs_libraries.html#dynamic-envs).
+> 
+> 
+> 
+> 
+> 
+> 
+> Note
+> 
+> 
+> 
+> 
+> MPS tensors cannot be placed in shared memory. If the environment
+> specs have leaves on an MPS device, [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv)
+> defaults to `use_buffers=False` (with a warning) and the data exchanged
+> between processes is staged on CPU. Passing `use_buffers=True` in that
+> case raises a `RuntimeError`.
 - **daemon** (*bool**,**optional*) - whether the processes should be daemonized.
 This is only applicable to parallel environments such as [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv).
 Defaults to `False`.

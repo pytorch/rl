@@ -58,7 +58,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f9cf2fbccd0>
+<torch._C.Generator object at 0x7fdb863c5730>
 ```
 
 ## The problem
@@ -531,9 +531,7 @@ identical parameters at `t` and `t + 1` (no distinct target
 network) and is unsupported with multi-step returns.
 
 ```
-gae_shifted = GAE(
- gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True
-)
+gae_shifted = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True)
 shifted_out = gae_shifted(sample.reshape(-1, 20).clone())
 print(
  "shifted GAE advantage finite?",
@@ -863,7 +861,7 @@ sampling sequences for the loss.
 -- how collectors lay out trajectory ids, masks, and slices.
 - [TorchRL documentation](https://pytorch.org/rl/)
 
-**Total running time of the script:** (0 minutes 0.353 seconds)
+**Total running time of the script:** (0 minutes 0.354 seconds)
 
 [`Download Jupyter notebook: memory_efficient_rl.ipynb`](../_downloads/1dc9c90b893b412af56b0fa1674e3ac1/memory_efficient_rl.ipynb)
 

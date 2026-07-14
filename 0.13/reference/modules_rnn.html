@@ -2291,11 +2291,11 @@ padding.</p>
 calls handle resets inside a batch.</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">&quot;pad&quot;</span></code></dt><dd><p>Splits trajectories on <code class="docutils literal notranslate"><span class="pre">is_init</span></code>, pads them to a common length, and uses
-PyTorch’s cuDNN-backed <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRU</span></code></a>.
+PyTorch’s cuDNN-backed <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html#torch.nn.GRU" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.GRU</span></code></a>.
 This is the default and the broadest compatibility path.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code></dt><dd><p>Uses a scan over the time dimension and avoids padded trajectory chunks.
-This is friendlier to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> for reset-heavy RL batches.
+This is friendlier to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> for reset-heavy RL batches.
 Supports unidirectional GRU/LSTM without dropout, and (for LSTM) without
 projections. Unsupported configurations raise when the recurrent path is
 executed.</p>
@@ -2308,7 +2308,7 @@ layers) are handled directly; unsupported variants — bidirectional modules
 and LSTM projections — silently fall back to the pad semantics.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code></dt><dd><p>Uses <code class="docutils literal notranslate"><span class="pre">&quot;pad&quot;</span></code> in eager mode and <code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> when called under
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
 </dd>
 </dl>
 <p>For long-running experiments, prefer choosing a backend explicitly once the
@@ -2324,7 +2324,7 @@ The <code class="docutils literal notranslate"><span class="pre">recurrent_matmu
 <p>Supported values are:</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code></dt><dd><p>Defer to the process-wide TorchRL setting, and fall back to
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.get_float32_matmul_precision.html#torch.get_float32_matmul_precision" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.get_float32_matmul_precision()</span></code></a> if the global is itself
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.get_float32_matmul_precision.html#torch.get_float32_matmul_precision" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.get_float32_matmul_precision()</span></code></a> if the global is itself
 <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>. The <code class="docutils literal notranslate"><span class="pre">TORCHRL_RNN_PRECISION</span></code> environment variable seeds the
 process-wide setting at import time. It is not consulted at every kernel
 call; call <a class="reference internal" href="generated/torchrl.modules.set_recurrent_matmul_precision.html#torchrl.modules.set_recurrent_matmul_precision" title="torchrl.modules.set_recurrent_matmul_precision"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_recurrent_matmul_precision()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code> or

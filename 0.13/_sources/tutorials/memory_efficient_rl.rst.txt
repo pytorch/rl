@@ -90,7 +90,7 @@ Memory-Efficient RL Training
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f9cf2fbccd0>
+    <torch._C.Generator object at 0x7fdb863c5730>
 
 
 
@@ -684,14 +684,12 @@ the cost is a longer fused sequence. ``shifted=True`` still requires
 identical parameters at ``t`` and ``t + 1`` (no distinct target
 network) and is unsupported with multi-step returns.
 
-.. GENERATED FROM PYTHON SOURCE LINES 496-510
+.. GENERATED FROM PYTHON SOURCE LINES 496-508
 
 .. code-block:: Python
 
 
-    gae_shifted = GAE(
-        gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True
-    )
+    gae_shifted = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True)
     shifted_out = gae_shifted(sample.reshape(-1, 20).clone())
     print(
         "shifted GAE advantage finite?",
@@ -716,7 +714,7 @@ network) and is unsupported with multi-step returns.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 511-529
+.. GENERATED FROM PYTHON SOURCE LINES 509-527
 
 Knob 6 — cap peak value-net memory with chunked calls
 -------------------------------------------------------
@@ -737,7 +735,7 @@ elements per chunk, or ``num_chunks`` a fixed number of chunks. The
 advantage / value targets are identical to the unchunked computation —
 only the forward is split.
 
-.. GENERATED FROM PYTHON SOURCE LINES 529-541
+.. GENERATED FROM PYTHON SOURCE LINES 527-539
 
 .. code-block:: Python
 
@@ -766,7 +764,7 @@ only the forward is split.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 542-547
+.. GENERATED FROM PYTHON SOURCE LINES 540-545
 
 ``num_chunks`` is the convenient default — it adapts the chunk size to
 whatever batch arrives. Reach for ``value_chunk_size`` when you want a
@@ -774,7 +772,7 @@ fixed, hardware-tuned forward footprint regardless of batch size. The
 knob composes with ``shifted`` and with everything below; it is purely
 a peak-memory lever and leaves the numerics untouched.
 
-.. GENERATED FROM PYTHON SOURCE LINES 549-558
+.. GENERATED FROM PYTHON SOURCE LINES 547-556
 
 Knob 7 — memory-mapped replay buffer storage
 --------------------------------------------
@@ -786,7 +784,7 @@ that allocates each leaf tensor as a memory-mapped file on disk.
 Reading is fast (the OS page cache keeps hot pages in memory), and
 the buffer can be larger than physical memory.
 
-.. GENERATED FROM PYTHON SOURCE LINES 558-570
+.. GENERATED FROM PYTHON SOURCE LINES 556-568
 
 .. code-block:: Python
 
@@ -815,13 +813,13 @@ the buffer can be larger than physical memory.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 571-574
+.. GENERATED FROM PYTHON SOURCE LINES 569-572
 
 The data went through disk, but the public API is identical to the
 in-memory case. See the :ref:`replay buffer tutorial <rb_tuto>` for
 more on storage choices.
 
-.. GENERATED FROM PYTHON SOURCE LINES 576-620
+.. GENERATED FROM PYTHON SOURCE LINES 574-618
 
 Knob 8 — keep collection off the training memory budget
 ---------------------------------------------------------
@@ -868,7 +866,7 @@ safe only when those transfers are already ordered, or on pure CPU. The
 exact cast and sync points are documented in
 :ref:`the collector internals page <ref_collectors_internals>`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 622-696
+.. GENERATED FROM PYTHON SOURCE LINES 620-694
 
 Knob 9 — sequence training without padding
 ------------------------------------------
@@ -945,7 +943,7 @@ cost no padding memory. ``split_trajectories(data, as_nested=True)``
 and the padded form are interchangeable
 (``.to_padded_tensor(...)`` round-trips between them).
 
-.. GENERATED FROM PYTHON SOURCE LINES 698-770
+.. GENERATED FROM PYTHON SOURCE LINES 696-768
 
 Putting it together
 -------------------
@@ -1020,7 +1018,7 @@ Every knob is independent — adopt them à la carte depending on what
 your loss needs. The ones that *interact* are highlighted in the
 *When not to rehydrate* section above.
 
-.. GENERATED FROM PYTHON SOURCE LINES 772-825
+.. GENERATED FROM PYTHON SOURCE LINES 770-823
 
 Conclusion
 ----------
@@ -1079,7 +1077,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.353 seconds)
+   **Total running time of the script:** (0 minutes 0.354 seconds)
 
 
 .. _sphx_glr_download_tutorials_memory_efficient_rl.py:

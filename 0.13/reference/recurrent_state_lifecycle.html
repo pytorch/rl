@@ -2481,7 +2481,7 @@ packed together. The module calls <code class="docutils literal notranslate"><sp
 <code class="docutils literal notranslate"><span class="pre">torchrl.objectives.value.utils._get_num_per_traj_init</span></code>) to count
 per-trajectory lengths, then <code class="docutils literal notranslate"><span class="pre">_split_and_pad_sequence</span></code> to break the
 batch into shape <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">T')</span></code> with one trajectory per row.</p></li>
-<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> is run on each clean row, then results are
+<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> is run on each clean row, then results are
 unpadded back to the original shape.</p></li>
 <li><p>With the <code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;triton&quot;</span></code> backends, the module keeps the
 original <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">T,</span> <span class="pre">...)</span></code> layout and uses <code class="docutils literal notranslate"><span class="pre">is_init</span></code> to reset hidden
@@ -2511,7 +2511,7 @@ the post-done timesteps as a continuation of the pre-done trajectory.</p></li>
 TensorDict batch shape. These outputs should be read as “next hidden”
 checkpoints at trajectory ends, not as valid per-step hidden states at every
 position.</p>
-<p>With the pad backend, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> only returns the final hidden
+<p>With the pad backend, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.LSTM</span></code></a> only returns the final hidden
 state for a sequence. <code class="docutils literal notranslate"><span class="pre">LSTMModule._lstm</span></code> therefore fills hidden slots
 at non-terminal positions with zeros and writes the real final hidden at the
 sequence end. If a batch contains multiple trajectories, the split path
@@ -2526,7 +2526,7 @@ checkpoints, while non-terminal slots are zero placeholders.</p>
 <p>The advantage of the scan and triton backends is that mid-batch resets do
 not require materializing split-and-padded trajectory chunks. This can reduce
 VRAM use and improve throughput for batches with many resets. The
-<code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> backend is designed for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> friendliness, and
+<code class="docutils literal notranslate"><span class="pre">&quot;scan&quot;</span></code> backend is designed for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> friendliness, and
 <code class="docutils literal notranslate"><span class="pre">recurrent_backend=&quot;auto&quot;</span></code> selects it when called under compilation. The
 <code class="docutils literal notranslate"><span class="pre">&quot;triton&quot;</span></code> backend uses CUDA kernels for the recurrent reset path. Some
 configurations still fall back to the pad backend or are unsupported (for

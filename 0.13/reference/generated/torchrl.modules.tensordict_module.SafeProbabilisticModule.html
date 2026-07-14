@@ -2393,9 +2393,9 @@ PPO). Default is <code class="docutils literal notranslate"><span class="pre">Fa
 <li><p><strong>n_empirical_estimate</strong> (<em>int</em><em>, </em><em>optional</em>) – keyword-only argument.
 Number of samples to compute the empirical
 mean when it is not available. Defaults to 1000.</p></li>
-<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.12)"><em>torch.Generator</em></a><em>, </em><em>int</em><em>, </em><em>NestedKey</em><em>, or </em><em>None</em><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><em>torch.Generator</em></a><em>, </em><em>int</em><em>, </em><em>NestedKey</em><em>, or </em><em>None</em><em>, </em><em>optional</em>) – keyword-only argument.
 Routes sampling through an explicit RNG instead of the global PyTorch RNG.
-Accepts a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a> (used in place, advances across calls),
+Accepts a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a> (used in place, advances across calls),
 an <code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code> (shorthand for <code class="docutils literal notranslate"><span class="pre">Generator().manual_seed(int)</span></code>), or a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> to fetch the generator from the input tensordict on every
 call (the value can be a <code class="docutils literal notranslate"><span class="pre">Generator</span></code> or a scalar int / Tensor used as a

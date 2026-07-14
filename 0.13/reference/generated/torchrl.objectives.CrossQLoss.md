@@ -199,7 +199,7 @@ are required for this to be computed.
 
 Returns: a differentiable tensor with the alpha loss along with a metadata dictionary containing the detached "log_prob" of the sampled action.
 
-alpha_loss(*log_prob: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/objectives/crossq.html#CrossQLoss.alpha_loss)
+alpha_loss(*log_prob: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/objectives/crossq.html#CrossQLoss.alpha_loss)
 
 Compute the entropy loss.
 
@@ -207,7 +207,8 @@ The entropy loss should be computed last.
 
 Parameters:
 
-**log_prob** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a log-probability as computed by the `actor_loss()` and returned in the metadata.
+- **log_prob** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - a log-probability as computed by the `actor_loss()` and returned in the metadata.
+- **tensordict** (*TensorDictBase**,**optional*) - the input tensordict.
 
 Returns: a differentiable tensor with the entropy loss.
 

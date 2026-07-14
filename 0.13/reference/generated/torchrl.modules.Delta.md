@@ -33,7 +33,7 @@ need to override .expand.
 Returns:
 
 New distribution instance with batch dimensions expanded to
-batch_size.
+batch_shape.
 
 log_prob(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/distributions/continuous.html#Delta.log_prob)
 
