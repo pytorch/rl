@@ -311,32 +311,66 @@ class Learner:
             updates priorities or to avoid a no-op remote call.
 
     Example:
+        A DQN learner consumes transitions already written by a collector,
+        executes a bounded optimization command, and exposes a versioned policy
+        snapshot for publication:
+
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-        >>> from torchrl.objectives import LossModule
+        >>> from torchrl.modules import QValueActor
+        >>> from torchrl.objectives import DQNLoss, SoftUpdate
         >>> from torchrl.trainers import Learner, LearnerStepRequest
-        >>> class Loss(LossModule):
-        ...     def __init__(self):
-        ...         super().__init__()
-        ...         self.weight = torch.nn.Parameter(torch.ones(()))
-        ...     def forward(self, batch):
-        ...         return TensorDict({"loss": self.weight * batch["x"].mean()}, [])
-        >>> replay = TensorDictReplayBuffer(storage=LazyTensorStorage(4), batch_size=2)
-        >>> _ = replay.extend(TensorDict({"x": torch.ones(4, 1)}, [4]))
-        >>> loss = Loss()
+        >>> _ = torch.manual_seed(0)
+        >>> policy = QValueActor(
+        ...     torch.nn.Linear(4, 2),
+        ...     in_keys=["observation"],
+        ...     action_space="one-hot",
+        ... )
+        >>> loss = DQNLoss(policy, action_space="one-hot", delay_value=True)
+        >>> replay = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(16), batch_size=4
+        ... )
+        >>> transitions = TensorDict(
+        ...     {
+        ...         "observation": torch.randn(8, 4),
+        ...         "action": torch.nn.functional.one_hot(torch.arange(8) % 2, 2),
+        ...         "next": TensorDict(
+        ...             {
+        ...                 "observation": torch.randn(8, 4),
+        ...                 "reward": torch.randn(8, 1),
+        ...                 "done": torch.zeros(8, 1, dtype=torch.bool),
+        ...                 "terminated": torch.zeros(8, 1, dtype=torch.bool),
+        ...             },
+        ...             [8],
+        ...         ),
+        ...     },
+        ...     [8],
+        ... )
+        >>> _ = replay.extend(transitions)
         >>> learner = Learner(
         ...     loss,
         ...     replay,
-        ...     optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+        ...     optimizer=torch.optim.Adam(loss.parameters(), lr=0.01),
+        ...     target_net_updater=SoftUpdate(loss, eps=0.95),
+        ... ).initialize()
+        >>> weights_before = learner.get_weights().weights.clone()
+        >>> result = learner.step(
+        ...     LearnerStepRequest(round_id=1, num_steps=3, global_batch_size=4)
         ... )
-        >>> _ = learner.initialize()
-        >>> weight_before = loss.weight.detach().clone()
-        >>> result = learner.step(LearnerStepRequest(1, 1, 2))
-        >>> result.metrics["loss"].item()
-        1.0
-        >>> bool(loss.weight < weight_before)
+        >>> (result.optim_steps, result.model_version)
+        (3, 3)
+        >>> set(result.metrics.keys()) == {"loss", "grad_norm"}
         True
+        >>> snapshot = learner.get_weights()
+        >>> snapshot.model_version
+        3
+        >>> any(
+        ...     not torch.equal(weights_before.get(key), snapshot.weights.get(key))
+        ...     for key in weights_before.keys(True, True)
+        ... )
+        True
+        >>> learner.close()
     """
 
     def __init__(
