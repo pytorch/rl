@@ -232,6 +232,57 @@ def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
     assert captured["engine_args"].enable_prefix_caching is True
 
 
+def test_async_vllm_constructor_respects_engine_args_prefix_caching(monkeypatch):
+    """AsyncVLLM.__init__ must not clobber an explicit enable_prefix_caching value."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    actor_class = object()
+
+    # Opt-in carried by engine_args survives construction.
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
+    service = vllm_async.AsyncVLLM(engine_args, actor_class=actor_class)
+    assert service.engine_args.enable_prefix_caching is True
+
+    # Unset engine args fall back to the conservative default.
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=None)
+    vllm_async.AsyncVLLM(engine_args, actor_class=actor_class)
+    assert engine_args.enable_prefix_caching is False
+
+    # An explicit constructor argument wins over engine_args.
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
+    vllm_async.AsyncVLLM(
+        engine_args, actor_class=actor_class, enable_prefix_caching=False
+    )
+    assert engine_args.enable_prefix_caching is False
+
+
+def test_async_vllm_launch_preserves_prefix_caching(monkeypatch):
+    """AsyncVLLM.launch must forward the engine_args prefix-caching opt-in."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(
+        vllm_async,
+        "_get_ray",
+        lambda: types.SimpleNamespace(remote=lambda **kwargs: (lambda cls: cls)),
+    )
+    monkeypatch.setattr(vllm_async.AsyncVLLM, "_launch", lambda self: None)
+    monkeypatch.setattr(
+        vllm_async.AsyncVLLM, "create_load_balancer", lambda self, *a, **kw: None
+    )
+
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
+    service = vllm_async.AsyncVLLM.launch(engine_args, num_replicas=2)
+    assert service.engine_args.enable_prefix_caching is True
+
+
 @pytest.fixture
 def sample_text():
     """Create sample text for testing."""
