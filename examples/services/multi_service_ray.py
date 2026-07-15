@@ -4,9 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 """Run the multi-service training example with Ray.
 
-The logger and replay buffer are Ray service owners, and policy requests use
-``RayTransport``. The driver runs the same ordinary TensorDict loop as the
-other examples through their restricted clients.
+The logger, replay buffer, and inference policy are Ray service owners. The
+driver runs the same ordinary TensorDict loop as the other examples through
+their restricted component clients.
 
 Install Ray and run from the repository root:
 

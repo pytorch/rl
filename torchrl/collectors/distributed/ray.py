@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
+from torchrl._comm.ray_runtime import _RayRuntimeLease
 from torchrl._utils import as_remote, logger as torchrl_logger
 from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
@@ -23,7 +24,7 @@ from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._single import Collector
 from torchrl.collectors.utils import _NON_NN_POLICY_WEIGHTS, split_trajectories
 from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
-from torchrl.data import RayReplayBuffer, ReplayBuffer
+from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -131,6 +132,11 @@ class RayCollector(BaseCollector):
 
             .. note:: If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
                 pickled directly), the ``policy_factory`` should be used instead.
+
+            A Ray-owned
+            :class:`~torchrl.modules.inference_server.InferenceServer` is also
+            accepted. In that case each collector worker receives an independent
+            restricted inference client and keeps no local policy copy.
 
     Keyword Args:
         policy_factory (Callable[[], Callable], list of Callable[[], Callable], optional): a callable
@@ -255,11 +261,10 @@ class RayCollector(BaseCollector):
             parameters being updated for a certain time even if ``update_after_each_batch``
             is turned on.
             Defaults to -1 (no forced update).
-        replay_buffer (RayReplayBuffer, optional): if provided, the collector will not yield tensordicts
-            but populate the buffer instead. Must be a :class:`~torchrl.data.RayReplayBuffer` instance.
-            Regular :class:`~torchrl.data.ReplayBuffer` instances cannot be shared across Ray actor
-            boundaries (workers write to serialized copies, not the main process buffer).
-            Defaults to ``None``.
+        replay_buffer (ReplayBuffer, optional): if provided, the collector will
+            populate it instead of yielding TensorDicts. The replay buffer must
+            use ``service_backend="ray"``; the collector creates restricted
+            worker clients internally. Defaults to ``None``.
         weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
@@ -396,20 +401,15 @@ class RayCollector(BaseCollector):
                 for ck in collector_kwargs:
                     ck.setdefault("post_collect_hook", post_collect_hook)
         if replay_buffer is not None:
-            if not isinstance(replay_buffer, RayReplayBuffer):
+            if not (
+                getattr(replay_buffer, "service_backend", None) == "ray"
+                and callable(getattr(replay_buffer, "client", None))
+            ):
                 raise TypeError(
-                    "RayCollector requires a RayReplayBuffer instance when "
-                    "replay_buffer is provided. Regular ReplayBuffer instances "
-                    "cannot be shared across Ray actor boundaries — workers "
-                    "write to serialized copies, not the main process buffer. "
-                    "Use torchrl.data.RayReplayBuffer instead."
+                    "RayCollector requires a replay buffer with "
+                    "service_backend='ray' and a client() method. Construct it "
+                    "with ReplayBuffer(..., service_backend='ray')."
                 )
-            replay_buffer_client = replay_buffer.client()
-            if isinstance(collector_kwargs, dict):
-                collector_kwargs.setdefault("replay_buffer", replay_buffer_client)
-            else:
-                for ck in collector_kwargs:
-                    ck.setdefault("replay_buffer", replay_buffer_client)
         if trajs_per_batch is not None:
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("trajs_per_batch", trajs_per_batch)
@@ -472,6 +472,15 @@ class RayCollector(BaseCollector):
         create_env_fn, collector_kwargs, remote_configs = out_lists
         num_collectors = len(create_env_fn)
 
+        # Every worker gets its own restricted endpoint. This matters for
+        # transports with point-to-point connection state and is harmless for
+        # the default Ray actor client.
+        if replay_buffer is not None:
+            clients = replay_buffer.clients(num_collectors)
+            collector_kwargs = [dict(kwargs) for kwargs in collector_kwargs]
+            for kwargs, client in zip(collector_kwargs, clients):
+                kwargs.setdefault("replay_buffer", client)
+
         if use_env_creator:
             for i in range(len(create_env_fn)):
                 if not isinstance(create_env_fn[i], (EnvBase, EnvCreator)):
@@ -482,10 +491,24 @@ class RayCollector(BaseCollector):
             raise RuntimeError(
                 "ray library not found, unable to create a DistributedCollector. "
             ) from RAY_ERR
-        if not ray.is_initialized():
-            ray.init(**ray_init_config)
+        self._runtime_lease = _RayRuntimeLease.acquire(ray_init_config)
         if not ray.is_initialized():
             raise RuntimeError("Ray could not be initialized.")
+
+        policy_service = None
+        if (
+            policy is not None
+            and getattr(policy, "service_backend", None) == "ray"
+            and callable(getattr(policy, "client", None))
+        ):
+            if policy_factory is not None:
+                raise ValueError(
+                    "policy_factory cannot be combined with an inference service."
+                )
+            policy_service = policy
+            policy = policy.clients(num_collectors)
+            if trust_policy is None:
+                trust_policy = True
 
         # Define collector_class, monkey patch it with as_remote and print_remote_collector_info methods
         if collector_class == "async":
@@ -508,14 +531,15 @@ class RayCollector(BaseCollector):
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory
-        self.policy = policy  # Store policy for weight extraction
+        self.policy = policy_service if policy_service is not None else policy
+        self._policy_service = policy_service
         self.trust_policy = trust_policy
-        if isinstance(policy, nn.Module):
-            policy_weights = TensorDict.from_module(policy)
+        if isinstance(self.policy, nn.Module):
+            policy_weights = TensorDict.from_module(self.policy)
             policy_weights = policy_weights.data.lock_()
         else:
             policy_weights = TensorDict(lock=True)
-            if weight_updater is None:
+            if weight_updater is None and policy_service is None:
                 warnings.warn(_NON_NN_POLICY_WEIGHTS)
         self.policy_weights = policy_weights
         self.collector_class = collector_class
@@ -616,7 +640,11 @@ class RayCollector(BaseCollector):
                 remote_configs,
             )
         # Set up weight synchronization - prefer new schemes over legacy updater
-        if weight_updater is None and weight_sync_schemes is None:
+        if policy_service is not None and weight_sync_schemes is None:
+            # Collectors call the centrally owned inference policy and do not
+            # keep policy parameters of their own.
+            weight_sync_schemes = {}
+        elif weight_updater is None and weight_sync_schemes is None:
             # Default to Ray weight sync scheme for Ray collectors
             from torchrl.weight_update import RayWeightSyncScheme
 
@@ -743,6 +771,20 @@ class RayCollector(BaseCollector):
         When using policy_factory without a central policy, weight synchronization
         is deferred until this method is called with actual weights.
         """
+        if self._policy_service is not None:
+            weights = policy_or_weights
+            if weights is None and weights_dict is not None:
+                weights = weights_dict.get(model_id or "policy")
+            if isinstance(weights, nn.Module):
+                weights = TensorDict.from_module(weights).data
+            if weights is None:
+                raise ValueError(
+                    "Weights must be provided when updating a centralized "
+                    "inference service."
+                )
+            self._policy_service.update_model_weights(weights)
+            return None
+
         # Trigger lazy initialization if not already done
         if not self._weight_sync_initialized:
             self._lazy_initialize_weight_sync()
@@ -871,6 +913,7 @@ class RayCollector(BaseCollector):
             other_params["worker_idx"] = i
 
             cls = self.collector_class.as_remote(remote_config).remote
+            worker_policy = policy[i] if isinstance(policy, Sequence) else policy
             collector = self._make_collector(
                 cls,
                 env_maker=[env_maker] * num_envs
@@ -880,7 +923,7 @@ class RayCollector(BaseCollector):
                     and not issubclass(self.collector_class, Collector)
                 )
                 else env_maker,
-                policy=policy,
+                policy=worker_policy,
                 other_params=other_params,
             )
             self._remote_collectors.append(collector)
@@ -1128,6 +1171,7 @@ class RayCollector(BaseCollector):
         if self._collection_thread is not None and self._collection_thread.is_alive():
             self._collection_thread.join(timeout=5.0)
         self.stop_remote_collectors()
+        self._runtime_lease.release()
         if shutdown_ray:
             ray.shutdown()
 
@@ -1238,8 +1282,25 @@ class RayCollector(BaseCollector):
                     )
             self._weight_sync_schemes = None
 
+        self._runtime_lease.release()
         if shutdown_ray:
             ray.shutdown()
+
+    def __del__(self) -> None:
+        # Construction can fail after the runtime lease is acquired (for
+        # example while starting a worker). Release only resources already
+        # attached to this collector; service owners remain independent.
+        for collector in list(getattr(self, "_remote_collectors", ())):
+            try:
+                ray.kill(collector, no_restart=True)
+            except Exception:
+                pass
+        lease = getattr(self, "_runtime_lease", None)
+        if lease is not None:
+            try:
+                lease.release()
+            except Exception:
+                pass
 
     def __repr__(self) -> str:
         string = f"{self.__class__.__name__}()"

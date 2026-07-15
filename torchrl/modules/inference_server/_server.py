@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
+import inspect
 import multiprocessing as mp
 
 import queue
@@ -12,18 +14,20 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future
+from dataclasses import replace
 from multiprocessing.synchronize import Event as MPEvent
 from statistics import mean
 from typing import Any, Literal
 
 import torch
-from tensordict import lazy_stack
+from tensordict import lazy_stack, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl._comm import CommandChannel, Mailbox, watch_process_liveness
+from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
     _NO_INTERACTION_TYPE_CODE,
     _REMOTE_INTERACTION_TYPE_KEY,
@@ -33,6 +37,12 @@ from torchrl.modules.inference_server._config import (
     InferenceDeviceConfig,
     InferenceServerConfig,
 )
+from torchrl.modules.inference_server._factory import (
+    _inference_transport_kind,
+    _make_inference_transport,
+    _validate_inference_transport_selection,
+)
+from torchrl.modules.inference_server._threading import ThreadingTransport
 from torchrl.modules.inference_server._transport import InferenceTransport
 from torchrl.weight_update import (
     SharedMemWeightSyncScheme,
@@ -47,6 +57,119 @@ _CODE_TO_INTERACTION_TYPE = {
     3: InteractionType.RANDOM,
     4: InteractionType.DETERMINISTIC,
 }
+_has_ray = importlib.util.find_spec("ray") is not None
+
+
+class _InferenceServerMeta(type):
+    """Select a private owner while keeping InferenceServer as the API."""
+
+    def __call__(cls, *args, **kwargs):
+        if cls is not InferenceServer:
+            return super().__call__(*args, **kwargs)
+
+        if len(args) > 2:
+            raise TypeError(
+                "InferenceServer accepts at most model and transport positionally."
+            )
+        model = args[0] if args else kwargs.pop("model", None)
+        transport = args[1] if len(args) > 1 else kwargs.pop("transport", None)
+        policy_factory = kwargs.pop("policy_factory", None)
+        server_config = kwargs.get("server_config")
+        configured_backend = (
+            server_config.service_backend if server_config is not None else "thread"
+        )
+        service_backend = kwargs.pop("service_backend", None)
+        if service_backend is None:
+            service_backend = configured_backend
+        elif server_config is not None and configured_backend not in (
+            "thread",
+            service_backend,
+        ):
+            raise ValueError(
+                "service_backend conflicts with server_config.service_backend."
+            )
+        if service_backend not in ("thread", "process", "ray"):
+            raise ValueError(
+                "InferenceServer service_backend must be 'thread', 'process', or 'ray'."
+            )
+
+        service_options = dict(kwargs.pop("service_backend_options", None) or {})
+        transport_options = kwargs.pop("transport_options", None)
+        request_spec = kwargs.pop("request_spec", None)
+        response_spec = kwargs.pop("response_spec", None)
+        num_clients = kwargs.pop("num_clients", None)
+        _validate_inference_transport_selection(
+            transport,
+            service_backend=service_backend,
+            transport_options=transport_options,
+            request_spec=request_spec,
+            response_spec=response_spec,
+        )
+
+        if service_backend == "ray":
+            if model is not None:
+                raise ValueError(
+                    "service_backend='ray' requires policy_factory so the policy "
+                    "is constructed on the Ray actor."
+                )
+            if policy_factory is None:
+                raise ValueError(
+                    "policy_factory is required for service_backend='ray'."
+                )
+            return _RayInferenceServer(
+                policy_factory=policy_factory,
+                transport=transport,
+                transport_options=transport_options,
+                service_backend_options=service_options,
+                request_spec=request_spec,
+                response_spec=response_spec,
+                num_clients=num_clients,
+                **kwargs,
+            )
+
+        resolved_transport = _make_inference_transport(
+            transport,
+            service_backend=service_backend,
+            transport_options=transport_options,
+            request_spec=request_spec,
+            response_spec=response_spec,
+            num_clients=num_clients,
+        )
+        if service_backend == "process":
+            if model is not None:
+                raise ValueError(
+                    "service_backend='process' requires policy_factory so the policy "
+                    "is constructed in the child process."
+                )
+            if policy_factory is None:
+                raise ValueError(
+                    "policy_factory is required for service_backend='process'."
+                )
+            allowed_options = {"mp_context", "startup_timeout"}
+            extra_options = set(service_options) - allowed_options
+            if extra_options:
+                raise ValueError(
+                    "Unsupported process service_backend_options: "
+                    f"{sorted(extra_options)}."
+                )
+            return ProcessInferenceServer(
+                policy_factory=policy_factory,
+                transport=resolved_transport,
+                **service_options,
+                **kwargs,
+            )
+
+        if service_options:
+            raise ValueError(
+                "service_backend_options are only valid for process or Ray services."
+            )
+        if model is None:
+            if policy_factory is None:
+                raise ValueError("Either model or policy_factory must be provided.")
+            model = policy_factory()
+        elif policy_factory is not None:
+            raise ValueError("model and policy_factory are mutually exclusive.")
+        return super().__call__(model, resolved_transport, **kwargs)
 
 
 def _normalize_tensordict_device_metadata(data: TensorDictBase) -> TensorDictBase:
@@ -91,7 +214,7 @@ def _default_collate(items: list[TensorDictBase]) -> TensorDictBase:
     )
 
 
-class InferenceServer:
+class InferenceServer(metaclass=_InferenceServerMeta):
     """Auto-batching inference server.
 
     Actors submit individual TensorDicts via the *transport* and receive
@@ -99,12 +222,35 @@ class InferenceServer:
     batches inputs, runs the model, and fans results back to the callers.
 
     Args:
-        model (nn.Module or Callable): a callable that maps a batched
+        model (nn.Module or Callable, optional): callable that maps a batched
             TensorDictBase to a batched TensorDictBase (e.g. a
-            :class:`~tensordict.nn.TensorDictModule`).
-        transport (InferenceTransport): the communication backend.
+            :class:`~tensordict.nn.TensorDictModule`). Pass ``policy_factory``
+            instead when a process or Ray actor owns the policy.
+        transport (InferenceTransport or str, optional): payload transport.
+            ``"auto"`` selects a backend-appropriate transport and is the
+            recommended default.
 
     Keyword Args:
+        policy_factory (Callable, optional): zero-argument policy constructor.
+            Required for ``service_backend="process"`` and
+            ``service_backend="ray"`` so policy parameters are created by the
+            process that owns them.
+        service_backend (str, optional): where inference runs: ``"thread"``,
+            ``"process"``, or ``"ray"``. Defaults to ``"thread"``.
+        service_backend_options (dict, optional): owner configuration. The Ray
+            backend accepts ``ray_init_config`` and ``remote_config``; the
+            process backend accepts ``mp_context`` and ``startup_timeout``.
+        transport_options (dict, optional): options forwarded to the selected
+            transport. For ``"distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. Explicit selectors never fall back to another
+            transport.
+        request_spec (TensorDictBase, optional): static request layout for
+            shared-memory or process-owned distributed transports. Ray-owned
+            distributed transports infer and bind this layout on first use.
+        response_spec (TensorDictBase, optional): static response layout paired
+            with ``request_spec``.
+        num_clients (int, optional): expected concurrent client count for
+            transports that allocate a fixed number of slots.
         max_batch_size (int, optional): upper bound on the number of requests
             processed in a single forward pass. Default: ``64``.
         min_batch_size (int, optional): minimum number of requests to
@@ -157,28 +303,44 @@ class InferenceServer:
             annotations. Defaults to ``"policy_version"``.
 
     Example:
+        >>> import torch
+        >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules.inference_server import (
-        ...     InferenceServer,
-        ...     ThreadingTransport,
-        ... )
+        >>> from torchrl.modules.inference_server import InferenceServer
         >>> import torch.nn as nn
         >>> policy = TensorDictModule(
         ...     nn.Linear(4, 2), in_keys=["obs"], out_keys=["act"]
         ... )
-        >>> transport = ThreadingTransport()
-        >>> server = InferenceServer(policy, transport, max_batch_size=8)
-        >>> server.start()
-        >>> client = transport.client()
-        >>> # client(td) can now be called from any thread
-        >>> server.shutdown()
+        >>> with InferenceServer(policy, transport="auto", max_batch_size=8) as server:
+        ...     result = server.client()(TensorDict({"obs": torch.randn(4)}))
+        >>> result["act"].shape
+        torch.Size([2])
     """
 
     def __init__(
         self,
-        model: nn.Module,
-        transport: InferenceTransport,
+        model: nn.Module | Callable[[TensorDictBase], TensorDictBase] | None = None,
+        transport: InferenceTransport
+        | Literal[
+            "auto",
+            "thread",
+            "process",
+            "ray",
+            "shared_memory",
+            "direct",
+            "distributed",
+        ] = "auto",
         *,
+        policy_factory: Callable[
+            [], nn.Module | Callable[[TensorDictBase], TensorDictBase]
+        ]
+        | None = None,
+        service_backend: Literal["thread", "process", "ray"] = "thread",
+        service_backend_options: dict[str, Any] | None = None,
+        transport_options: dict[str, Any] | None = None,
+        request_spec: TensorDictBase | None = None,
+        response_spec: TensorDictBase | None = None,
+        num_clients: int | None = None,
         max_batch_size: int | None = None,
         min_batch_size: int | None = None,
         timeout: float | None = None,
@@ -196,6 +358,23 @@ class InferenceServer:
         policy_version: int = 0,
         policy_version_key: NestedKey | None = "policy_version",
     ):
+        # Deployment keywords are consumed by the metaclass before this local
+        # implementation is constructed. Keeping them in the signature makes
+        # the canonical API discoverable to help() and static tooling.
+        del (
+            policy_factory,
+            service_backend,
+            service_backend_options,
+            transport_options,
+            request_spec,
+            response_spec,
+            num_clients,
+        )
+        if model is None or not isinstance(transport, InferenceTransport):
+            raise RuntimeError(
+                "InferenceServer deployment arguments were not resolved before "
+                "constructing the local server."
+            )
         if server_config is not None and any(
             kwarg is not None
             for kwarg in (
@@ -422,9 +601,27 @@ class InferenceServer:
         """Whether the background worker thread is running."""
         return self._worker is not None and self._worker.is_alive()
 
+    @property
+    def service_backend(self) -> str:
+        """Execution backend that owns the policy."""
+        return "thread"
+
+    @property
+    def transport_kind(self) -> str:
+        """Physical transport used for inference payloads."""
+        return _inference_transport_kind(self.transport)
+
     def client(self) -> Any:
         """Return a restricted inference client from the owned transport."""
         return self.transport.client()
+
+    def clients(self, num_clients: int) -> list[Any]:
+        """Return one independently routed client per concurrent consumer."""
+        if isinstance(num_clients, bool) or not isinstance(num_clients, int):
+            raise TypeError("num_clients must be an integer.")
+        if num_clients < 1:
+            raise ValueError("num_clients must be at least 1.")
+        return [self.client() for _ in range(num_clients)]
 
     # -- background loop ------------------------------------------------------
 
@@ -611,6 +808,12 @@ class InferenceServer:
         worker = getattr(self, "_worker", None)
         if worker is not None and worker.is_alive():
             self.shutdown(timeout=1.0)
+
+
+_inference_server_signature = inspect.signature(InferenceServer.__init__)
+InferenceServer.__signature__ = _inference_server_signature.replace(
+    parameters=tuple(_inference_server_signature.parameters.values())[1:]
+)
 
 
 def _process_server_entry(
@@ -994,9 +1197,28 @@ class ProcessInferenceServer:
         """Whether the child process is alive."""
         return self._process is not None and self._process.is_alive()
 
+    @property
+    def service_backend(self) -> str:
+        """Execution backend that owns the policy."""
+        return "process"
+
+    @property
+    def transport_kind(self) -> str:
+        """Physical transport used for inference payloads."""
+        return _inference_transport_kind(self.transport)
+
     def client(self) -> Any:
         """Return a restricted inference client from the owned transport."""
         return self._service_client
+
+    def clients(self, num_clients: int) -> list[Any]:
+        """Return one independently routed client per concurrent consumer."""
+        if isinstance(num_clients, bool) or not isinstance(num_clients, int):
+            raise TypeError("num_clients must be an integer.")
+        if num_clients < 1:
+            raise ValueError("num_clients must be at least 1.")
+        # MPTransport routes replies per client, so reserve a fresh endpoint.
+        return [self.transport.client() for _ in range(num_clients)]
 
     def stats(
         self, *, reset: bool = False, timeout: float = 5.0
@@ -1084,6 +1306,350 @@ class ProcessInferenceServer:
         process = getattr(self, "_process", None)
         if process is not None and process.is_alive():
             self.shutdown(timeout=1.0)
+
+
+class _RayInferenceServerActor:
+    """Ray actor that owns a policy, transport, and local inference loop."""
+
+    def __init__(
+        self,
+        policy_factory: Callable[[], nn.Module],
+        transport: InferenceTransport | str | None,
+        transport_options: dict[str, Any] | None,
+        request_spec: TensorDictBase | None,
+        response_spec: TensorDictBase | None,
+        num_clients: int | None,
+        server_kwargs: dict[str, Any],
+    ) -> None:
+        self.model = policy_factory()
+        self._transport = transport
+        self._transport_options = transport_options
+        self._num_clients = num_clients
+        self._bootstrap_lock = threading.Lock()
+        config = server_kwargs.get("server_config")
+        if config is not None and config.service_backend != "thread":
+            server_kwargs["server_config"] = replace(config, service_backend="thread")
+        self._server_kwargs = server_kwargs
+        self.server = None
+        if request_spec is not None or response_spec is not None:
+            if request_spec is None or response_spec is None:
+                raise ValueError(
+                    "request_spec and response_spec must be provided together."
+                )
+            self._start_server(request_spec, response_spec)
+        elif transport != "distributed":
+            resolved_transport = _make_inference_transport(
+                transport,
+                service_backend="ray",
+                transport_options=transport_options,
+                request_spec=None,
+                response_spec=None,
+                num_clients=num_clients,
+            )
+            self.server = InferenceServer(
+                self.model,
+                resolved_transport,
+                service_backend="thread",
+                **server_kwargs,
+            ).start()
+
+    def _start_server(
+        self, request_spec: TensorDictBase, response_spec: TensorDictBase
+    ) -> None:
+        resolved_transport = _make_inference_transport(
+            self._transport,
+            service_backend="ray",
+            transport_options=self._transport_options,
+            request_spec=request_spec,
+            response_spec=response_spec,
+            num_clients=self._num_clients,
+        )
+        self.server = InferenceServer(
+            self.model,
+            resolved_transport,
+            service_backend="thread",
+            **self._server_kwargs,
+        ).start()
+
+    def bootstrap_distributed(self, request: TensorDictBase):
+        """Bind the distributed layout on the first endpoint generation."""
+        with self._bootstrap_lock:
+            if self.server is None:
+                # Reuse InferenceServer's collation, placement, and versioning
+                # rules to derive the reply layout without publishing a second
+                # public configuration surface.
+                probe = InferenceServer(
+                    self.model,
+                    ThreadingTransport(),
+                    service_backend="thread",
+                    **self._server_kwargs,
+                )
+                batch = probe.collate_fn([request])
+                if probe.policy_device is not None:
+                    batch = batch.to(probe.policy_device)
+                interaction_context, batch = probe._interaction_type_context(batch)
+                with interaction_context:
+                    response = self.model(batch)
+                if probe.output_device is not None:
+                    response = response.to(probe.output_device)
+                response = probe._set_policy_version(response).unbind(0)[0]
+                self._start_server(request, response)
+            return self.server.client()
+
+    def client(self):
+        if self.server is None:
+            raise RuntimeError(
+                "The distributed transport has not established its schema yet."
+            )
+        return self.server.client()
+
+    def stats(self, reset: bool = False) -> dict[str, float | int]:
+        if self.server is None:
+            return {"num_requests": 0, "num_batches": 0}
+        return self.server.stats(reset=reset)
+
+    def health(self) -> dict[str, Any]:
+        return {
+            "is_alive": self.server is None or self.server.is_alive,
+            "policy_version": (
+                int(self._server_kwargs.get("policy_version", 0))
+                if self.server is None
+                else self.server.policy_version
+            ),
+            "transport": (
+                "distributed"
+                if self.server is None
+                else _inference_transport_kind(self.server.transport)
+            ),
+        }
+
+    def update_model_weights(
+        self, weights: TensorDictBase, mark_weight_update: bool = True
+    ) -> None:
+        if self.server is None:
+            weights.to_module(self.model)
+            if mark_weight_update:
+                self._server_kwargs["policy_version"] = (
+                    int(self._server_kwargs.get("policy_version", 0)) + 1
+                )
+        else:
+            self.server.update_model(
+                lambda model: weights.to_module(model),
+                mark_weight_update=mark_weight_update,
+            )
+
+    def shutdown(self) -> None:
+        if self.server is not None:
+            self.server.shutdown(timeout=None)
+            close = getattr(self.server.transport, "close", None)
+            if close is not None:
+                close()
+
+
+class _RayDistributedInferenceClient:
+    """Restricted client that lazily binds a distributed TensorDict schema."""
+
+    def __init__(self, actor) -> None:
+        self._actor = actor
+        self._client = None
+
+    def __call__(
+        self, payload: TensorDictBase, timeout: float | None = None
+    ) -> TensorDictBase:
+        if self._client is None:
+            import ray
+
+            self._client = ray.get(self._actor.bootstrap_distributed.remote(payload))
+            _set_ray_client_liveness(self._client, self._actor)
+        return self._client(payload, timeout=timeout)
+
+
+class _RayInferenceServer(InferenceServer):
+    """Private Ray owner returned by ``InferenceServer`` dispatch."""
+
+    def __init__(
+        self,
+        *,
+        policy_factory: Callable[[], nn.Module],
+        transport: InferenceTransport | str | None = "auto",
+        transport_options: dict[str, Any] | None = None,
+        service_backend_options: dict[str, Any] | None = None,
+        request_spec: TensorDictBase | None = None,
+        response_spec: TensorDictBase | None = None,
+        num_clients: int | None = None,
+        **server_kwargs,
+    ) -> None:
+        if not _has_ray:
+            raise ImportError("Ray is required for service_backend='ray'.")
+        import ray
+
+        options = dict(service_backend_options or {})
+        ray_init_config = options.pop("ray_init_config", None)
+        remote_config = dict(options.pop("remote_config", None) or {})
+        if options:
+            raise ValueError(
+                f"Unsupported Ray service_backend_options: {sorted(options)}."
+            )
+        if remote_config.get("num_gpus", 0):
+            if (
+                server_kwargs.get("device") is None
+                and server_kwargs.get("policy_device") is None
+                and server_kwargs.get("device_config") is None
+            ):
+                server_kwargs["policy_device"] = "cuda:0"
+            if (
+                server_kwargs.get("output_device") is None
+                and server_kwargs.get("device_config") is None
+            ):
+                server_kwargs["output_device"] = "cpu"
+
+        self._runtime_lease = _RayRuntimeLease.acquire(ray_init_config)
+        self._actor = None
+        self._lazy_distributed = (
+            transport == "distributed"
+            and request_spec is None
+            and response_spec is None
+        )
+        self._distributed = transport == "distributed"
+        try:
+            actor_cls = ray.remote(**remote_config)(_RayInferenceServerActor)
+            self._actor = actor_cls.remote(
+                policy_factory,
+                transport,
+                transport_options,
+                request_spec,
+                response_spec,
+                num_clients,
+                server_kwargs,
+            )
+            ray.get(self._actor.health.remote())
+        except BaseException:
+            if self._actor is not None:
+                with contextlib.suppress(Exception):
+                    ray.kill(self._actor, no_restart=True)
+                self._actor = None
+            self._runtime_lease.release()
+            raise
+
+    @property
+    def service_backend(self) -> str:
+        return "ray"
+
+    @property
+    def is_alive(self) -> bool:
+        actor = getattr(self, "_actor", None)
+        if actor is None:
+            return False
+        import ray
+
+        try:
+            return bool(ray.get(actor.health.remote())["is_alive"])
+        except Exception:
+            return False
+
+    @property
+    def policy_version(self) -> int:
+        return int(self.health()["policy_version"])
+
+    @property
+    def transport_kind(self) -> str:
+        return str(self.health()["transport"])
+
+    def start(self) -> _RayInferenceServer:
+        if not self.is_alive:
+            raise RuntimeError("The Ray inference server is not alive.")
+        return self
+
+    def client(self):
+        if self._actor is None:
+            raise RuntimeError("The Ray inference server is closed.")
+        if self._lazy_distributed:
+            return _RayDistributedInferenceClient(self._actor)
+        import ray
+
+        client = ray.get(self._actor.client.remote())
+        if self._distributed:
+            _set_ray_client_liveness(client, self._actor)
+        return client
+
+    def clients(self, num_clients: int) -> list[Any]:
+        if isinstance(num_clients, bool) or not isinstance(num_clients, int):
+            raise TypeError("num_clients must be an integer.")
+        if num_clients < 1:
+            raise ValueError("num_clients must be at least 1.")
+        return [self.client() for _ in range(num_clients)]
+
+    def stats(self, *, reset: bool = False) -> dict[str, float | int]:
+        if self._actor is None:
+            raise RuntimeError("The Ray inference server is closed.")
+        import ray
+
+        return ray.get(self._actor.stats.remote(reset))
+
+    def health(self) -> dict[str, Any]:
+        if self._actor is None:
+            return {"is_alive": False}
+        import ray
+
+        return ray.get(self._actor.health.remote())
+
+    def update_model_weights(
+        self,
+        weights: TensorDictBase,
+        *,
+        mark_weight_update: bool = True,
+    ) -> None:
+        if self._actor is None:
+            raise RuntimeError("The Ray inference server is closed.")
+        import ray
+
+        ray.get(self._actor.update_model_weights.remote(weights, mark_weight_update))
+
+    def update_policy_weights_(
+        self, model_id=None, policy_or_weights=None, **kwargs
+    ) -> None:
+        del kwargs
+        if (
+            policy_or_weights is None
+            and model_id is not None
+            and not isinstance(model_id, str)
+        ):
+            policy_or_weights = model_id
+        if isinstance(policy_or_weights, nn.Module):
+            policy_or_weights = TensorDict.from_module(policy_or_weights).data
+        if policy_or_weights is None:
+            raise ValueError("Policy weights must be provided.")
+        self.update_model_weights(policy_or_weights)
+
+    def shutdown(self, timeout: float | None = 5.0) -> None:
+        actor = getattr(self, "_actor", None)
+        if actor is None:
+            return
+        import ray
+
+        try:
+            ray.get(actor.shutdown.remote(), timeout=timeout)
+        except Exception:
+            pass
+        try:
+            ray.kill(actor, no_restart=True)
+        except Exception:
+            pass
+        self._actor = None
+        self._runtime_lease.release()
+
+    close = shutdown
+
+    def __enter__(self) -> _RayInferenceServer:
+        return self.start()
+
+    def __exit__(self, *exc_info) -> None:
+        self.shutdown()
+
+    def __del__(self) -> None:
+        if getattr(self, "_actor", None) is not None:
+            with contextlib.suppress(BaseException):
+                self.shutdown(timeout=1.0)
 
 
 class InferenceClient:
