@@ -1384,7 +1384,10 @@ class _RayInferenceServerActor:
                     service_backend="thread",
                     **self._server_kwargs,
                 )
-                batch = probe.collate_fn([request])
+                # Collation may return a lazy stack backed by the request. A
+                # TensorDictModule then writes its output keys into that stack,
+                # which must not widen the request schema used by the transport.
+                batch = probe.collate_fn([request.clone()])
                 if probe.policy_device is not None:
                     batch = batch.to(probe.policy_device)
                 interaction_context, batch = probe._interaction_type_context(batch)
