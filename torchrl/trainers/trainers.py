@@ -18,7 +18,7 @@ from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, cast, Literal, Protocol
+from typing import Any, Literal
 
 import numpy as np
 import torch.nn
@@ -169,38 +169,6 @@ class TrainerHookBase:
         raise NotImplementedError
 
 
-class OptimizationContext(Protocol):
-    """Minimal state required by an :class:`OptimizationStepper`.
-
-    Both :class:`Trainer` and distributed learners implement this protocol. The
-    protocol keeps optimization code independent from collection, logging, and
-    controller lifecycle concerns while preserving the released stepper calling
-    convention.
-
-    Example:
-        A custom execution boundary can accept any trainer or learner that
-        implements this protocol while preserving the stepper call contract:
-
-        >>> from torchrl.trainers import (
-        ...     DefaultOptimizationStepper, OptimizationContext
-        ... )
-        >>> def optimize_batch(context: OptimizationContext, batch):
-        ...     stepper = DefaultOptimizationStepper()
-        ...     return stepper.step(context, batch)
-    """
-
-    loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase]
-    optimizer: optim.Optimizer | None
-    clip_grad_norm: bool
-    clip_norm: float | None
-
-    def register_module(self, module_name: str, module: Any) -> None:
-        ...
-
-    def sync_gradients(self, optimizer: optim.Optimizer) -> None:
-        ...
-
-
 class OptimizationStepper(TrainerHookBase):
     """Performs a single optimization step in a Trainer.
 
@@ -218,8 +186,7 @@ class OptimizationStepper(TrainerHookBase):
     values suitable for logging.
     """
 
-    _trainer: OptimizationContext
-    supports_data_parallel = False
+    _trainer: Trainer
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
         """Perform one optimization step on a ``sub_batch``.
@@ -233,11 +200,9 @@ class OptimizationStepper(TrainerHookBase):
         """
         raise NotImplementedError
 
-    def _step(
-        self, context: OptimizationContext, sub_batch: TensorDictBase
-    ) -> TensorDictBase:
-        """Run the released step contract on an internal optimization context."""
-        return self.step(cast("Trainer", context), sub_batch)
+    def _step(self, context: Any, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Run this stepper against a private optimization context."""
+        return self.step(context, sub_batch)
 
     def state_dict(self) -> dict[str, Any]:
         return {}
@@ -263,8 +228,6 @@ class DefaultOptimizationStepper(OptimizationStepper):
     Optionally, a subset of loss entries can be selected via ``loss_components``.
     In that case, only the selected keys contribute to the backward pass.
     """
-
-    supports_data_parallel = True
 
     def __init__(self, loss_components: Sequence[str] | None = None) -> None:
         if loss_components is not None and not loss_components:
@@ -295,7 +258,7 @@ class DefaultOptimizationStepper(OptimizationStepper):
         return float(gn)
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
-        losses_td = trainer.loss_module(sub_batch)
+        losses_td = trainer.compute_loss(sub_batch)
 
         if trainer.optimizer is None:
             raise RuntimeError(
@@ -312,8 +275,6 @@ class DefaultOptimizationStepper(OptimizationStepper):
             items = [item for key, item in losses_td.items() if key.startswith("loss")]
         loss = sum(items)
         loss.backward()
-
-        trainer.sync_gradients(trainer.optimizer)
 
         gn = self._compute_and_clip_grad_norm(
             trainer.optimizer,
@@ -434,7 +395,6 @@ class Trainer:
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
-        self.data_parallel_context = None
         self.logger = logger
         self.async_collection = async_collection
 
@@ -542,6 +502,14 @@ class Trainer:
         if self.checkpoint is not None:
             self._sync_checkpoint_components()
 
+    def compute_loss(
+        self, sub_batch: TensorDictBase, method: str | None = None
+    ) -> TensorDictBase | tuple[Any, ...]:
+        """Evaluate the configured loss through the active execution boundary."""
+        if method is None:
+            return self.loss_module(sub_batch)
+        return getattr(self.loss_module, method)(sub_batch)
+
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
             raise RuntimeError(
@@ -626,15 +594,6 @@ class Trainer:
                 continue
             register(f"trainer_module.{name}", module)
         return checkpoint
-
-    def sync_gradients(self, optimizer: optim.Optimizer) -> None:
-        """Synchronize gradients when a data-parallel context is attached.
-
-        Local trainers do not attach a context, making this method a no-op and
-        preserving their existing numerical behavior.
-        """
-        if self.data_parallel_context is not None:
-            self.data_parallel_context.sync_gradients(optimizer)
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
