@@ -168,6 +168,7 @@ collector_trajs = Collector(
     frames_per_batch=200,
     total_frames=-1,
     trajs_per_batch=5,
+    traj_format="padded",
 )
 
 for traj_data in collector_trajs:
@@ -183,12 +184,35 @@ print(f"Shape: {traj_data.shape}  →  (trajs_per_batch, max_episode_length)")
 print(traj_data["collector", "mask"])
 
 ######################################################################
+# ``traj_format`` controls the batch layout. ``"padded"`` (the current
+# default — it will change to ``"cat"`` in torchrl v0.16) stacks the
+# episodes with zero padding as above. ``"cat"`` concatenates them along
+# time instead: the batch is flat and unpadded, episodes are contiguous
+# and delimited by ``("next", "done")`` and ``("collector", "traj_ids")``.
+# Prefer it when episode lengths vary widely or frames are large (e.g.
+# images), since no memory is spent on padding:
+
+collector_trajs.shutdown()
+collector_cat = Collector(
+    env,
+    policy,
+    frames_per_batch=200,
+    total_frames=-1,
+    trajs_per_batch=5,
+    traj_format="cat",
+)
+
+traj_data_cat = next(iter(collector_cat))
+print(f"Shape: {traj_data_cat.shape}  →  (sum of the 5 episode lengths,)")
+print(traj_data_cat["next", "done"].squeeze(-1))
+
+######################################################################
 # Storing transitions and sampling trajectory slices
 # ---------------------------------------------------
 #
 # In off-policy training the standard pattern is to store **flat
 # transitions** in a :class:`~torchrl.data.ReplayBuffer` and let a
-# :class:`~torchrl.data.SliceSampler` carve out contiguous
+# :class:`~torchrl.data.replay_buffers.SliceSampler` carve out contiguous
 # sub-sequences that respect episode boundaries. The sampler uses
 # ``("next", "done")`` to locate where episodes end, so you never get a
 # slice that straddles two unrelated trajectories.
@@ -199,8 +223,12 @@ print(traj_data["collector", "mask"])
 # .. seealso::
 #   The :ref:`replay buffer tutorial <tuto_rb_traj>` covers trajectory
 #   storage in more depth, including alternative samplers such as
-#   :class:`~torchrl.data.PrioritizedSliceSampler` and
-#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`.
+#   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`.
+#   :ref:`Trajectory boundaries <ref_traj_boundaries>` documents exactly
+#   which markers (``done``/``truncated``/``terminated`` flags, trajectory
+#   ids, the write cursor) the sampler uses to recover episode boundaries
+#   from the buffer, and its blind spots.
 
 from torchrl.data import SliceSampler
 
@@ -341,9 +369,12 @@ collector_async.async_shutdown()
 #   and replay-buffer workflow.
 # * :ref:`Recurrent DQN tutorial <RNN_tuto>` — training a recurrent
 #   policy where per-episode data is essential.
+# * :ref:`Trajectory boundaries <ref_traj_boundaries>` — the contract
+#   between collectors, storages and samplers for recovering episode
+#   boundaries from a replay buffer.
 # * `TorchRL documentation <https://pytorch.org/rl/>`_
 
 # sphinx_gallery_start_ignore
 collector.shutdown()
-collector_trajs.shutdown()
+collector_cat.shutdown()
 # sphinx_gallery_end_ignore

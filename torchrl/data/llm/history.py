@@ -27,15 +27,15 @@ if TYPE_CHECKING:
 
 # Global storage for custom templates and their metadata
 _CHAT_TEMPLATES = {
-    "chatml_format": """{% for message in messages %}
-    {%- if message['role'] == 'assistant' %}
-    {% generation %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endgeneration %}
-    {%- else %}
-    {{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
-    {%- endif %}
-{% endfor %}
-{%- if add_generation_prompt %}
-    {% generation %}{{- '<|im_start|>assistant\n' }}{% endgeneration %}
+    "chatml_format": """{%- for message in messages %}
+{%- if message['role'] == 'assistant' -%}
+{{ '<|im_start|>' + message['role'] + '\n' }}{% generation %}{{ message['content'] }}{% endgeneration %}{{ '<|im_end|>\n' }}
+{%- else -%}
+{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}
+{%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt -%}
+{{ '<|im_start|>assistant\n' }}
 {%- endif %}
 """,
     "qwen": """
@@ -63,13 +63,14 @@ _CHAT_TEMPLATES = {
     {%- if (message.role == "user") or (message.role == "system" and not loop.first) %}
         {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}
     {%- elif (message.role == "assistant" and not message.tool_calls) %}
-    {% generation %}    {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}    {% endgeneration %}
+        {{- '<|im_start|>' + message.role + '\\n' }}{% generation %}{{- message.content }}{% endgeneration %}{{- '<|im_end|>' + '\\n' }}
     {%- elif message.role == "assistant" %}
-        {% generation %}{{- '<|im_start|>' + message.role }}
+        {{- '<|im_start|>' + message.role }}
         {%- if message.content %}
-            {{- '\\n' + message.content }}
+            {{- '\\n' }}{% generation %}{{- message.content }}{% endgeneration %}
         {%- endif %}
         {%- for tool_call in message.tool_calls %}
+            {% generation %}
             {%- if tool_call.function is defined %}
                 {%- set tool_call = tool_call.function %}
             {%- endif %}
@@ -78,8 +79,9 @@ _CHAT_TEMPLATES = {
             {{- '\\\", \\\"arguments\\\": ' }}
             {{- tool_call.arguments | tojson }}
             {{- '}\\n</tool_call>' }}
+            {%- endgeneration %}
         {%- endfor %}
-        {{- '<|im_end|>\\n' }}{% endgeneration %}
+        {{- '<|im_end|>\\n' }}
     {%- elif message.role == "tool" %}
         {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}
             {{- '<|im_start|>tool' }}
@@ -97,12 +99,12 @@ _CHAT_TEMPLATES = {
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
-    {% generation %}{{- '<|im_start|>assistant\\n' }}{% endgeneration %}
+    {{- '<|im_start|>assistant\\n' }}
 {%- endif %}
 """,
-    "dialogpt": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'user' %}{{ message['content'] }}{{ eos_token }}{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ ' ' }}{% endgeneration %}{% endif %}""",
-    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ 'Assistant: ' + message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ 'Assistant: ' }}{% endgeneration %}{% endif %}""",
-    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{% generation %}{{ 'Assistant: ' + message['content'] + eos_token }}{% endgeneration %}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ 'Assistant:' }}{% endgeneration %}{% endif %}""",
+    "dialogpt": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'user' %}{{ message['content'] }}{{ eos_token }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ ' ' }}{% endif %}""",
+    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{{ 'Assistant:' }}{% generation %}{{ ' ' + message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}""",
+    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{{ 'Assistant:' }}{% generation %}{{ ' ' + message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}""",
     "llama": """{{- bos_token }}
 {%- if messages[0]['role'] == 'system' %}
     {%- set system_message = messages[0]['content']|trim %}
@@ -117,7 +119,7 @@ _CHAT_TEMPLATES = {
 {%- endif %}
 {%- for message in messages %}
     {%- if message['role'] == 'assistant' %}
-    {% generation %}{{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}
+    {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}{% generation %}
         {%- if message['content'] is string %}
             {{- message['content'] }}
         {%- else %}
@@ -127,7 +129,7 @@ _CHAT_TEMPLATES = {
                 {%- endif %}
             {%- endfor %}
         {%- endif %}
-    {{- "<|eot|>" }}{% endgeneration %}
+    {%- endgeneration %}{{- "<|eot|>" }}
     {%- else %}
     {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}
         {%- if message['content'] is string %}
@@ -143,13 +145,110 @@ _CHAT_TEMPLATES = {
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
-    {% generation %}{{- '<|header_start|>assistant<|header_end|>\n\n' }}{% endgeneration %}
+    {{- '<|header_start|>assistant<|header_end|>\n\n' }}
 {%- endif %}""",
 }
 
 # Global storage for custom template metadata
 _CUSTOM_INVERSE_PARSERS = {}
 _CUSTOM_MODEL_FAMILY_KEYWORDS = {}
+
+
+def _assistant_content_spans(
+    rendered: str, conversation: list[dict]
+) -> list[tuple[int, int]]:
+    spans = []
+    cursor = 0
+    for message in conversation:
+        if message.get("role") != "assistant":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+        start = rendered.find(content, cursor)
+        if start < 0:
+            start = rendered.find(content)
+        if start < 0:
+            continue
+        end = start + len(content)
+        spans.append((start, end))
+        cursor = end
+    return spans
+
+
+def _fallback_assistant_tokens_mask(
+    *,
+    tokenizer,
+    rendered: str,
+    conversation: list[dict],
+    input_ids: torch.Tensor,
+    current_mask: torch.Tensor,
+) -> torch.Tensor:
+    if current_mask.any():
+        return current_mask
+    spans = _assistant_content_spans(rendered, conversation)
+    if not spans:
+        return current_mask
+
+    try:
+        encoded = tokenizer(
+            rendered,
+            add_special_tokens=False,
+            return_offsets_mapping=True,
+        )
+        offsets = encoded.get("offset_mapping", None)
+    except NotImplementedError:
+        offsets = None
+    if input_ids.ndim == 2:
+        if input_ids.shape[0] != 1:
+            target_mask = None
+            fallback_mask = None
+        elif offsets is None or len(offsets) != input_ids.shape[-1]:
+            target_mask = current_mask[0]
+            fallback_mask = None
+        else:
+            target_mask = current_mask[0]
+            fallback_mask = torch.zeros_like(target_mask)
+    elif input_ids.ndim == 1:
+        if offsets is None or len(offsets) != input_ids.shape[-1]:
+            target_mask = current_mask
+            fallback_mask = None
+        else:
+            target_mask = current_mask
+            fallback_mask = torch.zeros_like(target_mask)
+    else:
+        return current_mask
+
+    if fallback_mask is not None:
+        for idx, (token_start, token_end) in enumerate(offsets):
+            if token_start == token_end:
+                continue
+            for span_start, span_end in spans:
+                if token_start < span_end and token_end > span_start:
+                    fallback_mask[idx] = 1
+                    break
+
+    if fallback_mask is None or not fallback_mask.any():
+        if target_mask is None:
+            return current_mask
+        fallback_mask = torch.zeros_like(target_mask)
+        for span_start, span_end in spans:
+            prefix_ids = tokenizer(rendered[:span_start], add_special_tokens=False).get(
+                "input_ids"
+            )
+            prefix_and_content_ids = tokenizer(
+                rendered[:span_end], add_special_tokens=False
+            ).get("input_ids")
+            start_idx = len(prefix_ids)
+            end_idx = len(prefix_and_content_ids)
+            if start_idx < end_idx <= fallback_mask.shape[-1]:
+                fallback_mask[start_idx:end_idx] = 1
+
+    if input_ids.ndim == 2:
+        current_mask = current_mask.clone()
+        current_mask[0] = fallback_mask
+        return current_mask
+    return fallback_mask
 
 
 def add_chat_template(
@@ -697,6 +796,31 @@ class History(TensorClass["nocast"]):
             return_assistant_tokens_mask=return_assistant_tokens_mask,
             **kwargs,
         )
+        if (
+            return_assistant_tokens_mask
+            and not isinstance(result, (torch.Tensor, list, str))
+            and "assistant_masks" in result
+            and "input_ids" in result
+        ):
+            rendered = tokenizer.apply_chat_template(
+                conversation=self_flat,
+                add_generation_prompt=add_generation_prompt,
+                chat_template=chat_template,
+                tokenize=False,
+                continue_final_message=continue_final_message,
+            )
+            if (
+                isinstance(rendered, str)
+                and isinstance(result["assistant_masks"], torch.Tensor)
+                and isinstance(result["input_ids"], torch.Tensor)
+            ):
+                result["assistant_masks"] = _fallback_assistant_tokens_mask(
+                    tokenizer=tokenizer,
+                    rendered=rendered,
+                    conversation=self_flat,
+                    input_ids=result["input_ids"],
+                    current_mask=result["assistant_masks"],
+                )
         if not isinstance(result, (torch.Tensor, list, str)):
             result = TensorDict.from_dict(result, auto_batch_size=True, batch_dims=1)
             # If self has a batch_dims of 1, we have just the time dimension, so we need to remove the batch dim from the result
@@ -724,6 +848,7 @@ class History(TensorClass["nocast"]):
         Args:
             text (str | list[str]): The chat template to invert.
             chat_template_name (str, optional): The name of the chat template to use.
+            chat_template (str, optional): The chat template string to use.
             tokenizer (transformers.AutoTokenizer | transformers.AutoProcessor, optional): The tokenizer to use.
 
         Returns:

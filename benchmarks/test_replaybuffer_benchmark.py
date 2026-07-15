@@ -12,6 +12,7 @@ from tensordict import TensorDict
 
 from torchrl.data import (
     LazyMemmapStorage,
+    LazyStackStorage,
     LazyTensorStorage,
     ListStorage,
     ReplayBuffer,
@@ -20,10 +21,12 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers import (
     PrioritizedSampler,
+    PromptGroupSampler,
     RandomSampler,
     SamplerWithoutReplacement,
     SliceSampler,
 )
+from torchrl.envs.transforms import ActionChunkTransform, CatFrames
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
     TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9
@@ -71,6 +74,12 @@ def populate(rb, td):
 
 def sample(rb):
     rb.sample()
+
+
+def test_replay_buffer_direct_client_identity(benchmark):
+    replay_buffer = ReplayBuffer(storage=ListStorage(1))
+    client = benchmark(replay_buffer.client)
+    assert client is replay_buffer
 
 
 def sample_prioritized_sampler(sampler, storage, batch_size):
@@ -279,6 +288,26 @@ def test_rb_sample(benchmark, rb, storage, sampler, size):
     benchmark(sample, rb)
 
 
+@pytest.mark.parametrize("size", [1_000, 100_000])
+def test_prompt_group_sampler_cached_sample(benchmark, size):
+    rb = ReplayBuffer(
+        storage=LazyStackStorage(size),
+        sampler=PromptGroupSampler(num_groups=8, group_key="prompt"),
+        batch_size=64,
+    )
+    rb.extend(
+        TensorDict(
+            {
+                "prompt": torch.arange(size) % 64,
+                "value": torch.arange(size),
+            },
+            batch_size=[size],
+        )
+    )
+    rb.sample()
+    benchmark(sample, rb)
+
+
 class TestPrioritizedReplayBufferBenchmark:
     @pytest.mark.parametrize("device", _prioritized_sampler_benchmark_devices())
     @pytest.mark.parametrize("size", [1_000_000, 10_000_000])
@@ -447,6 +476,34 @@ def test_rb_extend_sample(
         warmup_rounds=10,
         rounds=50,
     )
+
+
+class TestWindowingTransformsBenchmark:
+    """Offline (sample-path) sliding-window transforms: CatFrames.unfolding
+    and the ActionChunkTransform recipe built on top of it."""
+
+    @pytest.mark.parametrize("done_key", ["done", None], ids=["done_aware", "no_done"])
+    def test_action_chunk_transform(self, benchmark, done_key):
+        t = ActionChunkTransform(chunk_size=8, done_key=done_key)
+        td = TensorDict(
+            {
+                "action": torch.randn(64, 32, 7),
+                ("next", "done"): torch.zeros(64, 32, 1, dtype=torch.bool),
+            },
+            batch_size=[64],
+        )
+        benchmark(t, td)
+
+    def test_catframes_offline(self, benchmark):
+        t = CatFrames(N=4, dim=-3, in_keys=["pixels"], out_keys=["pixels_cat"])
+        td = TensorDict(
+            {
+                "pixels": torch.randn(8, 32, 3, 32, 32),
+                ("next", "done"): torch.zeros(8, 32, 1, dtype=torch.bool),
+            },
+            batch_size=[8, 32],
+        ).refine_names(None, "time")
+        benchmark(t, td)
 
 
 if __name__ == "__main__":

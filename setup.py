@@ -267,6 +267,12 @@ def get_extensions():
                     "-DWITH_CUDA",
                 ]
             extra_link_args = ["-O0", "-g"]
+        else:
+            # setuptools appends Python's sysconfig CFLAGS (which include -g)
+            # to the compile command, leaving ~20 MB of debug info in the
+            # extension. Strip symbols at link time in release builds; the
+            # dynamic symbol table (needed by dlopen) is unaffected.
+            extra_link_args = ["-Wl,-x"] if sys.platform == "darwin" else ["-Wl,-s"]
 
     extensions_dir = "torchrl/csrc"
 
@@ -341,7 +347,9 @@ def _version_with_local_sha(base_version: str) -> str:
 def set_version():
     # Prefer explicit build version if provided by build tooling.
     if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
-        override = os.environ.get("TORCHRL_BUILD_VERSION")
+        override = os.environ.get("TORCHRL_BUILD_VERSION") or os.environ.get(
+            "BUILD_VERSION"
+        )
         if override:
             os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = override.strip()
         else:

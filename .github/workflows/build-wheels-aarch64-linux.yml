@@ -64,6 +64,7 @@ jobs:
       with-cpu: ${{ inputs.with-cpu || (github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable')) || 'enable' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
+      python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
   build:
     needs: generate-matrix
     strategy:

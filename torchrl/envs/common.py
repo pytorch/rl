@@ -9,7 +9,7 @@ import abc
 import re
 import warnings
 import weakref
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from copy import deepcopy
 from functools import partial, wraps
 from typing import Any
@@ -24,12 +24,13 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT
-from tensordict.utils import is_non_tensor, NestedKey
+from tensordict.utils import expand_as_right, is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
     _maybe_record_function_decorator,
     _replace_last,
+    DEFAULT_DONE_KEYS,
     implement_for,
     prod,
     seed_generator,
@@ -133,6 +134,7 @@ class EnvMetaData:
         device: torch.device,
         batch_locked: bool,
         device_map: dict,
+        supports_set_state: bool = False,
     ):
         self.device = device
         self.tensordict = tensordict
@@ -141,6 +143,7 @@ class EnvMetaData:
         self.env_str = env_str
         self.batch_locked = batch_locked
         self.device_map = device_map
+        self.supports_set_state = supports_set_state
         self.has_dynamic_specs = _has_dynamic_specs(specs)
 
     @property
@@ -159,7 +162,15 @@ class EnvMetaData:
 
     @tensordict.setter
     def tensordict(self, value: TensorDictBase):
-        self._tensordict = value.to("cpu")
+        # ``tensordict.to("cpu")`` issues a ``torch.cuda.Stream.record()`` sync
+        # whenever a CUDA context exists -- even for a CPU->CPU move -- so only
+        # move when the value actually lives on a non-CPU device. This keeps env
+        # metadata capture from spuriously touching CUDA for CPU/deviceless envs
+        # (which otherwise fails on a busy/unavailable GPU). The getter handles
+        # any device conversion, so the stored value's behavior is unchanged.
+        if value.device is not None and value.device.type != "cpu":
+            value = value.to("cpu")
+        self._tensordict = value
 
     @specs.setter
     def specs(self, value: Composite):
@@ -185,6 +196,7 @@ class EnvMetaData:
         device = env.device
         specs = specs.to("cpu")
         batch_locked = env.batch_locked
+        supports_set_state = env._supports_set_state
         # we need to save the device map, as the tensordict will be placed on cpu
         device_map = {}
 
@@ -200,6 +212,7 @@ class EnvMetaData:
             device=device,
             batch_locked=batch_locked,
             device_map=device_map,
+            supports_set_state=supports_set_state,
         )
 
     def expand(self, *size: int) -> EnvMetaData:
@@ -213,6 +226,7 @@ class EnvMetaData:
             device=self.device,
             batch_locked=self.batch_locked,
             device_map=self.device_map,
+            supports_set_state=self.supports_set_state,
         )
 
     def clone(self):
@@ -224,6 +238,7 @@ class EnvMetaData:
             device=self.device,
             batch_locked=self.batch_locked,
             device_map=self.device_map,
+            supports_set_state=self.supports_set_state,
         )
 
     def to(self, device: DEVICE_TYPING) -> EnvMetaData:
@@ -240,6 +255,7 @@ class EnvMetaData:
             device=device,
             batch_locked=self.batch_locked,
             device_map=device_map,
+            supports_set_state=self.supports_set_state,
         )
 
     def __getitem__(self, item):
@@ -253,7 +269,38 @@ class EnvMetaData:
             device=self.device,
             batch_locked=self.batch_locked,
             device_map=self.device_map,
+            supports_set_state=self.supports_set_state,
         )
+
+
+_NO_COMPILE = object()
+
+
+def _pop_compile_kwargs(kwargs: dict) -> dict | None:
+    """Pop and normalize the ``compile`` kwarg.
+
+    Accepts ``True``/``False``/``None`` for "compile with defaults" /
+    "do not compile", or a ``dict`` of kwargs forwarded to
+    :meth:`EnvBase.compile`. Using a dict avoids name collisions with env
+    constructor kwargs (``backend``, ``mode``, ``fullgraph``, ``warmup``, ...).
+    """
+    compile_arg = kwargs.pop("compile", _NO_COMPILE)
+    if compile_arg is _NO_COMPILE or compile_arg is False or compile_arg is None:
+        return None
+    if compile_arg is True:
+        return {}
+    if isinstance(compile_arg, dict):
+        return dict(compile_arg)
+    raise TypeError(
+        f"compile must be a bool, None, or a dict of torch.compile kwargs; "
+        f"got {type(compile_arg).__name__}"
+    )
+
+
+def _maybe_compile_env(instance, compile_kwargs):
+    if compile_kwargs is None:
+        return instance
+    return instance.compile(**compile_kwargs)
 
 
 class _EnvPostInit(abc.ABCMeta):
@@ -262,6 +309,7 @@ class _EnvPostInit(abc.ABCMeta):
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         policy = kwargs.pop("policy", None)
+        compile_kwargs = _pop_compile_kwargs(kwargs)
         instance: EnvBase = super().__call__(*args, **kwargs)
         if "_cache" not in instance.__dict__:
             instance._cache = {}
@@ -280,6 +328,31 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.reward_keys
         # _ = instance.action_keys
         _ = instance.state_spec
+        # Auto-append a FrameSkipTransform for envs that accept a ``frame_skip``
+        # argument but do not implement frame-skipping in their own ``_step``.
+        # Envs that handle it natively (e.g. gym-like envs) set
+        # ``_has_frame_skip = True`` and are left untouched here.
+        #
+        # We read ``frame_skip`` straight from ``__dict__`` (it is set by
+        # ``_EnvWrapper.__init__``) instead of ``getattr``: a plain ``getattr``
+        # would fall through to ``__getattr__`` on batched envs
+        # (``ParallelEnv`` / ``SerialEnv``), which for a lazy (non-started) env
+        # *starts the workers and raises* rather than returning a value. Envs
+        # without the attribute (batched envs, native ``EnvBase`` subclasses)
+        # default to 1 and are skipped.
+        frame_skip = instance.__dict__.get("frame_skip", 1)
+        if (
+            frame_skip
+            and frame_skip > 1
+            and not getattr(type(instance), "_has_frame_skip", False)
+        ):
+            from torchrl.envs.transforms._env import FrameSkipTransform
+            from torchrl.envs.transforms.transforms import TransformedEnv
+
+            # The transform now owns the frame-skipping; neutralize any
+            # bookkeeping on the wrapped env to avoid double-counting.
+            instance.wrapper_frame_skip = 1
+            instance = TransformedEnv(instance, FrameSkipTransform(frame_skip))
         if auto_reset:
             from torchrl.envs.transforms.transforms import (
                 AutoResetEnv,
@@ -296,7 +369,7 @@ class _EnvPostInit(abc.ABCMeta):
                 )
 
                 instance = _maybe_append_env_transforms_from_module(instance, policy)
-            return instance
+            return _maybe_compile_env(instance, compile_kwargs)
 
         done_keys = set(instance.full_done_spec.keys(True, True))
         obs_keys = set(instance.full_observation_spec.keys(True, True))
@@ -325,7 +398,7 @@ class _EnvPostInit(abc.ABCMeta):
             )
 
             instance = _maybe_append_env_transforms_from_module(instance, policy)
-        return instance
+        return _maybe_compile_env(instance, compile_kwargs)
 
 
 class EnvBase(nn.Module, metaclass=_EnvPostInit):
@@ -377,6 +450,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
             .. seealso:: The :ref:`auto-resetting environments API <autoresetting_envs>` section in the API
                 documentation.
+
+        compile (bool or dict, optional): if truthy, the env is compiled right
+            after construction by calling :meth:`~torchrl.envs.EnvBase.compile`.
+
+            * ``False`` / ``None`` (default): no compilation.
+            * ``True``: compile with default :func:`torch.compile` settings.
+            * ``dict``: kwargs forwarded to :meth:`~torchrl.envs.EnvBase.compile`,
+              for example ``{"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"}``.
+
+            A dict is the recommended form: passing torch.compile kwargs through
+            the env constructor as top-level keywords would risk colliding with
+            env-specific kwargs.
+
+            .. note:: The compile step is achieved by the `EnvBase` metaclass.
+                It does not appear in the `__init__` method and is included
+                in the keyword arguments strictly for type-hinting purpose. It
+                also applies to :class:`~torchrl.envs.TransformedEnv`, so
+                wrapping with transforms and asking for compile in one shot is
+                supported, e.g.
+                ``TransformedEnv(env, transform, compile={"warmup": 4})``.
+
+            .. seealso:: :meth:`~torchrl.envs.EnvBase.compile` and
+                :meth:`~torchrl.envs.EnvBase.eager`.
 
     Attributes:
         done_spec (Composite): equivalent to ``full_done_spec`` as all
@@ -510,6 +606,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     _batch_size: torch.Size | None
     _device: torch.device | None
     _is_spec_locked: bool = False
+    # Whether this env can honor a state passed through the reset tensordict
+    # (i.e. supports a deterministic ``reset(td, set_state=True)``). Subclasses
+    # whose ``_reset`` reads the input state set this to ``True``. It gates both
+    # the transition ``FutureWarning`` and the ``NotImplementedError`` raised by
+    # :meth:`reset` when ``set_state=True`` on an env that does not support it.
+    _supports_set_state: bool = False
+    # Whether this env implements ``frame_skip`` natively in its own ``_step``
+    # (e.g. :class:`~torchrl.envs.GymLikeEnv` loops over ``wrapper_frame_skip``).
+    # When ``False`` (the default) and a ``frame_skip > 1`` is requested, the
+    # ``EnvBase`` metaclass automatically wraps the env in a
+    # :class:`~torchrl.envs.transforms.FrameSkipTransform` so that the same
+    # behaviour is obtained without each wrapper re-implementing it.
+    _has_frame_skip: bool = False
 
     def __init__(
         self,
@@ -727,7 +836,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 output_spec = output_spec[0]
 
         if done_key is None:
-            done_key = ["done", "terminated", "truncated"]
+            done_key = list(DEFAULT_DONE_KEYS)
         full_done_spec = output_spec.separates(*done_key, default=None)
         if full_done_spec is not None:
             self.full_done_spec = full_done_spec
@@ -2264,7 +2373,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     tensordict = tensordict[partial_steps]
             else:
                 if not partial_steps.any():
-                    next_tensordict = self._skip_tensordic(tensordict)
+                    next_tensordict = self._skip_tensordict(tensordict)
                 else:
                     # trust that the _step can handle this!
                     tensordict.set("_step", partial_steps)
@@ -2999,6 +3108,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def reset(
         self,
         tensordict: TensorDictBase | None = None,
+        *,
+        set_state: bool | None = None,
         **kwargs,
     ) -> TensorDictBase:
         """Resets the environment.
@@ -3008,6 +3119,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         Args:
             tensordict (TensorDictBase, optional): tensordict to be used to contain the resulting new observation.
                 In some cases, this input can also be used to pass argument to the reset function.
+
+        Keyword Args:
+            set_state (bool, optional): if ``True``, the environment is reset
+                *deterministically* to the state contained in ``tensordict``
+                (for stateless envs such as :class:`~torchrl.envs.PendulumEnv`,
+                the relevant state entries -- e.g. ``"th"``/``"thdot"`` -- are
+                honored; for stateful envs that support it, the underlying
+                set-state API is used). Passing ``set_state=True`` to an env that
+                cannot honor a provided state raises ``NotImplementedError``.
+                If ``False``, any state present in ``tensordict`` is ignored and a
+                fresh (typically random) initial state is generated. The default
+                (``None``) preserves the historical behavior of honoring state
+                found in ``tensordict``, but emits a :class:`FutureWarning`: from
+                **v0.15** an unspecified ``set_state`` will be treated as
+                ``False``. This is a keyword argument, deliberately *not* a
+                tensordict key, so it never stacks/pads across a rollout.
             kwargs (optional): other arguments to be passed to the native
                 reset function.
 
@@ -3022,6 +3149,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self._assert_tensordict_shape(tensordict)
 
         select_reset_only = kwargs.pop("select_reset_only", False)
+        set_state = self._resolve_set_state(set_state, tensordict, select_reset_only)
+        if set_state is not None:
+            # Only forward ``set_state`` to envs that consume it. This keeps the
+            # kwargs of envs that blindly forward to a native backend (gym, brax,
+            # ...) clean -- those return ``None`` from ``_resolve_set_state``.
+            kwargs["set_state"] = set_state
         if select_reset_only and tensordict is not None:
             # When making rollouts with step_and_maybe_reset, it can happen that a tensordict has
             # keys that are used by reset to optionally set the reset state (eg, the fen in chess). If that's the
@@ -3048,6 +3181,69 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
         return self._reset_proc_data(tensordict, tensordict_reset)
+
+    def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
+        """Whether ``tensordict`` populates any leaf of this env's ``state_spec``."""
+        if tensordict is None:
+            return False
+        state_keys = list(self.state_spec.keys(True, True))
+        if not state_keys:
+            return False
+        # ``leaves_only=False`` so that NonTensor state entries (e.g. ChessEnv's
+        # ``fen``/``pgn``) are detected too -- ``leaves_only=True`` filters them out.
+        td_keys = set(tensordict.keys(include_nested=True, leaves_only=False))
+        return any(key in td_keys for key in state_keys)
+
+    def _resolve_set_state(
+        self,
+        set_state: bool | None,
+        tensordict: TensorDictBase | None,
+        select_reset_only: bool,
+    ) -> bool | None:
+        """Validate and resolve the ``set_state`` reset kwarg.
+
+        Returns the effective ``set_state`` value to forward to ``_reset`` (a
+        bool for envs that support deterministic resets, or ``None`` for envs
+        that do not -- in which case nothing is forwarded). Raises if
+        ``set_state=True`` is requested on an unsupported env or in an
+        incompatible context, and emits the transition ``FutureWarning`` when
+        state is honored implicitly.
+        """
+        if set_state is True:
+            if not self._supports_set_state:
+                raise NotImplementedError(
+                    f"{type(self).__name__} does not support deterministic resets "
+                    f"via set_state=True: its `_reset` cannot honor a state passed "
+                    f"through the reset tensordict."
+                )
+            if select_reset_only:
+                raise ValueError(
+                    "set_state=True is incompatible with select_reset_only=True: "
+                    "the latter strips the state from the input tensordict before reset."
+                )
+        if not self._supports_set_state:
+            # Unsupported envs never see ``set_state`` (keeps native-backend kwargs clean).
+            return None
+        if select_reset_only:
+            # Rollout / auto-reset path: never honor a provided state.
+            return False
+        if set_state is None:
+            # Transition behavior: honor state implicitly if present, but warn.
+            # TODO(v0.15): treat an unspecified ``set_state`` as ``False`` and
+            #  drop this branch (and the ``select_reset_only`` strip can follow).
+            if self._input_td_has_state(tensordict):
+                warnings.warn(
+                    "A reset tensordict carrying state was passed to `reset()` "
+                    "without specifying `set_state`. The state is honored for now, "
+                    "but from v0.15 it will be ignored unless you pass "
+                    "`set_state=True` explicitly (pass `set_state=False` to opt "
+                    "into the future behavior and silence this warning).",
+                    category=FutureWarning,
+                    stacklevel=2,
+                )
+                return True
+            return False
+        return bool(set_state)
 
     def _reset_proc_data(self, tensordict, tensordict_reset):
         self._complete_done(self.full_done_spec, tensordict_reset)
@@ -3176,7 +3372,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             leading dimension.
         """
         if tensordict is not None:
-            self.reset(tensordict)
+            # all_actions enumerates the actions available *from the provided
+            # state*, so honor it deterministically where the env supports it.
+            self.reset(tensordict, set_state=True if self._supports_set_state else None)
 
         return self.full_action_spec.enumerate(use_mask=True)
 
@@ -3254,6 +3452,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         callback: Callable[[TensorDictBase, ...], Any] | None = None,
         *,
+        actions: Iterable[Any] | None = None,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool | None = None,
@@ -3264,6 +3463,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         out=None,
         trust_policy: bool = False,
         storing_device: DEVICE_TYPING | None = None,
+        set_state: bool | None = None,
     ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
@@ -3284,6 +3484,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 the call to ``rollout``.
 
         Keyword Args:
+            actions (iterable, optional): an iterable of pre-computed actions to
+                drive the rollout instead of a ``policy``. Each item is written
+                under the environment's (top-level) action key before stepping,
+                making open-loop replay a one-liner
+                (``env.rollout(max_steps, actions=[...])``). Mutually exclusive
+                with ``policy``. When the iterable is sized, ``max_steps`` is
+                capped to its length. To stop early on a goal condition, combine
+                with :class:`~torchrl.envs.transforms.TerminateTransform` and
+                ``break_when_any_done=True``. Defaults to ``None``.
             auto_reset (bool, optional): if ``True``, the contained environments will be reset before starting the
                 rollout. If ``False``, then the rollout will continue from a previous state, which requires the
                 ``tensordict`` argument to be passed with the previous rollout. Default is ``True``.
@@ -3316,11 +3525,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 ``done_spec``, an exception is raised.
                 Truncated keys can be set through ``env.add_truncated_keys``.
                 Defaults to ``False``.
+            out (TensorDict, optional): output tensordict where rollout data is
+                written. Defaults to ``None``.
             trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
                 assumed to be compatible with the collector. This defaults to ``True`` for CudaGraphModules
                 and ``False`` otherwise.
             storing_device (Device, optional): if provided, the tensordict will be stored on this device.
                 Defaults to ``None``.
+            set_state (bool, optional): forwarded to the initial
+                :meth:`~torchrl.envs.EnvBase.reset` (only when ``auto_reset=True``).
+                Pass ``set_state=True`` to start the rollout *deterministically*
+                from the state contained in ``tensordict``. See
+                :meth:`~torchrl.envs.EnvBase.reset` for details. Defaults to
+                ``None``.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -3518,6 +3735,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         if return_contiguous is None:
             return_contiguous = not self._has_dynamic_specs
+        if actions is not None:
+            if policy is not None:
+                raise ValueError(
+                    "Cannot pass both `policy` and `actions` to rollout()."
+                )
+            # The macro action is a single (possibly structured) object written
+            # under the top-level action key, e.g. "action".
+            action_key = next(iter(self.full_action_spec.keys()))
+            action_iterator = iter(actions)
+
+            def policy(tensordict, _it=action_iterator, _key=action_key):
+                tensordict.set(_key, next(_it))
+                return tensordict
+
+            # A sized iterable bounds the rollout length.
+            if hasattr(actions, "__len__"):
+                max_steps = min(max_steps, len(actions))
+            # The action-iterator policy ignores observations; don't wrap it.
+            trust_policy = True
         if policy is not None:
             policy = _make_compatible_policy(
                 policy,
@@ -3540,7 +3776,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         env_device = self.device
 
         if auto_reset:
-            tensordict = self.reset(tensordict)
+            tensordict = self.reset(tensordict, set_state=set_state)
         elif tensordict is None:
             raise RuntimeError("tensordict must be provided when auto_reset is False")
         else:
@@ -3680,10 +3916,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self, tensordict: TensorDictBase
     ) -> dict[NestedKey, torch.Tensor]:
         next_tensordict = tensordict.get("next")
-        done = False
+        done = None
         for done_key in self.done_keys:
-            done = done | next_tensordict.get(done_key)
-        if done is False or not done.any():
+            done_value = next_tensordict.get(done_key)
+            done = done_value if done is None else done | done_value
+        if done is None:
             return {}
         done = done.squeeze(-1)
 
@@ -3693,10 +3930,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if obs is None or not isinstance(obs, torch.Tensor):
                 continue
             reset_observations[obs_key] = obs.clone()
+            done_obs = expand_as_right(done, obs)
             if obs.is_floating_point():
-                obs[done] = torch.nan
+                obs = torch.where(done_obs, torch.full_like(obs, torch.nan), obs)
             else:
-                obs[done] = 0
+                obs = torch.where(done_obs, torch.zeros_like(obs), obs)
+            next_tensordict.set(obs_key, obs)
         return reset_observations
 
     @property
@@ -3739,10 +3978,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            if storing_device is None or tensordict.device == storing_device:
-                td_append = tensordict.copy()
+            # Run step_mdp + post-step-mdp hooks before copying the post-step
+            # tensordict for stacking: the hook is allowed to mutate it (e.g.
+            # to drop transient keys), and we want those mutations reflected
+            # in what gets stacked.
+            post_step_td = tensordict
+            next_td = self._step_mdp(post_step_td)
+            if self._post_step_mdp_hooks is not None:
+                post_step_td, next_td = self._post_step_mdp_hooks(post_step_td, next_td)
+
+            if storing_device is None or post_step_td.device == storing_device:
+                td_append = post_step_td.copy()
             else:
-                td_append = tensordict.to(storing_device)
+                td_append = post_step_td.to(storing_device)
             if break_when_all_done:
                 if partial_steps is not True and not partial_steps.all():
                     # At least one step is partial
@@ -3756,7 +4004,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
                 break
-            tensordict = self._step_mdp(tensordict)
+            tensordict = next_td
 
             if break_when_any_done:
                 # done and truncated are in done_keys
@@ -3842,6 +4090,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
+        compiled = self.__dict__.get("_compiled_step_and_maybe_reset", None)
+        if compiled is not None:
+            return compiled(tensordict)
+        return self._step_and_maybe_reset(tensordict)
+
+    def _step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         """Runs a step in the environment and (partially) resets it if needed.
 
         Args:
@@ -3892,14 +4148,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict
             )
         tensordict_ = self._step_mdp(tensordict)
-        # if self._post_step_mdp_hooks is not None:
-        # tensordict_ = self._post_step_mdp_hooks(tensordict_)
+        if self._post_step_mdp_hooks is not None:
+            tensordict, tensordict_ = self._post_step_mdp_hooks(tensordict, tensordict_)
         if native_autoreset:
             for obs_key, obs in reset_observations.items():
                 if obs_key in tensordict_.keys(True, True):
                     tensordict_.set(obs_key, obs)
+            done_by_key = {
+                done_key: tensordict_.get(done_key).clone()
+                for done_key in self.done_keys
+            }
+            for done_group in self.done_keys_groups:
+                reset = False
+                for done_key in done_group:
+                    reset = reset | done_by_key[done_key]
+                tensordict_.set(_replace_last(done_group[0], "_reset"), reset.clone())
+            tensordict_ = self._reset_on_native_autoreset(tensordict_, tensordict_)
+            for reset_key in self.reset_keys:
+                tensordict_.pop(reset_key, None)
             for done_key in self.done_keys:
-                done = tensordict_.get(done_key).clone()
+                done = done_by_key[done_key]
                 init_key = _replace_last(done_key, "is_init")
                 if init_key in tensordict_.keys(True, True):
                     tensordict_.set(init_key, done.clone())
@@ -3908,7 +4176,80 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
-    # _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None
+    def compile(self, *, warmup: int | None = None, **kwargs):
+        """Compile :meth:`step_and_maybe_reset` and return ``self``.
+
+        Args:
+            warmup (int, optional): if provided, the first ``warmup`` calls to
+                :meth:`step_and_maybe_reset` will run eagerly so the input
+                :class:`~tensordict.TensorDict` layout (keys, names, nesting)
+                stabilizes before tracing. Compilation kicks in on call
+                ``warmup``. This avoids the recompile that otherwise happens
+                because the first post-:meth:`reset` tensordict and the
+                steady-state post-``step_mdp`` tensordict have different
+                layouts. Defaults to ``None`` (compile immediately).
+            **kwargs: forwarded to :func:`torch.compile`. Common ones include
+                ``backend``, ``mode``, ``fullgraph``, and ``dynamic``.
+
+        The same behavior is reachable directly from the constructor of every
+        :class:`EnvBase` subclass (and of
+        :class:`~torchrl.envs.TransformedEnv`) via the ``compile=`` kwarg:
+
+        .. code-block:: python
+
+            env = GymEnv(
+                "HalfCheetah-v4",
+                compile={"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"},
+            )
+
+            env = TransformedEnv(
+                GymEnv("HalfCheetah-v4"),
+                Compose(...),
+                compile={"warmup": 4, "fullgraph": True},
+            )
+
+        See :meth:`eager` to undo it.
+        """
+        from torchrl._utils import compile_with_warmup
+
+        if warmup is None:
+            compiled = torch.compile(self._step_and_maybe_reset, **kwargs)
+        else:
+            compiled = compile_with_warmup(
+                self._step_and_maybe_reset, warmup=warmup, **kwargs
+            )
+        self.__dict__["_compiled_step_and_maybe_reset"] = compiled
+        return self
+
+    def eager(self):
+        """Restore eager :meth:`step_and_maybe_reset` execution and return ``self``."""
+        self.__dict__.pop("_compiled_step_and_maybe_reset", None)
+        return self
+
+    _post_step_mdp_hooks: Callable[
+        [TensorDictBase, TensorDictBase], tuple[TensorDictBase, TensorDictBase]
+    ] | None = None
+    """Optional hook called after :meth:`_step_mdp` inside :meth:`step_and_maybe_reset`.
+
+    Signature: ``(tensordict, tensordict_) -> (tensordict, tensordict_)`` where
+    ``tensordict`` is the post-step tensordict (still carrying
+    ``("next", ...)`` entries) and ``tensordict_`` is the result of
+    ``step_mdp``. The hook may mutate either tensordict in place; both are
+    returned so the caller picks up any swaps. Used by transforms that need to
+    adjust the data the policy will see on the next iteration, or trim the
+    data that the data collector will stack (for example a low-precision
+    delta transform that drops the full-precision ``("next", obs)`` slot in
+    favour of a compressed sibling key).
+
+    Defaults to ``None``: when unset, the hook is skipped. Transforms that need
+    it are expected to expose a ``_post_step_mdp_hooks`` method themselves and
+    rely on :class:`~torchrl.envs.TransformedEnv` to delegate the call.
+    """
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
 
     @property
     @_cache_value

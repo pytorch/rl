@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -18,8 +18,12 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
-from torchrl.collectors.utils import _map_weight, _traj_emit, _traj_ingest
-
+from torchrl.collectors.utils import (
+    _map_weight,
+    _maybe_normalize_replay_buffer_tensordict_device,
+    _traj_emit,
+    _traj_ingest,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.weight_update.utils import _resolve_attr
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -218,14 +222,20 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     Keyword Args:
         trajs_per_batch (int, optional): When set, the collector yields batches
-            of exactly this many complete, zero-padded trajectories instead of
-            fixed-frame batches. Each yielded :class:`~tensordict.TensorDict`
-            has shape ``(trajs_per_batch, max_traj_len)`` and includes a
-            ``("collector", "mask")`` boolean field marking valid time steps.
-            Trajectories that span multiple internal collection steps are
-            reassembled automatically. ``frames_per_batch`` still controls
-            how often the environment is polled internally, but the output
-            batch size is determined by ``trajs_per_batch``.
+            of exactly this many complete trajectories instead of fixed-frame
+            batches. By default each yielded :class:`~tensordict.TensorDict`
+            has shape ``(trajs_per_batch, max_traj_len)``, zero-padded along
+            time, and includes a ``("collector", "mask")`` boolean field
+            marking valid time steps; with ``traj_format="cat"`` the
+            trajectories are instead concatenated along time into a flat,
+            unpadded batch. Trajectories that span multiple internal
+            collection steps are reassembled automatically.
+            ``frames_per_batch`` still controls how often the environment is
+            polled internally, but the output batch size is determined by
+            ``trajs_per_batch``.
+            (:class:`~torchrl.collectors.AsyncBatchedCollector` exposes the
+            same capability through its ``yield_completed_trajectories``
+            flag.)
 
             **Replay buffer integration**
 
@@ -264,7 +274,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             :class:`~torchrl.collectors.MultiSyncCollector`,
             :class:`~torchrl.collectors.MultiAsyncCollector`,
             :class:`~torchrl.collectors.distributed.RayCollector`, and
-            :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+            :class:`~torchrl.collectors.distributed.RPCCollector`.
             Trajectory assembly is delegated to each worker's inner collector,
             which calls :meth:`_iter_by_trajectories` independently and writes
             complete trajectories to the shared replay buffer.  Both the
@@ -296,6 +306,23 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             ``trajs_per_write=2`` makes 5 writes, while
             ``trajs_per_write=10`` or larger makes 1 write. Defaults to
             ``None`` (write all currently queued completed trajectories).
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set. ``"padded"`` stacks the
+            trajectories into a ``(trajs_per_batch, max_traj_len)`` batch,
+            zero-padded along time, with a ``("collector", "mask")`` entry
+            marking the valid steps. ``"cat"`` concatenates them along time
+            into a flat, unpadded ``[sum_i T_i]`` batch — no mask, no wasted
+            memory on padding; trajectories are contiguous, delimited by
+            ``("next", "done")`` (``True`` at the last step of each, by the
+            completeness guarantee) and ``("collector", "traj_ids")``.
+            ``"cat"`` matches the layout the replay-buffer write path uses
+            and the one :class:`~torchrl.data.SliceSampler` expects. Has no
+            effect on replay-buffer writes (always flat); raises if set
+            without ``trajs_per_batch``. Defaults to ``None``, which
+            currently resolves to ``"padded"`` and emits a
+            :class:`FutureWarning` when ``trajs_per_batch`` batches are
+            yielded without an explicit choice: the default will change to
+            ``"cat"`` in torchrl v0.16.
     """
 
     _task = None
@@ -313,6 +340,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
+    traj_format: Literal["padded", "cat"] = "padded"
     _pre_collect_hook: Callable[[], None] | None = None
     _post_collect_hook: Callable[[TensorDictBase], None] | None = None
 
@@ -606,6 +634,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             >>> collector.get_distant_attr("_receiver_schemes['policy']._sync_interval")
         """
         return _resolve_attr(self, attr)
+
+    def _dump_env_transform(self, step: int | None = None) -> None:
+        """Dump the environment transform when it supports ``dump``."""
+        env = getattr(self, "env", None)
+        transform = getattr(env, "transform", None)
+        dump = getattr(transform, "dump", None)
+        if callable(dump):
+            dump(step=step)
 
     def map_fn(
         self,
@@ -1252,6 +1288,13 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     context=self,
                     worker_idx=self.worker_idx,
                 )
+            elif scheme.context is None:
+                # The scheme was already initialized on the receiver (e.g. early,
+                # by _make_policy_factory which has no access to the inner
+                # collector yet). Now that we *do* have the collector, set it as
+                # the context so receiver-side bookkeeping (policy version,
+                # cascading sub-collector updates) can reach it.
+                scheme.context = self
 
             # Store the scheme for later use in receive_weights()
             self._receiver_schemes[model_id] = scheme
@@ -1281,6 +1324,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         accumulates complete trajectories and yields zero-padded batches of
         shape ``(trajs_per_batch, max_traj_len)`` with a
         ``("collector", "mask")`` boolean field marking valid timesteps.
+        With ``traj_format="cat"``, the trajectories are instead concatenated
+        along time into flat, unpadded batches (trajectories delimited by
+        ``("next", "done")``).
 
         **With a replay buffer**: each complete trajectory is written to the
         buffer immediately as a **flat 1-D sequence** of valid timesteps — no
@@ -1310,6 +1356,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         partial_trajs: dict[int, list] = {}
         complete_trajs: list = []
+        # register the assembly containers on the instance so that reset()
+        # can flush them (the generator keeps references to the same objects)
+        self._traj_assembly = (partial_trajs, complete_trajs)
         rb = getattr(self, "replay_buffer", None)
         # _ignore_rb is a single-collector concept; multi-collectors don't have it.
         # Default True so that missing attr → has_rb=False (safe for multi-collectors).
@@ -1340,13 +1389,21 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                         trajs = complete_trajs[:trajs_per_write]
                         del complete_trajs[:trajs_per_write]
                         if len(trajs) == 1:
-                            rb.extend(trajs[0])
+                            trajs = trajs[0]
                         else:
-                            rb.extend(torch.cat(trajs, dim=0))
+                            trajs = torch.cat(trajs, dim=0)
+                        trajs = _maybe_normalize_replay_buffer_tensordict_device(
+                            trajs, rb
+                        )
+                        rb.extend(trajs)
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:
-                        traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
+                        traj_batch = _traj_emit(
+                            complete_trajs,
+                            self.trajs_per_batch,
+                            traj_format=getattr(self, "traj_format", "padded"),
+                        )
                         yield traj_batch
         finally:
             if has_rb:
@@ -1363,6 +1420,19 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             return out
         except StopIteration:
             return None
+
+    def _flush_trajectory_assembly(self) -> None:
+        """Drop partially-assembled and queued-but-not-yet-yielded trajectories.
+
+        Called by ``reset()`` when ``trajs_per_batch`` is in use: after an
+        environment reset, steps queued under the pre-reset policy must not
+        leak into post-reset batches, and stale partial chunks must not be
+        merged with later episodes that reuse a rebased trajectory id.
+        """
+        assembly = getattr(self, "_traj_assembly", None)
+        if assembly is not None:
+            assembly[0].clear()
+            assembly[1].clear()
 
     @abc.abstractmethod
     def shutdown(
@@ -1423,44 +1493,3 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         if self.weight_updater is not None:
             self.weight_updater.init(*args, **kwargs)
-
-
-def _make_legacy_metaclass(parent_metaclass):
-    """Create a legacy metaclass for deprecated collector names.
-
-    This factory creates a metaclass that inherits from the given parent metaclass
-    to avoid metaclass conflicts.
-    """
-
-    class _LegacyMeta(parent_metaclass):
-        """Metaclass for deprecated collector class names.
-
-        Raises a deprecation warning when the old class name is instantiated,
-        and ensures isinstance() checks work for both old and new names.
-        """
-
-        def __call__(cls, *args, **kwargs):
-            warnings.warn(
-                f"{cls.__name__} has been deprecated and will be removed in v0.13. "
-                f"Please use {cls.__bases__[0].__name__} instead.",
-                category=DeprecationWarning,
-            )
-            return super().__call__(*args, **kwargs)
-
-        def __instancecheck__(cls, instance):
-            if super().__instancecheck__(instance):
-                return True
-            parent_cls = cls.__bases__[0]
-            return isinstance(instance, parent_cls)
-
-    return _LegacyMeta
-
-
-# Default legacy metaclass for classes with abc.ABCMeta
-_LegacyCollectorMeta = _make_legacy_metaclass(abc.ABCMeta)
-
-
-class DataCollectorBase(BaseCollector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.BaseCollector`."""
-
-    ...

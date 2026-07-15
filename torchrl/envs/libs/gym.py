@@ -75,6 +75,59 @@ For more information, please refer to discussion https://github.com/pytorch/rl/d
 """
 
 
+@implement_for("gym", None, "0.20.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:
+    return
+
+
+@implement_for("gym", "0.21.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    return
+
+
+@implement_for("gymnasium")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    return
+
+
+@implement_for("gym", "0.20.0", "0.21.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    """Expose the legacy ALE entry point used by gym 0.20 Atari specs."""
+    del env_name
+    try:
+        ale_gym = importlib.import_module("ale_py.gym")
+    except ImportError:
+        return
+    if hasattr(ale_gym, "ALGymEnv"):
+        return
+    try:
+        ale_gym.ALGymEnv = gym_backend("envs.atari").AtariEnv
+    except (AttributeError, ImportError):
+        return
+
+
+def _gymnasium_reward_space(env):
+    reward_space = getattr(env, "__dict__", {}).get("reward_space", None)
+    if reward_space is not None:
+        return reward_space
+
+    get_wrapper_attr = getattr(env, "get_wrapper_attr", None)
+    if get_wrapper_attr is not None:
+        try:
+            reward_space = get_wrapper_attr("reward_space")
+        except AttributeError:
+            pass
+        else:
+            if reward_space is not None:
+                return reward_space
+
+    unwrapped = getattr(env, "unwrapped", None)
+    if unwrapped is not None and unwrapped is not env:
+        reward_space = getattr(unwrapped, "__dict__", {}).get("reward_space", None)
+        if reward_space is not None:
+            return reward_space
+
+
 def _minigrid_lib():
     assert _has_minigrid, "minigrid not found"
     import minigrid
@@ -820,6 +873,9 @@ class _GymAsyncMeta(_EnvPostInit):
         missing_obs_value = kwargs.pop("missing_obs_value", None)
         native_autoreset = kwargs.pop("native_autoreset", False)
         num_workers = kwargs.pop("num_workers", 1)
+        native_autoreset = kwargs.setdefault(
+            "_torchrl_native_autoreset_requested", native_autoreset
+        )
 
         if cls.__name__ == "GymEnv" and num_workers > 1:
             from torchrl.envs import EnvCreator, ParallelEnv
@@ -841,17 +897,27 @@ class _GymAsyncMeta(_EnvPostInit):
             )
 
             if _has_isaaclab:
-                from isaaclab.envs import ManagerBasedRLEnv
+                # IsaacLabWrapper owns the single source of truth for which
+                # Isaac Lab envs we know how to bridge (manager-based and
+                # direct alike). Importing it lazily here avoids a circular
+                # import at module load time.
+                from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
                 kwargs = {}
                 if missing_obs_value is not None:
                     kwargs["missing_obs_value"] = missing_obs_value
-                if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
+                if IsaacLabWrapper._supports_native_autoreset(
+                    instance._env.unwrapped, native_autoreset=native_autoreset
+                ):
                     env = TransformedEnv(
                         instance,
                         VecGymEnvTransform(**kwargs, native_autoreset=native_autoreset),
                     )
                     env._torchrl_native_autoreset = native_autoreset
+                    # Mirror the flag on the inner wrapper so it can gate
+                    # the per-index ``_reset`` bridge on it (see
+                    # IsaacLabWrapper._reset).
+                    instance._torchrl_native_autoreset = native_autoreset
                     return env
 
             if _has_sb3:
@@ -1070,6 +1136,9 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         )
 
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
+        self._torchrl_native_autoreset_requested = kwargs.pop(
+            "_torchrl_native_autoreset_requested", False
+        )
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         if env is not None:
@@ -1140,9 +1209,14 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
             tuple_of_classes = tuple_of_classes + (VecEnv,)
         if _has_isaaclab:
-            from isaaclab.envs import ManagerBasedRLEnv
+            from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-            tuple_of_classes = tuple_of_classes + (ManagerBasedRLEnv,)
+            tuple_of_classes = (
+                tuple_of_classes
+                + IsaacLabWrapper._supported_isaac_env_classes(
+                    include_direct=self._torchrl_native_autoreset_requested
+                )
+            )
         return isinstance(
             self._env.unwrapped, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
@@ -1400,21 +1474,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", None, "1.0.0")
     def _reward_space(self, env):  # noqa: F811
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            return env.reward_space
-        env = env.unwrapped
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            rs = env.reward_space
-            return rs
+        return _gymnasium_reward_space(env)
 
     @implement_for("gymnasium", "1.1.0")
     def _reward_space(self, env):  # noqa: F811
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            return env.reward_space
-        env = env.unwrapped
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            rs = env.reward_space
-            return rs
+        return _gymnasium_reward_space(env)
 
     def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
         # If batch_size is provided, we set it to tell what batch size must be used
@@ -1974,6 +2038,7 @@ class GymEnv(GymWrapper):
                             torchrl_logger.warning(
                                 f"ale_py not found, this may cause issues with ALE environments: {err}"
                             )
+                    _patch_legacy_ale_py_gym_env(env_name)
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
                     if len(w) and "frameskip" in str(w[-1].message):

@@ -118,6 +118,21 @@ grep -v "pytorch_sphinx_theme" "$SCRIPT_DIR/requirements.txt" | uv pip install -
 echo "Verifying torchrl installation..."
 python -c "import torchrl; print(f'TorchRL version: {torchrl.__version__}')"
 
+# Fetch the MuJoCo Menagerie assets used by the macro-control tutorial.
+# MuJoCo Menagerie is a model repository, not an installable Python package,
+# so this sparse checkout is the docs dependency used for rendered tutorials.
+if [ -z "${TORCHRL_MUJOCO_MENAGERIE_PATH:-}" ]; then
+    MENAGERIE_DIR="$ROOT_DIR/.docs_mujoco_menagerie"
+    if [ ! -d "$MENAGERIE_DIR/.git" ]; then
+        echo "Fetching MuJoCo Menagerie assets..."
+        git clone --depth=1 --filter=blob:none --sparse \
+            https://github.com/google-deepmind/mujoco_menagerie.git "$MENAGERIE_DIR"
+    fi
+    git -C "$MENAGERIE_DIR" sparse-checkout set \
+        universal_robots_ur5e robotiq_2f85
+    export TORCHRL_MUJOCO_MENAGERIE_PATH="$MENAGERIE_DIR"
+fi
+
 # Set up environment for building
 export MAX_IDLE_COUNT=180
 export BATCHED_PIPE_TIMEOUT=180
