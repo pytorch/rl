@@ -1,6 +1,14 @@
 name: Continuous Benchmark (PR)
+# Opt-in only: the baseline-vs-head comparison costs 2 x ~40-60 min GPU jobs
+# per PR push, and most PRs don't touch performance-relevant code. Add the
+# "benchmarks/upload" CI-trigger label to a PR to run it (the "labeled"
+# trigger starts the run as soon as the label is applied). The gate must NOT
+# match the auto-applied "Benchmarks" category label: contains() compares
+# case-insensitively, so a plain "benchmarks" gate would fire on every PR
+# the labeler tags.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
@@ -16,6 +24,7 @@ jobs:
 
   benchmark:
     name: ${{ matrix.device }} Pytest benchmark
+    if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
     runs-on: linux.g5.4xlarge.nvidia.gpu
     env:
       PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
@@ -26,9 +35,9 @@ jobs:
       matrix:
         include:
           - device: CPU
-            image: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+            image: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
           - device: GPU
-            image: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+            image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
     defaults:
       run:
         shell: bash -l {0}
@@ -72,12 +81,24 @@ jobs:
           echo /usr/local/bin >> "$GITHUB_PATH"
       - name: Setup benchmarks
         run: |
+          BENCHMARK_SITE_DIR="$(mktemp -d)"
           {
             echo "BASE_SHA=${PR_BASE_SHA:0:8}"
             echo "HEAD_SHA=${PR_HEAD_SHA:0:8}"
             echo "BASELINE_JSON=$(mktemp)"
             echo "CONTENDER_JSON=$(mktemp)"
+            echo "BENCHMARK_SITE_DIR=${BENCHMARK_SITE_DIR}"
           } >> "$GITHUB_ENV"
+          cat > "${BENCHMARK_SITE_DIR}/sitecustomize.py" <<'PY'
+          import warnings
+
+          try:
+              import torch
+
+              torch._dynamo.config.reorderable_logging_functions.add(warnings.warn)
+          except (AttributeError, ImportError):
+              pass
+          PY
       - name: Install benchmark dependencies
         run: |
           set -euxo pipefail
@@ -85,13 +106,34 @@ jobs:
           source ./py310/bin/activate
           export PYTHON_INCLUDE_DIR=/usr/include/python3.10
 
-          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers accelerate ray
-          python3.10 -m pip install "pybind11[global]"
-          python3.10 -m pip install git+https://github.com/pytorch/tensordict 
-          python3.10 -m pip install safetensors tqdm pandas numpy matplotlib
+          # NB: the nightly/cu128 channel is frozen (torch and torchvision builds
+          # drifted out of sync there, making install ResolutionImpossible). Use the
+          # live cu126 nightly channel; its CUDA 12.6 wheels run fine on the GPU
+          # runner via driver backward-compatibility.
+          # The --extra-index-url onto PyPI is required: torch nightly pulls in
+          # transitive deps (e.g. spmd-types) that are only shipped as sdists on the
+          # torch channel, and building those sdists needs setuptools/wheel which the
+          # torch index does not host. Install torch separately so torchvision's
+          # exact torch dependency cannot make pip backtrack into PyPI stable
+          # torch. Then install nightly torchvision without dependencies and
+          # constrain later dependency installs so PyPI stable releases cannot
+          # upgrade torch/torchvision before the version assertion.
+          python3.10 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --extra-index-url https://pypi.org/simple -U
+          python3.10 -m pip install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cu126 --no-deps -U
+          python3.10 - <<'PY' > /tmp/torch-constraints.txt
+          from importlib.metadata import version
+
+          print(f"torch=={version('torch')}")
+          print(f"torchvision=={version('torchvision')}")
+          PY
+          python3.10 -m pip install -c /tmp/torch-constraints.txt ninja pytest pytest-benchmark pytest-timeout "hoptorch>=0.1.4" "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "gym[accept-rom-license,atari]" transformers accelerate ray
+          python3.10 -m pip install -c /tmp/torch-constraints.txt "pybind11[global]"
+          python3.10 -m pip install -c /tmp/torch-constraints.txt cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
+          python3.10 -m pip install --no-deps git+https://github.com/pytorch/tensordict
+          python3.10 -m pip install -c /tmp/torch-constraints.txt safetensors tqdm pandas numpy matplotlib
 
           bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
       - name: Run baseline benchmarks
         run: |
           set -euxo pipefail
@@ -104,7 +146,7 @@ jobs:
           git fetch --no-tags --depth=1 "https://github.com/${PR_BASE_REPO}.git" "${PR_BASE_SHA}"
           git checkout --detach "${PR_BASE_SHA}"
           rm -rf build
-          python3.10 setup.py develop
+          python3.10 -m pip install -e . --no-build-isolation --no-deps
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
             # test import and fail early if the GPU runner did not expose CUDA
@@ -113,12 +155,35 @@ jobs:
             python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
           fi
 
+          # The PR workflow compares against the base SHA. If the base
+          # checkout cannot repeatedly execute this benchmark, skip it in both
+          # legs so the remaining benchmark suite still compares like-for-like.
+          if ! python - <<'PY'
+          import torch
+          from torchrl.data.vla import OpenVLAImagePreprocessor
+
+          preprocessor = OpenVLAImagePreprocessor(size=32, backend="torchvision")
+          images = torch.zeros(1, 3, 32, 32, dtype=torch.uint8)
+          preprocessor(images)
+          preprocessor(images)
+          PY
+          then
+            echo "Skipping VLA preprocessing benchmarks because the baseline cannot run them."
+            echo "TORCHRL_BENCHMARK_IGNORE=test_vla_preprocessing_benchmark.py" >> "${GITHUB_ENV}"
+            export TORCHRL_BENCHMARK_IGNORE=test_vla_preprocessing_benchmark.py
+          fi
+
           REPO_ROOT="$(pwd)"
           cd "${REPO_ROOT}/benchmarks"
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py .
+          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+          benchmark_ignore_args=()
+          if [ -n "${TORCHRL_BENCHMARK_IGNORE:-}" ]; then
+            benchmark_ignore_args=(--ignore "${TORCHRL_BENCHMARK_IGNORE}")
+          fi
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py "${benchmark_ignore_args[@]}" .
       - name: Run PR benchmarks
         run: |
           set -euxo pipefail
@@ -130,7 +195,7 @@ jobs:
           fi
           git checkout --detach "${PR_HEAD_SHA}"
           rm -rf build
-          python3.10 setup.py develop
+          python3.10 -m pip install -e . --no-build-isolation --no-deps
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
             # test import and fail early if the GPU runner did not expose CUDA
@@ -144,7 +209,12 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
+          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+          benchmark_ignore_args=()
+          if [ -n "${TORCHRL_BENCHMARK_IGNORE:-}" ]; then
+            benchmark_ignore_args=(--ignore "${TORCHRL_BENCHMARK_IGNORE}")
+          fi
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py "${benchmark_ignore_args[@]}" .
       - name: Upload PR benchmark results
         if: ${{ always() }}
         run: |

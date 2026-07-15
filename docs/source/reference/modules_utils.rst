@@ -15,6 +15,17 @@ Utility modules and helper functions for building RL networks.
     get_primers_from_module
     get_env_transforms_from_module
 
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    get_recurrent_matmul_precision
+    set_recurrent_matmul_precision
+
+.. autodata:: RecurrentMatmulPrecision
+
+.. autodata:: RecurrentMatmulPrecisionUserMode
+
 .. currentmodule:: torchrl.modules.models.utils
 
 .. autosummary::

@@ -49,7 +49,7 @@ logger = CSVLogger(exp_name="my_exp")
 
 #####################################
 # Once the logger is instantiated, the only thing left to do is call the
-# logging methods! For example, :meth:`~torchrl.record.CSVLogger.log_scalar`
+# logging methods! For example, :meth:`~torchrl.record.loggers.csv.CSVLogger.log_scalar`
 # is used in several places across the training examples to log values such as
 # reward, loss value or time elapsed for executing a piece of code.
 

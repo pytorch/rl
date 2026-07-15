@@ -41,7 +41,7 @@ coverage run -m pytest ${this_dir}/test_tutorials.py \
     -vvv \
     --capture no
 
-coverage combine -q
+coverage combine -q || true
 coverage xml -i
 
 # Upload test results with metadata for flaky tracking

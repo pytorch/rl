@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
+
 import pytest
 
 import tensordict.tensordict
@@ -30,6 +32,7 @@ from torchrl.envs import (
     Crop,
     FlattenObservation,
     GrayScale,
+    NextObservationDelta,
     ObservationNorm,
     ParallelEnv,
     PermuteTransform,
@@ -41,6 +44,7 @@ from torchrl.envs import (
     UnsqueezeTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import check_env_specs, step_mdp
 
@@ -662,6 +666,289 @@ class TestCatFrames(TransformBase):
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 3
         cat_td = cat_frames._call(cat_td)
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 4
+
+    def test_unfolding_n_larger_than_t(self):
+        # history windows longer than the sampled trajectory: the leading
+        # no-reset block used to be built by slicing the done entry (capped
+        # at the time length) and crashed for N > T
+        t = CatFrames(N=6, dim=-2, in_keys=["obs"], out_keys=["obs_cat"])
+        obs = torch.arange(3.0).view(1, 3, 1, 1)
+        done = torch.zeros(1, 3, 1, dtype=torch.bool)
+        td = TensorDict(
+            {"obs": obs, ("next", "done"): done}, batch_size=[1, 3]
+        ).refine_names(None, "time")
+        out = t(td)
+        assert out["obs_cat"].shape == torch.Size([1, 3, 6, 1])
+        # padding="same": the first frame fills the missing history
+        torch.testing.assert_close(out["obs_cat"][0, 0, :, 0], torch.zeros(6))
+        torch.testing.assert_close(
+            out["obs_cat"][0, 2, :, 0],
+            torch.tensor([0.0, 0.0, 0.0, 0.0, 1.0, 2.0]),
+        )
+
+    def test_unfolding_missing_done_raises(self):
+        t = CatFrames(N=3, dim=-2, in_keys=["obs"], out_keys=["obs_cat"])
+        td = TensorDict(
+            {"obs": torch.randn(1, 4, 1, 1)}, batch_size=[1, 4]
+        ).refine_names(None, "time")
+        with pytest.raises(KeyError, match="delimit"):
+            t(td)
+
+    def test_future_windows(self):
+        t = CatFrames(
+            N=3,
+            dim=-2,
+            in_keys=["obs"],
+            out_keys=["obs_cat"],
+            future=True,
+            mask_key="mask",
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        # the done entry is optional with forward windows: each row is one
+        # contiguous trajectory
+        td = TensorDict({"obs": obs}, batch_size=[1, 4]).refine_names(None, "time")
+        out = t(td.clone())
+        expected = torch.tensor(
+            [[0.0, 1.0, 2.0], [1.0, 2.0, 3.0], [2.0, 3.0, 3.0], [3.0, 3.0, 3.0]]
+        )
+        torch.testing.assert_close(out["obs_cat"][0, :, :, 0], expected)
+        expected_mask = torch.tensor(
+            [[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]
+        ).bool()
+        assert torch.equal(out["mask"][0], expected_mask)
+
+    def test_future_windows_with_done(self):
+        t = CatFrames(
+            N=3,
+            dim=-2,
+            in_keys=["obs"],
+            out_keys=["obs_cat"],
+            future=True,
+            mask_key="mask",
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True  # boundary between steps 1 and 2
+        td = TensorDict(
+            {"obs": obs, ("next", "done"): done}, batch_size=[1, 4]
+        ).refine_names(None, "time")
+        out = t(td.clone())
+        expected = torch.tensor(
+            [[0.0, 1.0, 1.0], [1.0, 1.0, 1.0], [2.0, 3.0, 3.0], [3.0, 3.0, 3.0]]
+        )
+        torch.testing.assert_close(out["obs_cat"][0, :, :, 0], expected)
+        expected_mask = torch.tensor(
+            [[0, 0, 1], [0, 1, 1], [0, 0, 1], [0, 1, 1]]
+        ).bool()
+        assert torch.equal(out["mask"][0], expected_mask)
+
+    def test_future_windows_constant_padding(self):
+        t = CatFrames(
+            N=3,
+            dim=-2,
+            in_keys=["obs"],
+            out_keys=["obs_cat"],
+            future=True,
+            padding="constant",
+            padding_value=-1.0,
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        td = TensorDict({"obs": obs}, batch_size=[1, 4]).refine_names(None, "time")
+        out = t(td.clone())
+        expected = torch.tensor(
+            [[0.0, 1.0, 2.0], [1.0, 2.0, 3.0], [2.0, 3.0, -1.0], [3.0, -1.0, -1.0]]
+        )
+        torch.testing.assert_close(out["obs_cat"][0, :, :, 0], expected)
+
+    def test_mask_key_history_windows(self):
+        # the mask is also available for plain (backward) history windows
+        t = CatFrames(
+            N=3, dim=-2, in_keys=["obs"], out_keys=["obs_cat"], mask_key="mask"
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True
+        td = TensorDict(
+            {"obs": obs, ("next", "done"): done}, batch_size=[1, 4]
+        ).refine_names(None, "time")
+        out = t(td.clone())
+        # window slots read oldest-to-newest; True = fabricated by padding
+        expected_mask = torch.tensor(
+            [[1, 1, 0], [1, 0, 0], [1, 1, 0], [1, 0, 0]]
+        ).bool()
+        assert torch.equal(out["mask"][0], expected_mask)
+
+    def test_future_env_raises(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            CatFrames(N=2, dim=-1, in_keys=["observation"], future=True),
+        )
+        with pytest.raises(RuntimeError, match="offline"):
+            env.reset()
+
+    def test_mask_key_env_raises(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            CatFrames(N=2, dim=-1, in_keys=["observation"], mask_key="mask"),
+        )
+        with pytest.raises(RuntimeError, match="offline"):
+            env.reset()
+
+    def test_future_next_key_overlap_raises(self):
+        t = CatFrames(
+            N=2,
+            dim=-1,
+            in_keys=["obs", ("next", "obs")],
+            out_keys=["obs_cat", ("next", "obs_cat")],
+            future=True,
+        )
+        obs = torch.randn(1, 4, 2)
+        td = TensorDict(
+            {
+                "obs": obs,
+                ("next", "obs"): obs,
+                ("next", "done"): torch.zeros(1, 4, 1, dtype=torch.bool),
+            },
+            batch_size=[1, 4],
+        ).refine_names(None, "time")
+        with pytest.raises(NotImplementedError, match="history"):
+            t(td)
+
+    @staticmethod
+    def _unfold_done(done, N, ndim):
+        # Mirror of ``CatFrames.unfolding.unfold_done`` (window-padding mask)
+        # used to drive the ``cat_frames`` functional in multi-trajectory
+        # tests with an explicit ``done_mask``.
+        prefix = (slice(None),) * (ndim - 1)
+        reset = torch.cat(
+            [
+                torch.zeros_like(done[prefix + (slice(N - 1),)]),
+                torch.ones_like(done[prefix + (slice(1),)]),
+                done[prefix + (slice(None, -1),)],
+            ],
+            ndim - 1,
+        )
+        reset_unfold = reset.unfold(ndim - 1, N, 1)
+        reset_unfold_list = [torch.zeros_like(reset_unfold[..., -1])]
+        for r in reversed(reset_unfold.unbind(-1)):
+            reset_unfold_list.append(r | reset_unfold_list[-1])
+        return torch.stack(list(reversed(reset_unfold_list))[1:], -1)
+
+    def test_cat_frames_functional_basic(self):
+        # documented example: a single trajectory of 4 frames stacked over a
+        # window of N=3 along the feature dim.
+        frames = torch.arange(8.0).view(4, 2)
+        out = F.cat_frames(frames, N=3, dim=-1, time_dim=-2, padding="constant")
+        assert out.shape == torch.Size([4, 6])
+        expected = torch.tensor(
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0, 2.0, 3.0],
+                [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            ]
+        )
+        torch.testing.assert_close(out, expected)
+
+    def test_cat_frames_functional_validation(self):
+        x = torch.randn(1, 5, 2)
+        with pytest.raises(ValueError, match="dim must be < 0"):
+            F.cat_frames(x, N=2, dim=0, time_dim=-2)
+        with pytest.raises(ValueError, match="time_dim must be < 0"):
+            F.cat_frames(x, N=2, dim=-1, time_dim=1)
+        with pytest.raises(ValueError, match="padding must be one of"):
+            F.cat_frames(x, N=2, dim=-1, time_dim=-2, padding="zeros")
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_cat_frames_functional_dtype_device(self, device):
+        # dtype and device are preserved, and padding_value is honored.
+        x = torch.arange(24, dtype=torch.int64, device=device).view(1, 12, 2)
+        out = F.cat_frames(
+            x, N=3, dim=-1, time_dim=-2, padding="constant", padding_value=7
+        )
+        assert out.dtype == torch.int64
+        assert out.device == x.device
+        # the first frame has N-1 padded frames of value 7 + the real frame.
+        assert (out[0, 0, :4] == 7).all()
+        assert (out[0, 0, 4:] == x[0, 0]).all()
+
+    @pytest.mark.parametrize("padding", ["same", "constant"])
+    @pytest.mark.parametrize("padding_value", [0, 2, -1.5])
+    @pytest.mark.parametrize("dim", [-1, -2, -3])
+    @pytest.mark.parametrize("N", [2, 3, 5])
+    @pytest.mark.parametrize("batch_size", [(1,), (2,), (2, 3)])
+    def test_cat_frames_functional_matches_unfolding(
+        self, padding, padding_value, dim, N, batch_size
+    ):
+        # The functional reproduces CatFrames' offline (unfolding) output
+        # byte-for-byte on a single contiguous trajectory.
+        torch.manual_seed(0)
+        time_len = 12
+        extra = (4,) * (-dim - 1)
+        x = torch.randn(*batch_size, time_len, 3, *extra)
+        done = torch.zeros(*batch_size, time_len, 1, dtype=torch.bool)
+        td = TensorDict({"obs": x, ("next", "done"): done}, [*batch_size, time_len])
+        td.names = [None] * len(batch_size) + ["time"]
+        cf = CatFrames(
+            N=N,
+            dim=dim,
+            in_keys=["obs"],
+            out_keys=["out"],
+            padding=padding,
+            padding_value=padding_value,
+        )
+        out_td = cf.unfolding(td.clone())["out"]
+        time_dim = len(batch_size) - x.ndim
+        out_f = F.cat_frames(
+            x,
+            N=N,
+            dim=dim,
+            padding=padding,
+            padding_value=padding_value,
+            time_dim=time_dim,
+        )
+        torch.testing.assert_close(out_td, out_f)
+
+    @pytest.mark.parametrize("padding", ["same", "constant"])
+    def test_cat_frames_functional_matches_unfolding_multitraj(self, padding):
+        # With an explicit done_mask the functional also reproduces the
+        # multi-trajectory (mid-sequence reset) offline output.
+        torch.manual_seed(1)
+        N = 4
+        time_len = 15
+        x = torch.randn(2, time_len, 3)
+        done = torch.zeros(2, time_len, 1, dtype=torch.bool)
+        done[0, 5, 0] = True
+        done[1, 9, 0] = True
+        td = TensorDict({"obs": x, ("next", "done"): done}, [2, time_len])
+        td.names = [None, "time"]
+        cf = CatFrames(N=N, dim=-1, in_keys=["obs"], out_keys=["out"], padding=padding)
+        out_td = cf.unfolding(td.clone())["out"]
+        done_mask = self._unfold_done(done, N, 2)
+        out_f = F.cat_frames(
+            x, N=N, dim=-1, time_dim=-2, padding=padding, done_mask=done_mask
+        )
+        torch.testing.assert_close(out_td, out_f)
+
+    @pytest.mark.parametrize("padding", ["same", "constant"])
+    @pytest.mark.parametrize("dim", [-1, -2])
+    def test_catframes_delegates_to_functional(self, padding, dim):
+        # CatFrames.unfolding stays equivalent to a direct cat_frames call on
+        # the offline path (drop-in / no behavior change check).
+        torch.manual_seed(2)
+        N = 3
+        time_len = 8
+        extra = (4,) * (-dim - 1)
+        x = torch.randn(2, time_len, 3, *extra)
+        done = torch.zeros(2, time_len, 1, dtype=torch.bool)
+        td = TensorDict({"obs": x, ("next", "done"): done}, [2, time_len])
+        td.names = [None, "time"]
+        cf = CatFrames(N=N, dim=dim, in_keys=["obs"], out_keys=["out"], padding=padding)
+        out_td = cf.unfolding(td.clone())["out"]
+        out_f = F.cat_frames(
+            x, N=N, dim=dim, padding=padding, time_dim=len(x.shape[:1]) - x.ndim
+        )
+        torch.testing.assert_close(out_td, out_f)
 
 
 @pytest.mark.skipif(not _has_tv, reason="no torchvision")
@@ -2790,3 +3077,400 @@ class TestPermuteTransform(TransformBase):
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         td = trans(td)
         assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+
+class TestNextObservationDelta(TransformBase):
+    """Tests for the env-side delta-compression transform.
+
+    Under the sub-td contract, after one step the post-step tensordict
+    carries ``("next", "delta", k)`` at ``delta_dtype`` and the full
+    ``("next", k)`` slot is absent. The flowing tensordict that the policy
+    reads next iteration has full-precision root ``k`` (promoted by
+    ``step_mdp`` before the hook drops the full slot from the post-step td).
+    """
+
+    DELTA_KEY = ("next", "delta", "observation")
+
+    @staticmethod
+    def _smoke_one_step(env):
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        post_step, flowing = env.step_and_maybe_reset(td)
+        assert post_step[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in post_step.keys(True, True)
+        assert flowing["observation"].dtype == torch.float32
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        self._smoke_one_step(env)
+
+    def test_serial_trans_env_check(self):
+        # NextObservationDelta inside a batched-env worker must raise at
+        # construction time.
+        with pytest.raises(RuntimeError, match="cannot live inside a SerialEnv"):
+            SerialEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    NextObservationDelta(in_keys=["observation"]),
+                ),
+            )
+
+    def test_parallel_trans_env_check(self):
+        with pytest.raises(RuntimeError, match="cannot live inside a SerialEnv"):
+            ParallelEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    NextObservationDelta(in_keys=["observation"]),
+                ),
+                mp_start_method="fork",
+            )
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: ContinuousActionVecMockEnv()),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        self._smoke_one_step(env)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        try:
+            self._smoke_one_step(env)
+        finally:
+            env.close()
+
+    def test_transform_no_env(self):
+        # Calling the transform directly with only root obs (no stored delta)
+        # is a no-op for that key. Reconstruction needs both root and the
+        # ``("next", "delta", k)`` sibling to be present.
+        t = NextObservationDelta(in_keys=["observation"])
+        td = TensorDict({"observation": torch.zeros(3, 1)}, batch_size=[3])
+        out = t(td)
+        assert ("next", "observation") not in out.keys(True, True)
+
+    def test_transform_compose(self):
+        # Composed offline call reaches forward; with no delta key present
+        # the transform is a no-op for that key.
+        t = Compose(NextObservationDelta(in_keys=["observation"]))
+        td = TensorDict({"observation": torch.zeros(3, 1)}, batch_size=[3])
+        out = t(td)
+        assert ("next", "observation") not in out.keys(True, True)
+
+    def test_transform_env(self):
+        # Stacked output carries the delta, not the full next obs.
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        post_step, flowing = env.step_and_maybe_reset(td)
+
+        assert post_step[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in post_step.keys(True, True)
+        assert post_step["observation"].dtype == torch.float32
+        assert flowing["observation"].dtype == torch.float32
+
+    def test_transform_model(self):
+        pytest.skip("NextObservationDelta is an env-side transform; not a module hook.")
+
+    def test_transform_rb(self):
+        # The same transform attached to a replay buffer reconstructs
+        # ``("next", k)`` from ``obs + ("next", "delta", k)`` at sample time.
+        from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+        obs = torch.linspace(-1.0, 1.0, 4, dtype=torch.float32).view(4, 1)
+        true_next = obs + 0.25
+        delta = (true_next - obs).to(torch.float16)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(4),
+            transform=NextObservationDelta(in_keys=["observation"]),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {"observation": obs, ("next", "delta", "observation"): delta},
+                batch_size=[4],
+            )
+        )
+        sample = rb.sample()
+        assert ("next", "observation") in sample.keys(True, True)
+        assert ("next", "delta", "observation") not in sample.keys(True, True)
+        assert sample["next", "observation"].dtype == torch.float32
+
+    def test_transform_inverse(self):
+        pytest.skip("NextObservationDelta has no inverse (no in_keys_inv).")
+
+    def test_auto_infer_keys_skips_uint8(self):
+        # The auto-inferred in_keys should include float keys and exclude
+        # integer / uint8 image-like keys.
+        from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(
+                observation_spec=Composite(
+                    observation=Unbounded(shape=(7,)),
+                    pixels=Bounded(low=0, high=255, shape=(3, 4, 4), dtype=torch.uint8),
+                )
+            ),
+            NextObservationDelta(),
+        )
+        in_keys = list(env.transform.in_keys)
+        assert ("observation",) in [
+            (k,) if isinstance(k, str) else tuple(k) for k in in_keys
+        ]
+        for k in in_keys:
+            spec = env.observation_spec[k]
+            assert spec.dtype.is_floating_point
+
+    def test_multi_in_keys_explicit(self):
+        torch.manual_seed(1)
+        from torchrl.data.tensor_specs import Composite, Unbounded
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(
+                observation_spec=Composite(
+                    observation=Unbounded(shape=(7,)),
+                    observation_orig=Unbounded(shape=(7,)),
+                )
+            ),
+            NextObservationDelta(in_keys=["observation", "observation_orig"]),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert out[("next", "delta", "observation_orig")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert ("next", "observation_orig") not in out.keys(True, True)
+        assert out_["observation"].dtype == torch.float32
+        assert out_["observation_orig"].dtype == torch.float32
+
+    def test_reset_between_steps(self):
+        torch.manual_seed(2)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        td0 = env.reset()
+        td0.set("action", env.action_spec.rand())
+        env.step_and_maybe_reset(td0)
+        td1 = env.reset()
+        td1.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td1)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert out_["observation"].dtype == torch.float32
+
+    def test_compose_with_downstream_transform(self):
+        from torchrl.envs.transforms import RewardSum
+
+        torch.manual_seed(3)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                NextObservationDelta(in_keys=["observation"]),
+                RewardSum(),
+            ),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert out_["observation"].dtype == torch.float32
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_collector_compressed(self, use_buffers):
+        from torchrl.collectors import Collector
+
+        torch.manual_seed(4)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            )
+
+        collector = Collector(
+            create_env_fn=make_env,
+            policy=None,
+            frames_per_batch=16,
+            total_frames=16,
+            use_buffers=use_buffers,
+        )
+        try:
+            batch = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert batch[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in batch.keys(True, True)
+        assert batch["observation"].dtype == torch.float32
+
+    def test_env_rollout_hook_fires(self):
+        # env.rollout() must drop ("next", obs) on every stacked step,
+        # including on the stop-early path.
+        torch.manual_seed(5)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        out = env.rollout(8, break_when_any_done=True)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert out["observation"].dtype == torch.float32
+
+    def test_env_rollout_nonstop_hook_fires(self):
+        torch.manual_seed(6)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        out = env.rollout(8, break_when_any_done=False)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert out["observation"].dtype == torch.float32
+
+
+class TestNextObservationDeltaForward:
+    """RB-side `forward()` tests for `NextObservationDelta`.
+
+    The same class is used on the env (compress in `_step`) and on the
+    replay buffer (reconstruct in `forward` at sample time).
+    """
+
+    @staticmethod
+    def _delta_tol(delta_dtype: torch.dtype, scale: float = 1.0) -> float:
+        return torch.finfo(delta_dtype).eps * 8.0 * scale
+
+    def test_round_trip_basic(self):
+        obs = torch.linspace(-1.0, 1.0, 8, dtype=torch.float32).view(8, 1)
+        true_next = obs + 0.25
+        delta = (true_next - obs).to(torch.float16)
+        td = TensorDict(
+            {"observation": obs, ("next", "delta", "observation"): delta},
+            batch_size=[8],
+        )
+        td = NextObservationDelta(in_keys=["observation"])(td)
+        assert ("next", "observation") in td.keys(True, True)
+        assert ("next", "delta", "observation") not in td.keys(True, True)
+        tol = self._delta_tol(
+            torch.float16, scale=max(1.0, true_next.abs().max().item())
+        )
+        torch.testing.assert_close(
+            td["next", "observation"], true_next, atol=tol, rtol=tol
+        )
+
+    def test_drop_delta_false_keeps_key(self):
+        obs = torch.zeros(4, 1)
+        delta = torch.zeros(4, 1, dtype=torch.float16)
+        td = TensorDict(
+            {"observation": obs, ("next", "delta", "observation"): delta},
+            batch_size=[4],
+        )
+        td = NextObservationDelta(in_keys=["observation"], drop_delta=False)(td)
+        assert ("next", "observation") in td.keys(True, True)
+        assert ("next", "delta", "observation") in td.keys(True, True)
+
+    def test_restore_dtype_explicit(self):
+        obs = torch.zeros(4, 1, dtype=torch.float64)
+        delta = torch.ones(4, 1, dtype=torch.float16)
+        td = TensorDict(
+            {"observation": obs, ("next", "delta", "observation"): delta},
+            batch_size=[4],
+        )
+        td = NextObservationDelta(in_keys=["observation"], restore_dtype=torch.float32)(
+            td
+        )
+        assert td["next", "observation"].dtype == torch.float32
+
+    def test_no_boundary_nan(self):
+        # The delta encodes the actual transition that happened inside
+        # env.step, so end-of-trajectory positions reconstruct correctly --
+        # no NaN regardless of the done pattern.
+        obs = torch.randn(8, 3)
+        next_obs = torch.randn(8, 3)
+        delta = (next_obs - obs).to(torch.float16)
+        td = TensorDict(
+            {
+                "observation": obs,
+                ("next", "delta", "observation"): delta,
+                ("next", "done"): torch.tensor(
+                    [
+                        [False],
+                        [True],
+                        [False],
+                        [False],
+                        [True],
+                        [False],
+                        [False],
+                        [False],
+                    ]
+                ),
+            },
+            batch_size=[8],
+        )
+        td = NextObservationDelta(in_keys=["observation"])(td)
+        assert torch.isfinite(td["next", "observation"]).all()
+
+    def test_end_to_end_env_to_rb(self):
+        # env compresses → collector stacks → RB stores → RB sample
+        # reconstructs. Same transform class on both sides.
+        from torchrl.collectors import Collector
+        from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+        torch.manual_seed(7)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            )
+
+        collector = Collector(
+            create_env_fn=make_env,
+            policy=None,
+            frames_per_batch=16,
+            total_frames=16,
+            use_buffers=False,
+        )
+        try:
+            batch = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert ("next", "observation") not in batch.keys(True, True)
+        assert batch[("next", "delta", "observation")].dtype == torch.float16
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(16),
+            transform=NextObservationDelta(in_keys=["observation"]),
+            batch_size=8,
+        )
+        rb.extend(batch)
+        sample = rb.sample()
+        assert ("next", "observation") in sample.keys(True, True)
+        assert ("next", "delta", "observation") not in sample.keys(True, True)
+        assert sample["next", "observation"].dtype == torch.float32
+
+    def test_missing_key_is_noop(self):
+        # If neither the root nor the delta key is in the td, the transform
+        # silently no-ops on that key.
+        td = TensorDict({"some_other_key": torch.zeros(4)}, batch_size=[4])
+        out = NextObservationDelta(in_keys=["observation"])(td)
+        assert "some_other_key" in out.keys(True, True)
+        assert ("next", "observation") not in out.keys(True, True)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

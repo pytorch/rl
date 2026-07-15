@@ -28,10 +28,7 @@ else
 fi
 
 if [[ "$OSTYPE" == "msys" ]]; then
-    IS_WHEEL=1 "$script_dir/windows/internal/vc_env_helper.bat" python -m build --wheel
+    IS_WHEEL=1 "$script_dir/windows/internal/vc_env_helper.bat" python -m build --wheel --no-isolation
 else
-    python -m build --wheel
-    if [[ "$(uname)" != Darwin ]]; then
-      rename "linux_x86_64" "manylinux1_x86_64" dist/*.whl
-    fi
+    python -m build --wheel --no-isolation
 fi

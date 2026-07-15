@@ -14,6 +14,7 @@ Hooks for customizing the training loop at various points.
     CountFramesLog
     EarlyStopping
     LogScalar
+    LRSchedulerHook
     OptimizerHook
     LogValidationReward
     ReplayBufferTrainer
@@ -22,3 +23,4 @@ Hooks for customizing the training loop at various points.
     UpdateWeights
     TargetNetUpdaterHook
     UTDRHook
+    ValueEstimatorHook

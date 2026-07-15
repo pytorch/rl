@@ -4,6 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from typing import Any
+
+import torch
 import torch.nn
 import torch.optim
 from torchrl.data import Composite
@@ -24,6 +27,21 @@ def make_env(env_name="CartPole-v1", device="cpu", from_pixels=False):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
     return env
+
+
+def make_render_env(spec: Any):
+    """Builds a CartPole environment suitable for ``rlrender``.
+
+    Pixel rendering uses the Gymnasium classic-control renderer when
+    ``rlrender --from-pixels`` is requested.
+    """
+    checkpoint = (
+        spec.checkpoint if isinstance(getattr(spec, "checkpoint", None), dict) else {}
+    )
+    env_name = spec.env_kwargs.get(
+        "env_name", checkpoint.get("env_name", "CartPole-v1")
+    )
+    return make_env(env_name, device=spec.device, from_pixels=spec.from_pixels)
 
 
 # ====================================================================
@@ -61,6 +79,15 @@ def make_dqn_model(env_name, device):
     qvalue_module = make_dqn_modules(proof_environment, device=device)
     del proof_environment
     return qvalue_module
+
+
+def make_render_policy(spec: Any):
+    """Builds the DQN policy module for ``rlrender`` checkpoint loading."""
+    checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
+    env_name = spec.policy_kwargs.get(
+        "env_name", checkpoint.get("env_name", "CartPole-v1")
+    )
+    return make_dqn_model(env_name, device=spec.device)
 
 
 # ====================================================================

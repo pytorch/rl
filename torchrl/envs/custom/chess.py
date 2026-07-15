@@ -22,6 +22,8 @@ from torchrl.envs import EnvBase
 from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
+_has_torchvision = importlib.util.find_spec("torchvision") is not None
+
 
 class _ChessMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
@@ -272,6 +274,10 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             0, indices, True
         )
 
+    # ``_reset`` can honor a board state (fen/pgn) passed through the reset
+    # tensordict, so this env supports ``reset(td, set_state=True)``.
+    _supports_set_state = True
+
     def __init__(
         self,
         *,
@@ -329,7 +335,7 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
                 raise ImportError(
                     "Please install cairosvg to use this environment with pixel rendering."
                 )
-            if importlib.util.find_spec("torchvision") is None:
+            if not _has_torchvision:
                 raise ImportError(
                     "Please install torchvision to use this environment with pixel rendering."
                 )
@@ -365,19 +371,24 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             )
         return super().all_actions(tensordict)
 
-    def _reset(self, tensordict=None):
+    def _reset(self, tensordict=None, **kwargs):
+        # ``set_state`` is resolved by ``EnvBase.reset``: when truthy, honor the
+        # board state (fen/pgn) found in the input tensordict; otherwise ignore
+        # it and start from the standard initial position.
+        set_state = bool(kwargs.get("set_state"))
         fen = None
         pgn = None
         if tensordict is not None:
             dest = tensordict.empty()
-            if self.include_fen:
-                fen = tensordict.get("fen", None)
-                if fen is not None:
-                    fen = fen.data
-            elif self.include_pgn:
-                pgn = tensordict.get("pgn", None)
-                if pgn is not None:
-                    pgn = pgn.data
+            if set_state:
+                if self.include_fen:
+                    fen = tensordict.get("fen", None)
+                    if fen is not None:
+                        fen = fen.data
+                elif self.include_pgn:
+                    pgn = tensordict.get("pgn", None)
+                    if pgn is not None:
+                        pgn = pgn.data
         else:
             dest = TensorDict()
 
@@ -457,19 +468,19 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
     @classmethod
     def _get_tensor_image(cls, board):
         try:
-            from PIL import Image
-
             svg = board._repr_svg_()
             # Convert SVG to PNG using cairosvg
             png_data = io.BytesIO()
             cls._cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=png_data)
             png_data.seek(0)
-            # Open the PNG image using Pillow
-            img = Image.open(png_data)
-            img = cls._torchvision.transforms.functional.pil_to_tensor(img)
+            # Decode the PNG bytes directly into a CHW tensor.
+            img = cls._torchvision.io.decode_image(
+                torch.frombuffer(png_data.getbuffer(), dtype=torch.uint8),
+                mode=cls._torchvision.io.ImageReadMode.RGB,
+            )
         except ImportError:
             raise ImportError(
-                "Chess rendering requires cairosvg, PIL and torchvision to be installed."
+                "Chess rendering requires cairosvg and torchvision to be installed."
             )
         return img
 

@@ -21,24 +21,24 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+  pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/"${CU_VERSION}" -U
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
-  pip3 install torch --index-url https://download.pytorch.org/whl/cu128
+  pip3 install torch --index-url https://download.pytorch.org/whl/"${CU_VERSION}"
 fi
 
 # install tensordict
-# install tensordict
+pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  pip3 install --no-deps tensordict
 fi
 
 # smoke test
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"

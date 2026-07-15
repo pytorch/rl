@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import time
 import warnings
 from contextlib import nullcontext
@@ -17,16 +18,26 @@ import torch
 from tensordict import assert_allclose_td, TensorDict
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import ReplayBuffer, ReplayBufferEnsemble, SamplerWithoutReplacement
+from torchrl.data import (
+    ReplayBuffer,
+    ReplayBufferEnsemble,
+    SamplerWithoutReplacement,
+    VideoClipRef,
+)
 from torchrl.data.datasets.atari_dqn import AtariDQNExperienceReplay
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.gen_dgrl import GenDGRLExperienceReplay
+from torchrl.data.datasets.lerobot import (
+    lerobot_columns_to_tensordict,
+    LeRobotExperienceReplay,
+)
 from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.utils import CloudpickleWrapper
+from torchrl.data.video import _has_torchcodec
 from torchrl.envs import (
     CatTensors,
     Compose,
@@ -49,12 +60,6 @@ _has_d4rl = importlib.util.find_spec("d4rl") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
-
-if importlib.util.find_spec("gym"):
-    import gym
-
-if _has_gymnasium:
-    import gymnasium
 
 
 @pytest.mark.slow
@@ -300,6 +305,7 @@ class TestD4RL:
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
         import d4rl  # noqa: F401
+        import gym
 
         t0 = time.time()
         data = D4RLExperienceReplay(
@@ -660,6 +666,7 @@ class TestMinari:
         MINARI_DATASETS_PATH = os.environ.get("MINARI_DATASETS_PATH")
         os.environ["MINARI_DATASETS_PATH"] = str(tmpdir)
         try:
+            import gymnasium
             import minari
             from minari import DataCollector
 
@@ -720,6 +727,65 @@ class TestMinari:
         finally:
             if MINARI_DATASETS_PATH:
                 os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
+
+    @pytest.mark.skipif(
+        not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
+    )
+    def test_download_load_dataset_path(self, tmp_path, monkeypatch):
+        """Regression test for the ``MINARI_DATASETS_PATH`` handling on download.
+
+        ``_download_and_preproc`` downloads the dataset into a temporary directory
+        and then calls ``minari.load_dataset`` to read its metadata. Minari
+        resolves dataset locations through ``MINARI_DATASETS_PATH``; if that
+        variable is restored to a pre-existing value before the ``load_dataset``
+        call, Minari looks in the wrong directory and raises ``FileNotFoundError``.
+
+        Here we simulate a remote download by copying a locally-built dataset into
+        whatever directory torchrl points Minari at, while ``MINARI_DATASETS_PATH``
+        is set to an unrelated, empty cache. This used to fail before the fix.
+        """
+        import gymnasium
+        import minari
+        from minari import DataCollector
+
+        dataset_id = "cartpole/test-download-load-v1"
+
+        source_dir = tmp_path / "source"
+        monkeypatch.setenv("MINARI_DATASETS_PATH", str(source_dir))
+        env = DataCollector(gymnasium.make("CartPole-v1"), record_infos=True)
+        for _ in range(5):
+            env.reset(seed=123)
+            while True:
+                _, _, terminated, truncated, _ = env.step(env.action_space.sample())
+                if terminated or truncated:
+                    break
+        env.create_dataset(
+            dataset_id=dataset_id,
+            algorithm_name="RandomPolicy",
+            code_permalink="https://github.com/Farama-Foundation/Minari",
+            author="Farama",
+            author_email="contact@farama.org",
+            eval_env="CartPole-v1",
+        )
+
+        empty_cache = tmp_path / "empty_cache"
+        empty_cache.mkdir()
+        monkeypatch.setenv("MINARI_DATASETS_PATH", str(empty_cache))
+
+        def fake_download_dataset(dataset_id, *args, **kwargs):
+            dest = os.environ["MINARI_DATASETS_PATH"]
+            shutil.copytree(source_dir, dest, dirs_exist_ok=True)
+
+        monkeypatch.setattr(minari, "download_dataset", fake_download_dataset)
+
+        data = MinariExperienceReplay(
+            dataset_id=dataset_id,
+            batch_size=32,
+            root=str(tmp_path / "torchrl_root"),
+            download=True,
+        )
+        sample = data.sample()
+        assert sample.shape[0] == 32
 
     def test_correct_categorical_missions(self):
         try:
@@ -1118,6 +1184,28 @@ class TestOpenX:
 )
 @pytest.mark.slow
 class TestOpenML:
+    @pytest.fixture(autouse=True)
+    def _patch_openml_data(self, monkeypatch, tmp_path):
+        """Use deterministic local data instead of querying OpenML in CI tests."""
+
+        def _get_data(cls, dataset_name):
+            dataset_seed = sum(map(ord, dataset_name))
+            generator = torch.Generator().manual_seed(dataset_seed)
+            num_rows = 5000
+            num_features = 8
+            num_classes = 3
+            x = torch.randn(
+                num_rows, num_features, dtype=torch.float64, generator=generator
+            )
+            y = torch.randint(num_classes, (num_rows,), generator=generator)
+            return TensorDict({"X": x, "y": y}, [num_rows])
+
+        monkeypatch.setattr(OpenMLExperienceReplay, "_get_data", classmethod(_get_data))
+        monkeypatch.setattr(
+            "torchrl.data.datasets.openml._get_root_dir",
+            lambda name: tmp_path / name,
+        )
+
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
     def test_env(self, dataset, batch_size):
         env = OpenMLEnv(dataset, batch_size=batch_size)
@@ -1141,3 +1229,306 @@ class TestOpenML:
         for i, _ in enumerate(data):  # noqa: B007
             continue
         assert len(data) // 2048 in (i, i - 1)
+
+
+class TestLeRobotExperienceReplay:
+    @staticmethod
+    def _columns(n_ep=2, ep_len=4, state_dim=7, action_dim=7):
+        n = n_ep * ep_len
+        return {
+            "observation.state": torch.randn(n, state_dim),
+            "observation.images.top": torch.randint(
+                0, 255, (n, 3, 8, 8), dtype=torch.uint8
+            ),
+            "action": torch.randn(n, action_dim),
+            "episode_index": torch.arange(n_ep).repeat_interleave(ep_len),
+            "frame_index": torch.arange(n) % ep_len,
+            "task": ["pick the cube"] * (n // 2) + ["place the cube"] * (n - n // 2),
+            "next.reward": torch.zeros(n, 1),
+        }
+
+    def test_columns_to_tensordict(self):
+        td = lerobot_columns_to_tensordict(self._columns())
+        assert td["observation", "state"].shape == torch.Size([8, 7])
+        assert td["observation", "image", "top"].shape == torch.Size([8, 3, 8, 8])
+        assert td["action"].shape == torch.Size([8, 7])
+        assert td["episode"].tolist() == [0, 0, 0, 0, 1, 1, 1, 1]
+        assert td["next", "reward"].shape == torch.Size([8, 1])
+        assert td.get("language_instruction").tolist()[0] == "pick the cube"
+
+    def test_multi_camera_mapping(self):
+        cols = {
+            "observation.images.top": torch.zeros(2, 3, 4, 4),
+            "observation.images.wrist": torch.zeros(2, 3, 4, 4),
+            "action": torch.zeros(2, 7),
+            "episode_index": torch.zeros(2, dtype=torch.long),
+        }
+        td = lerobot_columns_to_tensordict(cols)
+        keys = set(td.keys(include_nested=True, leaves_only=True))
+        assert ("observation", "image", "top") in keys
+        assert ("observation", "image", "wrist") in keys
+
+    def test_custom_key_map(self):
+        cols = {
+            "act": torch.zeros(3, 2),
+            "episode_index": torch.zeros(3, dtype=torch.long),
+        }
+        td = lerobot_columns_to_tensordict(cols, key_map={"act": "action"})
+        assert td["action"].shape == torch.Size([3, 2])
+
+    def test_from_columns_sample_windows(self):
+        rb = LeRobotExperienceReplay.from_columns(
+            self._columns(n_ep=2, ep_len=4), slice_len=4, batch_size=8
+        )
+        sample = rb.sample()
+        assert sample.numel() == 8
+        windows = sample.reshape(2, 4)
+        # slices never cross trajectory boundaries
+        for i in range(2):
+            ep = windows["episode"][i]
+            assert (ep == ep[0]).all()
+        assert sample.get("language_instruction") is not None
+
+    def test_download_requires_hf_packages(self, tmp_path, monkeypatch):
+        import torchrl.data.datasets.lerobot as lerobot_module
+
+        monkeypatch.setattr(lerobot_module, "_has_datasets", False)
+        with pytest.raises(ImportError, match="datasets"):
+            LeRobotExperienceReplay("fake/repo", root=str(tmp_path), download=True)
+
+    def test_next_keys_get_trailing_singleton(self):
+        # TED convention: per-step signals under "next" carry a trailing
+        # singleton dim (SliceSampler combines them with its own [batch, 1]
+        # truncated flag), while index-like columns stay 1-D.
+        td = lerobot_columns_to_tensordict(
+            {
+                "next.done": torch.zeros(4, dtype=torch.bool),
+                "next.reward": torch.zeros(4),
+                "episode_index": torch.zeros(4, dtype=torch.long),
+            }
+        )
+        assert td["next", "done"].shape == torch.Size([4, 1])
+        assert td["next", "reward"].shape == torch.Size([4, 1])
+        assert td["episode"].shape == torch.Size([4])
+
+    @staticmethod
+    def _snapshot(major_version, info, episodes):
+        from torchrl.data.datasets.lerobot import _LeRobotSnapshot
+
+        snap = _LeRobotSnapshot.__new__(_LeRobotSnapshot)
+        snap.root = Path("/data")
+        snap.info = info
+        snap.fps = float(info.get("fps", 10))
+        snap.major_version = major_version
+        snap.episodes = episodes
+        return snap
+
+    def test_video_segments_v3_grouping(self):
+        # v3: episodes are concatenated back-to-back inside shared files; the
+        # segments group consecutive episodes per file and sum their lengths
+        snap = self._snapshot(
+            3,
+            {
+                "fps": 10,
+                "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
+            },
+            [
+                {
+                    "episode_index": ep,
+                    "length": length,
+                    "videos/cam/chunk_index": 0,
+                    "videos/cam/file_index": file,
+                    "videos/cam/from_timestamp": start,
+                }
+                for ep, (length, file, start) in enumerate(
+                    [(10, 0, 0.0), (20, 0, 1.0), (5, 1, 0.0)]
+                )
+            ],
+        )
+        paths, counts = snap.video_segments("cam")
+        assert counts == [30, 5]
+        assert paths == [
+            str(Path("/data/videos/cam/chunk-000/file-000.mp4")),
+            str(Path("/data/videos/cam/chunk-000/file-001.mp4")),
+        ]
+
+    def test_rehydrate_next_obs(self):
+        columns = {
+            "observation.state": torch.arange(8, dtype=torch.float32).view(8, 1),
+            "action": torch.zeros(8, 2),
+            "episode_index": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+            "frame_index": torch.tensor([0, 1, 2, 3, 0, 1, 2, 3]),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=4, batch_size=8, rehydrate=True
+        )
+        # the invariant must hold on every draw, whichever episodes the
+        # sampler picks: a position mirrors its successor iff the successor is
+        # the true next step (same episode AND consecutive frame counter)
+        for _ in range(20):
+            sample = rb.sample()
+            state = sample["observation", "state"].squeeze(-1)
+            next_state = sample["next", "observation", "state"].squeeze(-1)
+            episode = sample["episode"]
+            frame = sample["frame"]
+            consecutive = (episode[1:] == episode[:-1]) & (frame[1:] == frame[:-1] + 1)
+            assert (next_state[:-1][consecutive] == state[1:][consecutive]).all()
+            assert next_state[:-1][~consecutive].isnan().all()
+            assert next_state[-1].isnan()
+
+    def test_rehydrate_splice_is_filled(self):
+        # a single episode guarantees back-to-back slices of the same episode:
+        # the splice position must be filled (frame counter check), not given
+        # the first row of the following slice
+        columns = {
+            "observation.state": torch.arange(8, dtype=torch.float32).view(8, 1),
+            "episode_index": torch.zeros(8, dtype=torch.long),
+            "frame_index": torch.arange(8),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=4, batch_size=8, rehydrate=True
+        )
+        for _ in range(20):
+            sample = rb.sample()
+            state = sample["observation", "state"].squeeze(-1)
+            next_state = sample["next", "observation", "state"].squeeze(-1)
+            frame = sample["frame"]
+            splice = frame[4] != frame[3] + 1
+            if splice:
+                assert next_state[3].isnan()
+            else:
+                assert next_state[3] == state[4]
+            assert next_state[7].isnan()
+
+    def test_rehydrate_requires_episode(self):
+        columns = {
+            "observation.state": torch.zeros(4, 1),
+            "task": ["t"] * 4,
+        }
+        with pytest.raises(ValueError, match="episode"):
+            LeRobotExperienceReplay.from_columns(columns, batch_size=4, rehydrate=True)
+
+    def test_rehydrate_integer_fill(self):
+        # integer leaves (e.g. uint8 frames) cannot hold NaN: they are
+        # zero-filled at slice boundaries instead
+        columns = {
+            "observation.state": torch.zeros(8, 1),
+            "observation.images.cam": torch.arange(1, 9, dtype=torch.uint8)
+            .view(8, 1, 1, 1)
+            .expand(8, 3, 2, 2)
+            .clone(),
+            "episode_index": torch.zeros(8, dtype=torch.long),
+            "frame_index": torch.arange(8),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=8, batch_size=8, rehydrate=True
+        )
+        sample = rb.sample()
+        img = sample["observation", "image", "cam"]
+        next_img = sample["next", "observation", "image", "cam"]
+        assert next_img.dtype == torch.uint8
+        assert (next_img[:-1] == img[1:]).all()
+        assert (next_img[-1] == 0).all()
+        assert sample["next", "observation", "state"][-1].isnan().all()
+
+    def test_rehydrate_skips_undecoded_refs(self):
+        # an undecoded video reference cannot be shifted: it is skipped (with
+        # a warning) while the tensor observations are still re-hydrated
+        ref = VideoClipRef.from_files(["/tmp/fake.mp4"], num_frames_per_file=[8])
+        columns = {
+            "observation.state": torch.arange(8, dtype=torch.float32).view(8, 1),
+            "observation.images.cam": ref,
+            "episode_index": torch.zeros(8, dtype=torch.long),
+            "frame_index": torch.arange(8),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=8, batch_size=8, rehydrate=True, decode_video=False
+        )
+        sample = rb.sample()
+        assert ("next", "observation", "state") in sample.keys(True, True)
+        assert sample.get(("next", "observation", "image"), None) is None
+
+    def test_video_segments_v2_per_episode(self):
+        # v2.x: one video file per episode, chunked by episode index
+        snap = self._snapshot(
+            2,
+            {
+                "fps": 10,
+                "chunks_size": 2,
+                "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
+            },
+            [
+                {"episode_index": 0, "length": 3},
+                {"episode_index": 1, "length": 4},
+                {"episode_index": 2, "length": 5},
+            ],
+        )
+        paths, counts = snap.video_segments("cam")
+        assert counts == [3, 4, 5]
+        assert paths[0] == str(Path("/data/videos/chunk-000/cam/episode_000000.mp4"))
+        assert paths[2] == str(Path("/data/videos/chunk-001/cam/episode_000002.mp4"))
+
+    def test_load_missing_raises(self, tmp_path):
+        with pytest.raises(RuntimeError, match="not found"):
+            LeRobotExperienceReplay("fake/repo", root=str(tmp_path), download=False)
+
+    def test_mixed_list_column_raises(self):
+        with pytest.raises(ValueError, match="mixes strings"):
+            lerobot_columns_to_tensordict(
+                {"x": ["a", 1, "c"], "episode_index": [0, 0, 0]}
+            )
+
+    def test_from_columns_is_disk_free(self, tmp_path):
+        target = tmp_path / "should_not_be_created"
+        LeRobotExperienceReplay.from_columns(
+            self._columns(), slice_len=4, batch_size=8, root=str(target)
+        )
+        assert not target.exists()
+
+    def test_video_clip_ref_column_passthrough(self):
+        # A VideoClipRef column flows through to the canonical image key and, with
+        # decode_video=False, is sampled lazily (no decoding, no torchcodec needed).
+        n = 8
+        cols = {
+            "observation.images.top": VideoClipRef(
+                "dummy.mp4", frame_index=torch.arange(n)
+            ),
+            "action": torch.randn(n, 7),
+            "episode_index": torch.zeros(n, dtype=torch.long),
+        }
+        td = lerobot_columns_to_tensordict(cols)
+        assert isinstance(td.get(("observation", "image", "top")), VideoClipRef)
+        rb = LeRobotExperienceReplay.from_columns(
+            cols, slice_len=4, batch_size=8, decode_video=False
+        )
+        sample = rb.sample()
+        ref = sample.get(("observation", "image", "top"))
+        assert isinstance(ref, VideoClipRef)
+        assert ref.shape == torch.Size([8])
+
+    @pytest.mark.skipif(not _has_torchcodec, reason="requires torchcodec")
+    def test_video_decode_on_sample(self, tmp_path):
+        # End-to-end: a synthetic MP4 is referenced lazily, and decode_video=True
+        # (default) decodes the sampled frames on rb.sample().
+        from torchcodec.encoders import VideoEncoder
+
+        n, h, w = 8, 16, 16
+        frames = torch.arange(n, dtype=torch.uint8).reshape(n, 1, 1, 1)
+        frames = frames.expand(n, 3, h, w).contiguous()
+        path = str(tmp_path / "clip.mp4")
+        VideoEncoder(frames=frames, frame_rate=10).to_file(path)
+        cols = {
+            "observation.images.top": VideoClipRef.from_file(path),
+            "action": torch.randn(n, 7),
+            "episode_index": torch.zeros(n, dtype=torch.long),
+        }
+        rb = LeRobotExperienceReplay.from_columns(cols, slice_len=4, batch_size=8)
+        sample = rb.sample()
+        decoded = sample.get(("observation", "image", "top"))
+        assert torch.is_tensor(decoded)
+        assert decoded.shape == torch.Size([8, 3, h, w])
+        assert decoded.dtype == torch.uint8
