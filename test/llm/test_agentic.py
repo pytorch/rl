@@ -38,6 +38,7 @@ from torchrl.envs.llm.agentic.sandbox import (
     BubblewrapSandbox,
     default_sandbox,
     ResourceLimits,
+    SandboxError,
     SeatbeltSandbox,
     UnsafeSubprocessSandbox,
 )
@@ -99,6 +100,12 @@ class TestAgenticParsers:
         assert re_parsed.calls[0].tool == "echo"
         assert re_parsed.calls[0].args == {"text": "hi"}
         assert re_parsed.calls[0].call_id == "abc"
+
+    def test_xml_round_trip_preserves_generated_call_id(self):
+        p = XMLToolCallParser()
+        call = p.parse('<tool name="echo">{}</tool>').calls[0]
+        re_parsed = p.parse(p.render_call(call))
+        assert re_parsed.calls[0].call_id == call.call_id
 
     def test_xml_render_result(self):
         p = XMLToolCallParser()
@@ -271,6 +278,73 @@ class TestAgenticSandbox:
         assert c2.wall_seconds == 2
         assert c2.network == "none"
 
+    def test_resource_limits_narrow_filesystem_roots(self, tmp_path):
+        root = tmp_path / "root"
+        nested = root / "nested"
+        a = ResourceLimits(
+            fs_read_roots=(str(root),),
+            fs_write_roots=(str(root),),
+        )
+        b = ResourceLimits(
+            fs_read_roots=(str(nested),),
+            fs_write_roots=(str(nested),),
+        )
+        narrowed = a.narrow(b)
+        assert narrowed.fs_read_roots == (str(nested),)
+        assert narrowed.fs_write_roots == (str(nested),)
+        # Empty write roots mean no writes, so a per-call override cannot
+        # widen them to the construction-time root.
+        assert a.narrow(ResourceLimits(fs_write_roots=())).fs_write_roots == ()
+
+    def test_hardened_read_file_respects_roots(self, tmp_path):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        inside = allowed / "inside.txt"
+        inside.write_text("inside")
+        outside = tmp_path / "outside.txt"
+        outside.write_text("outside")
+
+        async def go():
+            sandbox = BubblewrapSandbox(
+                ResourceLimits(fs_read_roots=(str(allowed),)),
+                bwrap_path="/bin/true",
+            )
+            async with sandbox:
+                assert await sandbox.read_file(str(inside)) == b"inside"
+                with pytest.raises(SandboxError, match="outside fs_read_roots"):
+                    await sandbox.read_file(str(outside))
+
+        _run(go())
+
+    def test_hardened_write_file_rejects_parent_escape(self, tmp_path):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        escaped = allowed / ".." / "escaped.txt"
+
+        async def go():
+            sandbox = BubblewrapSandbox(
+                ResourceLimits(fs_write_roots=(str(allowed),)),
+                bwrap_path="/bin/true",
+            )
+            async with sandbox:
+                with pytest.raises(SandboxError, match="outside fs_write_roots"):
+                    await sandbox.write_file(str(escaped), b"escape")
+
+        _run(go())
+        assert not escaped.exists()
+
+    def test_hardened_backends_reject_unenforced_network_allowlist(self):
+        limits = ResourceLimits(
+            network="allowlist",
+            network_allowlist=("example.com:443",),
+        )
+        with pytest.raises(SandboxError, match="cannot enforce"):
+            BubblewrapSandbox(limits, bwrap_path="/bin/true")._build_argv(
+                ["/bin/true"], limits, None
+            )
+        with pytest.raises(SandboxError, match="cannot enforce"):
+            SeatbeltSandbox(limits)._build_argv(["/bin/true"], limits, None)
+
     def test_default_sandbox_picks_platform(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -413,6 +487,20 @@ class TestAgenticRepl:
                 async with SubprocessRepl(s) as r:
                     res = await r.execute("import time; time.sleep(5)", timeout=0.3)
                     assert res.timed_out
+
+        _run(go())
+
+    def test_subprocess_repl_fails_closed_on_sandbox_error(self):
+        class BrokenSandbox:
+            limits = ResourceLimits()
+
+            def _build_argv(self, argv, limits, cwd):
+                raise SandboxError("invalid sandbox policy")
+
+        async def go():
+            repl = SubprocessRepl(BrokenSandbox())
+            with pytest.raises(SandboxError, match="invalid sandbox policy"):
+                await repl.open()
 
         _run(go())
 
