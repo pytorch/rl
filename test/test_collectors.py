@@ -5666,6 +5666,36 @@ class TestCollectorRB:
         assert len(rb) > 0
         assert rb.storage[: len(rb)].device == torch.device("cpu")
 
+    def test_runner_managed_replay_buffer_returns_uncloned_rollout(self):
+        class RunnerManagedCollector(Collector):
+            _ignore_rb = True
+
+        env = CountingEnv()
+        rb = ReplayBuffer(storage=LazyTensorStorage(32), batch_size=4)
+        postproc_inputs = []
+
+        def postproc(data):
+            postproc_inputs.append(data)
+            return data
+
+        collector = RunnerManagedCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=8,
+            total_frames=8,
+            replay_buffer=rb,
+            extend_buffer=True,
+            return_same_td=True,
+            postproc=postproc,
+        )
+        try:
+            data = next(iter(collector))
+            assert data is postproc_inputs[0]
+            rb.extend(data)
+            assert len(rb) == 8
+        finally:
+            collector.shutdown()
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize(
         "collector_class", [MultiSyncCollector, MultiAsyncCollector]
