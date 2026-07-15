@@ -667,9 +667,11 @@ class Trainer:
                 self._checkpoint_skip_warnings.add(name)
 
         if self.learner_backend == "ray":
-            # Restore service owners before constructing learner-local clients
-            # and process groups. Driver copies of loss/optimizer state are not
-            # authoritative in this mode and are intentionally omitted.
+            # These adapters refer to already-live services, so Checkpoint's
+            # deterministic name-based load order is safe. Driver copies of
+            # loss/optimizer state are not authoritative in this mode and are
+            # intentionally omitted. Policy weights are republished after the
+            # complete checkpoint has loaded.
             register("replay_buffer", self.replay_buffer)
             register("collector", self.collector)
             register("trainer_state", self._checkpoint_state)
@@ -1538,6 +1540,18 @@ class Trainer:
         self,
     ) -> tuple[NestedKey | None, TensorDictBase | None]:
         return None, None
+
+    @staticmethod
+    def _compose_execution_weight_publication(
+        auxiliary_module: nn.Module | None,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        """Compose learner policy weights with a controller-owned module."""
+        if auxiliary_module is None:
+            return None, None
+        auxiliary_weights = TensorDict(
+            {"module": TensorDict({"1": TensorDict.from_module(auxiliary_module)})}
+        )
+        return ("module", "0"), auxiliary_weights
 
     def _execution_controller_state(self) -> dict[str, Any]:
         return {
