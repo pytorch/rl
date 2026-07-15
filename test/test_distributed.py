@@ -53,6 +53,11 @@ from torchrl.testing.dist_utils import (
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+from torchrl.trainers._distributed import (
+    _connect_tcp_store,
+    _create_tcp_store,
+    _DDPProcessGroup,
+)
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -81,6 +86,69 @@ class CountingPolicy(TensorDictModuleBase):
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
         return tensordict
+
+
+def _run_ddp_reference_rank(rank, coordinates, result_queue):
+    store = _connect_tcp_store(coordinates, timeout=30.0)
+    context = _DDPProcessGroup.create(
+        rank=rank,
+        local_rank=rank,
+        world_size=2,
+        store=store,
+        backend="gloo",
+        timeout=30.0,
+    )
+    try:
+        torch.manual_seed(0)
+        model = nn.Linear(2, 1, bias=False)
+        ddp_model = context.wrap(model)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        data = torch.tensor([[1.0, 2.0], [2.0, 1.0], [3.0, 1.0], [1.0, 3.0]])
+        target = torch.tensor([[1.0], [0.0], [2.0], [-1.0]])
+        local_data = data.chunk(2)[rank]
+        local_target = target.chunk(2)[rank]
+        loss = (ddp_model(local_data) - local_target).pow(2).mean()
+        loss.backward()
+        optimizer.step()
+        context.barrier()
+        result_queue.put(model.weight.detach().tolist())
+    finally:
+        context.close()
+
+
+def test_private_ddp_matches_global_batch_and_preserves_default_group():
+    master_store, coordinates = _create_tcp_store(host="127.0.0.1", timeout=30.0)
+    context = mp.get_context("spawn")
+    result_queue = context.Queue()
+    processes = [
+        context.Process(
+            target=_run_ddp_reference_rank,
+            args=(rank, coordinates, result_queue),
+        )
+        for rank in range(2)
+    ]
+    for process in processes:
+        process.start()
+    weights = [result_queue.get(timeout=30.0) for _ in processes]
+    for process in processes:
+        process.join(timeout=30.0)
+        assert process.exitcode == 0
+    result_queue.close()
+
+    torch.manual_seed(0)
+    reference = nn.Linear(2, 1, bias=False)
+    optimizer = torch.optim.SGD(reference.parameters(), lr=0.1)
+    data = torch.tensor([[1.0, 2.0], [2.0, 1.0], [3.0, 1.0], [1.0, 3.0]])
+    target = torch.tensor([[1.0], [0.0], [2.0], [-1.0]])
+    loss = (reference(data) - target).pow(2).mean()
+    loss.backward()
+    optimizer.step()
+
+    expected = reference.weight.detach()
+    torch.testing.assert_close(torch.tensor(weights[0]), expected)
+    torch.testing.assert_close(torch.tensor(weights[1]), expected)
+    assert not dist.is_initialized()
+    del master_store
 
 
 class DistributedCollectorBase:
