@@ -2,9 +2,11 @@ import pathlib
 import warnings
 from collections.abc import Callable
 from functools import partial
+from typing import Any, Literal
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
+from tensordict.nn import TensorDictSequential
 from torch import optim
 
 from torchrl.checkpoint import Checkpoint
@@ -49,6 +51,8 @@ class TD3OptimizationStepper(OptimizationStepper):
         ``update_tensordict_priority``, priorities are updated immediately after
         the critic update using TD error from ``value_loss``.
     """
+
+    updates_replay_priority = True
 
     def __init__(
         self,
@@ -96,7 +100,7 @@ class TD3OptimizationStepper(OptimizationStepper):
         clip_grad_norm = trainer.clip_grad_norm
         clip_norm = trainer.clip_norm
 
-        q_loss, q_metadata = trainer.loss_module.value_loss(sub_batch)
+        q_loss, q_metadata = trainer.compute_loss(sub_batch, method="value_loss")
         q_loss.backward()
 
         critic_params = list(self._params(self.optimizer_critic))
@@ -110,7 +114,7 @@ class TD3OptimizationStepper(OptimizationStepper):
 
         actor_loss = q_loss.new_zeros(())
         if do_actor:
-            actor_loss, *_ = trainer.loss_module.actor_loss(sub_batch)
+            actor_loss, *_ = trainer.compute_loss(sub_batch, method="actor_loss")
             actor_loss.backward()
 
             actor_params = list(self._params(self.optimizer_actor))
@@ -179,6 +183,11 @@ class TD3Trainer(Trainer):
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.
         num_epochs (int, optional): Number of epochs per batch. Defaults to 1 (typical for off-policy).
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+        learner_backend_options (dict, optional): Ray world size and resources.
+        learner_poll_interval (float): Remote replay polling interval.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
@@ -216,6 +225,10 @@ class TD3Trainer(Trainer):
         checkpoint: Checkpoint | None = None,
         num_epochs: int = 1,
         replay_buffer: ReplayBuffer | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -232,6 +245,13 @@ class TD3Trainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("TD3Trainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "TD3Trainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -240,6 +260,12 @@ class TD3Trainer(Trainer):
             loss_module=loss_module,
             optimizer=optimizer,
             optimization_stepper=optimization_stepper,
+            replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
+            learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -257,7 +283,7 @@ class TD3Trainer(Trainer):
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
 
-        if replay_buffer is not None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -273,23 +299,25 @@ class TD3Trainer(Trainer):
         # stepper, as this step requires access to the critic loss.
 
         self.target_net_updater = target_net_updater
-        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+        if learner_backend == "local":
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         self.exploration_module = exploration_module
 
         # Here, we build a weight source that mirrors the collector policy structure when
         # an exploration module is used, to allow for simpler weight synchronization.
-        weights_source = self.loss_module.actor_network
-        if exploration_module is not None:
-            from tensordict.nn import TensorDictSequential
+        if learner_backend == "local":
+            weights_source = self.loss_module.actor_network
+            if exploration_module is not None:
+                weights_source = TensorDictSequential(
+                    weights_source, exploration_module
+                )
 
-            weights_source = TensorDictSequential(weights_source, exploration_module)
-
-        policy_weights_getter = partial(TensorDict.from_module, weights_source)
-        update_weights = UpdateWeights(
-            self.collector, 1, policy_weights_getter=policy_weights_getter
-        )
-        self.register_op("post_steps", update_weights)
+            policy_weights_getter = partial(TensorDict.from_module, weights_source)
+            update_weights = UpdateWeights(
+                self.collector, 1, policy_weights_getter=policy_weights_getter
+            )
+            self.register_op("post_steps", update_weights)
 
         self.enable_logging = enable_logging
         self.log_rewards = log_rewards
@@ -298,6 +326,11 @@ class TD3Trainer(Trainer):
 
         if self.enable_logging:
             self._setup_td3_logging()
+
+    def _execution_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        return self._compose_execution_weight_publication(self.exploration_module)
 
     def _setup_td3_logging(self):
         """Set up logging hooks for TD3-specific metrics."""

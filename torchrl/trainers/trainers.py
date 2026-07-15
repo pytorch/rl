@@ -603,6 +603,9 @@ class Trainer:
                 seed=seed,
                 clip_grad_norm=clip_grad_norm,
                 clip_norm=clip_norm,
+                update_replay_priority=not getattr(
+                    optimization_stepper, "updates_replay_priority", False
+                ),
             )
 
         if self.checkpoint is not None:
@@ -1537,6 +1540,18 @@ class Trainer:
         self,
     ) -> tuple[NestedKey | None, TensorDictBase | None]:
         return None, None
+
+    @staticmethod
+    def _compose_execution_weight_publication(
+        auxiliary_module: nn.Module | None,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        """Compose learner policy weights with a controller-owned module."""
+        if auxiliary_module is None:
+            return None, None
+        auxiliary_weights = TensorDict(
+            {"module": TensorDict({"1": TensorDict.from_module(auxiliary_module)})}
+        )
+        return ("module", "0"), auxiliary_weights
 
     def _execution_controller_state(self) -> dict[str, Any]:
         return {

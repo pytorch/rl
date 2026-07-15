@@ -11,6 +11,7 @@ import warnings
 from collections.abc import Callable
 
 from functools import partial
+from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -64,11 +65,17 @@ class DDPGTrainer(Trainer):
         log_interval (int, optional): Interval for logging metrics. Defaults to 10000.
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state.
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing experiences. Defaults to None.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+        learner_backend_options (dict, optional): Ray world size and resources.
+        learner_poll_interval (float): Remote replay polling interval.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
-        target_net_updater (TargetNetUpdater, optional): Target network updater (typically SoftUpdate).
+        target_net_updater (TargetNetUpdater): Target network updater (typically
+            :class:`~torchrl.objectives.utils.SoftUpdate`).
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.
         done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
@@ -103,6 +110,10 @@ class DDPGTrainer(Trainer):
         save_trainer_file: str | pathlib.Path | None = None,
         checkpoint: Checkpoint | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -124,6 +135,13 @@ class DDPGTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("DDPGTrainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "DDPGTrainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -131,6 +149,12 @@ class DDPGTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
+            learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -147,7 +171,7 @@ class DDPGTrainer(Trainer):
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
 
-        if replay_buffer is not None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -162,15 +186,17 @@ class DDPGTrainer(Trainer):
             self.register_op("post_loss", rb_trainer.update_priority)
 
         self.target_net_updater = target_net_updater
-        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+        if learner_backend == "local":
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
-        policy_weights_getter = partial(
-            TensorDict.from_module, self.loss_module.actor_network
-        )
-        update_weights = UpdateWeights(
-            self.collector, 1, policy_weights_getter=policy_weights_getter
-        )
-        self.register_op("post_steps", update_weights)
+        if learner_backend == "local":
+            policy_weights_getter = partial(
+                TensorDict.from_module, self.loss_module.actor_network
+            )
+            update_weights = UpdateWeights(
+                self.collector, 1, policy_weights_getter=policy_weights_getter
+            )
+            self.register_op("post_steps", update_weights)
 
         self.enable_logging = enable_logging
         self.log_rewards = log_rewards

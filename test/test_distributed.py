@@ -16,13 +16,14 @@ import socket
 import sys
 import time
 import traceback
+from dataclasses import dataclass
 from functools import partial
 
 import pytest
 
 import torch
 import torch.distributed as dist
-from tensordict import TensorDict
+from tensordict import NestedKey, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import multiprocessing as mp, nn
@@ -62,7 +63,8 @@ from torchrl.trainers._distributed import (
     _DDPProcessGroup,
 )
 from torchrl.trainers._ray_execution import _RayTrainerExecution
-from torchrl.trainers.algorithms import DQNTrainer
+from torchrl.trainers.algorithms import DDPGTrainer, DQNTrainer, SACTrainer, TD3Trainer
+from torchrl.trainers.trainers import OptimizationStepper
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -94,6 +96,13 @@ class CountingPolicy(TensorDictModuleBase):
 
 
 class ScalarRayLoss(LossModule):
+    @dataclass
+    class _AcceptedKeys:
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
+        action: NestedKey = "action"
+
     def __init__(self):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(()))
@@ -118,6 +127,61 @@ class CountingTargetUpdater(TargetNetUpdater):
 
     def load_state_dict(self, state_dict):
         self.calls = state_dict["calls"]
+
+
+class MultiOptimizerRayLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.actor = nn.Parameter(torch.ones(()))
+        self.critic = nn.Parameter(torch.ones(()))
+
+    def forward(self, tensordict):
+        return TensorDict(
+            {
+                "loss_actor": self.actor * tensordict["value"].mean(),
+                "loss_critic": self.critic * tensordict["value"].mean(),
+            },
+            batch_size=[],
+        )
+
+    def actor_loss(self, tensordict):
+        return self.actor * tensordict["value"].mean()
+
+    def critic_loss(self, tensordict):
+        return self.critic * tensordict["value"].mean()
+
+
+class MultiOptimizerRayStepper(OptimizationStepper):
+    def __init__(self, actor_optimizer, critic_optimizer):
+        self.actor_optimizer = actor_optimizer
+        self.critic_optimizer = critic_optimizer
+
+    def step(self, trainer, sub_batch):
+        critic_loss = trainer.compute_loss(sub_batch, method="critic_loss")
+        critic_loss.backward()
+        self.critic_optimizer.step()
+        self.critic_optimizer.zero_grad()
+        actor_loss = trainer.compute_loss(sub_batch, method="actor_loss")
+        actor_loss.backward()
+        self.actor_optimizer.step()
+        self.actor_optimizer.zero_grad()
+        return TensorDict(
+            {
+                "loss_actor": actor_loss.detach(),
+                "loss_critic": critic_loss.detach(),
+            },
+            batch_size=[],
+        )
+
+    def state_dict(self):
+        return {
+            "actor_optimizer": self.actor_optimizer.state_dict(),
+            "critic_optimizer": self.critic_optimizer.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict):
+        self.actor_optimizer.load_state_dict(state_dict["actor_optimizer"])
+        self.critic_optimizer.load_state_dict(state_dict["critic_optimizer"])
 
 
 def _run_ddp_reference_rank(rank, coordinates, result_queue):
@@ -906,6 +970,44 @@ class TestRayCollector(DistributedCollectorBase):
                 },
             )
 
+    def test_ray_ddp_multi_optimizer_stepper(self):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 1},
+        )
+        replay.extend(TensorDict({"value": torch.ones(32, 1)}, [32]))
+        loss = MultiOptimizerRayLoss()
+        stepper = MultiOptimizerRayStepper(
+            torch.optim.SGD([loss.actor], lr=0.1),
+            torch.optim.SGD([loss.critic], lr=0.1),
+        )
+        backend = _RayTrainerExecution(
+            loss_module=loss,
+            optimizer=None,
+            optimization_stepper=stepper,
+            target_net_updater=None,
+            replay_buffer=replay,
+            global_batch_size=8,
+            options={
+                "world_size": 2,
+                "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                "backend": "gloo",
+                "setup_timeout": 60.0,
+                "command_timeout": 60.0,
+            },
+        )
+        try:
+            backend.start()
+            backend.step(2)
+            weights = backend.get_weights(expected_version=2)
+            torch.testing.assert_close(weights["actor"], torch.tensor(0.8))
+            torch.testing.assert_close(weights["critic"], torch.tensor(0.8))
+        finally:
+            backend.shutdown()
+            replay.shutdown()
+
     def test_dqn_trainer_ray_backend(self, tmp_path):
         replay = RayReplayBuffer(
             replay_buffer_cls=TensorDictReplayBuffer,
@@ -1017,6 +1119,83 @@ class TestRayCollector(DistributedCollectorBase):
         finally:
             collector.shutdown()
             replay.shutdown()
+
+    @pytest.mark.parametrize("trainer_cls", [DDPGTrainer, SACTrainer, TD3Trainer])
+    def test_offpolicy_trainer_ray_backend(self, trainer_cls):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 1},
+        )
+        collector = RayCollector(
+            create_env_fn=[CountingEnv],
+            policy=CountingPolicy(),
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=8,
+            init_random_frames=0,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        try:
+            with pytest.warns(UserWarning, match="experimental"):
+                trainer = trainer_cls(
+                    collector=collector,
+                    total_frames=8,
+                    frame_skip=1,
+                    optim_steps_per_batch=1,
+                    loss_module=loss,
+                    optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                    replay_buffer=replay,
+                    batch_size=8,
+                    target_net_updater=CountingTargetUpdater(loss),
+                    learner_backend="ray",
+                    learner_backend_options={
+                        "world_size": 2,
+                        "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                        "backend": "gloo",
+                        "setup_timeout": 60.0,
+                        "command_timeout": 60.0,
+                    },
+                    enable_logging=True,
+                    log_rewards=False,
+                    log_actions=False,
+                    progress_bar=False,
+                )
+            assert trainer._pre_steps_log_ops
+            trainer.train()
+            assert trainer.collected_frames == 8
+            assert trainer._optim_count == 1
+            assert trainer._published_model_version == 1
+        finally:
+            collector.shutdown()
+            replay.shutdown()
+
+    @pytest.mark.parametrize("trainer_cls", [DDPGTrainer, SACTrainer, TD3Trainer])
+    def test_offpolicy_trainer_ray_rejects_unsupported_configuration(self, trainer_cls):
+        loss = ScalarRayLoss()
+        common = {
+            "collector": None,
+            "total_frames": 8,
+            "frame_skip": 1,
+            "optim_steps_per_batch": 1,
+            "loss_module": loss,
+            "optimizer": torch.optim.SGD(loss.parameters(), lr=0.1),
+            "learner_backend": "ray",
+        }
+        with pytest.warns(UserWarning, match="experimental"):
+            with pytest.raises(ValueError, match="requires a target_net_updater"):
+                trainer_cls(target_net_updater=None, **common)
+        with pytest.warns(UserWarning, match="experimental"):
+            with pytest.raises(ValueError, match="cannot run batch logging hooks"):
+                trainer_cls(
+                    target_net_updater=CountingTargetUpdater(loss),
+                    async_collection=True,
+                    enable_logging=True,
+                    **common,
+                )
 
     def test_ray_owned_inference_and_replay(self):
         replay = TensorDictReplayBuffer(
