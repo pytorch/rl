@@ -10,6 +10,14 @@ or PyTorch RPC with :class:`~.RPCCollector`) and launchers (``'ray'``,
 They can be efficiently used in synchronous or asynchronous mode, on a single
 node or across multiple nodes.
 
+``RayCollector`` uses Ray to place and control its worker actors, but an
+attached inference server or replay buffer selects its own payload transport.
+With a replay buffer attached, workers write rollouts directly through the
+replay endpoint instead of returning them to the driver. Without one, yielded
+rollouts use Ray's object store. See :ref:`ref_service_transports` for the
+backend/transport compatibility table and the recommended direct-to-replay
+topology.
+
 *Resources*: Find examples for these collectors in the
 `dedicated folder <https://github.com/pytorch/rl/examples/distributed/collectors>`_.
 
