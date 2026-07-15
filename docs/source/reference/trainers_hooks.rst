@@ -15,8 +15,6 @@ Hooks for customizing the training loop at various points.
     EarlyStopping
     LogScalar
     LRSchedulerHook
-    OptimizationStepper
-    DefaultOptimizationStepper
     OptimizerHook
     LogValidationReward
     ReplayBufferTrainer
