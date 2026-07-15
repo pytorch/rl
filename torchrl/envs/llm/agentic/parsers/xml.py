@@ -71,9 +71,13 @@ class XMLToolCallParser:
         return ParseResult(text=cleaned, calls=tuple(calls), raw=response)
 
     def render_call(self, call: ParsedCall) -> str:
-        tag = f' tag="{call.tag}"' if call.tag else ""
+        # Preserve parser-assigned ids as well as explicit human-readable tags.
+        # Otherwise an untagged parse -> render_call -> parse round-trip would
+        # silently assign a different call_id.
+        tag = call.tag or call.call_id
+        tag_attr = f' tag="{tag}"' if tag else ""
         body = json.dumps(dict(call.args), ensure_ascii=False)
-        return f'<tool name="{call.tool}"{tag}>{body}</tool>'
+        return f'<tool name="{call.tool}"{tag_attr}>{body}</tool>'
 
     def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
         body = result.text

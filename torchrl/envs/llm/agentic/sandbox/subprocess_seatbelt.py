@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import ClassVar
 
-from .base import ResourceLimits, SandboxError, SandboxResult
+from .base import _path_is_within_roots, ResourceLimits, SandboxError, SandboxResult
 
 _OUTPUT_CAP = 1 << 20
 
@@ -34,6 +34,11 @@ _has_sandbox_exec = shutil.which("sandbox-exec") is not None
 
 def _profile(limits: ResourceLimits) -> str:
     """Build a sandbox-exec Scheme profile from ``limits``."""
+    if limits.network == "allowlist":
+        raise SandboxError(
+            "SeatbeltSandbox cannot enforce network='allowlist'. Use "
+            "network='none' or provide an externally enforced network policy."
+        )
     lines: list[str] = [
         "(version 1)",
         "(deny default)",
@@ -41,10 +46,18 @@ def _profile(limits: ResourceLimits) -> str:
         "(allow process-exec)",
         "(allow signal (target self))",
         "(allow sysctl-read)",
-        "(allow file-read*)",  # readable host root by default
         "(allow mach-lookup)",
         "(allow ipc-posix-shm)",
     ]
+    if limits.fs_read_roots:
+        for root in limits.fs_read_roots:
+            if not Path(root).is_absolute():
+                raise SandboxError(
+                    f"sandbox filesystem roots must be absolute: {root!r}"
+                )
+            lines.append(f'(allow file-read* (subpath "{root}"))')
+    else:
+        lines.append("(allow file-read*)")  # documented backend default
     if limits.network in ("none", "loopback"):
         lines.append("(deny network*)")
     else:
@@ -98,6 +111,7 @@ class SeatbeltSandbox:
         self,
         argv: Sequence[str],
         limits: ResourceLimits,
+        cwd: str | None = None,
     ) -> list[str]:
         return [self._exec or "sandbox-exec", "-p", _profile(limits), "--", *argv]
 
@@ -160,9 +174,7 @@ class SeatbeltSandbox:
     async def write_file(self, path: str, data: bytes) -> None:
         if not self._opened:
             raise SandboxError("sandbox is not open; call open() first")
-        if not any(
-            os.path.commonpath([path, r]) == r for r in self.limits.fs_write_roots
-        ):
+        if not _path_is_within_roots(path, self.limits.fs_write_roots):
             raise SandboxError(
                 f"refusing to write to {path!r}: outside fs_write_roots "
                 f"{self.limits.fs_write_roots!r}"
@@ -173,6 +185,13 @@ class SeatbeltSandbox:
     async def read_file(self, path: str, max_bytes: int | None = None) -> bytes:
         if not self._opened:
             raise SandboxError("sandbox is not open; call open() first")
+        if self.limits.fs_read_roots and not _path_is_within_roots(
+            path, self.limits.fs_read_roots
+        ):
+            raise SandboxError(
+                f"refusing to read {path!r}: outside fs_read_roots "
+                f"{self.limits.fs_read_roots!r}"
+            )
         b = Path(path).read_bytes()
         if max_bytes is not None and len(b) > max_bytes:
             return b[:max_bytes]
