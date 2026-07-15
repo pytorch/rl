@@ -22,7 +22,6 @@ from torchrl.collectors._evaluator import (
     _freeze_vecnorm,
     _wrap_env_factory_frozen,
 )
-from torchrl.data import Unbounded
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import (
@@ -32,8 +31,10 @@ from torchrl.envs.transforms import (
     Transform,
     VecNormV2,
 )
+from torchrl.modules import RandomPolicy
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers.process import ProcessLogger
+from torchrl.testing import AddPixelsTransform
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -81,31 +82,11 @@ class _VideoEventsLogger:
             file.write(f"{name}:{step}:{video.shape[1]}\n")
 
 
-class _AddPixels(Transform):
-    """Writes a constant uint8 image so ``VideoRecorder`` has frames to record."""
-
-    def __init__(self):
-        super().__init__(in_keys=[], out_keys=["pixels"])
-
-    def _call(self, next_tensordict):
-        next_tensordict.set("pixels", torch.zeros(3, 8, 8, dtype=torch.uint8))
-        return next_tensordict
-
-    def _reset(self, tensordict, tensordict_reset):
-        return self._call(tensordict_reset)
-
-    def transform_observation_spec(self, observation_spec):
-        observation_spec["pixels"] = Unbounded(
-            shape=(3, 8, 8), dtype=torch.uint8, device=observation_spec.device
-        )
-        return observation_spec
-
-
 def _make_video_env(video_logger):
     return TransformedEnv(
         _make_env(),
         Compose(
-            _AddPixels(),
+            AddPixelsTransform(),
             VideoRecorder(
                 video_logger,
                 tag="eval_video",
@@ -1240,6 +1221,52 @@ class TestEvaluatorProcessBackendAsMultiCollector:
         try:
             metrics = evaluator.evaluate(weights=train_policy, step=0)
             assert "eval/reward" in metrics
+            worker_state = evaluator._backend._collector.state_dict()["worker0"][
+                "policy_state_dict"
+            ]
+            for key, value in train_policy.state_dict().items():
+                torch.testing.assert_close(worker_state[key], value)
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_stateless_policy_without_weights(self):
+        """A stateless process policy does not initialize weight transport."""
+        action_spec = _make_env().action_spec
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=partial(RandomPolicy, action_spec),
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            assert not evaluator._backend._collector._weight_sync_schemes
+            with pytest.raises(TypeError, match="requires an nn.Module policy"):
+                evaluator.evaluate(weights=TensorDict({"weight": torch.ones(())}))
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_enables_weights_after_unweighted_eval(self):
+        """The first weight update rebuilds an unconfigured process collector."""
+        train_policy = _make_policy()
+        with torch.no_grad():
+            for parameter in train_policy.parameters():
+                parameter.fill_(1.25)
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=0)
+            unconfigured_collector = evaluator._backend._collector
+            assert not unconfigured_collector._weight_sync_schemes
+
+            evaluator.evaluate(weights=train_policy, step=1)
+
+            assert evaluator._backend._collector is not unconfigured_collector
             worker_state = evaluator._backend._collector.state_dict()["worker0"][
                 "policy_state_dict"
             ]
