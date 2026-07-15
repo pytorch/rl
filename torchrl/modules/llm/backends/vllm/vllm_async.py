@@ -482,6 +482,15 @@ class _AsyncLLMEngine:
             tags = ["scheduling"]
         return await self.engine.wake_up(tags=tags)
 
+    async def reset_prefix_cache(self) -> bool | None:
+        """Invalidate cached KV prefixes (stale after an online weight update).
+
+        Returns:
+            Whether the cache was fully reset, when reported by vLLM. ``False``
+            means some cached blocks are still held by in-flight requests.
+        """
+        return await self.engine.reset_prefix_cache()
+
 
 def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
     """Get the number of GPUs per replica for the given engine args."""
@@ -1066,6 +1075,26 @@ class AsyncVLLM(RLvLLMEngine):
             futures.append(actor_collective_rpc.remote(method, timeout, args, kwargs))
         return futures
 
+    def reset_prefix_cache(self) -> None:
+        """Reset the KV prefix cache on all replicas.
+
+        Called automatically after each weight update: cached prefixes are
+        keyed by prompt content, not by the weights that produced them, so
+        they are stale once new weights are loaded. This is a no-op when
+        prefix caching is disabled.
+        """
+        if not getattr(self.engine_args, "enable_prefix_caching", False):
+            return
+        ray = _get_ray()
+        torchrl_logger.info("Resetting prefix caches...")
+        results = ray.get([actor.reset_prefix_cache.remote() for actor in self.actors])
+        if any(result is False for result in results):
+            torchrl_logger.warning(
+                "reset_prefix_cache could not fully clear the prefix cache on "
+                "some replicas (in-flight requests may still hold KV blocks); "
+                "stale prefixes may persist until those requests complete."
+            )
+
     def shutdown(self):
         """Shutdown all actors and clean up resources."""
         torchrl_logger.info(
@@ -1281,6 +1310,10 @@ class AsyncVLLM(RLvLLMEngine):
 
         # Step 3: Wait for all actors to finish receiving
         ray.get(refs)
+
+        # Invalidate prefix caches before resuming scheduling: cached prefixes
+        # are keyed by prompt content and are stale now that weights changed.
+        self.reset_prefix_cache()
 
         # Wake up vLLM engines after weight update
         torchrl_logger.info("Waking up vLLM engines after weight update...")
@@ -2024,8 +2057,9 @@ def make_async_vllm_engine(
         pipeline_parallel_size = 1
 
     # Prefix caches are keyed by prompt content, not by the model weights that
-    # produced their KV entries. AsyncVLLM is commonly used with online weight
-    # updates, so keep prefix caching off unless the caller explicitly opts in.
+    # produced their KV entries. TorchRL resets the cache after each weight
+    # update (AsyncVLLM.reset_prefix_cache), so opting in is safe for online
+    # RL, but stay conservative unless the caller explicitly opts in.
     kwargs.setdefault("enable_prefix_caching", False)
 
     # Set compilation flag - this controls whether vLLM will compile the model for better performance

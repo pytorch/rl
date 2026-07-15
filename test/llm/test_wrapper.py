@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import gc
 import importlib.util
 import sys
@@ -281,6 +282,144 @@ def test_async_vllm_launch_preserves_prefix_caching(monkeypatch):
     engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
     service = vllm_async.AsyncVLLM.launch(engine_args, num_replicas=2)
     assert service.engine_args.enable_prefix_caching is True
+
+
+class _FakeActorMethod:
+    """Records invocations of a remote actor method and returns a canned result."""
+
+    def __init__(self, name: str, events: list[str], result=None):
+        self._name = name
+        self._events = events
+        self._result = result
+
+    def remote(self, *args, **kwargs):
+        self._events.append(self._name)
+        return self._result
+
+
+class _FakeVLLMActor:
+    def __init__(self, events: list[str], reset_result=True):
+        self.sleep = _FakeActorMethod("sleep", events)
+        self.update_weights_native = _FakeActorMethod("update_weights_native", events)
+        self.reset_prefix_cache = _FakeActorMethod(
+            "reset_prefix_cache", events, reset_result
+        )
+        self.wake_up = _FakeActorMethod("wake_up", events)
+
+
+def _make_offline_async_vllm(monkeypatch, *, enable_prefix_caching, events):
+    """Build an AsyncVLLM wired to fake actors, ray and vllm modules."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    @dataclasses.dataclass
+    class FakeUpdateInfo:
+        names: list
+        dtype_names: list
+        shapes: list
+        packed: bool
+
+    @dataclasses.dataclass
+    class FakeSendArgs:
+        group: Any
+        packed: bool
+
+    fake_transfer_base = types.SimpleNamespace(
+        WeightTransferUpdateRequest=lambda **kwargs: kwargs
+    )
+    fake_transfer_nccl = types.SimpleNamespace(
+        NCCLTrainerSendWeightsArgs=FakeSendArgs,
+        NCCLWeightTransferEngine=types.SimpleNamespace(
+            trainer_send_weights=lambda **kwargs: None
+        ),
+        NCCLWeightTransferUpdateInfo=FakeUpdateInfo,
+    )
+    monkeypatch.setitem(
+        sys.modules, "vllm.distributed.weight_transfer.base", fake_transfer_base
+    )
+    monkeypatch.setitem(
+        sys.modules, "vllm.distributed.weight_transfer.nccl_engine", fake_transfer_nccl
+    )
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(
+        vllm_async,
+        "_get_ray",
+        lambda: types.SimpleNamespace(get=lambda refs, **kwargs: refs),
+    )
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda *args, **kwargs: None)
+
+    service = vllm_async.AsyncVLLM(
+        FakeAsyncEngineArgs(enable_prefix_caching=enable_prefix_caching),
+        actor_class=object(),
+    )
+    service._launched = True
+    service._trainer_nccl_group = object()
+    service.actors = [_FakeVLLMActor(events)]
+    return service
+
+
+def test_async_vllm_update_weights_resets_prefix_cache(monkeypatch):
+    """Weight updates must invalidate the prefix cache before scheduling resumes."""
+    events = []
+    service = _make_offline_async_vllm(
+        monkeypatch, enable_prefix_caching=True, events=events
+    )
+    service.update_weights(iter([("weight", torch.zeros(2))]))
+    assert events == ["sleep", "update_weights_native", "reset_prefix_cache", "wake_up"]
+
+
+def test_async_vllm_update_weights_skips_reset_when_caching_disabled(monkeypatch):
+    events = []
+    service = _make_offline_async_vllm(
+        monkeypatch, enable_prefix_caching=False, events=events
+    )
+    service.update_weights(iter([("weight", torch.zeros(2))]))
+    assert events == ["sleep", "update_weights_native", "wake_up"]
+
+
+def test_async_vllm_reset_prefix_cache_fanout(monkeypatch):
+    """reset_prefix_cache hits every replica and warns when a reset is refused."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(
+        vllm_async,
+        "_get_ray",
+        lambda: types.SimpleNamespace(get=lambda refs, **kwargs: refs),
+    )
+    warnings_seen = []
+    monkeypatch.setattr(
+        vllm_async.torchrl_logger,
+        "warning",
+        lambda msg, *a, **kw: warnings_seen.append(msg),
+    )
+
+    service = vllm_async.AsyncVLLM(
+        FakeAsyncEngineArgs(enable_prefix_caching=True), actor_class=object()
+    )
+    events = []
+    service.actors = [
+        _FakeVLLMActor(events),
+        _FakeVLLMActor(events, reset_result=False),
+        _FakeVLLMActor(events),
+    ]
+    service.reset_prefix_cache()
+    assert events == ["reset_prefix_cache"] * 3
+    assert len(warnings_seen) == 1
+
+    # A replica refusing the reset is only a warning, never an error; with all
+    # replicas succeeding no warning is emitted.
+    warnings_seen.clear()
+    events.clear()
+    service.actors = [_FakeVLLMActor(events), _FakeVLLMActor(events)]
+    service.reset_prefix_cache()
+    assert events == ["reset_prefix_cache"] * 2
+    assert not warnings_seen
 
 
 @pytest.fixture

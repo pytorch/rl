@@ -143,12 +143,22 @@ class RayLLMWorker(RLvLLMEngine):
     standardized interface for weight updates and configuration access.
     """
 
-    def __init__(self, ray_actor, tensor_parallel_size: int, model_name: str):
+    def __init__(
+        self,
+        ray_actor,
+        tensor_parallel_size: int,
+        model_name: str,
+        enable_prefix_caching: bool = True,
+    ):
         self.ray_actor = ray_actor
         self._tensor_parallel_size = tensor_parallel_size
         self._model_name = model_name
         self._master_address = None
         self._master_port = None
+        # vLLM enables prefix caching by default (V1), so unless the caller
+        # explicitly disabled it we must assume the cache exists and reset it
+        # after weight updates.
+        self._enable_prefix_caching = enable_prefix_caching
 
     def get_tp_size(self) -> int:
         """Get the tensor parallel size."""
@@ -302,12 +312,31 @@ class RayLLMWorker(RLvLLMEngine):
 
             ray.get(ref)
 
+            # Invalidate prefix caches before resuming scheduling: cached
+            # prefixes are keyed by prompt content and are stale now that
+            # weights changed.
+            self.reset_prefix_cache()
+
             # Wake up vLLM engine after weight transfer
             ray.get(self.ray_actor.wake_up.remote(tags=["scheduling"]))
             torchrl_logger.info("Ray worker weight update completed")
 
         except ImportError:
             raise ImportError("Ray not available for weight updates")
+
+    def reset_prefix_cache(self) -> None:
+        """Reset the KV prefix cache on the Ray worker.
+
+        No-op when prefix caching was explicitly disabled at construction.
+        """
+        if not self._enable_prefix_caching:
+            return
+        try:
+            import ray
+
+            ray.get(self.ray_actor.reset_prefix_cache.remote())
+        except ImportError:
+            raise ImportError("Ray not available for prefix cache reset")
 
     # Delegate generation methods to the Ray actor
     def generate(self, *args, **kwargs):
@@ -376,6 +405,10 @@ class LocalLLMWrapper(RLvLLMEngine):
         torchrl_logger.info(
             f"Local LLM weight update (no-op) for {len(weights_list)} parameters"
         )
+
+    def reset_prefix_cache(self) -> None:
+        """Reset the KV prefix cache on the wrapped local LLM instance."""
+        self.llm_instance.reset_prefix_cache()
 
     # Delegate generation methods to the local LLM
     def generate(self, *args, **kwargs):
@@ -485,7 +518,12 @@ def make_vllm_worker(
         ray.get(worker.initialize.remote())
 
         # Wrap the Ray actor in RayLLMWorker to provide RLvLLMEngine interface
-        return RayLLMWorker(worker, num_devices or 1, model_name)
+        return RayLLMWorker(
+            worker,
+            num_devices or 1,
+            model_name,
+            enable_prefix_caching=kwargs.get("enable_prefix_caching") is not False,
+        )
 
     else:
         # Local non-Ray mode - use LLM directly
