@@ -150,13 +150,10 @@ def test_toolcompose_parallel_dispatch(benchmark, n_tools):
     set_list_to_stack(True).set()
     base = ChatEnv(batch_size=(1,), input_mode="history")
     tools = [_SleepyTool(f"t{i}") for i in range(n_tools)]
-    env = TransformedEnv(
-        base, ToolCompose(tools=tools, parser=XMLToolCallParser())
-    )
+    env = TransformedEnv(base, ToolCompose(tools=tools, parser=XMLToolCallParser()))
 
     fake = "".join(
-        f'<tool name="t{i}" tag="{i}">{{"ms": 50}}</tool>'
-        for i in range(n_tools)
+        f'<tool name="t{i}" tag="{i}">{{"ms": 50}}</tool>' for i in range(n_tools)
     )
 
     def go():
@@ -181,9 +178,7 @@ def test_toolcompose_single_call_baseline(benchmark):
     base = ChatEnv(batch_size=(1,), input_mode="history")
     env = TransformedEnv(
         base,
-        ToolCompose(
-            tools=[_SleepyTool("t0")], parser=XMLToolCallParser()
-        ),
+        ToolCompose(tools=[_SleepyTool("t0")], parser=XMLToolCallParser()),
     )
     fake = '<tool name="t0" tag="0">{"ms": 50}</tool>'
 

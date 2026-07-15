@@ -18,6 +18,7 @@ read/write restrictions and full network deny.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import time
@@ -30,6 +31,13 @@ from .base import _path_is_within_roots, ResourceLimits, SandboxError, SandboxRe
 _OUTPUT_CAP = 1 << 20
 
 _has_sandbox_exec = shutil.which("sandbox-exec") is not None
+
+
+def _scheme_string(value: str) -> str:
+    """Quote a Python string for use in a Seatbelt Scheme profile."""
+    if "\x00" in value:
+        raise SandboxError("sandbox filesystem roots cannot contain NUL bytes")
+    return json.dumps(value, ensure_ascii=False)
 
 
 def _profile(limits: ResourceLimits) -> str:
@@ -55,7 +63,7 @@ def _profile(limits: ResourceLimits) -> str:
                 raise SandboxError(
                     f"sandbox filesystem roots must be absolute: {root!r}"
                 )
-            lines.append(f'(allow file-read* (subpath "{root}"))')
+            lines.append(f"(allow file-read* (subpath {_scheme_string(root)}))")
     else:
         lines.append("(allow file-read*)")  # documented backend default
     if limits.network in ("none", "loopback"):
@@ -65,7 +73,11 @@ def _profile(limits: ResourceLimits) -> str:
     if limits.fs_write_roots:
         # Allow writes only under the named roots.
         for root in limits.fs_write_roots:
-            lines.append(f'(allow file-write* (subpath "{root}"))')
+            if not Path(root).is_absolute():
+                raise SandboxError(
+                    f"sandbox filesystem roots must be absolute: {root!r}"
+                )
+            lines.append(f"(allow file-write* (subpath {_scheme_string(root)}))")
     # /private/var, /tmp need write for many runtimes; allow only if user
     # explicitly listed them.
     return "\n".join(lines)

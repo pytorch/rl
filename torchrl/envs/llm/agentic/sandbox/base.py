@@ -73,6 +73,15 @@ def _intersect_roots(
     return tuple(sorted(intersection))
 
 
+def _clean_environment() -> dict[str, str]:
+    """Return the exact environment represented by ``env=None``."""
+    return {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "LANG": os.environ.get("LANG", "C.UTF-8"),
+    }
+
+
 class SandboxError(RuntimeError):
     """Raised on sandbox infrastructure failures.
 
@@ -133,21 +142,32 @@ class ResourceLimits(TensorClass["nocast"]):
                 return a
             return min(a, b)
 
-        rank: dict[str, int] = {
-            "none": 0,
-            "loopback": 1,
-            "allowlist": 2,
-            "full": 3,
-        }
-        net = (
-            self.network if rank[self.network] <= rank[other.network] else other.network
-        )
-        if self.network_allowlist or other.network_allowlist:
-            allow = tuple(
-                sorted(set(self.network_allowlist) & set(other.network_allowlist))
+        if self.network == other.network:
+            net = self.network
+            allow = (
+                tuple(
+                    sorted(set(self.network_allowlist) & set(other.network_allowlist))
+                )
+                if net == "allowlist"
+                else ()
             )
-        else:
-            allow = ()
+        elif self.network == "full":
+            net = other.network
+            allow = tuple(other.network_allowlist) if net == "allowlist" else ()
+        elif other.network == "full":
+            net = self.network
+            allow = tuple(self.network_allowlist) if net == "allowlist" else ()
+        elif "none" in (self.network, other.network):
+            net, allow = "none", ()
+        elif {self.network, other.network} == {"loopback", "allowlist"}:
+            # The intersection cannot be represented without resolving the
+            # host allowlist. Fail closed rather than selecting either wider
+            # policy.
+            net, allow = "none", ()
+        else:  # pragma: no cover - all Literal combinations handled above
+            raise ValueError(
+                f"unsupported network policies: {self.network!r}, " f"{other.network!r}"
+            )
         # An empty read-root set means the backend default (unrestricted
         # read-only host access), whereas an empty write-root set means no
         # writes. Their intersections therefore have different identities.
@@ -161,6 +181,15 @@ class ResourceLimits(TensorClass["nocast"]):
             other.fs_write_roots,
             empty_is_unrestricted=False,
         )
+        self_env = _clean_environment() if self.env is None else self.env
+        other_env = _clean_environment() if other.env is None else other.env
+        # Environment mappings specify exact values. The intersection may
+        # remove entries but cannot add or change them.
+        env = {
+            key: value for key, value in self_env.items() if other_env.get(key) == value
+        }
+        if self.env is None and other.env is None:
+            env = None
         return ResourceLimits(
             cpu_seconds=_min_or(self.cpu_seconds, other.cpu_seconds),
             wall_seconds=_min_or(self.wall_seconds, other.wall_seconds),
@@ -170,7 +199,7 @@ class ResourceLimits(TensorClass["nocast"]):
             fs_read_roots=read_roots,
             fs_write_roots=write_roots,
             max_processes=_min_or(self.max_processes, other.max_processes),
-            env=other.env if other.env is not None else self.env,
+            env=env,
         )
 
 
