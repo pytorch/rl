@@ -27,6 +27,13 @@ Core API
 Transport Backends
 ------------------
 
+The transport can be selected behind the high-level
+:class:`InferenceServer` constructor. In particular, a Ray-owned server can
+use ``transport="ray"`` for dynamic or non-tensor payloads, or
+``transport="distributed"`` with Gloo/NCCL for fixed-layout TensorDict
+payloads. See :ref:`ref_service_transports` for supported owner/transport
+combinations, restrictions, and expected performance.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
