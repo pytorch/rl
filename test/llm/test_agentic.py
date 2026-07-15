@@ -15,15 +15,26 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time as _time
 import warnings
+from typing import ClassVar
 
 import pytest
-from tensordict import set_list_to_stack
+from tensordict import lazy_stack, set_list_to_stack, TensorDict
 
+from torchrl.data.llm import History
+from torchrl.envs import TransformedEnv
+from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.agentic import (
     ParsedCall,
+    PythonTool,
+    RateLimiter,
+    ShellTool,
+    StopTool,
     Tool,
     ToolCallParser,
+    ToolCompose,
+    ToolContext,
     ToolResult,
     validate_args,
 )
@@ -47,6 +58,13 @@ from torchrl.envs.llm.agentic.sandbox.subprocess_seatbelt import (
     _has_sandbox_exec,
     _profile,
 )
+from torchrl.envs.llm.agentic.tools import as_tool
+from torchrl.envs.llm.transforms import (
+    IncrementalTokenizer,
+    PythonInterpreter,
+    SimpleToolTransform,
+)
+from torchrl.envs.transforms import StepCounter
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -590,3 +608,568 @@ class TestAgenticRepl:
                     assert r2.stdout.strip() == "42"
 
         _run(go())
+
+
+# ----- ToolCompose, builtins, legacy adapter -----
+
+
+class _Sleeper:
+    description: ClassVar[str] = "sleep N ms"
+    input_schema = {
+        "type": "object",
+        "properties": {"ms": {"type": "integer"}},
+    }
+    output_schema = None
+    wants_state = False
+
+    def __init__(self, name):
+        self.name = name
+
+    async def setup(self):
+        pass
+
+    async def teardown(self):
+        pass
+
+    async def run(self, args, ctx):
+        await asyncio.sleep(args.get("ms", 100) / 1000)
+        return ToolResult.from_text(f"{self.name}-done")
+
+
+class _Stateful:
+    name: ClassVar[str] = "stateful"
+    description: ClassVar[str] = "needs state"
+    input_schema = {"type": "object"}
+    output_schema = None
+    wants_state = True
+    received_state = None
+
+    async def setup(self):
+        pass
+
+    async def teardown(self):
+        pass
+
+    async def run(self, args, ctx):
+        type(self).received_state = ctx.state
+        return ToolResult.from_text("ok")
+
+
+class _Boom:
+    name: ClassVar[str] = "boom"
+    description = "always fails"
+    input_schema = {"type": "object"}
+    output_schema = None
+    wants_state = False
+
+    async def setup(self):
+        pass
+
+    async def teardown(self):
+        pass
+
+    async def run(self, args, ctx):
+        raise RuntimeError("boom")
+
+
+class _Echo:
+    name: ClassVar[str] = "echo"
+    description = "echo arguments"
+    input_schema = {"type": "object"}
+    output_schema = None
+    wants_state = False
+
+    async def setup(self):
+        pass
+
+    async def teardown(self):
+        pass
+
+    async def run(self, args, ctx):
+        return ToolResult.from_text(json.dumps(dict(args), sort_keys=True))
+
+
+def _agentic_env(tools, parser=None):
+    parser = parser or XMLToolCallParser()
+    base = ChatEnv(batch_size=(1,), input_mode="history")
+    return TransformedEnv(base, ToolCompose(tools=tools, parser=parser))
+
+
+def _push_assistant(obs, response: str):
+    obs["history"].full = obs["history"].prompt.extend(
+        History(role="assistant", content=response).view(1, 1), dim=-1
+    )
+
+
+def _push_assistant_history(obs, message: History):
+    obs["history"].full = obs["history"].prompt.extend(message.view(1, 1), dim=-1)
+
+
+class TestToolCompose:
+    def test_rejects_non_tool(self):
+        with pytest.raises(TypeError):
+            ToolCompose(tools=[object()], parser=XMLToolCallParser())
+
+    def test_rejects_duplicate_names(self):
+        with pytest.raises(ValueError):
+            ToolCompose(
+                tools=[_Sleeper("dup"), _Sleeper("dup")],
+                parser=XMLToolCallParser(),
+            )
+
+    def test_append_transform_blocked(self):
+        compose = ToolCompose(tools=[StopTool()], parser=XMLToolCallParser())
+        with pytest.raises(TypeError):
+            compose.append_transform(IncrementalTokenizer)
+
+        env = TransformedEnv(ChatEnv(batch_size=(1,), input_mode="history"), compose)
+        with pytest.raises(TypeError):
+            env.append_transform(StepCounter())
+
+    def test_clone_preserves_toolcompose(self):
+        compose = ToolCompose(
+            tools=[_Echo()],
+            parser=XMLToolCallParser(),
+            rate_limits={"echo": RateLimiter(max_concurrent=1)},
+        )
+        cloned = compose.clone()
+        assert isinstance(cloned, ToolCompose)
+        assert cloned.parser is not compose.parser
+        assert cloned.tools[0] is not compose.tools[0]
+        assert cloned["echo"].name == "echo"
+
+    def test_agentic_signals_are_in_observation_spec_and_reset(self):
+        env = _agentic_env([StopTool()])
+        for key in ("any_tool_calls", "any_error", "stop_requested"):
+            assert ("agentic", key) in env.observation_spec.keys(True)
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        assert env.observation_spec.is_in(obs)
+        assert not obs[("agentic", "any_tool_calls")].any()
+        env.close()
+
+    def test_lookup_by_name(self):
+        compose = ToolCompose(tools=[StopTool()], parser=XMLToolCallParser())
+        assert "stop" in compose
+        assert compose["stop"].name == "stop"
+
+    def test_parallel_dispatch_wall_time(self):
+        env = _agentic_env([_Sleeper("a"), _Sleeper("b"), _Sleeper("c")])
+        obs = env.reset(TensorDict({"query": "go"}, batch_size=(1,)))
+        _push_assistant(
+            obs,
+            '<tool name="a" tag="1">{"ms": 500}</tool>'
+            '<tool name="b" tag="2">{"ms": 500}</tool>'
+            '<tool name="c" tag="3">{"ms": 500}</tool>',
+        )
+        t0 = _time.monotonic()
+        nxt = env.step(obs)
+        elapsed = _time.monotonic() - t0
+        # Three 500ms tools must run concurrently: total < 0.8s.
+        assert elapsed < 0.9, f"parallel dispatch took {elapsed:.2f}s; expected < 0.8s"
+        assert bool(nxt.get(("next", "agentic", "any_tool_calls")).item())
+        assert not bool(nxt.get(("next", "agentic", "stop_requested")).item())
+
+    def test_stop_tool_terminates(self):
+        env = _agentic_env([StopTool()])
+        obs = env.reset(TensorDict({"query": "stop"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="stop">{"reason":"done"}</tool>')
+        nxt = env.step(obs)
+        assert bool(nxt.get(("next", "agentic", "stop_requested")).item())
+
+    def test_no_tool_calls_passthrough(self):
+        env = _agentic_env([StopTool()])
+        obs = env.reset(TensorDict({"query": "nothing"}, batch_size=(1,)))
+        _push_assistant(obs, "I have nothing to call.")
+        nxt = env.step(obs)
+        assert not bool(nxt.get(("next", "agentic", "any_tool_calls")).item())
+
+    def test_unknown_tool_reports_error(self):
+        env = _agentic_env([StopTool()])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="ghost" tag="1">{}</tool>')
+        nxt = env.step(obs)
+        assert bool(nxt.get(("next", "agentic", "any_error")).item())
+
+    def test_failure_isolation(self):
+        env = _agentic_env([_Sleeper("a"), _Boom()])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(
+            obs,
+            '<tool name="a" tag="1">{"ms": 5}</tool>'
+            '<tool name="boom" tag="2">{}</tool>',
+        )
+        nxt = env.step(obs)
+        # both calls fired; one failed, one succeeded.
+        assert bool(nxt.get(("next", "agentic", "any_error")).item())
+        assert bool(nxt.get(("next", "agentic", "any_tool_calls")).item())
+        # The history should have both tool messages appended.
+        prompt = nxt[("next", "history")].prompt
+        # Assistant message + 2 tool messages = at least 3 entries beyond
+        # the original prompt.
+        assert len(prompt[0]) >= 3
+
+    def test_stable_call_id_round_trip(self):
+        captured: list[str] = []
+
+        class _Recorder:
+            name: ClassVar[str] = "rec"
+            description = "records call_id"
+            input_schema = {"type": "object"}
+            output_schema = None
+            wants_state = False
+
+            async def setup(self):
+                pass
+
+            async def teardown(self):
+                pass
+
+            async def run(self, args, ctx):
+                captured.append(ctx.call_id)
+                return ToolResult.from_text(f"id={ctx.call_id}")
+
+        env = _agentic_env([_Recorder()])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="rec" tag="my-id">{}</tool>')
+        nxt = env.step(obs)
+        assert captured == ["my-id"]
+        # The rendered tool message must reference the same call_id.
+        prompt = nxt[("next", "history")].prompt
+        last_msg = prompt[0][-1]
+        assert "my-id" in last_msg.content
+
+    def test_pass_state_to_tools(self):
+        _Stateful.received_state = None
+        base = ChatEnv(batch_size=(1,), input_mode="history")
+        env = TransformedEnv(
+            base,
+            ToolCompose(
+                tools=[_Stateful()],
+                parser=XMLToolCallParser(),
+                pass_state_to_tools=True,
+            ),
+        )
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="stateful">{}</tool>')
+        env.step(obs)
+        assert _Stateful.received_state is not None
+
+    def test_pass_state_off_means_no_state(self):
+        _Stateful.received_state = None
+        env = _agentic_env([_Stateful()])  # pass_state_to_tools defaults False
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="stateful">{}</tool>')
+        env.step(obs)
+        assert _Stateful.received_state is None
+
+    def test_rate_limit_serializes_concurrent_calls(self):
+        # max_concurrent=1 forces 3 calls of 200ms each to take >= 600ms.
+        slow = _Sleeper("slow")
+        compose = ToolCompose(
+            tools=[slow],
+            parser=XMLToolCallParser(),
+            rate_limits={"slow": RateLimiter(max_concurrent=1)},
+        )
+        base = ChatEnv(batch_size=(1,), input_mode="history")
+        env = TransformedEnv(base, compose)
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(
+            obs,
+            '<tool name="slow" tag="1">{"ms": 200}</tool>'
+            '<tool name="slow" tag="2">{"ms": 200}</tool>'
+            '<tool name="slow" tag="3">{"ms": 200}</tool>',
+        )
+        t0 = _time.monotonic()
+        env.step(obs)
+        elapsed = _time.monotonic() - t0
+        assert (
+            elapsed >= 0.55
+        ), f"rate-limited dispatch should serialize: got {elapsed:.2f}s"
+
+    def test_rate_limit_spaces_concurrent_token_waiters(self):
+        async def go():
+            limiter = RateLimiter(rate_per_second=10, burst=1)
+            start = _time.monotonic()
+            admitted: list[float] = []
+
+            async def wait_for_slot():
+                async with limiter.slot():
+                    admitted.append(_time.monotonic() - start)
+
+            await asyncio.gather(*(wait_for_slot() for _ in range(4)))
+            return sorted(admitted)
+
+        admitted = _run(go())
+        assert admitted[1] >= 0.08
+        assert admitted[2] >= 0.18
+        assert admitted[3] >= 0.28
+
+    def test_openai_history_tool_calls_are_dispatched(self):
+        env = _agentic_env([_Echo()], parser=OpenAIToolCallParser())
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant_history(
+            obs,
+            History(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_a",
+                        "type": "function",
+                        "function": {
+                            "name": "echo",
+                            "arguments": '{"value": 1}',
+                        },
+                    }
+                ],
+            ),
+        )
+        nxt = env.step(obs)
+        assert bool(nxt.get(("next", "agentic", "any_tool_calls")).item())
+        result = nxt[("next", "history")].prompt[0][-1]
+        assert result.role == "tool"
+        assert result.tool_call_id == "call_a"
+        assert result.content == '{"value": 1}'
+        env.close()
+
+    def test_anthropic_results_keep_structured_user_message(self):
+        env = _agentic_env([_Echo()], parser=AnthropicToolUseParser())
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant_history(
+            obs,
+            History(
+                role="assistant",
+                content=[
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_a",
+                        "name": "echo",
+                        "input": {"value": 1},
+                    },
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_b",
+                        "name": "echo",
+                        "input": {"value": 2},
+                    },
+                ],
+            ),
+        )
+        nxt = env.step(obs)
+        result = nxt[("next", "history")].prompt[0][-1]
+        assert result.role == "user"
+        assert [block["tool_use_id"] for block in result.content] == [
+            "toolu_a",
+            "toolu_b",
+        ]
+        env.close()
+
+    def test_argument_validation(self):
+        class _NeedsCode:
+            name: ClassVar[str] = "needs"
+            description = ""
+            input_schema = {
+                "type": "object",
+                "properties": {"code": {"type": "string"}},
+                "required": ["code"],
+            }
+            output_schema = None
+            wants_state = False
+
+            async def setup(self):
+                pass
+
+            async def teardown(self):
+                pass
+
+            async def run(self, args, ctx):  # pragma: no cover - never reached
+                return ToolResult.from_text("hit")
+
+        env = _agentic_env([_NeedsCode()])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="needs">{}</tool>')  # missing required
+        nxt = env.step(obs)
+        assert bool(nxt.get(("next", "agentic", "any_error")).item())
+
+    def test_nested_loop_safety(self):
+        # When the caller already owns an event loop, ToolCompose._step
+        # must still complete (offload to a worker thread).
+        async def go():
+            env = _agentic_env([StopTool()])
+            obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+            _push_assistant(obs, '<tool name="stop">{}</tool>')
+            return env.step(obs)
+
+        nxt = _run(go())
+        assert bool(nxt.get(("next", "agentic", "stop_requested")).item())
+
+    def test_batched_dispatch(self):
+        env = TransformedEnv(
+            ChatEnv(batch_size=(2,), input_mode="history"),
+            ToolCompose(tools=[_Echo()], parser=XMLToolCallParser()),
+        )
+        obs = env.reset(TensorDict({"query": ["first", "second"]}, batch_size=(2,)))
+        responses = lazy_stack(
+            [
+                History(
+                    role="assistant",
+                    content='<tool name="echo">{"value": 1}</tool>',
+                ),
+                History(
+                    role="assistant",
+                    content='<tool name="echo">{"value": 2}</tool>',
+                ),
+            ]
+        ).unsqueeze(-1)
+        obs["history"].full = obs["history"].prompt.extend(responses, dim=-1)
+        nxt = env.step(obs)
+        assert nxt[("next", "agentic", "any_tool_calls")].all()
+        results = nxt[("next", "history")].prompt[..., -1].content
+        assert '"value": 1' in results[0]
+        assert '"value": 2' in results[1]
+        env.close()
+
+
+class TestPythonTool:
+    def test_state_persists_across_calls(self):
+        async def go():
+            async with UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10)) as s:
+                tool = PythonTool(repl=SubprocessRepl(s))
+                await tool.setup()
+                ctx = ToolContext(call_id="c1")
+                r1 = await tool.run({"code": "x = 41"}, ctx)
+                assert not r1.is_error
+                r2 = await tool.run({"code": "print(x + 1)"}, ctx)
+                assert not r2.is_error
+                assert "42" in r2.text
+                await tool.teardown()
+
+        _run(go())
+
+    def test_error_marked_is_error(self):
+        async def go():
+            async with UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10)) as s:
+                tool = PythonTool(repl=SubprocessRepl(s))
+                await tool.setup()
+                r = await tool.run({"code": "1/0"}, ToolContext(call_id="c"))
+                assert r.is_error
+                assert "ZeroDivisionError" in r.text
+                await tool.teardown()
+
+        _run(go())
+
+    def test_state_persists_across_toolcompose_steps(self):
+        sandbox = UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10))
+        env = _agentic_env([PythonTool(repl=SubprocessRepl(sandbox))])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="python">{"code":"x=41"}</tool>')
+        obs = env.step(obs)["next"]
+        _push_assistant(obs, '<tool name="python">{"code":"print(x+1)"}</tool>')
+        nxt = env.step(obs)
+        assert not bool(nxt.get(("next", "agentic", "any_error")).item())
+        assert "42" in nxt[("next", "history")].prompt[0][-1].content
+        env.close()
+
+    def test_state_resets_between_episodes(self):
+        sandbox = UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10))
+        env = _agentic_env([PythonTool(repl=SubprocessRepl(sandbox))])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="python">{"code":"x=41"}</tool>')
+        env.step(obs)
+
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="python">{"code":"print(x)"}</tool>')
+        nxt = env.step(obs)
+        assert bool(nxt.get(("next", "agentic", "any_error")).item())
+        assert "NameError" in nxt[("next", "history")].prompt[0][-1].content
+        env.close()
+
+
+class TestShellTool:
+    def test_runs_argv(self):
+        async def go():
+            async with UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=5)) as s:
+                tool = ShellTool(s)
+                await tool.setup()
+                r = await tool.run(
+                    {"argv": ["/bin/echo", "hi"]}, ToolContext(call_id="c")
+                )
+                assert not r.is_error
+                assert "hi" in r.text
+                # Don't tear down s twice -- ShellTool teardown closes it.
+
+        _run(go())
+
+
+class TestLegacyAdapter:
+    def test_python_interpreter_uses_fenced_code_syntax(self):
+        async def go():
+            tool = as_tool(
+                PythonInterpreter(),
+                name="python",
+                input_schema={"type": "object"},
+            )
+            result = await tool.run(
+                {"code": "print(4)"}, ToolContext(call_id="python-call")
+            )
+            await tool.teardown()
+            return result
+
+        result = _run(go())
+        assert "4" in result.text
+
+    def test_simple_transform_uses_legacy_named_syntax(self):
+        async def go():
+            tool = as_tool(
+                SimpleToolTransform({"add": lambda a, b: a + b}),
+                name="add",
+            )
+            return await tool.run({"a": 1, "b": 2}, ToolContext(call_id="add-call"))
+
+        result = _run(go())
+        assert "3" in result.text
+
+    def test_lifts_legacy_transform(self):
+        # Use a tiny duck-typed legacy class instead of pulling in the
+        # full PythonInterpreter, which has its own subprocess pool.
+        class _LegacyAdder:
+            tool_role = "tool"
+
+            def _process_batch_item(self, content, index):
+                # Echo the captured XML so the assertion can find it.
+                if "<tool name=" in content:
+                    return [f"legacy got: {content}"]
+                return None
+
+        tool = as_tool(
+            _LegacyAdder(),
+            name="adder",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "a": {"type": "integer"},
+                    "b": {"type": "integer"},
+                },
+            },
+        )
+        assert tool.name == "adder"
+        env = _agentic_env([tool])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="adder">{"a": 1, "b": 2}</tool>')
+        nxt = env.step(obs)
+        prompt = nxt[("next", "history")].prompt
+        # The last appended message should be the tool result containing
+        # the legacy output.
+        assert "legacy got" in prompt[0][-1].content
+
+    def test_preserves_batch_index(self):
+        indices = []
+
+        class _Legacy:
+            def _process_batch_item(self, content, index):
+                indices.append(index)
+                return [content]
+
+        tool = as_tool(_Legacy(), name="legacy")
+        _run(tool.run({}, ToolContext(call_id="c", batch_index=3)))
+        assert indices == [3]
