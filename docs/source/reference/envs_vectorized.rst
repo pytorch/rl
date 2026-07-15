@@ -22,7 +22,7 @@ Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its
 
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
-Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
+Check the :func:`~torchrl.envs.check_env_specs` method for a sanity check.
 
 .. code-block::
    :caption: Parallel environment
@@ -44,6 +44,17 @@ one can simply call:
         >>> print(a)
         9.81
 
+Batched environments can be indexed with integers, slices, integer numpy arrays
+or integer torch tensors. Indexing returns a live batched-env view over the
+selected workers. For example, ``env23 = env[2:]`` keeps talking to the same
+workers as ``env``; stepping or resetting ``env23`` updates those workers rather
+than a detached copy. Integer indexing preserves a singleton batch. The parent
+batched environment owns the workers: closing an indexed view only closes that
+view object, while closing the parent shuts down the shared workers and makes
+existing indexed views unusable. The view keeps its parent alive, so rebinding
+``env = env[:1]`` remains usable; close the final view when it is no longer
+needed.
+
 .. note::
 
   *A note on performance*: launching a :class:`~.ParallelEnv` can take quite some time
@@ -59,7 +70,7 @@ one can simply call:
   will create data buffers based on the environment specs to pass data from one process
   to another. This means that a misspecified spec (input, observation or reward) will
   cause a breakage at runtime as the data can't be written on the preallocated buffer.
-  In general, an environment should be tested using the :func:`~.utils.check_env_specs`
+  In general, an environment should be tested using the :func:`~torchrl.envs.check_env_specs`
   test function before being used in a :class:`ParallelEnv`. This function will raise
   an assertion error whenever the preallocated buffer and the collected data mismatch.
 
@@ -131,8 +142,8 @@ size of the tensordict that holds it. The classes armed to deal with this are:
 - Batch-unlocked environments;
 - Unbatched environments (i.e., environments without batch size). In these environments, the :meth:`~torchrl.envs.EnvBase.step`
   method will first look for a `"_step"` entry and, if present, act accordingly.
-  If a :class:`~torchrl.envs.Transform` instance passes a `"_step"` entry to the tensordict, it is also captured by
-  :class:`~torchrl.envs.TransformedEnv`'s own `_step` method which will skip the `base_env.step` as well as any further
+  If a :class:`~torchrl.envs.transforms.Transform` instance passes a `"_step"` entry to the tensordict, it is also captured by
+  :class:`~torchrl.envs.transforms.TransformedEnv`'s own `_step` method which will skip the `base_env.step` as well as any further
   transformation.
 
 When dealing with partial steps, the strategy is always to use the step output and mask missing values with the previous
@@ -144,7 +155,7 @@ is not observed because these classes handle the passing of data properly.
 Partial steps are an essential feature of :meth:`~torchrl.envs.EnvBase.rollout` when `break_when_all_done` is `True`,
 as the environments with a `True` done state will need to be skipped during calls to `_step`.
 
-The :class:`~torchrl.envs.ConditionalSkip` transform allows you to programmatically ask for (partial) step skips.
+The :class:`~torchrl.envs.transforms.ConditionalSkip` transform allows you to programmatically ask for (partial) step skips.
 
 Partial Resets
 ~~~~~~~~~~~~~~
@@ -290,7 +301,7 @@ the output of others.
 This family of classes is particularly interesting when dealing with environments that have a high (and/or variable)
 latency.
 
-.. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.TransformedEnv` and
+.. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.transforms.TransformedEnv` and
     batched environments, but users won't currently be able to use the async features of the base environment when
     it's nested in these classes. One should prefer nested transformed envs within an `AsyncEnvPool` instead.
     If this is not possible, please raise an issue.

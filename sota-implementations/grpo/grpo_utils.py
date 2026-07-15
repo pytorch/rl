@@ -162,9 +162,14 @@ def get_train_model(
         compile=cfg.model.compile,
     )
 
-    # Force all model parameters to the same dtype
-    for param in train_model.parameters():
-        param.data = param.data.to(model_dtype)
+    # Keep the base model in the requested low-precision dtype, but keep
+    # trainable LoRA adapters in fp32. Adam keeps optimizer state in the
+    # parameter dtype, so bf16 LoRA parameters can destabilize GRPO updates.
+    for name, param in train_model.named_parameters():
+        if "lora_" in name and param.requires_grad:
+            param.data = param.data.to(torch.float32)
+        else:
+            param.data = param.data.to(model_dtype)
 
     policy_training = TransformersWrapper(
         train_model,
@@ -252,6 +257,9 @@ def _get_vllm_inference_model(
         "enforce_eager": cfg.inference_model.enforce_eager,
         "verbose": verbose,
         "compile": compile_model,
+        "enable_prefix_caching": getattr(
+            cfg.inference_model, "enable_prefix_caching", False
+        ),
     }
 
     # Handle FP32 output configuration
@@ -276,7 +284,6 @@ def _get_vllm_inference_model(
         "seed",
         "swap_space",
         "cpu_offload_gb",
-        "enable_prefix_caching",
         "tensor_parallel_size",
         "pipeline_parallel_size",
     ]
@@ -353,6 +360,18 @@ def _get_sglang_inference_model(
         ),
     }
 
+    # GRPO consumes inference-time token log-probs as fixed behavior-policy
+    # scores. Expose SGLang's fp32 LM-head option for model/backend
+    # combinations that produce unstable bf16 output log-probs.
+    enable_fp32_lm_head = getattr(
+        cfg.inference_model,
+        "enable_fp32_lm_head",
+        getattr(cfg.inference_model, "enable_fp32_output", False),
+    )
+    if enable_fp32_lm_head:
+        torchrl_logger.info("Enabled FP32 LM head for SGLang inference")
+    inference_params["enable_fp32_lm_head"] = enable_fp32_lm_head
+
     # Handle torch_dtype
     if hasattr(cfg.inference_model, "torch_dtype"):
         dtype_str = cfg.inference_model.torch_dtype
@@ -366,6 +385,9 @@ def _get_sglang_inference_model(
     optional_sglang_params = [
         "trust_remote_code",
         "dp_size",
+        "disable_cuda_graph",
+        "disable_piecewise_cuda_graph",
+        "disable_overlap_schedule",
     ]
 
     for param in optional_sglang_params:
@@ -373,6 +395,15 @@ def _get_sglang_inference_model(
             value = getattr(cfg.inference_model, param)
             if value is not None:
                 inference_params[param] = value
+
+    if hasattr(cfg.inference_model, "disable_radix_cache"):
+        inference_params[
+            "disable_radix_cache"
+        ] = cfg.inference_model.disable_radix_cache
+    elif hasattr(cfg.inference_model, "enable_prefix_caching"):
+        inference_params[
+            "disable_radix_cache"
+        ] = not cfg.inference_model.enable_prefix_caching
 
     # Pin SGLang server to allocated GPUs via CUDA_VISIBLE_DEVICES
     if sglang_devices is not None:
@@ -609,7 +640,7 @@ def get_hf_model(
                 lora_dropout=0.0,  # Disable dropout for RL training
                 bias="none",
                 task_type="CAUSAL_LM",
-                inference_mode=True,  # Force inference mode for consistent behavior
+                inference_mode=not requires_grad,
                 init_lora_weights=True,  # This ensures weights are initialized
             )
 
@@ -617,17 +648,20 @@ def get_hf_model(
             model = get_peft_model(
                 model,
                 lora_config,
-                autocast_adapter_dtype=False,  # Prevent automatic casting of adapter layers
+                autocast_adapter_dtype=requires_grad,
             )
 
-            # Force LoRA layers to correct dtype and eval mode
+            # Keep trainable adapters in fp32 for optimizer-state stability.
             for n, p in model.named_parameters():
-                if "lora_" in n:  # Only convert LoRA parameters
-                    p.data = p.data.to(torch_dtype)
+                if "lora_" in n:
+                    p.data = p.data.to(torch.float32 if requires_grad else torch_dtype)
+                    p.requires_grad_(requires_grad)
 
         model.eval()  # Ensure model is in eval mode
-        if requires_grad:
+        if requires_grad and not lora:
             model.requires_grad_(True)
+        elif not requires_grad:
+            model.requires_grad_(False)
 
         return model, tokenizer
 

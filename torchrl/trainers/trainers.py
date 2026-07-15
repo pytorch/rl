@@ -10,10 +10,12 @@ import itertools
 import json
 import math
 import pathlib
+import sys
 import time
 import warnings
+import weakref
 from collections import defaultdict, OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal
@@ -25,15 +27,17 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-
 from torchrl._utils import (
     _CKPT_BACKEND,
+    implement_for,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
     rl_warnings,
     timeit,
     VERBOSE,
 )
+
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -77,6 +81,40 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+# On Windows, a memory-mapped checkpoint keeps the file locked for as long as
+# the loaded tensors are alive, so the checkpoint could neither be deleted nor
+# safely re-saved. Only default to ``mmap=True`` on other platforms.
+_MMAP_CKPT_DEFAULT = sys.platform != "win32"
+
+
+@implement_for("torch", "2.4")
+def _torch_load_defaults() -> dict[str, Any]:
+    return {"weights_only": True, "mmap": _MMAP_CKPT_DEFAULT}
+
+
+@implement_for("torch", None, "2.4")
+def _torch_load_defaults() -> dict[str, Any]:  # noqa: F811
+    # The weights-only unpickler of torch < 2.4 does not allow
+    # ``torch.device``, which TensorDict state-dicts carry as their
+    # ``__device`` metadata entry.
+    return {"weights_only": False, "mmap": _MMAP_CKPT_DEFAULT}
+
+
+class _TrainerCheckpointState:
+    """State-dict view over Trainer progress counters."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        return dict(self.trainer._get_state())
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.trainer.collected_frames = state_dict["collected_frames"]
+        self.trainer._last_log = state_dict["_last_log"]
+        self.trainer._last_save = state_dict["_last_save"]
+        self.trainer._optim_count = state_dict["_optim_count"]
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -291,6 +329,10 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+        checkpoint (Checkpoint, optional): unified checkpoint object used for
+            scheduled saves and restores. The trainer registers any missing
+            standard components on this object. When omitted, the legacy
+            ``CKPT_BACKEND`` path is retained during the compatibility window.
         async_collection (bool, optional): Whether to collect data asynchronously.
             This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
@@ -338,6 +380,7 @@ class Trainer:
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
@@ -373,6 +416,9 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.checkpoint = checkpoint
+        self._checkpoint_state = _TrainerCheckpointState(self)
+        self._checkpoint_skip_warnings: set[str] = set()
         self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
@@ -449,12 +495,93 @@ class Trainer:
             log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
             log_timing_hook.register(self)
 
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
             raise RuntimeError(
                 f"{module_name} is already registered, choose a different name."
             )
         self._modules[module_name] = module
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
+    @staticmethod
+    def _is_checkpointable(component: Any) -> bool:
+        return (
+            callable(getattr(component, "dump", None))
+            and callable(getattr(component, "load", None))
+        ) or (
+            callable(getattr(component, "state_dict", None))
+            and callable(getattr(component, "load_state_dict", None))
+        )
+
+    def _checkpoint_policy(self) -> Any | None:
+        for name in ("actor_network", "value_network", "local_value_network"):
+            policy = getattr(self.loss_module, name, None)
+            if policy is not None:
+                return policy
+        return None
+
+    def _sync_checkpoint_components(
+        self, checkpoint: Checkpoint | None = None
+    ) -> Checkpoint:
+        if checkpoint is None:
+            checkpoint = self.checkpoint
+        if checkpoint is None:
+            checkpoint = Checkpoint()
+
+        def register(name: str, component: Any) -> None:
+            if name in checkpoint or component is None:
+                return
+            if self._is_checkpointable(component):
+                checkpoint.register(name, component)
+            elif name not in self._checkpoint_skip_warnings:
+                torchrl_logger.warning(
+                    "Skipping non-checkpointable Trainer component %r (%s).",
+                    name,
+                    type(component).__name__,
+                )
+                self._checkpoint_skip_warnings.add(name)
+
+        register("policy", self._checkpoint_policy())
+        register("loss_module", self.loss_module)
+
+        optimizer = self.optimizer
+        if not self._is_checkpointable(optimizer):
+            optimizer_hook = self._modules.get("optimizer")
+            hook_optimizer = getattr(optimizer_hook, "optimizer", optimizer_hook)
+            optimizer = (
+                hook_optimizer
+                if self._is_checkpointable(hook_optimizer)
+                else optimizer_hook
+            )
+        register("optimizer", optimizer)
+
+        register("collector", self.collector)
+        replay_buffer = getattr(self, "replay_buffer", None)
+        if not self._is_checkpointable(replay_buffer):
+            replay_buffer_hook = self._modules.get("replay_buffer")
+            hook_replay_buffer = getattr(
+                replay_buffer_hook, "replay_buffer", replay_buffer_hook
+            )
+            replay_buffer = (
+                hook_replay_buffer
+                if self._is_checkpointable(hook_replay_buffer)
+                else replay_buffer_hook
+            )
+        register("replay_buffer", replay_buffer)
+        register("logger", self.logger)
+        register("exploration", getattr(self, "greedy_module", None))
+        register("exploration", getattr(self, "exploration_module", None))
+        register("target_updater", getattr(self, "target_net_updater", None))
+        register("trainer_state", self._checkpoint_state)
+        for name, module in self._modules.items():
+            if name in ("optimizer", "replay_buffer") and name in checkpoint:
+                continue
+            register(f"trainer_module.{name}", module)
+        return checkpoint
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
@@ -541,6 +668,22 @@ class Trainer:
         self._stop_reason = reason
 
     def _save_trainer(self) -> None:
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components().save(self.save_trainer_file)
+            return
+        warnings.warn(
+            "The default Trainer checkpoint format will change from the legacy "
+            "CKPT_BACKEND format to torchrl.checkpoint in v0.15. Pass "
+            "checkpoint=Checkpoint(...) to opt in now.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        warnings.warn(
+            "The legacy CKPT_BACKEND trainer checkpoint path is deprecated and "
+            "will be removed in v0.16. Use checkpoint=Checkpoint(...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if _CKPT_BACKEND == "torchsnapshot":
             if not _has_ts:
                 raise ImportError(
@@ -549,7 +692,19 @@ class Trainer:
                 )
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
-            torch.save(self.state_dict(), self.save_trainer_file)
+            # Write to a temporary file and atomically swap it in: an
+            # interrupted save cannot destroy the previous checkpoint, and
+            # tensors still memory-mapped from a previous
+            # ``load_from_file(mmap=True)`` keep reading from the old inode
+            # instead of from a truncated file.
+            file = pathlib.Path(self.save_trainer_file)
+            tmp_file = file.with_name(file.name + ".tmp")
+            try:
+                torch.save(self.state_dict(), tmp_file)
+                tmp_file.replace(file)
+            except BaseException:
+                tmp_file.unlink(missing_ok=True)
+                raise
         elif _CKPT_BACKEND == "memmap":
             state = self.state_dict()
             path = pathlib.Path(self.save_trainer_file)
@@ -582,21 +737,69 @@ class Trainer:
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
 
-        Keyword arguments are passed to the :func:`~torch.load` function.
-        They are ignored when ``CKPT_BACKEND=memmap``.
+        Keyword arguments are passed to the :func:`~torch.load` function for
+        legacy torch checkpoints and unified components explicitly saved with
+        the torch state-dict payload format. Unified checkpoints additionally
+        accept ``strict`` to control missing or incompatible components.
+        Arguments are ignored when ``CKPT_BACKEND=memmap``.
 
         .. note::
-            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
+            Unified state-dict components use TensorDict storage by default and
+            do not invoke the pickle loader. For explicit torch payloads and
+            ``CKPT_BACKEND=torch`` checkpoints, ``weights_only=True`` is the
             default for safer deserialization. Pass ``weights_only=False``
-            explicitly only if you have custom (non-stdlib) objects in your
-            state dict.
+            explicitly only if the state dict contains custom objects. On
+            torch < 2.4 the default is ``weights_only=False`` because the
+            weights-only unpickler of those versions cannot deserialize the
+            ``torch.device`` instances contained in TensorDict state-dicts.
+
+        .. note::
+            Explicit torch payloads and ``CKPT_BACKEND=torch`` checkpoints use
+            ``mmap=True`` by default. Pass ``mmap=False`` for legacy pre-zipfile
+            ``torch.save`` files or file-like objects. On Windows the default
+            is ``mmap=False`` because a mapped checkpoint keeps the file locked,
+            preventing deletion or re-save.
+
+        .. note::
+            Unified checkpoint tensors are mapped to CPU by default. Pass an
+            explicit ``map_location`` to select another device mapping.
+
+        .. note::
+            After restoring an independently registered policy component, the
+            trainer synchronizes the collector once so local policy copies and
+            remote workers observe the restored learner weights.
 
         """
-        if _CKPT_BACKEND == "torchsnapshot":
+        if Checkpoint.is_checkpoint(file):
+            checkpoint = self.checkpoint
+            if checkpoint is None:
+                checkpoint = Checkpoint()
+            map_location = kwargs.pop("map_location", "cpu")
+            strict = kwargs.pop("strict", None)
+            for key, value in _torch_load_defaults().items():
+                kwargs.setdefault(key, value)
+            result = self._sync_checkpoint_components(checkpoint).load(
+                file,
+                map_location=map_location,
+                tensor_load_kwargs=kwargs,
+                strict=strict,
+            )
+            if "policy" in result.loaded:
+                # The collector payload is restored before the independently
+                # registered policy component. Synchronize once more after all
+                # components have loaded so local copies, remote workers, and
+                # weight-transport caches observe the restored learner policy.
+                policy = checkpoint.components["policy"]
+                if policy is self._checkpoint_policy():
+                    self.collector.update_policy_weights_()
+                else:
+                    self.collector.update_policy_weights_(policy)
+        elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
-            kwargs.setdefault("weights_only", True)
+            for key, value in _torch_load_defaults().items():
+                kwargs.setdefault(key, value)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
         elif _CKPT_BACKEND == "memmap":
@@ -1760,8 +1963,10 @@ class RewardNormalizer(TrainerHookBase):
         }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        # deepcopy to decouple the normalizer stats from the caller's tensors
+        # (which may e.g. be mmap-backed by a checkpoint file)
         for key, value in state_dict.items():
-            setattr(self, key, value)
+            setattr(self, key, deepcopy(value))
 
     def register(self, trainer: Trainer, name: str = "reward_normalizer"):
         trainer.register_op("batch_process", self.update_reward_stats)
@@ -2196,10 +2401,10 @@ class UpdateWeights(TrainerHookBase):
         )
 
     def state_dict(self) -> dict:
-        return {}
+        return {"counter": self.counter}
 
     def load_state_dict(self, state_dict) -> None:
-        return
+        self.counter = state_dict.get("counter", 0)
 
 
 class CountFramesLog(TrainerHookBase):
@@ -2299,6 +2504,119 @@ class TargetNetUpdaterHook(TrainerHookBase):
 
     def register(self, trainer: Trainer, name: str):
         trainer.register_op("post_steps", self)
+
+
+class ValueEstimatorHook(TrainerHookBase):
+    """A hook that computes value estimates over a collected batch.
+
+    Wraps a value estimator module such as :class:`~torchrl.objectives.value.GAE`
+    and applies it to the whole collected batch at the ``pre_epoch`` stage, so
+    that advantage and value-target entries are available when the loss module
+    consumes sub-batches during optimization.
+
+    In async-collection mode the training loop has no batch to hand to the
+    ``pre_epoch`` stage (``batch`` is ``None``); the hook then passes the batch
+    through untouched, and value estimates are expected to be computed
+    elsewhere (e.g. by a replay-buffer transform).
+
+    Args:
+        value_estimator (Callable[[TensorDictBase], TensorDictBase]): the value
+            estimator to apply to the collected batch, e.g. an instance of
+            :class:`~torchrl.objectives.value.GAE`.
+
+    Examples:
+        >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=critic, average_gae=True)
+        >>> value_estimator_hook = ValueEstimatorHook(gae)
+        >>> value_estimator_hook.register(trainer)
+    """
+
+    def __init__(
+        self, value_estimator: Callable[[TensorDictBase], TensorDictBase]
+    ) -> None:
+        self.value_estimator = value_estimator
+
+    def __call__(self, batch: TensorDictBase | None) -> TensorDictBase | None:
+        if batch is None:
+            return batch
+        return self.value_estimator(batch)
+
+    def state_dict(self) -> dict[str, Any]:
+        if hasattr(self.value_estimator, "state_dict"):
+            return {"value_estimator": self.value_estimator.state_dict()}
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        if "value_estimator" in state_dict and hasattr(
+            self.value_estimator, "load_state_dict"
+        ):
+            self.value_estimator.load_state_dict(state_dict["value_estimator"])
+
+    def register(self, trainer: Trainer, name: str = "value_estimator"):
+        trainer.register_op("pre_epoch", self)
+        trainer.register_module(name, self)
+
+
+class LRSchedulerHook(TrainerHookBase):
+    """A hook that steps a learning-rate scheduler during training.
+
+    Args:
+        scheduler (torch.optim.lr_scheduler.LRScheduler): the scheduler to step.
+        interval (Literal["batch", "optim"], optional): ``"batch"`` to step the
+            scheduler once per collected batch, or ``"optim"`` to step it after
+            every optimization step. With ``"optim"``, the number of scheduler
+            steps per collected batch scales with ``num_epochs`` and the number
+            of sub-batches per batch. Defaults to ``"batch"``.
+
+    Once registered with a trainer, the hook only steps the scheduler when at
+    least one optimization step has run since its last call, so the learning
+    rate is not decayed during warmup phases (e.g. while
+    ``collector.init_random_frames`` has not been reached).
+
+    Examples:
+        >>> scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100)
+        >>> lr_scheduler_hook = LRSchedulerHook(scheduler)
+        >>> lr_scheduler_hook.register(trainer)
+    """
+
+    def __init__(
+        self,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        interval: Literal["batch", "optim"] = "batch",
+    ) -> None:
+        if interval not in ("batch", "optim"):
+            raise ValueError(f"interval must be 'batch' or 'optim', got {interval}")
+        self.scheduler = scheduler
+        self.interval = interval
+        self._trainer_ref: weakref.ReferenceType[Trainer] | None = None
+        self._last_optim_count: int = 0
+
+    def __call__(self, batch: TensorDictBase | None = None) -> TensorDictBase | None:
+        trainer = self._trainer_ref() if self._trainer_ref is not None else None
+        if trainer is not None:
+            optim_count = trainer._optim_count
+            if optim_count == self._last_optim_count:
+                # no optimization step has run since the last call (e.g. during
+                # the init_random_frames warmup): keep the learning rate as is
+                return batch
+            self._last_optim_count = optim_count
+        self.scheduler.step()
+        return batch
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "scheduler": self.scheduler.state_dict(),
+            "last_optim_count": self._last_optim_count,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.scheduler.load_state_dict(state_dict["scheduler"])
+        self._last_optim_count = state_dict.get("last_optim_count", 0)
+
+    def register(self, trainer: Trainer, name: str = "lr_scheduler"):
+        self._trainer_ref = weakref.ref(trainer)
+        dest = "post_optim" if self.interval == "optim" else "post_steps"
+        trainer.register_op(dest, self)
+        trainer.register_module(name, self)
 
 
 class UTDRHook(TrainerHookBase):

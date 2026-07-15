@@ -23,6 +23,7 @@ from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
     _map_to_cpu_if_needed,
+    _maybe_normalize_replay_buffer_tensordict_device,
     _TrajectoryPool,
 )
 from torchrl.data import ReplayBuffer
@@ -68,8 +69,10 @@ def _main_async_collector(
     trajs_per_write: int | None = None,
     init_fn: Callable[[], None] | None = None,
     auto_register_policy_transforms: bool | None = None,
+    track_policy_version: bool = False,
     pre_collect_hook: Callable[[], None] | None = None,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+    compact_obs: bool = False,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -102,6 +105,9 @@ def _main_async_collector(
         # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
         # it detects the RB. When trajs_per_batch is None, keep existing behavior.
         collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
+        runner_handles_replay_buffer = replay_buffer is not None and bool(
+            collector_class._ignore_rb
+        )
         inner_collector = collector_class(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
@@ -118,7 +124,10 @@ def _main_async_collector(
             env_device=env_device,
             exploration_type=exploration_type,
             reset_when_done=reset_when_done,
-            return_same_td=replay_buffer is None,
+            # The runner consumes this rollout immediately and writes it to the
+            # replay buffer before asking the collector for another one. There
+            # is no need to clone a rollout solely to protect it from reuse.
+            return_same_td=replay_buffer is None or runner_handles_replay_buffer,
             interruptor=interruptor,
             set_truncated=set_truncated,
             use_buffers=use_buffers,
@@ -138,8 +147,10 @@ def _main_async_collector(
             trajs_per_batch=trajs_per_batch,
             trajs_per_write=trajs_per_write,
             auto_register_policy_transforms=auto_register_policy_transforms,
+            track_policy_version=track_policy_version,
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
+            compact_obs=compact_obs,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
@@ -242,11 +253,33 @@ def _main_async_collector(
                     run_free = False
                 if msg == "pause":
                     queue_out.put((idx, "paused"), timeout=_TIMEOUT)
-                    while not pipe_child.poll(1e-2):
-                        continue
-                    data_in, msg = pipe_child.recv()
-                    if msg != "restart":
-                        raise RuntimeError(f"Expected msg='restart', got {msg=}")
+                    while True:
+                        while not pipe_child.poll(1e-2):
+                            continue
+                        data_in, msg = pipe_child.recv()
+                        if msg == "restart":
+                            break
+                        if msg == "cascade_execute":
+                            attr_path, args, kwargs = data_in
+                            try:
+                                result = inner_collector.cascade_execute(
+                                    attr_path, *args, **kwargs
+                                )
+                                pipe_child.send((result, "cascade_execute"))
+                            except Exception as err:
+                                pipe_child.send((err, "cascade_execute"))
+                            continue
+                        if msg == "get_distant_attr":
+                            try:
+                                result = inner_collector.get_distant_attr(data_in)
+                                pipe_child.send((result, "get_distant_attr"))
+                            except Exception as err:
+                                pipe_child.send((err, "get_distant_attr"))
+                            continue
+                        raise RuntimeError(
+                            "Expected a paused-worker control message or "
+                            f"msg='restart', got {msg=}."
+                        )
                     msg = "continue"
             else:
                 data_in = None
@@ -309,6 +342,9 @@ def _main_async_collector(
             if replay_buffer is not None:
                 if extend_buffer and next_data is not None:
                     next_data.names = None
+                    next_data = _maybe_normalize_replay_buffer_tensordict_device(
+                        next_data, replay_buffer
+                    )
                     replay_buffer.extend(next_data)
 
                 if run_free:

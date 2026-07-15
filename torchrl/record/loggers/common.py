@@ -6,49 +6,45 @@ from __future__ import annotations
 
 import abc
 import importlib.util
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Mapping, Sequence
+
+from typing import Any, TYPE_CHECKING
 
 import torch
 from tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl._utils import _RayServiceMetaClass, implement_for
+from torchrl._utils import _RayServiceMetaClass
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
-try:
-    from torchcodec.encoders import VideoEncoder  # noqa: F401
+_has_torchcodec = importlib.util.find_spec("torchcodec") is not None
 
-    _has_torchcodec = True
-    del VideoEncoder
-except Exception:
-    _has_torchcodec = False
+if TYPE_CHECKING:
+    from typing import Self
 
 
 __all__ = ["Logger"]
 
 
-@implement_for("torchvision", None, "0.22")
 def _write_video(filename, video_array, **kwargs):
-    if not _has_tv:
-        raise ImportError(
-            "Writing mp4 videos with torchvision < 0.22 requires torchvision to be installed. "
-            "Install it with: pip install torchvision"
-        )
-    import torchvision
-
-    torchvision.io.write_video(filename, video_array, **kwargs)
-
-
-@implement_for("torchvision", "0.22")
-def _write_video(filename, video_array, **kwargs):  # noqa: F811
     if not _has_torchcodec:
-        raise ImportError(
-            "Writing mp4 videos with torchvision >= 0.22 requires torchcodec >= 0.10.0, "
-            "since torchvision.io.write_video was deprecated in 0.22 and removed in 0.24. "
-            "Install it with: pip install 'torchcodec>=0.10.0'"
+        raise ModuleNotFoundError(
+            "Writing MP4 videos with VideoRecorder or CSVLogger requires "
+            "torchcodec >= 0.10.0. When running TorchRL from this repository "
+            "with uv, use `uv run --extra video <command>` (or "
+            "`uv run --extra rendering <command>`) so torchcodec is installed "
+            "in the command environment. Otherwise install it with "
+            "`pip install 'torchcodec>=0.10.0'`."
         )
-    from torchcodec.encoders import VideoEncoder
+    try:
+        from torchcodec.encoders import VideoEncoder
+    except Exception as err:
+        raise ImportError(
+            "torchcodec is installed but could not be imported for MP4 video "
+            "writing. Make sure the installed torchcodec build is compatible "
+            "with the active PyTorch build, or rerun the command with "
+            "`uv run --extra video <command>` from the TorchRL repository."
+        ) from err
 
     fps = kwargs.pop("fps", 30)
     video_codec = kwargs.pop("video_codec", None)
@@ -191,12 +187,16 @@ class Logger(metaclass=_RayServiceMetaClass):
     """A template for loggers.
 
     Keyword Args:
+        service_backend (str): Deployment backend. One of ``"direct"``,
+            ``"process"``, or ``"ray"``. Defaults to ``"direct"``.
+        service_backend_options (dict, optional): Backend options. Process
+            services accept ``context``/``mp_context``, ``max_queue_size``, and
+            ``startup_timeout``. Ray services accept ``actor_options`` and
+            ``ray_init_config``.
         use_ray_service (bool): If ``True``, the logger runs as a Ray actor
-            in a separate process. All method calls are delegated to the remote
-            actor via ``ray.get(actor.method.remote(...))``. CUDA tensors in
-            :meth:`log_metrics` and :meth:`log_video` are automatically moved
-            to CPU before the remote call. Requires ``ray`` to be installed.
-            Default: ``False``.
+            in a separate process. Deprecated in favor of
+            ``service_backend="ray"`` and scheduled for removal in v0.16.
+            Defaults to ``False``.
         ray_actor_options (dict, optional): Options passed to ``ray.remote()``
             when creating the Ray actor (e.g., ``{"num_cpus": 1}``).
             Only used when ``use_ray_service=True``.
@@ -213,12 +213,123 @@ class Logger(metaclass=_RayServiceMetaClass):
                 _concrete_cls, *args, ray_actor_options=ray_actor_options, **kwargs
             )
 
+        def _service_wrapper(
+            service_backend,
+            *args,
+            service_backend_options=None,
+            **kwargs,
+        ):
+            options = dict(service_backend_options or {})
+            if service_backend == "process":
+                from torchrl.record.loggers.process import ProcessLogger
+
+                if "context" in options:
+                    if "mp_context" in options:
+                        raise ValueError(
+                            "Use only one of 'context' and 'mp_context' in "
+                            "service_backend_options."
+                        )
+                    options["mp_context"] = options.pop("context")
+                return ProcessLogger(_concrete_cls, *args, **options, **kwargs)
+            if service_backend == "ray":
+                from torchrl.record.loggers.ray import RayLogger
+
+                legacy_actor_options = kwargs.pop("ray_actor_options", None)
+                actor_options = options.pop("actor_options", legacy_actor_options)
+                ray_init_config = options.pop("ray_init_config", None)
+                if options:
+                    raise TypeError(
+                        f"Unexpected Ray logger service options: {sorted(options)}"
+                    )
+                return RayLogger(
+                    _concrete_cls,
+                    *args,
+                    ray_actor_options=actor_options,
+                    ray_init_config=ray_init_config,
+                    **kwargs,
+                )
+            raise ValueError(
+                f"Logger does not support service_backend={service_backend!r}."
+            )
+
         cls._RayServiceClass = staticmethod(_ray_wrapper)
+        cls._ServiceClass = staticmethod(_service_wrapper)
 
     def __init__(self, exp_name: str, log_dir: str) -> None:
         self.exp_name = exp_name
         self.log_dir = log_dir
+        self._service_shutdown = False
         self.experiment = self._create_experiment()
+
+    def start(self) -> Self:
+        """Return this already-started direct logger."""
+        if self._service_shutdown:
+            raise RuntimeError("A shut down direct logger cannot be restarted.")
+        return self
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether the direct logger remains available."""
+        return not self._service_shutdown
+
+    def client(self) -> Self:
+        """Return ``self`` for the zero-overhead direct backend."""
+        return self
+
+    @property
+    def service_backend(self) -> str:
+        """The canonical deployment backend for this logger."""
+        return "direct"
+
+    def flush(self, timeout: float | None = None) -> None:
+        """Flush the underlying experiment when it exposes ``flush``."""
+        del timeout
+        flush = getattr(self.experiment, "flush", None)
+        if callable(flush):
+            flush()
+
+    def shutdown(self, timeout: float | None = None) -> None:
+        """Flush and close the underlying direct experiment."""
+        del timeout
+        if self._service_shutdown:
+            return
+        self.flush()
+        finish = getattr(self.experiment, "finish", None)
+        if callable(finish):
+            finish()
+        else:
+            close = getattr(self.experiment, "close", None)
+            if callable(close):
+                close()
+        self._service_shutdown = True
+
+    def close(self, timeout: float | None = None) -> None:
+        """Alias for :meth:`shutdown`."""
+        self.shutdown(timeout=timeout)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return local logger identifiers and counters for checkpointing."""
+        self.flush()
+        state: dict[str, Any] = {
+            "exp_name": self.exp_name,
+            "log_dir": str(self.log_dir),
+        }
+        local_state = self._checkpoint_state()
+        if local_state:
+            state["local"] = local_state
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore local logger counters without recreating external services."""
+        self._load_checkpoint_state(state_dict.get("local", {}))
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        """Return logger-specific local state without external connections."""
+        return {}
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore logger-specific local state."""
+        del state_dict
 
     @abc.abstractmethod
     def _create_experiment(self) -> Experiment:  # noqa: F821

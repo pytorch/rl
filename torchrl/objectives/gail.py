@@ -14,7 +14,6 @@ from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce
 
 
 class GAILLoss(LossModule):
@@ -181,7 +180,9 @@ class GAILLoss(LossModule):
             fake_labels = torch.zeros((batch_size, 1), dtype=torch.float32).to(device)
             real_labels = torch.ones((batch_size, 1), dtype=torch.float32).to(device)
 
-        with self.discriminator_network_params.to_module(self.discriminator_network):
+        with self.discriminator_network_params.to_module(
+            self.discriminator_network, preserve_module_state=False
+        ):
             d_logits = self.discriminator_network(combined_inputs).get(
                 self.tensor_keys.discriminator_pred
             )
@@ -222,7 +223,7 @@ class GAILLoss(LossModule):
             )
 
             with self.discriminator_network_params.to_module(
-                self.discriminator_network
+                self.discriminator_network, preserve_module_state=False
             ):
                 d_logits_mixture = self.discriminator_network(pg_input_td).get(
                     self.tensor_keys.discriminator_pred
@@ -246,7 +247,7 @@ class GAILLoss(LossModule):
 
             loss += gp_loss
             out["gp_loss"] = gp_loss.detach()
-        loss = _reduce(loss, reduction=self.reduction)
+        loss = self._reduce_loss(loss, tensordict=tensordict)
         out["loss"] = loss
         td_out = TensorDict(out)
         self._clear_weakrefs(

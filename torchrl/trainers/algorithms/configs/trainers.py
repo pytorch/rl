@@ -17,12 +17,15 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
 from torchrl.trainers import TrainerHookBase
+from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
 
@@ -88,6 +91,7 @@ class SACTrainerConfig(TrainerConfig):
     action_key: Any = "action"
     observation_key: Any = "observation"
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -115,6 +119,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
@@ -197,6 +202,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         batch_size=batch_size,
         enable_logging=enable_logging,
@@ -219,10 +225,154 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
 
 
 @dataclass
-class PPOTrainerConfig(TrainerConfig):
-    """Hydra configuration for :class:`~torchrl.trainers.algorithms.PPOTrainer`.
+class OfflineToOnlineTrainerConfig(SACTrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.OfflineToOnlineTrainer`.
 
-    Every kwarg accepted by ``PPOTrainer.__init__`` is exposed as a field here.
+    Every kwarg accepted by ``OfflineToOnlineTrainer.__init__`` is exposed as a
+    field here, with SAC network-construction helper fields inherited from
+    :class:`SACTrainerConfig`.
+    """
+
+    anneal_frames: int | None = None
+
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.trainers."
+        "_make_offline_to_online_trainer"
+    )
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for offline-to-online trainer configuration."""
+        super().__post_init__()
+
+
+def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    frame_skip = kwargs.pop("frame_skip", 1)
+    optim_steps_per_batch = kwargs.pop("optim_steps_per_batch", 1)
+    loss_module = kwargs.pop("loss_module")
+    optimizer = kwargs.pop("optimizer")
+    logger = kwargs.pop("logger")
+    clip_grad_norm = kwargs.pop("clip_grad_norm", True)
+    clip_norm = kwargs.pop("clip_norm")
+    progress_bar = kwargs.pop("progress_bar", True)
+    replay_buffer = kwargs.pop("replay_buffer")
+    save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
+    log_interval = kwargs.pop("log_interval", 10000)
+    save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
+    seed = kwargs.pop("seed")
+    actor_network = kwargs.pop("actor_network")
+    critic_network = kwargs.pop("critic_network")
+    kwargs.pop("create_env_fn")
+    target_net_updater = kwargs.pop("target_net_updater")
+    async_collection = kwargs.pop("async_collection", False)
+    if async_collection:
+        raise ValueError("OfflineToOnlineTrainer does not support async_collection.")
+    log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    batch_size = kwargs.pop("batch_size", None)
+    anneal_frames = kwargs.pop("anneal_frames", None)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
+
+    # Instantiate networks first
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
+        actor_network = actor_network()
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
+        critic_network = critic_network()
+
+    if not isinstance(collector, BaseCollector):
+        collector = collector()
+
+    if not isinstance(loss_module, LossModule):
+        # then it's a partial config
+        loss_module = loss_module(
+            actor_network=actor_network, critic_network=critic_network
+        )
+    if target_net_updater is not None and not isinstance(
+        target_net_updater, TargetNetUpdater
+    ):
+        # target_net_updater must be a partial taking the loss as input
+        target_net_updater = target_net_updater(loss_module)
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        # then it's a partial config
+        optimizer = optimizer(params=loss_module.parameters())
+
+    # Quick instance checks
+    if not isinstance(collector, BaseCollector):
+        raise ValueError(f"collector must be a BaseCollector, got {type(collector)}")
+    if not isinstance(loss_module, LossModule):
+        raise ValueError(f"loss_module must be a LossModule, got {type(loss_module)}")
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        raise ValueError(
+            f"optimizer must be a torch.optim.Optimizer, got {type(optimizer)}"
+        )
+    if not isinstance(logger, Logger) and logger is not None:
+        raise ValueError(f"logger must be a Logger, got {type(logger)}")
+
+    trainer = OfflineToOnlineTrainer(
+        collector=collector,
+        total_frames=total_frames,
+        frame_skip=frame_skip,
+        optim_steps_per_batch=optim_steps_per_batch,
+        loss_module=loss_module,
+        replay_buffer=replay_buffer,
+        anneal_frames=anneal_frames,
+        batch_size=batch_size,
+        optimizer=optimizer,
+        logger=logger,
+        clip_grad_norm=clip_grad_norm,
+        clip_norm=clip_norm,
+        progress_bar=progress_bar,
+        seed=seed,
+        save_trainer_interval=save_trainer_interval,
+        log_interval=log_interval,
+        save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
+        target_net_updater=target_net_updater,
+        async_collection=async_collection,
+        log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
+    )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
+
+
+@dataclass
+class OnPolicyTrainerConfig(TrainerConfig):
+    """Base Hydra configuration for on-policy trainers.
+
+    Exposes every kwarg accepted by
+    :class:`~torchrl.trainers.algorithms.OnPolicyTrainer` as a field. Algorithm
+    configs (:class:`PPOTrainerConfig`, :class:`A2CTrainerConfig`,
+    :class:`ReinforceTrainerConfig`) subclass it, overriding only the
+    algorithm-specific defaults and the factory ``_target_``.
 
     Args:
         collector: The data collector for gathering training data.
@@ -243,16 +393,37 @@ class PPOTrainerConfig(TrainerConfig):
         create_env_fn: Environment creation function.
         actor_network: Actor network configuration.
         critic_network: Critic network configuration.
-        num_epochs: Number of epochs per batch. Default: 4.
+        num_epochs: Number of epochs per batch.
         async_collection: Whether to use async collection. Default: False.
         add_gae: Whether to add GAE computation. Default: True.
         gae: Custom GAE module configuration.
+        lr_scheduler: Learning-rate scheduler (or a partial configuration taking
+            the optimizer as input), stepped once per collected batch via
+            :class:`~torchrl.trainers.LRSchedulerHook`.
         weight_update_map: Mapping from collector destination paths to trainer source paths.
             Required if collector has weight_sync_schemes configured.
             Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
         log_timings: Whether to automatically log timing information for all hooks.
             If True, timing metrics will be logged to the logger (e.g., wandb, tensorboard)
             with prefix "time/" (e.g., "time/hook/UpdateWeights"). Default: False.
+        auto_log_optim_steps: Whether to log the number of optimization steps after
+            each optimization loop. Default: True.
+        batch_size: Unused by on-policy trainers; set the batch size on the replay
+            buffer instead.
+        gamma: Discount factor for the default GAE module. Default: 0.99.
+        lmbda: Lambda parameter for the default GAE module. Default: 0.95.
+        enable_logging: Whether to enable logging. Default: True.
+        log_rewards: Whether to log rewards. Default: True.
+        log_actions: Whether to log actions. Default: True.
+        log_observations: Whether to log observations. Default: False.
+        done_key: Done key used by GAE, losses, and logging. Default: "done".
+        terminated_key: Terminated key used by GAE, losses, and logging. Default: "terminated".
+        reward_key: Reward key used by GAE, losses, and logging. Default: "reward".
+        episode_reward_key: Episode reward key used for cumulative reward logging. Default: "reward".
+        action_key: Action key used by losses and logging. Default: "action".
+        observation_key: Observation key used for logging. Default: "observation".
+        hooks: List of :class:`~torchrl.trainers.TrainerHookBase` instances to
+            register on the trainer after construction.
     """
 
     collector: Any
@@ -273,10 +444,11 @@ class PPOTrainerConfig(TrainerConfig):
     create_env_fn: Any = None
     actor_network: Any = None
     critic_network: Any = None
-    num_epochs: int = 4
+    num_epochs: int = 1
     async_collection: bool = False
     add_gae: bool = True
     gae: Any = None
+    lr_scheduler: Any = None
     weight_update_map: dict[str, str] | None = None
     log_timings: bool = False
     auto_log_optim_steps: bool = True
@@ -294,15 +466,55 @@ class PPOTrainerConfig(TrainerConfig):
     action_key: Any = "action"
     observation_key: Any = "observation"
     hooks: list[Any] | None = None
-
-    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
+    checkpoint: Any = None
 
     def __post_init__(self) -> None:
-        """Post-initialization hook for PPO trainer configuration."""
+        """Post-initialization hook for on-policy trainer configurations."""
         super().__post_init__()
 
 
-def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
+@dataclass
+class PPOTrainerConfig(OnPolicyTrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.PPOTrainer`.
+
+    Every kwarg accepted by ``PPOTrainer.__init__`` is exposed as a field here;
+    see :class:`OnPolicyTrainerConfig` for the full field list. PPO defaults to
+    4 optimization epochs per collected batch.
+    """
+
+    num_epochs: int = 4
+
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
+
+
+@dataclass
+class A2CTrainerConfig(OnPolicyTrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.A2CTrainer`.
+
+    Every kwarg accepted by ``A2CTrainer.__init__`` is exposed as a field here;
+    see :class:`OnPolicyTrainerConfig` for the full field list. A2C performs a
+    single optimization pass over each collected batch (``num_epochs=1``).
+    """
+
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer"
+
+
+@dataclass
+class ReinforceTrainerConfig(OnPolicyTrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.ReinforceTrainer`.
+
+    Every kwarg accepted by ``ReinforceTrainer.__init__`` is exposed as a field
+    here; see :class:`OnPolicyTrainerConfig` for the full field list. REINFORCE
+    performs a single optimization pass over each collected batch
+    (``num_epochs=1``).
+    """
+
+    _target_: str = (
+        "torchrl.trainers.algorithms.configs.trainers._make_reinforce_trainer"
+    )
+
+
+def _make_onpolicy_trainer(trainer_cls, *args, **kwargs):
     from torchrl.trainers.trainers import Logger
 
     collector = kwargs.pop("collector")
@@ -313,20 +525,22 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     optim_steps_per_batch = kwargs.pop("optim_steps_per_batch", 1)
     loss_module = kwargs.pop("loss_module")
     optimizer = kwargs.pop("optimizer")
-    logger = kwargs.pop("logger")
+    logger = kwargs.pop("logger", None)
     clip_grad_norm = kwargs.pop("clip_grad_norm", True)
-    clip_norm = kwargs.pop("clip_norm")
+    clip_norm = kwargs.pop("clip_norm", None)
     progress_bar = kwargs.pop("progress_bar", True)
-    replay_buffer = kwargs.pop("replay_buffer")
+    replay_buffer = kwargs.pop("replay_buffer", None)
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
-    save_trainer_file = kwargs.pop("save_trainer_file")
-    seed = kwargs.pop("seed")
-    actor_network = kwargs.pop("actor_network")
-    critic_network = kwargs.pop("critic_network")
+    save_trainer_file = kwargs.pop("save_trainer_file", None)
+    checkpoint = kwargs.pop("checkpoint", None)
+    seed = kwargs.pop("seed", None)
+    actor_network = kwargs.pop("actor_network", None)
+    critic_network = kwargs.pop("critic_network", None)
     add_gae = kwargs.pop("add_gae", True)
-    gae = kwargs.pop("gae")
-    create_env_fn = kwargs.pop("create_env_fn")
+    gae = kwargs.pop("gae", None)
+    kwargs.pop("create_env_fn", None)
+    lr_scheduler = kwargs.pop("lr_scheduler", None)
     weight_update_map = kwargs.pop("weight_update_map", None)
     log_timings = kwargs.pop("log_timings", False)
     auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
@@ -346,11 +560,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
     observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
     hooks = kwargs.pop("hooks", None)
-
-    if create_env_fn is not None:
-        # could be referenced somewhere else, no need to raise an error
-        pass
-    num_epochs = kwargs.pop("num_epochs", 4)
+    num_epochs = kwargs.pop("num_epochs", None)
     async_collection = kwargs.pop("async_collection", False)
 
     # Instantiate networks first
@@ -390,6 +600,11 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     if not isinstance(optimizer, torch.optim.Optimizer):
         # then it's a partial config
         optimizer = optimizer(params=loss_module.parameters())
+    if lr_scheduler is not None and not isinstance(
+        lr_scheduler, torch.optim.lr_scheduler.LRScheduler
+    ):
+        # then it's a partial config taking the optimizer as input
+        lr_scheduler = lr_scheduler(optimizer)
 
     # Quick instance checks
     if not isinstance(collector, BaseCollector):
@@ -406,13 +621,14 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     if not isinstance(gae, (GAE, TensorDictModuleBase)) and gae is not None:
         gae = gae()
 
-    trainer = PPOTrainer(
+    trainer = trainer_cls(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
         optim_steps_per_batch=optim_steps_per_batch,
         loss_module=loss_module,
         optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
         logger=logger,
         clip_grad_norm=clip_grad_norm,
         clip_norm=clip_norm,
@@ -421,6 +637,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         batch_size=batch_size,
         gamma=gamma,
@@ -445,6 +662,18 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
+
+
+def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
+    return _make_onpolicy_trainer(PPOTrainer, *args, **kwargs)
+
+
+def _make_a2c_trainer(*args, **kwargs) -> A2CTrainer:
+    return _make_onpolicy_trainer(A2CTrainer, *args, **kwargs)
+
+
+def _make_reinforce_trainer(*args, **kwargs) -> ReinforceTrainer:
+    return _make_onpolicy_trainer(ReinforceTrainer, *args, **kwargs)
 
 
 @dataclass
@@ -482,6 +711,7 @@ class DQNTrainerConfig(TrainerConfig):
     log_rewards: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    checkpoint: Any = None
     mixing_strategy: str | None = None
     done_key: Any = "done"
     terminated_key: Any = "terminated"
@@ -520,6 +750,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     value_network = kwargs.pop("value_network")
     kwargs.pop("create_env_fn", None)
@@ -623,6 +854,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -686,6 +918,7 @@ class DDPGTrainerConfig(TrainerConfig):
     action_key: Any = "action"
     observation_key: Any = "observation"
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
 
@@ -712,6 +945,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
@@ -779,6 +1013,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -834,6 +1069,7 @@ class IQLTrainerConfig(TrainerConfig):
     log_actions: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
 
@@ -860,6 +1096,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     qvalue_network = kwargs.pop("qvalue_network")
@@ -925,6 +1162,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -973,6 +1211,7 @@ class CQLTrainerConfig(TrainerConfig):
     log_actions: bool = True
     log_observations: bool = False
     hooks: list[Any] | None = None
+    checkpoint: Any = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
 
@@ -999,6 +1238,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     qvalue_network = kwargs.pop("qvalue_network")
@@ -1059,6 +1299,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
@@ -1113,6 +1354,7 @@ class TD3TrainerConfig(TrainerConfig):
     policy_update_delay: int = 2
     value_estimator_gamma: float | None = None
     hooks: list[Any] | None = None
+    checkpoint: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
 
     def __post_init__(self) -> None:
@@ -1144,6 +1386,7 @@ def _make_td3_trainer(*args, **kwargs):
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
+    checkpoint = kwargs.pop("checkpoint", None)
     seed = kwargs.pop("seed")
     num_epochs = kwargs.pop("num_epochs", 1)
     async_collection = kwargs.pop("async_collection", False)
@@ -1270,6 +1513,7 @@ def _make_td3_trainer(*args, **kwargs):
         save_trainer_interval=save_trainer_interval,
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
+        checkpoint=checkpoint,
         num_epochs=num_epochs,
         replay_buffer=replay_buffer,
         enable_logging=enable_logging,

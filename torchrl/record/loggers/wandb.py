@@ -4,10 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.metadata as metadata
 import importlib.util
+import json
 
 import os
-from collections.abc import Sequence
+import platform
+import sys
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from tensordict import TensorDictBase
@@ -20,8 +24,37 @@ _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 _has_moviepy = importlib.util.find_spec("moviepy") is not None
 
 
+def _collect_env_metadata() -> dict[str, Any]:
+    packages = {}
+    editable_sources = {}
+    for distribution in metadata.distributions():
+        name = distribution.metadata.get("Name")
+        if name is None:
+            continue
+        packages[name] = distribution.version
+        direct_url = distribution.read_text("direct_url.json")
+        if direct_url is not None:
+            direct_url = json.loads(direct_url)
+            dir_info = direct_url.get("dir_info")
+            if dir_info is not None and dir_info.get("editable"):
+                editable_sources[name] = direct_url.get("url")
+    return {
+        "python": {
+            "version": sys.version,
+            "executable": sys.executable,
+            "prefix": sys.prefix,
+            "base_prefix": sys.base_prefix,
+            "platform": platform.platform(),
+        },
+        "packages": dict(sorted(packages.items())),
+        "editable_sources": dict(sorted(editable_sources.items())),
+    }
+
+
 class WandbLogger(Logger):
     """Wrapper for the wandb logger.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.WandbLoggerConfig`.
 
     The keyword arguments are mainly based on the :func:`wandb.init` kwargs.
     See the doc `here <https://docs.wandb.ai/ref/python/init>`__.
@@ -39,6 +72,9 @@ class WandbLogger(Logger):
         project (str, optional): The name of the project where you're sending
             the new run. If the project is not specified, the run is put in
             an ``"Uncategorized"`` project.
+        log_env_packages (bool, optional): if ``True``, logs the Python runtime,
+            installed package versions, and editable source locations under
+            ``wandb.config["env"]``. Defaults to ``True``.
 
     Keyword Args:
         fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
@@ -60,6 +96,7 @@ class WandbLogger(Logger):
         project: str | None = None,
         *,
         video_fps: int = 32,
+        log_env_packages: bool = True,
         **kwargs,
     ) -> None:
         if not _has_wandb:
@@ -77,6 +114,7 @@ class WandbLogger(Logger):
         self.id = id
         self.project = project
         self.video_fps = video_fps
+        self.log_env_packages = log_env_packages
         self._step_registry: dict[str, int] = {}
         self._defined_step_metrics: set[str] = set()
         self._defined_metrics: set[str] = set()
@@ -90,8 +128,31 @@ class WandbLogger(Logger):
         }
 
         super().__init__(exp_name=exp_name, log_dir=save_dir)
+        if self.log_env_packages:
+            try:
+                self.experiment.config.update(
+                    {"env": _collect_env_metadata()}, allow_val_change=True
+                )
+            except TypeError:
+                self.experiment.config.update({"env": _collect_env_metadata()})
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "step_registry": dict(self._step_registry),
+            "defined_step_metrics": sorted(self._defined_step_metrics),
+            "defined_metrics": sorted(self._defined_metrics),
+        }
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
+        if "id" in state_dict:
+            self.id = state_dict["id"]
+        self._step_registry.clear()
+        self._step_registry.update(state_dict.get("step_registry", {}))
+        self._defined_step_metrics = set(state_dict.get("defined_step_metrics", ()))
+        self._defined_metrics = set(state_dict.get("defined_metrics", ()))
 
     def _create_experiment(self):
         """Creates a wandb experiment.
@@ -265,6 +326,9 @@ class WandbLogger(Logger):
             step: Optional step value for all metrics.
             keys_sep: Separator used to flatten nested TensorDict keys into strings.
                 Defaults to "/". Only used for TensorDict inputs.
+            override_global_step: If ``True``, bypasses per-group step injection
+                and forwards ``step`` to wandb's global ``step`` argument.
+                Defaults to ``False``.
 
         Returns:
             The converted metrics dictionary (with tensors converted to Python types).

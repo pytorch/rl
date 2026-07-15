@@ -8,10 +8,8 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 
 from torchrl._utils import accept_remote_rref_udf_invocation
-from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE, ExplorationType
 from torchrl.collectors._multi_async import MultiAsyncCollector
-from torchrl.collectors._multi_base import _MultiCollectorMeta
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase
 
@@ -143,7 +141,7 @@ class AsyncCollector(MultiAsyncCollector):
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
-            that will be allowed to finished collecting their rollout before the rest are forced to end early.
+            that will be allowed to finish collecting their rollout before the rest are forced to end early.
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
         num_sub_threads (int, optional): number of threads of the subprocesses.
@@ -156,11 +154,21 @@ class AsyncCollector(MultiAsyncCollector):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            See :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            for when these markers are needed to sample trajectories from a
+            replay buffer.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on the environment, tagging every collected frame with the current version
+            under the ``"policy_version"`` key. The transform's version is bumped exactly once
+            per :meth:`update_policy_weights_` call.
+
+            The recommended path is ``track_policy_version=True``: let the collector own the
+            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
+            **without** going through a collector (e.g. a hand-rolled rollout loop).
+
+            Defaults to ``False``.
 
     """
 
@@ -248,12 +256,3 @@ class AsyncCollector(MultiAsyncCollector):
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
-
-
-_LegacyAsyncCollectorMeta = _make_legacy_metaclass(_MultiCollectorMeta)
-
-
-class aSyncDataCollector(AsyncCollector, metaclass=_LegacyAsyncCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.AsyncCollector`."""
-
-    ...

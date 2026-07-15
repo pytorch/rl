@@ -60,22 +60,71 @@ Example:
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 import uuid
+import weakref
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal
 
 import requests
 import torch
+from torch.distributed.distributed_c10d import (
+    _new_process_group_helper,
+    _world,
+    Backend,
+    default_pg_timeout,
+    PrefixStore,
+    rendezvous,
+)
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.modules.llm.backends.sglang.sglang_utils import (
     dtype_to_str,
     get_local_ip_address,
     get_open_port,
 )
-from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    _merged_lora_state_dict,
+    WeightStrategy,
+    WeightSyncScheme,
+)
+
+_SGLANG_PAUSE_GENERATION_MODE = "retract"
+_SGLANG_PAUSE_GENERATION_MODE_ENV = "TORCHRL_SGLANG_PAUSE_GENERATION_MODE"
+_SGLANG_PAUSE_POLL_INTERVAL = 0.05
+_SGLANG_FLUSH_CACHE_ENV = "TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE"
+
+
+def _truthy_env(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _pause_generation_mode() -> Literal["abort", "retract", "in_place"]:
+    mode = os.environ.get(
+        _SGLANG_PAUSE_GENERATION_MODE_ENV, _SGLANG_PAUSE_GENERATION_MODE
+    )
+    if mode not in {"abort", "retract", "in_place"}:
+        raise ValueError(
+            f"{_SGLANG_PAUSE_GENERATION_MODE_ENV} must be one of "
+            f"'abort', 'retract' or 'in_place', got {mode!r}."
+        )
+    return mode
+
+
+@implement_for("torch", None, "2.6")
+def _process_group_options_kwargs() -> dict[str, None]:
+    return {"pg_options": None}
+
+
+@implement_for("torch", "2.6")
+def _process_group_options_kwargs() -> dict[str, None]:  # noqa: F811
+    return {"backend_options": None}
 
 
 def _init_custom_process_group(
@@ -95,15 +144,6 @@ def _init_custom_process_group(
 
     Adapted from SGLang (sglang.srt.distributed) and OpenRLHF.
     """
-    from torch.distributed.distributed_c10d import (
-        _new_process_group_helper,
-        _world,
-        Backend,
-        default_pg_timeout,
-        PrefixStore,
-        rendezvous,
-    )
-
     if init_method is None:
         init_method = "env://"
 
@@ -118,10 +158,6 @@ def _init_custom_process_group(
 
     store = PrefixStore(group_name, store)
 
-    # PyTorch >= 2.6 renamed pg_options to backend_options
-    pg_options_key = (
-        "backend_options" if str(torch.__version__) >= "2.6" else "pg_options"
-    )
     pg, _ = _new_process_group_helper(
         world_size,
         rank,
@@ -129,7 +165,7 @@ def _init_custom_process_group(
         backend,
         store,
         group_name=group_name,
-        **{pg_options_key: None},
+        **_process_group_options_kwargs(),
         timeout=timeout,
     )
 
@@ -149,8 +185,7 @@ def get_model_metadata(model: Any) -> dict[str, tuple[torch.dtype, torch.Size]]:
         dict: Mapping of parameter names to (dtype, shape) tuples.
     """
     if hasattr(model, "merge_and_unload"):
-        # LoRA model - merge first
-        sd = model.merge_and_unload().state_dict()
+        sd = _merged_lora_state_dict(model)
     else:
         sd = model.state_dict()
 
@@ -204,6 +239,104 @@ class SGLangCollectiveTransport:
         else:
             self.device = device
 
+    def _pause_generation_for_update(self, model_id: str) -> None:
+        """Pause SGLang generation before a live weight update.
+
+        The pause mode can be selected through
+        ``TORCHRL_SGLANG_PAUSE_GENERATION_MODE``. ``retract`` pauses scheduling
+        and moves active requests back to the waiting queue; ``abort`` cancels
+        in-flight requests before the update and requires callers to tolerate
+        transient generation failures.
+
+        The pause endpoint can return before a just-dispatched scheduler step
+        has drained. Poll load metrics until no request is still running before
+        starting the collective weight update.
+        """
+        mode = _pause_generation_mode()
+        try:
+            response = requests.post(
+                f"{self.server_url}/pause_generation",
+                json={"mode": mode},
+                timeout=self.timeout,
+            )
+        except requests.exceptions.RequestException as err:
+            raise RuntimeError(
+                f"Failed to pause SGLang generation before updating "
+                f"model '{model_id}': {err}"
+            ) from err
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"SGLang generation pause before updating model '{model_id}' "
+                f"failed: {response.text.strip()}"
+            )
+
+        self._wait_for_generation_pause(model_id)
+
+    def _running_generation_requests(self, model_id: str) -> int:
+        """Return the number of SGLang requests still running on the scheduler."""
+        try:
+            response = requests.get(
+                f"{self.server_url}/get_load",
+                timeout=min(self.timeout, 10.0),
+            )
+        except requests.exceptions.RequestException as err:
+            raise RuntimeError(
+                f"Failed to query SGLang load while pausing generation before "
+                f"updating model '{model_id}': {err}"
+            ) from err
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"SGLang load query while pausing generation before updating "
+                f"model '{model_id}' failed: {response.text.strip()}"
+            )
+
+        running = 0
+        for load in response.json():
+            if "num_running_reqs" in load:
+                running += int(load["num_running_reqs"])
+            else:
+                running += max(
+                    0,
+                    int(load.get("num_reqs", 0)) - int(load.get("num_waiting_reqs", 0)),
+                )
+        return running
+
+    def _wait_for_generation_pause(self, model_id: str) -> None:
+        """Wait until SGLang has no active scheduler requests."""
+        deadline = time.monotonic() + self.timeout
+        while True:
+            running = self._running_generation_requests(model_id)
+            if running == 0:
+                return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"Timed out waiting for SGLang generation to pause before "
+                    f"updating model '{model_id}' ({running} requests still running)"
+                )
+            time.sleep(_SGLANG_PAUSE_POLL_INTERVAL)
+
+    def _continue_generation_after_update(self, model_id: str) -> None:
+        """Resume SGLang generation after a live weight update."""
+        try:
+            response = requests.post(
+                f"{self.server_url}/continue_generation",
+                json={"torch_empty_cache": True},
+                timeout=self.timeout,
+            )
+        except requests.exceptions.RequestException as err:
+            raise RuntimeError(
+                f"Failed to resume SGLang generation after updating "
+                f"model '{model_id}': {err}"
+            ) from err
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"SGLang generation resume after updating model '{model_id}' "
+                f"failed: {response.text.strip()}"
+            )
+
     def init_all_workers_group(
         self, model_metadata: dict[str, tuple[torch.dtype, torch.Size]]
     ) -> None:
@@ -235,8 +368,6 @@ class SGLangCollectiveTransport:
         # 'invalid argument'" during NCCL P2P/IPC channel setup. Disabling P2P
         # forces NCCL to use SHM/network transport which works with any device
         # visibility configuration.
-        import os
-
         os.environ["NCCL_P2P_DISABLE"] = "1"
         os.environ["NCCL_SHM_DISABLE"] = "1"
 
@@ -272,8 +403,6 @@ class SGLangCollectiveTransport:
                 pg_result[0] = pg
             except Exception as e:
                 pg_error[0] = e
-
-        import threading
 
         pg_thread = threading.Thread(target=_trainer_pg_init, daemon=True)
         pg_thread.start()
@@ -370,51 +499,91 @@ class SGLangCollectiveTransport:
                     f"Weight '{name}' not found in weights. "
                     f"Available keys: {list(weights.keys())[:10]}..."
                 )
+            weight = weights[name]
+            if weight.dtype != dtype or weight.shape != shape:
+                raise ValueError(
+                    f"Weight '{name}' metadata changed before SGLang sync: "
+                    f"expected dtype={dtype}, shape={tuple(shape)}, got "
+                    f"dtype={weight.dtype}, shape={tuple(weight.shape)}."
+                )
             names.append(name)
             dtypes.append(dtype_to_str(dtype))
             shapes.append(list(shape))
 
         torchrl_logger.info(f"Broadcasting {len(names)} weights for model '{model_id}'")
 
-        # Step 1: Send a single HTTP request with all weight metadata.
-        # The server will enter a broadcast-receive loop for each parameter.
-        update_data = {
-            "names": names,
-            "dtypes": dtypes,
-            "shapes": shapes,
-            "group_name": self._group_name,
-            "flush_cache": True,
-        }
-        update_future = self._http_executor.submit(
-            requests.post,
-            f"{self.server_url}/update_weights_from_distributed",
-            json=update_data,
-            timeout=self.timeout,
-        )
+        paused = False
+        update_error = None
+        try:
+            self._pause_generation_for_update(model_id)
+            paused = True
 
-        # Step 2: Broadcast each weight tensor via NCCL in the same order.
-        # The server is concurrently receiving via broadcast on its side.
-        for name in names:
-            tensor = weights[name].to(f"cuda:{self.device}")
-            torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
-            del tensor
-
-        torch.cuda.synchronize()
-
-        # Step 3: Wait for the HTTP response confirming server received all weights
-        response = update_future.result(timeout=self.timeout + 5.0)
-        response.raise_for_status()
-        result = response.json()
-        if not result.get("success", False):
-            raise RuntimeError(
-                f"SGLang weight update failed: {result.get('message', 'Unknown error')}"
+            # Step 1: Send a single HTTP request with all weight metadata.
+            # The server will enter a broadcast-receive loop for each parameter.
+            # Keep SGLang's endpoint-level abort disabled: the explicit
+            # pause_generation call above provides the scheduling barrier.
+            # Cache flushing remains opt-in because retracted requests can sit
+            # in SGLang's waiting queue while paused.
+            update_data = {
+                "names": names,
+                "dtypes": dtypes,
+                "shapes": shapes,
+                "group_name": self._group_name,
+                "flush_cache": _truthy_env(_SGLANG_FLUSH_CACHE_ENV),
+                "abort_all_requests": False,
+            }
+            update_future = self._http_executor.submit(
+                requests.post,
+                f"{self.server_url}/update_weights_from_distributed",
+                json=update_data,
+                timeout=self.timeout,
             )
+
+            # Step 2: Broadcast each weight tensor via NCCL in the same order.
+            # The server is concurrently receiving via broadcast on its side.
+            for name in names:
+                tensor = weights[name].to(f"cuda:{self.device}")
+                torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
+                del tensor
+
+            torch.cuda.synchronize()
+
+            # Step 3: Wait for the HTTP response confirming server received all weights
+            response = update_future.result(timeout=self.timeout + 5.0)
+            response.raise_for_status()
+            result = response.json()
+            if not result.get("success", False):
+                raise RuntimeError(
+                    f"SGLang weight update failed: "
+                    f"{result.get('message', 'Unknown error')}"
+                )
+        except BaseException as err:
+            update_error = err
+            raise
+        finally:
+            if paused:
+                try:
+                    self._continue_generation_after_update(model_id)
+                except Exception as err:
+                    if update_error is None:
+                        raise
+                    torchrl_logger.warning(
+                        f"Failed to resume SGLang generation after a failed "
+                        f"weight update for model '{model_id}': {err}"
+                    )
 
         torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
 
     def check_connection(self) -> bool:
         """Check if the communication group is initialized."""
         return self._comm_group is not None
+
+    def shutdown(self) -> None:
+        """Release trainer-side resources used for weight synchronization."""
+        if self._comm_group is not None:
+            torch.distributed.destroy_process_group(self._comm_group)
+            self._comm_group = None
+        self._http_executor.shutdown(wait=False, cancel_futures=True)
 
 
 class SGLangWeightSyncScheme(WeightSyncScheme):
@@ -533,8 +702,6 @@ class SGLangWeightSender:
         Args:
             model: The PyTorch model to sync weights from.
         """
-        import weakref
-
         self._model_ref = weakref.ref(model)
 
     def init_all_workers_group(
@@ -599,3 +766,13 @@ class SGLangWeightSender:
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
+
+    def shutdown(self) -> None:
+        """Release resources held by the sender."""
+        if self._transport is not None:
+            shutdown = getattr(self._transport, "shutdown", None)
+            if shutdown is not None:
+                shutdown()
+            self._transport = None
+        self._collectors.clear()
+        self._post_hooks.clear()

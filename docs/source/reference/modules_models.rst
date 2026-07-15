@@ -20,6 +20,7 @@ Modules for model-based reinforcement learning, including world models and dynam
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    WorldModel
     WorldModelWrapper
     DreamerActor
     ObsEncoder

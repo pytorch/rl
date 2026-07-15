@@ -9,8 +9,10 @@ import importlib.util
 import inspect
 import os
 import tempfile
+import warnings
 from argparse import Namespace
 from collections import OrderedDict
+from copy import deepcopy
 from os import path, walk
 from time import sleep
 
@@ -18,15 +20,10 @@ import pytest
 import torch
 from torch import nn
 
-try:
-    from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.record.loggers.tensorboard import TensorboardLogger
-
-    _has_tb = True
-except ImportError:
-    _has_tb = False
+_has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
+from torchrl.checkpoint import Checkpoint
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -37,22 +34,27 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
+from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
+from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
     _has_ts,
+    _torch_load_defaults,
     BatchSubSampler,
     CountFramesLog,
     DefaultOptimizationStepper,
     EarlyStopping,
     LogScalar,
+    LRSchedulerHook,
     mask_batch,
     OptimizationStepper,
     OptimizerHook,
@@ -61,6 +63,7 @@ from torchrl.trainers.trainers import (
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
+    ValueEstimatorHook,
 )
 
 _has_ale = importlib.util.find_spec("ale_py") is not None
@@ -81,24 +84,36 @@ class MockingOptim:
 class MockingCollector:
     called_update_policy_weights_ = False
 
+    def __init__(self, source_policy=None):
+        self.source_policy = source_policy
+        self.policy = deepcopy(source_policy) if source_policy is not None else None
+        self.called_update_policy_weights_ = False
+
     def set_seed(self, seed, **kwargs):
         return seed
 
-    def update_policy_weights_(self):
+    def update_policy_weights_(self, policy=None):
         self.called_update_policy_weights_ = True
+        policy = self.source_policy if policy is None else policy
+        if policy is not None:
+            self.policy.load_state_dict(policy.state_dict())
 
     def shutdown(self):
         pass
 
     def state_dict(self):
-        return {}
+        if self.policy is None:
+            return {}
+        return {"policy": self.policy.state_dict()}
 
     def load_state_dict(self, state_dict):
-        pass
+        if self.policy is not None:
+            self.policy.load_state_dict(state_dict["policy"])
 
 
 class MockingIterableCollector(MockingCollector):
     def __init__(self, batches):
+        super().__init__()
         self._batches = batches
         self.init_random_frames = 10**9
         self.shutdown_calls = 0
@@ -114,21 +129,115 @@ class MockingLossModule(nn.Module):
     pass
 
 
+class MockingLogger:
+    def __init__(self):
+        self.value = 0
+
+    def state_dict(self):
+        return {"value": self.value}
+
+    def load_state_dict(self, state_dict):
+        self.value = state_dict["value"]
+
+
+class MockingReplayBufferHook:
+    def __init__(self, fraction=0.0):
+        self.replay_buffer = object()
+        self.fraction = fraction
+
+    def state_dict(self):
+        return {"fraction": self.fraction}
+
+    def load_state_dict(self, state_dict):
+        self.fraction = state_dict["fraction"]
+
+
 _mocking_optim = MockingOptim()
 
 
-def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
+def mocking_trainer(
+    file=None,
+    optimizer=_mocking_optim,
+    checkpoint=None,
+    logger=None,
+    with_policy=False,
+) -> Trainer:
+    loss_module = MockingLossModule()
+    if with_policy:
+        loss_module.actor_network = nn.Linear(2, 2)
+    collector = MockingCollector(getattr(loss_module, "actor_network", None))
     trainer = Trainer(
-        collector=MockingCollector(),
+        collector=collector,
         total_frames=None,
         frame_skip=None,
         optim_steps_per_batch=None,
-        loss_module=MockingLossModule(),
+        loss_module=loss_module,
         optimizer=optimizer,
+        logger=logger,
         save_trainer_file=file,
+        checkpoint=checkpoint,
     )
     trainer._pbar_str = OrderedDict()
     return trainer
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_unified_trainer_checkpoint(tmp_path, format):
+    path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(format=format),
+    )
+    assert {"collector", "loss_module", "trainer_state"}.issubset(
+        trainer.checkpoint.components
+    )
+    trainer.collected_frames = 41
+    trainer._optim_count = 7
+    trainer.save_trainer(force_save=True)
+    manifest = Checkpoint.manifest(path)
+    assert {"collector", "loss_module", "trainer_state"}.issubset(
+        manifest["components"]
+    )
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored.load_from_file(path)
+    assert restored.collected_frames == 41
+    assert restored._optim_count == 7
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_unified_trainer_resyncs_collector_policy_after_load(tmp_path, format):
+    path = tmp_path / "trainer-checkpoint"
+    source = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(format=format),
+        with_policy=True,
+    )
+    with torch.no_grad():
+        for parameter in source.loss_module.actor_network.parameters():
+            parameter.fill_(3.0)
+    assert any(
+        not torch.equal(source.collector.policy.state_dict()[key], value)
+        for key, value in source.loss_module.actor_network.state_dict().items()
+    )
+    source.save_trainer(force_save=True)
+
+    restored = mocking_trainer(checkpoint=Checkpoint(), with_policy=True)
+    restored.load_from_file(path)
+
+    assert restored.collector.called_update_policy_weights_
+    for key, value in restored.loss_module.actor_network.state_dict().items():
+        torch.testing.assert_close(restored.collector.policy.state_dict()[key], value)
+
+
+def test_unified_trainer_default_component_selection(tmp_path):
+    path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=path,
+        checkpoint=Checkpoint(save_components={"trainer_state"}),
+    )
+    trainer.save_trainer(force_save=True)
+    assert set(Checkpoint.manifest(path)["components"]) == {"trainer_state"}
 
 
 class TestSelectKeys:
@@ -223,6 +332,175 @@ class TestSelectKeys:
 
         SelectKeys.state_dict = SelectKeys_state_dict
         SelectKeys.load_state_dict = SelectKeys_load_state_dict
+
+
+class TestLoadFromFile:
+    def test_unified_load_options_strictness_and_save_format(
+        self, tmp_path, monkeypatch
+    ):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint())
+        source.collected_frames = 11
+        source.save_trainer(force_save=True)
+
+        captured = []
+        true_load = torch.load
+
+        def spy_load(*args, **kwargs):
+            captured.append(kwargs.copy())
+            return true_load(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "load", spy_load)
+        restored_default = mocking_trainer()
+        restored_default.load_from_file(file)
+        assert restored_default.collected_frames == 11
+        assert restored_default.checkpoint is None
+        assert not captured
+
+        captured.clear()
+        restored = mocking_trainer(logger=MockingLogger())
+        restored.load_from_file(
+            file,
+            strict="ignore",
+            map_location="cpu",
+            weights_only=True,
+            mmap=False,
+        )
+        assert restored.collected_frames == 11
+        assert restored.checkpoint is None
+        assert not captured
+
+    @pytest.mark.parametrize("format", ["directory", "archive"])
+    def test_unified_hook_replay_buffer_roundtrip(self, tmp_path, format):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint(format=format))
+        replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=2).register(source)
+        data = TensorDict({"obs": torch.randn(6, 4)}, [6])
+        replay_buffer.extend(data)
+        source.save_trainer(force_save=True)
+        assert "replay_buffer" in Checkpoint.manifest(file)["components"]
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored_replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        ReplayBufferTrainer(
+            replay_buffer=restored_replay_buffer, batch_size=2
+        ).register(restored)
+        restored.load_from_file(file)
+        torch.testing.assert_close(restored_replay_buffer[:]["obs"], data["obs"])
+
+    def test_unified_hook_owned_replay_buffer_state(self, tmp_path):
+        file = tmp_path / "unified"
+        source = mocking_trainer(file=file, checkpoint=Checkpoint())
+        source_hook = MockingReplayBufferHook(0.75)
+        source.register_module("replay_buffer", source_hook)
+        assert source.checkpoint.components["replay_buffer"] is source_hook
+        source.save_trainer(force_save=True)
+
+        restored = mocking_trainer(checkpoint=Checkpoint())
+        restored_hook = MockingReplayBufferHook()
+        restored.register_module("replay_buffer", restored_hook)
+        restored.load_from_file(file)
+        assert restored_hook.fraction == 0.75
+
+    def test_legacy_save_warning_categories(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        trainer = mocking_trainer(file=tmp_path / "legacy.pt")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            trainer.save_trainer(force_save=True)
+        assert any(
+            item.category is FutureWarning and "v0.15" in str(item.message)
+            for item in caught
+        )
+        assert any(
+            item.category is DeprecationWarning and "v0.16" in str(item.message)
+            for item in caught
+        )
+
+    def test_torch_backend_mmap_default(self, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        captured = {}
+        true_load = torch.load
+
+        def spy_load(*args, **kwargs):
+            captured.update(kwargs)
+            return true_load(*args, **kwargs)
+
+        monkeypatch.setattr(torch, "load", spy_load)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            trainer = mocking_trainer(file=file)
+            trainer.save_trainer(force_save=True)
+
+            trainer2 = mocking_trainer()
+            trainer2.load_from_file(file)
+            # mmap defaults to False on Windows (a mapped checkpoint locks the
+            # file) and weights_only to False on torch < 2.4 (its weights-only
+            # unpickler rejects torch.device).
+            defaults = _torch_load_defaults()
+            assert captured["mmap"] is defaults["mmap"]
+            assert captured["weights_only"] is defaults["weights_only"]
+
+            captured.clear()
+            trainer2.load_from_file(file, mmap=False)
+            assert captured["mmap"] is False
+
+    def test_resume_and_resave_replay_buffer(self, monkeypatch):
+        # Resuming with mmap=True leaves the replay buffer storage backed by
+        # the checkpoint file; re-saving to the same path must not corrupt it.
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+
+        def make_trainer(file=None):
+            trainer = mocking_trainer(file=file)
+            replay_buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+            ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=2).register(
+                trainer
+            )
+            return trainer, replay_buffer
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            data = TensorDict({"obs": torch.randn(10, 4)}, [10])
+
+            trainer, replay_buffer = make_trainer(file=file)
+            replay_buffer.extend(data)
+            trainer.save_trainer(force_save=True)
+
+            trainer2, replay_buffer2 = make_trainer(file=file)
+            trainer2.load_from_file(file)
+            trainer2.save_trainer(force_save=True)
+
+            trainer3, replay_buffer3 = make_trainer()
+            trainer3.load_from_file(file)
+            torch.testing.assert_close(replay_buffer3[:]["obs"], data["obs"])
+
+    def test_torch_backend_save_is_atomic(self, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        true_save = torch.save
+
+        def failing_save(*args, **kwargs):
+            true_save(*args, **kwargs)
+            raise RuntimeError("interrupted save")
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            file = path.join(tmpdirname, "file.pt")
+            trainer = mocking_trainer(file=file)
+            trainer.save_trainer(force_save=True)
+            reference = torch.load(file, weights_only=True, mmap=False)
+
+            trainer.collected_frames = 42
+            monkeypatch.setattr(torch, "save", failing_save)
+            with pytest.raises(RuntimeError, match="interrupted save"):
+                trainer.save_trainer(force_save=True)
+
+            # the previous checkpoint is intact and no temp file is left over
+            loaded = torch.load(file, weights_only=True, mmap=False)
+            assert (
+                loaded["state"]["collected_frames"]
+                == reference["state"]["collected_frames"]
+            )
+            assert os.listdir(tmpdirname) == ["file.pt"]
 
 
 @pytest.mark.parametrize("prioritized", [False, True])
@@ -738,6 +1016,30 @@ class TestRewardNorm:
         for key, item in reward_normalizer._reward_stats.items():
             assert item == reward_normalizer2._reward_stats[key]
 
+    def test_reward_norm_load_state_dict_decouples_from_source(self):
+        # loading a state dict must clone the incoming tensors so that
+        # mutating the source afterwards does not corrupt the normalizer
+        # stats (e.g. tensors mmap-backed by torch.load(mmap=True))
+        torch.manual_seed(0)
+        reward_normalizer = RewardNormalizer()
+        batch = 10
+        reward = torch.randn(batch, 1)
+        td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
+        reward_normalizer.update_reward_stats(td)
+        state_dict = reward_normalizer.state_dict()
+
+        reward_normalizer2 = RewardNormalizer()
+        reward_normalizer2.load_state_dict(state_dict)
+        before = {
+            key: item.clone() if isinstance(item, torch.Tensor) else item
+            for key, item in reward_normalizer2._reward_stats.items()
+        }
+        for item in state_dict["_reward_stats"].values():
+            if isinstance(item, torch.Tensor):
+                item.fill_(1e9)
+        for key, item in before.items():
+            assert reward_normalizer2._reward_stats[key] == item
+
     @pytest.mark.parametrize(
         "backend",
         [
@@ -901,6 +1203,9 @@ class TestRecorder:
         return args
 
     def test_recorder(self, N=8):
+        from tensorboard.backend.event_processing import event_accumulator
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         args = self._get_args()
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
@@ -926,7 +1231,7 @@ class TestRecorder:
             for _ in range(N):
                 recorder(None)
 
-            for (_, _, filenames) in walk(folder):
+            for _, _, filenames in walk(folder):
                 filename = filenames[0]
                 break
 
@@ -954,6 +1259,8 @@ class TestRecorder:
         ],
     )
     def test_recorder_load(self, backend, N=8):
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
 
@@ -1028,6 +1335,30 @@ def test_updateweights():
     assert trainer.collector.called_update_policy_weights_
 
 
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_updateweights_checkpoint_counter(tmp_path, format):
+    checkpoint_path = tmp_path / "trainer-checkpoint"
+    trainer = mocking_trainer(
+        file=checkpoint_path, checkpoint=Checkpoint(format=format)
+    )
+    update_weights = UpdateWeights(trainer.collector, 5)
+    update_weights.register(trainer)
+    for _ in range(3):
+        trainer._post_steps_hook()
+    trainer.save_trainer(force_save=True)
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored_update_weights = UpdateWeights(restored.collector, 5)
+    restored_update_weights.register(restored)
+    restored.load_from_file(checkpoint_path)
+
+    assert restored_update_weights.counter == 3
+    restored._post_steps_hook()
+    assert not restored.collector.called_update_policy_weights_
+    restored._post_steps_hook()
+    assert restored.collector.called_update_policy_weights_
+
+
 class TestCountFrames:
     def test_countframes(self):
         torch.manual_seed(0)
@@ -1089,7 +1420,10 @@ class TestCountFrames:
 
         frame_skip = 3
         batch = 10
-        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+        with (
+            tempfile.TemporaryDirectory() as tmpdirname,
+            tempfile.TemporaryDirectory() as tmpdirname2,
+        ):
             trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
             td = TensorDict(
                 {
@@ -1303,6 +1637,26 @@ class TestPostOptimCompleteLog:
         ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
         assert sig.parameters["auto_log_optim_steps"].default is True
 
+    @pytest.mark.parametrize(
+        "trainer_cls",
+        [
+            A2CTrainer,
+            CQLTrainer,
+            DDPGTrainer,
+            DQNTrainer,
+            IQLTrainer,
+            OfflineToOnlineTrainer,
+            PPOTrainer,
+            ReinforceTrainer,
+            SACTrainer,
+            TD3Trainer,
+        ],
+    )
+    def test_subclass_exposes_checkpoint(self, trainer_cls):
+        """Every algorithm trainer must expose the unified checkpoint argument."""
+        parameter = inspect.signature(trainer_cls.__init__).parameters["checkpoint"]
+        assert parameter.default is None
+
 
 class TestDefaultOptimizationStepper:
     def test_loss_components_partial(self):
@@ -1350,6 +1704,129 @@ class TestDefaultOptimizationStepper:
         assert all(
             torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
         )
+
+
+class TestLRSchedulerHook:
+    def test_scheduler_steps_on_call(self):
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.25
+
+    def test_invalid_interval_raises(self):
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+        with pytest.raises(ValueError, match="interval must be"):
+            LRSchedulerHook(scheduler, interval="epoch")
+
+    def test_state_dict_roundtrip(self):
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+        hook()
+        hook()
+        state = hook.state_dict()
+
+        net2 = torch.nn.Linear(2, 2)
+        optimizer2 = torch.optim.SGD(net2.parameters(), lr=1.0)
+        scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, step_size=1, gamma=0.5)
+        hook2 = LRSchedulerHook(scheduler2)
+        hook2.load_state_dict(state)
+
+        assert scheduler2.state_dict() == scheduler.state_dict()
+
+    @pytest.mark.parametrize("interval", ["batch", "optim"])
+    def test_register(self, interval):
+        trainer = mocking_trainer()
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler, interval=interval)
+        hook.register(trainer)
+
+        dest = "post_optim" if interval == "optim" else "post_steps"
+        ops = getattr(trainer, f"_{dest}_ops")
+        assert any(getattr(op, "__wrapped__", None) is hook for op, _ in ops)
+        assert trainer._modules["lr_scheduler"] is hook
+
+    def test_no_step_without_optimization(self):
+        # once registered, the hook must not decay the learning rate while no
+        # optimization step has run (e.g. during init_random_frames warmup)
+        trainer = mocking_trainer()
+        net = torch.nn.Linear(2, 2)
+        optimizer = torch.optim.SGD(net.parameters(), lr=1.0)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+        hook = LRSchedulerHook(scheduler)
+        hook.register(trainer)
+
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 1.0
+
+        trainer._optim_count += 1
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+
+        # no new optimization step: the scheduler must not advance
+        hook()
+        assert optimizer.param_groups[0]["lr"] == 0.5
+
+
+class TestValueEstimatorHook:
+    class _RecordingEstimator:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, batch):
+            self.calls += 1
+            batch.set("advantage", torch.ones(batch.shape))
+            return batch
+
+    def test_estimator_applied_to_batch(self):
+        estimator = self._RecordingEstimator()
+        hook = ValueEstimatorHook(estimator)
+        batch = TensorDict({"observation": torch.randn(5, 3)}, [5])
+        out = hook(batch)
+        assert estimator.calls == 1
+        assert "advantage" in out.keys()
+
+    def test_none_batch_passthrough(self):
+        # async collection hands the pre_epoch stage a None batch: the hook
+        # must pass it through without calling the estimator
+        estimator = self._RecordingEstimator()
+        hook = ValueEstimatorHook(estimator)
+        assert hook(None) is None
+        assert estimator.calls == 0
+
+    def test_state_dict_plain_callable(self):
+        hook = ValueEstimatorHook(self._RecordingEstimator())
+        assert hook.state_dict() == {}
+        hook.load_state_dict({})
+
+    def test_state_dict_module_delegation(self):
+        module = torch.nn.Linear(3, 1)
+        hook = ValueEstimatorHook(module)
+        state = hook.state_dict()
+        assert "value_estimator" in state
+
+        module2 = torch.nn.Linear(3, 1)
+        hook2 = ValueEstimatorHook(module2)
+        hook2.load_state_dict(state)
+        assert torch.equal(module2.weight, module.weight)
+
+    def test_register(self):
+        trainer = mocking_trainer()
+        hook = ValueEstimatorHook(self._RecordingEstimator())
+        hook.register(trainer)
+        ops = trainer._pre_epoch_ops
+        assert any(getattr(op, "__wrapped__", None) is hook for op, _ in ops)
+        assert trainer._modules["value_estimator"] is hook
 
 
 class TestProcessLossHook:

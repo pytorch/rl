@@ -6,13 +6,16 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import hydra
 import torch.nn
 import torch.optim
 import tqdm
+from omegaconf import DictConfig, OmegaConf
 from tensordict.nn import CudaGraphModule, TensorDictSequential
 from torchrl._utils import get_available_device, timeit
+from torchrl.checkpoint import Checkpoint, CheckpointFormat, GlobalRNGState
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import ExplorationType, set_exploration_type
@@ -20,13 +23,79 @@ from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.render import save_render_checkpoint
 from utils_cartpole import eval_model, make_dqn_model, make_env
 
 torch.set_float32_matmul_precision("high")
 
 
+def _save_checkpoint(
+    path: str | Path | None,
+    *,
+    cfg: DictConfig,
+    model: torch.nn.Module,
+    collected_frames: int,
+    metrics: dict,
+    checkpoint: Checkpoint | None = None,
+    format: CheckpointFormat = "archive",
+) -> Path | None:
+    """Saves a DQN checkpoint that can be consumed by ``rlrender``.
+
+    Args:
+        path: Destination checkpoint path. ``None`` disables checkpointing.
+        cfg: Hydra training configuration.
+        model: DQN policy module.
+        collected_frames: Number of training frames collected so far.
+        metrics: Scalar metrics recorded at checkpoint time.
+        checkpoint: Full training-state checkpoint. When omitted, a render-only
+            checkpoint is constructed for backwards compatibility.
+        format: Output container format for the compatibility path.
+
+    Returns:
+        The written checkpoint path, or ``None`` when checkpointing is disabled.
+    """
+    if path in (None, ""):
+        return None
+    if checkpoint is None:
+        return save_render_checkpoint(
+            path,
+            model,
+            env_metadata={"env_name": cfg.env.env_name},
+            frames=collected_frames,
+            metrics=metrics,
+            config=OmegaConf.to_container(cfg, resolve=True),
+            format=format,
+        )
+    checkpoint.components["trainer_state"]["collected_frames"] = collected_frames
+    checkpoint.components["metrics"].clear()
+    checkpoint.components["metrics"].update(metrics)
+    components = None
+    if not cfg.checkpoint.get("include_replay_buffer", True):
+        components = set(checkpoint.components).difference({"replay_buffer"})
+    return checkpoint.save(path, components=components)
+
+
+def _resume_checkpoint(
+    checkpoint: Checkpoint,
+    path: str | Path,
+    map_location: str | torch.device,
+    *,
+    include_replay_buffer: bool = True,
+):
+    """Restore mutable training state without replacing the current config."""
+    components = set(checkpoint.components).difference({"config"})
+    if not include_replay_buffer:
+        components.discard("replay_buffer")
+    return checkpoint.load(
+        path,
+        components=components,
+        map_location=map_location,
+        tensor_load_kwargs={"weights_only": True, "mmap": True},
+    )
+
+
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
-def main(cfg: DictConfig):  # noqa: F821
+def main(cfg: DictConfig):
 
     device = torch.device(cfg.device) if cfg.device else get_available_device()
 
@@ -133,23 +202,59 @@ def main(cfg: DictConfig):  # noqa: F821
         cudagraph_policy={"warmup": 10} if cfg.compile.cudagraphs else False,
     )
 
+    checkpoint_state = {"collected_frames": 0}
+    checkpoint_metrics = {}
+    checkpoint_config = OmegaConf.to_container(cfg, resolve=True)
+    checkpoint = Checkpoint(
+        format=cfg.checkpoint.format,
+        strict=cfg.checkpoint.strict,
+        policy=model,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        replay_buffer=replay_buffer,
+        collector=collector,
+        exploration=greedy_module,
+        target_updater=target_net_updater,
+        trainer_state=checkpoint_state,
+        rng=GlobalRNGState(),
+        environment_metadata={"env_name": cfg.env.env_name},
+        config=checkpoint_config,
+        metrics=checkpoint_metrics,
+    )
+
     # Main loop
-    collected_frames = 0
+    checkpoint_path = cfg.checkpoint.path
+    if cfg.checkpoint.resume:
+        if not checkpoint_path:
+            raise ValueError("checkpoint.path must be set when checkpoint.resume=True.")
+        _resume_checkpoint(
+            checkpoint,
+            checkpoint_path,
+            device,
+            include_replay_buffer=cfg.checkpoint.get("include_replay_buffer", True),
+        )
+    collected_frames = checkpoint_state["collected_frames"]
     num_updates = cfg.loss.num_updates
     batch_size = cfg.buffer.batch_size
     test_interval = cfg.logger.test_interval
     num_test_episodes = cfg.logger.num_test_episodes
     frames_per_batch = cfg.collector.frames_per_batch
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames, initial=collected_frames)
     init_random_frames = cfg.collector.init_random_frames
     q_losses = torch.zeros(num_updates, device=device)
+    checkpoint_interval = int(cfg.checkpoint.interval or 0)
+    last_checkpoint_frame = collected_frames
 
     c_iter = iter(collector)
     total_iter = len(collector)
+    metrics_to_log = dict(checkpoint_metrics)
     for i in range(total_iter):
         timeit.printevery(1000, total_iter, erase=True)
         with timeit("collecting"):
-            data = next(c_iter)
+            try:
+                data = next(c_iter)
+            except StopIteration:
+                break
 
         metrics_to_log = {}
         pbar.update(data.numel())
@@ -221,10 +326,32 @@ def main(cfg: DictConfig):  # noqa: F821
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             logger.log_metrics(metrics_to_log, step=collected_frames)
+        if (
+            checkpoint_path
+            and checkpoint_interval > 0
+            and collected_frames - last_checkpoint_frame >= checkpoint_interval
+        ):
+            _save_checkpoint(
+                checkpoint_path,
+                cfg=cfg,
+                model=model,
+                collected_frames=collected_frames,
+                metrics=metrics_to_log,
+                checkpoint=checkpoint,
+            )
+            last_checkpoint_frame = collected_frames
 
         # update weights of the inference policy
         collector.update_policy_weights_()
 
+    _save_checkpoint(
+        checkpoint_path,
+        cfg=cfg,
+        model=model,
+        collected_frames=collected_frames,
+        metrics=metrics_to_log,
+        checkpoint=checkpoint,
+    )
     collector.shutdown()
     if not test_env.is_closed:
         test_env.close()
