@@ -25,7 +25,7 @@ from torchrl.collectors.utils import (
     _traj_ingest,
 )
 from torchrl.collectors.weight_update import WeightUpdaterBase
-from torchrl.weight_update.utils import _resolve_attr
+from torchrl.weight_update.utils import _resolve_attr, _weight_tensor_signature
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 
@@ -1157,14 +1157,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 f"{type(self).__name__} cannot resolve weight model {model_id!r}."
             )
         weights = TensorDict.from_module(get_model(model_id))
-        return tuple(
-            (
-                key if isinstance(key, tuple) else (key,),
-                tuple(value.shape),
-                str(value.dtype),
-            )
-            for key, value in weights.items(True, True)
-        )
+        return _weight_tensor_signature(weights)
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload

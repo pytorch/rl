@@ -49,6 +49,7 @@ from torchrl.weight_update import (
     WeightStrategy,
     WeightSyncScheme,
 )
+from torchrl.weight_update.utils import _weight_tensor_signature
 
 _CODE_TO_INTERACTION_TYPE = {
     0: InteractionType.MODE,
@@ -1473,14 +1474,7 @@ class _RayInferenceServerActor:
         if model_id != "policy":
             raise KeyError(f"Unknown inference model_id {model_id!r}.")
         weights = TensorDict.from_module(self.model)
-        return tuple(
-            (
-                key if isinstance(key, tuple) else (key,),
-                tuple(value.shape),
-                str(value.dtype),
-            )
-            for key, value in weights.items(True, True)
-        )
+        return _weight_tensor_signature(weights)
 
     def _receive_weights_scheme(self, model_version: int | None = None) -> None:
         if not self._receiver_schemes:

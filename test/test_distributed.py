@@ -67,6 +67,8 @@ from torchrl.trainers.algorithms import DDPGTrainer, DQNTrainer, SACTrainer, TD3
 from torchrl.trainers.trainers import OptimizationStepper
 
 _has_ray = importlib.util.find_spec("ray") is not None
+if _has_ray:
+    import ray
 
 TIMEOUT = 200
 
@@ -1320,14 +1322,19 @@ class TestRayCollector(DistributedCollectorBase):
                 batch["next", "policy_version"],
                 torch.full_like(batch["next", "policy_version"], 5),
             )
+            with pytest.raises(
+                ray.exceptions.RayTaskError, match="tensor schema changed"
+            ):
+                backend.publish_weights(
+                    expected_version=5,
+                    model_weights_key=("module", "0"),
+                )
         finally:
             backend.shutdown()
             collector.shutdown()
             replay.shutdown()
 
     def test_ray_learner_rejects_weight_schema_mismatch(self):
-        import ray
-
         replay = RayReplayBuffer(
             replay_buffer_cls=TensorDictReplayBuffer,
             storage=partial(LazyTensorStorage, 64),

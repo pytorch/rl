@@ -792,10 +792,7 @@ class RayCollector(BaseCollector):
                     "Ray learner publication currently requires "
                     "RayWeightSyncScheme for collector-owned policies."
                 )
-            scheme = RayWeightSyncScheme(
-                strategy=configured.strategy_str,
-                backend=configured._backend,
-            )
+            scheme = configured._copy_uninitialized()
             targets = list(self.remote_collectors)
         scheme.init_on_sender(
             model_id="policy",

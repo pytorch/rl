@@ -29,6 +29,7 @@ from torchrl.trainers._distributed import (
 )
 from torchrl.trainers._execution import _ExecutionStep, _Learner
 from torchrl.trainers.trainers import OptimizationStepper
+from torchrl.weight_update.utils import _weight_tensor_signature
 
 _has_ray = importlib.util.find_spec("ray") is not None
 if _has_ray:
@@ -53,6 +54,7 @@ class _RayLearnerWorker:
         self.master_store = None
         self.learner = None
         self.weight_sync_scheme = None
+        self._expected_weight_signature = None
         self.generation = 0
 
     def create_store(self, host: str | None, timeout: float) -> tuple[str, int]:
@@ -130,6 +132,7 @@ class _RayLearnerWorker:
             num_workers=len(remote_collectors),
         )
         self.weight_sync_scheme = scheme
+        self._expected_weight_signature = None
 
     def publish_weights(
         self,
@@ -157,8 +160,8 @@ class _RayLearnerWorker:
             )
             payload.set(model_weights_key, weights)
             weights = payload
-        if not self.weight_sync_scheme.synchronized_on_sender:
-            expected_signature = self._weight_signature(weights)
+        current_signature = _weight_tensor_signature(weights)
+        if self._expected_weight_signature is None:
             target_signatures = ray.get(
                 [
                     target._weight_sync_signature.remote("policy")
@@ -166,31 +169,25 @@ class _RayLearnerWorker:
                 ]
             )
             for worker_idx, target_signature in enumerate(target_signatures):
-                if target_signature != expected_signature:
+                if target_signature != current_signature:
                     raise RuntimeError(
                         "Learner and weight receiver tensor schemas differ for "
-                        f"worker {worker_idx}: sender={expected_signature}, "
+                        f"worker {worker_idx}: sender={current_signature}, "
                         f"receiver={target_signature}."
                     )
+            self._expected_weight_signature = current_signature
+        elif current_signature != self._expected_weight_signature:
+            raise RuntimeError(
+                "Learner weight tensor schema changed after transport setup: "
+                f"expected={self._expected_weight_signature}, "
+                f"sender={current_signature}."
+            )
         self.weight_sync_scheme._set_model_version(expected_version)
         if not self.weight_sync_scheme.synchronized_on_sender:
             self.weight_sync_scheme.connect(weights=weights)
         else:
             self.weight_sync_scheme.send(weights=weights)
         return expected_version
-
-    @staticmethod
-    def _weight_signature(
-        weights: TensorDictBase,
-    ) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
-        return tuple(
-            (
-                key if isinstance(key, tuple) else (key,),
-                tuple(value.shape),
-                str(value.dtype),
-            )
-            for key, value in weights.items(True, True)
-        )
 
     def state_dict(self) -> dict[str, Any]:
         return self._require_learner().state_dict()
@@ -216,6 +213,7 @@ class _RayLearnerWorker:
         if self.weight_sync_scheme is not None:
             self.weight_sync_scheme.shutdown()
             self.weight_sync_scheme = None
+        self._expected_weight_signature = None
         self.master_store = None
 
     def _require_learner(self) -> _Learner:

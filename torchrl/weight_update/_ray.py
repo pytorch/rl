@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import socket
 
 import time
@@ -16,7 +17,7 @@ from tensordict.base import TensorDictBase
 
 from torchrl._comm import RayRendezvous
 from torchrl._utils import logger as torchrl_logger
-from torchrl.weight_update.utils import _resolve_model
+from torchrl.weight_update.utils import _resolve_model, _sorted_tensor_keys
 from torchrl.weight_update.weight_sync_schemes import (
     register_weight_sync_backend,
     TransportBackend,
@@ -32,11 +33,7 @@ def _weight_tensors(
     weights: TensorDictBase | Mapping[str, torch.Tensor],
 ) -> list[torch.Tensor]:
     if isinstance(weights, TensorDictBase):
-        keys = sorted(
-            weights.keys(include_nested=True, leaves_only=True),
-            key=lambda key: (key,) if isinstance(key, str) else tuple(key),
-        )
-        tensors = [weights.get(key) for key in keys]
+        tensors = [weights.get(key) for key in _sorted_tensor_keys(weights)]
     elif isinstance(weights, Mapping):
         tensors = [weights[key] for key in sorted(weights)]
     else:
@@ -505,6 +502,34 @@ class RayWeightSyncScheme(WeightSyncScheme):
         self._manage_receiver_connect = False
         self._receiver_connect_futures = []
         self._model_version: int | None = None
+
+    def _copy_uninitialized(self) -> RayWeightSyncScheme:
+        """Copy configuration while discarding sender and receiver runtime state."""
+        scheme = copy.copy(self)
+        scheme._initialized_on_sender = False
+        scheme._initialized_on_receiver = False
+        scheme._sender_transports = None
+        scheme._receiver_transport = None
+        scheme._shared_transport = None
+        scheme._context_ref = None
+        scheme._model_ref = None
+        scheme._worker_idx = None
+        scheme._model_id = None
+        scheme.synchronized_on_sender = False
+        scheme.synchronized_on_receiver = False
+        scheme._background_thread = None
+        scheme._stop_event = None
+        scheme._dist_initialized = False
+        scheme._remote_collectors = None
+        scheme._num_workers = 0
+        scheme._rendezvous_id = uuid.uuid4().hex
+        scheme._process_group = None
+        scheme._store = None
+        scheme._manage_receiver_connect = False
+        scheme._receiver_connect_futures = []
+        scheme._model_version = None
+        scheme._connection_info_actor = None
+        return scheme
 
     def _set_model_version(self, model_version: int) -> None:
         """Set the semantic version carried by the next publication."""

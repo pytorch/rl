@@ -146,6 +146,8 @@ from torchrl.weight_update import (
     SharedMemWeightSyncScheme,
     WeightSyncScheme,
 )
+from torchrl.weight_update._ray import _weight_tensors
+from torchrl.weight_update.utils import _weight_tensor_signature
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -184,6 +186,38 @@ def test_weight_sync_scheme_from_backend_forwards_kwargs():
 def test_weight_sync_scheme_from_backend_rejects_unknown():
     with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
         WeightSyncScheme.from_backend("unknown")
+
+
+def test_ray_weight_sync_copy_preserves_config_and_resets_runtime():
+    with pytest.warns(UserWarning, match="state_dict strategy is experimental"):
+        scheme = RayWeightSyncScheme(strategy="state_dict", backend="nccl")
+    scheme._future_option = "preserved"
+    scheme._model_id = "policy"
+    scheme._initialized_on_sender = True
+    scheme.synchronized_on_sender = True
+    rendezvous_id = scheme._rendezvous_id
+
+    copied = scheme._copy_uninitialized()
+
+    assert type(copied) is type(scheme)
+    assert copied is not scheme
+    assert copied.strategy_str == "state_dict"
+    assert copied._backend == "nccl"
+    assert copied._future_option == "preserved"
+    assert not copied.initialized_on_sender
+    assert not copied.synchronized_on_sender
+    assert copied._model_id is None
+    assert copied._rendezvous_id != rendezvous_id
+
+
+def test_ray_weight_transport_uses_canonical_tensor_order():
+    first = TensorDict({"second": torch.ones(2), "first": torch.zeros(1)})
+    second = TensorDict({"first": torch.zeros(1), "second": torch.ones(2)})
+
+    assert _weight_tensor_signature(first) == _weight_tensor_signature(second)
+    tensors = _weight_tensors(first)
+    torch.testing.assert_close(tensors[0], first["first"])
+    torch.testing.assert_close(tensors[1], first["second"])
 
 
 def test_missing_weight_update_path_raises():
