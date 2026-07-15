@@ -592,6 +592,12 @@ class Trainer:
             # Kept lazy to break the intentional Trainer/stepper import cycle.
             from torchrl.trainers._ray_execution import _RayTrainerExecution
 
+            prepare_weight_sync = getattr(collector, "_learner_weight_sync", None)
+            if prepare_weight_sync is None:
+                raise TypeError(
+                    "learner_backend='ray' requires a collector that exposes "
+                    "TorchRL WeightSyncScheme receivers."
+                )
             self._execution_backend = _RayTrainerExecution(
                 loss_module=loss_module,
                 optimizer=optimizer,
@@ -606,6 +612,7 @@ class Trainer:
                 update_replay_priority=not getattr(
                     optimization_stepper, "updates_replay_priority", False
                 ),
+                weight_sync_factory=prepare_weight_sync,
             )
 
         if self.checkpoint is not None:
@@ -1523,18 +1530,18 @@ class Trainer:
         model_version = backend.model_version
         if not force and model_version <= self._published_model_version:
             return
-        weights = backend.get_weights("policy", expected_version=model_version)
         model_weights_key, auxiliary_weights = self._execution_weight_publication()
-        if model_weights_key is not None:
-            payload = (
-                TensorDict()
-                if auxiliary_weights is None
-                else auxiliary_weights.detach().clone()
+        published_version = backend.publish_weights(
+            expected_version=model_version,
+            model_weights_key=model_weights_key,
+            auxiliary_weights=auxiliary_weights,
+        )
+        if published_version != model_version:
+            raise RuntimeError(
+                f"Published model version {published_version} does not match "
+                f"learner version {model_version}."
             )
-            payload.set(model_weights_key, weights)
-            weights = payload
-        self.collector.update_policy_weights_(weights, model_id="policy")
-        self._published_model_version = model_version
+        self._published_model_version = published_version
 
     def _execution_weight_publication(
         self,

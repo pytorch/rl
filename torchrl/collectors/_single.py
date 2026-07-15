@@ -1438,7 +1438,9 @@ class Collector(BaseCollector):
     ) -> None:
         """Copy weights from original policy to internal policy when no scheme configured."""
         if model_id is not None and model_id != "policy":
-            return
+            raise KeyError(
+                f"Collector has no local weight target for model_id={model_id!r}."
+            )
 
         # Get source weights - either from argument or from original policy
         if policy_or_weights is not None:
@@ -1446,7 +1448,10 @@ class Collector(BaseCollector):
         elif self._orig_policy is not None:
             weights = TensorDict.from_module(self._orig_policy)
         else:
-            return
+            raise RuntimeError(
+                "Collector cannot update policy weights without explicit weights "
+                "or an original policy module."
+            )
 
         # Apply to internal policy
         if (
@@ -1454,6 +1459,8 @@ class Collector(BaseCollector):
             and self._policy_w_state_dict is not None
         ):
             TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
+            return
+        raise RuntimeError("Collector has no mutable local policy weight target.")
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2260,5 +2267,5 @@ class Collector(BaseCollector):
         else:
             return _resolve_model(self, model_id)
 
-    def _receive_weights_scheme(self):
-        return super()._receive_weights_scheme()
+    def _receive_weights_scheme(self, model_version: int | None = None):
+        return super()._receive_weights_scheme(model_version=model_version)

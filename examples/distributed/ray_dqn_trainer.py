@@ -109,6 +109,8 @@ def main() -> None:
     )
     try:
         trainer.train()
+        if inference.policy_version <= 0:
+            raise RuntimeError("Learner weights did not reach the inference owner.")
     finally:
         collector.shutdown()
         inference.shutdown()

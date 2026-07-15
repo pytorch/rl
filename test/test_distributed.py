@@ -67,6 +67,8 @@ from torchrl.trainers.algorithms import DDPGTrainer, DQNTrainer, SACTrainer, TD3
 from torchrl.trainers.trainers import OptimizationStepper
 
 _has_ray = importlib.util.find_spec("ray") is not None
+if _has_ray:
+    import ray
 
 TIMEOUT = 200
 
@@ -93,6 +95,12 @@ class CountingPolicy(TensorDictModuleBase):
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
         return tensordict
+
+
+class MismatchedCountingPolicy(CountingPolicy):
+    def __init__(self):
+        super().__init__()
+        self.unexpected = nn.Parameter(torch.ones(()))
 
 
 class ScalarRayLoss(LossModule):
@@ -1196,6 +1204,180 @@ class TestRayCollector(DistributedCollectorBase):
                     enable_logging=True,
                     **common,
                 )
+
+    def test_ray_learner_publishes_directly_to_inference(self):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 0},
+        )
+        replay.extend(TensorDict({"value": torch.ones(32, 1)}, [32]))
+        inference = InferenceServer(
+            policy_factory=CountingPolicy,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        collector = RayCollector(
+            create_env_fn=[CountingEnv],
+            policy=inference,
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=8,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        backend = _RayTrainerExecution(
+            loss_module=loss,
+            optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            optimization_stepper=None,
+            target_net_updater=None,
+            replay_buffer=replay,
+            global_batch_size=8,
+            options={
+                "world_size": 2,
+                "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                "backend": "gloo",
+                "setup_timeout": 60.0,
+                "command_timeout": 60.0,
+            },
+            weight_sync_factory=collector._learner_weight_sync,
+        )
+        caller_store = dist.HashStore()
+        dist.init_process_group("gloo", store=caller_store, rank=0, world_size=1)
+        try:
+            assert dist.is_initialized()
+            backend.start()
+            assert backend.publish_weights(expected_version=0) == 0
+            assert inference.policy_version == 0
+            backend.step(1)
+            assert backend.publish_weights(expected_version=1) == 1
+            assert inference.policy_version == 1
+            state = backend.state_dict()
+            generation = backend.generation
+            backend.shutdown()
+            backend.start()
+            backend.load_state_dict(state)
+            assert backend.generation == generation + 1
+            assert backend.publish_weights(expected_version=1) == 1
+            assert inference.policy_version == 1
+            result = inference.client()(TensorDict({}, batch_size=[]))
+            torch.testing.assert_close(result["action"], torch.tensor(0.9))
+            assert dist.is_initialized()
+        finally:
+            backend.shutdown()
+            collector.shutdown()
+            inference.shutdown()
+            replay.shutdown()
+            if dist.is_initialized():
+                dist.destroy_process_group()
+
+    def test_ray_learner_publishes_to_collector_owned_policy(self):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 0},
+        )
+        replay.extend(TensorDict({"value": torch.ones(32, 1)}, [32]))
+        collector = RayCollector(
+            create_env_fn=[CountingEnv],
+            policy=CountingPolicy(),
+            collector_class=Collector,
+            collector_kwargs={"track_policy_version": True},
+            frames_per_batch=8,
+            total_frames=8,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        backend = _RayTrainerExecution(
+            loss_module=loss,
+            optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            optimization_stepper=None,
+            target_net_updater=None,
+            replay_buffer=replay,
+            global_batch_size=8,
+            options={
+                "world_size": 2,
+                "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                "backend": "gloo",
+                "setup_timeout": 60.0,
+                "command_timeout": 60.0,
+            },
+            weight_sync_factory=collector._learner_weight_sync,
+        )
+        try:
+            backend.start()
+            backend.publish_weights(expected_version=0)
+            backend.step(5)
+            backend.publish_weights(expected_version=5)
+            batch = next(iter(collector))
+            torch.testing.assert_close(
+                batch["action"], torch.full_like(batch["action"], 0.5)
+            )
+            torch.testing.assert_close(
+                batch["next", "policy_version"],
+                torch.full_like(batch["next", "policy_version"], 5),
+            )
+            with pytest.raises(
+                ray.exceptions.RayTaskError, match="tensor schema changed"
+            ):
+                backend.publish_weights(
+                    expected_version=5,
+                    model_weights_key=("module", "0"),
+                )
+        finally:
+            backend.shutdown()
+            collector.shutdown()
+            replay.shutdown()
+
+    def test_ray_learner_rejects_weight_schema_mismatch(self):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 0},
+        )
+        replay.extend(TensorDict({"value": torch.ones(32, 1)}, [32]))
+        collector = RayCollector(
+            create_env_fn=[CountingEnv],
+            policy=MismatchedCountingPolicy(),
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=8,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        backend = _RayTrainerExecution(
+            loss_module=loss,
+            optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            optimization_stepper=None,
+            target_net_updater=None,
+            replay_buffer=replay,
+            global_batch_size=8,
+            options={
+                "world_size": 2,
+                "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                "backend": "gloo",
+                "setup_timeout": 60.0,
+                "command_timeout": 60.0,
+            },
+            weight_sync_factory=collector._learner_weight_sync,
+        )
+        try:
+            backend.start()
+            with pytest.raises(
+                ray.exceptions.RayTaskError, match="tensor schemas differ"
+            ):
+                backend.publish_weights(expected_version=0)
+        finally:
+            backend.shutdown()
+            collector.shutdown()
+            replay.shutdown()
 
     def test_ray_owned_inference_and_replay(self):
         replay = TensorDictReplayBuffer(

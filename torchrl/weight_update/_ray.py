@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import os
+import copy
 import socket
 
 import time
+import uuid
 import weakref
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Literal
@@ -15,7 +17,7 @@ from tensordict.base import TensorDictBase
 
 from torchrl._comm import RayRendezvous
 from torchrl._utils import logger as torchrl_logger
-from torchrl.weight_update.utils import _resolve_model
+from torchrl.weight_update.utils import _resolve_model, _sorted_tensor_keys
 from torchrl.weight_update.weight_sync_schemes import (
     register_weight_sync_backend,
     TransportBackend,
@@ -25,6 +27,29 @@ from torchrl.weight_update.weight_sync_schemes import (
 
 # Default timeout for torch.distributed operations
 _DIST_TIMEOUT = timedelta(seconds=60)
+
+
+def _weight_tensors(
+    weights: TensorDictBase | Mapping[str, torch.Tensor],
+) -> list[torch.Tensor]:
+    if isinstance(weights, TensorDictBase):
+        tensors = [weights.get(key) for key in _sorted_tensor_keys(weights)]
+    elif isinstance(weights, Mapping):
+        tensors = [weights[key] for key in sorted(weights)]
+    else:
+        raise TypeError("Ray weight synchronization requires TensorDict or mapping.")
+    if not all(isinstance(tensor, torch.Tensor) for tensor in tensors):
+        raise TypeError("Ray weight synchronization only supports tensor leaves.")
+    return tensors
+
+
+def _transport_tensors(
+    weights: TensorDictBase | Mapping[str, torch.Tensor], backend: str
+) -> list[torch.Tensor]:
+    tensors = _weight_tensors(weights)
+    if backend == "gloo":
+        return [tensor.detach().to("cpu") for tensor in tensors]
+    return tensors
 
 
 @dataclass
@@ -40,6 +65,7 @@ class ConnectionInfo:
     master_port: int
     world_size: int
     stateful_model: bool
+    prefix: str
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a connection info value by key name.
@@ -114,6 +140,9 @@ class RayTransport:
         self._dist_initialized = False
         self._weights_buffer: TensorDictBase | None = None
         self._stateful_model: bool = True
+        self._process_group = None
+        self._store = None
+        self._model_version: int | None = None
 
         # Async operation state
         self._pending_future = None
@@ -139,6 +168,23 @@ class RayTransport:
         """
         self._model = model
 
+    def set_process_group(self, process_group, store=None) -> None:
+        """Attach the scheme-owned standalone process group."""
+        self._process_group = process_group
+        self._store = store
+
+    def set_model_version(self, model_version: int | None) -> None:
+        """Attach the semantic model version to the next publication."""
+        self._model_version = model_version
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_process_group"] = None
+        state["_store"] = None
+        state["_pending_future"] = None
+        state["_pending_isend"] = None
+        return state
+
     # ========================================================================
     # Sending Weights (Sender Side)
     # ========================================================================
@@ -158,10 +204,16 @@ class RayTransport:
             return
 
         # Step 1: Signal the remote actor via Ray to start receiving (async)
-        future = self._remote_actor._receive_weights_scheme.remote()
+        kwargs = (
+            {}
+            if self._model_version is None
+            else {"model_version": self._model_version}
+        )
+        future = self._remote_actor._receive_weights_scheme.remote(**kwargs)
 
         # Step 2: Send weights via torch.distributed (async)
-        weights.isend(dst=self._rank)
+        for tag, tensor in enumerate(_transport_tensors(weights, self._backend)):
+            self._process_group.send([tensor], self._rank, tag).wait()
 
         # Step 3: Wait for the Ray call to complete (receiver has applied weights)
         self.ray.get(future)
@@ -178,10 +230,20 @@ class RayTransport:
             return
 
         # Step 1: Signal the actor via Ray to start receiving (async)
-        self._pending_future = self._remote_actor._receive_weights_scheme.remote()
+        kwargs = (
+            {}
+            if self._model_version is None
+            else {"model_version": self._model_version}
+        )
+        self._pending_future = self._remote_actor._receive_weights_scheme.remote(
+            **kwargs
+        )
 
         # Step 2: Send weights via torch.distributed (async)
-        self._pending_isend = weights.isend(dst=self._rank, return_early=True)
+        self._pending_isend = [
+            self._process_group.send([tensor], self._rank, tag)
+            for tag, tensor in enumerate(_transport_tensors(weights, self._backend))
+        ]
 
     def wait_ack(self) -> None:
         """Wait for Ray actor to finish applying weights.
@@ -237,31 +299,37 @@ class RayTransport:
             else:
                 weights_buffer = TensorDict(lock=True)
 
+        # Gloo transfers CPU tensors. Keep the communication buffer separate
+        # from CUDA-backed module parameters and cast during strategy.apply_weights.
+        if self._backend == "gloo":
+            if isinstance(weights_buffer, TensorDictBase):
+                weights_buffer = weights_buffer.to("cpu")
+            elif isinstance(weights_buffer, Mapping):
+                weights_buffer = {
+                    key: value.to("cpu") for key, value in weights_buffer.items()
+                }
+
         # Cache the weights buffer for future use
         if self._weights_buffer is None:
             self._weights_buffer = weights_buffer
 
         # Receive weights from rank 0
-        if timeout is None:
-            # Blocking receive
-            weights_buffer.irecv(src=0)
-        else:
-            # Non-blocking receive with timeout support
-            futures = weights_buffer.irecv(src=0, return_premature=True)
-            if futures:
-                start_time = time.monotonic()
-                while True:
-                    # Check if all futures are complete
-                    all_complete = all(f.is_completed() for f in futures)
-                    if all_complete:
-                        break
-                    # Check timeout
-                    elapsed = time.monotonic() - start_time
-                    if elapsed >= timeout:
-                        # Timeout expired before receiving all weights
+        works = [
+            self._process_group.recv([tensor], 0, tag)
+            for tag, tensor in enumerate(_weight_tensors(weights_buffer))
+        ]
+        try:
+            for work in works:
+                if timeout is None:
+                    work.wait()
+                else:
+                    completed = work.wait(timedelta(seconds=timeout))
+                    if completed is False:
                         return None
-                    # Small sleep to avoid busy-waiting
-                    time.sleep(0.001)
+        except RuntimeError:
+            if timeout is not None:
+                return None
+            raise
 
         # Apply weights to model
         if not isinstance(model, torch.nn.Module):
@@ -351,18 +419,25 @@ class RayTransport:
         master_port = rendezvous.read("master_port")
         world_size = rendezvous.read("world_size")
         stateful_model = rendezvous.read("stateful_model")
+        prefix = rendezvous.read("prefix")
         self._stateful_model = stateful_model
-
-        # Set environment variables for torch.distributed
-        os.environ["MASTER_ADDR"] = master_addr
-        os.environ["MASTER_PORT"] = str(master_port)
-
-        # Initialize process group on receiver
-        torch.distributed.init_process_group(
-            backend=self._backend,
-            rank=rank,
-            world_size=world_size,
+        store = torch.distributed.TCPStore(
+            master_addr,
+            master_port,
+            world_size=None,
+            is_master=False,
+            timeout=_DIST_TIMEOUT,
         )
+        prefix_store = torch.distributed.PrefixStore(prefix, store)
+        if self._backend == "nccl":
+            process_group = torch.distributed.ProcessGroupNCCL(
+                prefix_store, rank, world_size
+            )
+        else:
+            process_group = torch.distributed.ProcessGroupGloo(
+                prefix_store, rank, world_size, _DIST_TIMEOUT
+            )
+        self.set_process_group(process_group, store)
         self._dist_initialized = True
 
         # Receive initial weights if model is stateful
@@ -400,9 +475,8 @@ class RayWeightSyncScheme(WeightSyncScheme):
         Returns:
             The connection info actor name.
         """
-        if self._model_id is not None:
-            return f"connection_info_{self._model_id}"
-        return "connection_info"
+        model_id = self._model_id or "weights"
+        return f"torchrl_weight_sync_{model_id}_{self._rendezvous_id}"
 
     def __init__(
         self,
@@ -422,6 +496,47 @@ class RayWeightSyncScheme(WeightSyncScheme):
         self._dist_initialized = False
         self._remote_collectors: list | None = None
         self._num_workers: int = 0
+        self._rendezvous_id = uuid.uuid4().hex
+        self._process_group = None
+        self._store = None
+        self._manage_receiver_connect = False
+        self._receiver_connect_futures = []
+        self._model_version: int | None = None
+
+    def _copy_uninitialized(self) -> RayWeightSyncScheme:
+        """Copy configuration while discarding sender and receiver runtime state."""
+        scheme = copy.copy(self)
+        scheme._initialized_on_sender = False
+        scheme._initialized_on_receiver = False
+        scheme._sender_transports = None
+        scheme._receiver_transport = None
+        scheme._shared_transport = None
+        scheme._context_ref = None
+        scheme._model_ref = None
+        scheme._worker_idx = None
+        scheme._model_id = None
+        scheme.synchronized_on_sender = False
+        scheme.synchronized_on_receiver = False
+        scheme._background_thread = None
+        scheme._stop_event = None
+        scheme._dist_initialized = False
+        scheme._remote_collectors = None
+        scheme._num_workers = 0
+        scheme._rendezvous_id = uuid.uuid4().hex
+        scheme._process_group = None
+        scheme._store = None
+        scheme._manage_receiver_connect = False
+        scheme._receiver_connect_futures = []
+        scheme._model_version = None
+        scheme._connection_info_actor = None
+        return scheme
+
+    def _set_model_version(self, model_version: int) -> None:
+        """Set the semantic version carried by the next publication."""
+        self._model_version = model_version
+        for transport in (self._sender_transports or {}).values():
+            if isinstance(transport, RayTransport):
+                transport.set_model_version(model_version)
 
     @property
     def model(self) -> Any | None:
@@ -606,7 +721,9 @@ class RayWeightSyncScheme(WeightSyncScheme):
             transport.set_model(model)
         self._register_transport_receiver(transport=transport)
 
-    def _setup_distributed_connection_sender(self, timeout: float = 300.0) -> None:
+    def _setup_distributed_connection_sender(
+        self, timeout: float = 300.0, weights: Any | None = None
+    ) -> None:
         """Set up torch.distributed connection info and share with remote collectors.
 
         This method:
@@ -633,16 +750,27 @@ class RayWeightSyncScheme(WeightSyncScheme):
         except socket.gaierror:
             master_addr = "127.0.0.1"
 
-        # Find an available port
-        master_port = self._find_free_port()
         world_size = self._num_workers + 1  # +1 for the sender (rank 0)
 
-        try:
-            self.weights
+        if weights is not None:
+            self.weights = weights
             stateful_model = True
-        except (AttributeError, RuntimeError, ValueError):
-            stateful_model = False
+        else:
+            try:
+                stateful_model = self.weights is not None
+            except (AttributeError, RuntimeError, ValueError):
+                stateful_model = False
         self._stateful_model = stateful_model
+        self._store = torch.distributed.TCPStore(
+            master_addr,
+            0,
+            world_size=None,
+            is_master=True,
+            timeout=_DIST_TIMEOUT,
+            wait_for_workers=False,
+        )
+        master_port = self._store.port
+        prefix = f"weight-sync/{self._rendezvous_id}"
 
         # Connection info to share with workers via named Ray actor
         RemoteConnectionInfo = self.ray.remote(num_cpus=0)(ConnectionInfo).options(
@@ -653,24 +781,26 @@ class RayWeightSyncScheme(WeightSyncScheme):
             master_port=master_port,
             world_size=world_size,
             stateful_model=stateful_model,
+            prefix=prefix,
         )
-
-        # Set environment variables for torch.distributed
-        os.environ["MASTER_ADDR"] = master_addr
-        os.environ["MASTER_PORT"] = str(master_port)
-
-        # Initialize process group on sender (rank 0)
-        # Note: Workers will call init_process_group in their transport's
-        # setup_connection_and_weights_on_receiver. The init_process_group is
-        # a collective operation, so all ranks must call it together.
-        if torch.distributed.is_initialized():
-            torch.distributed.destroy_process_group()
-        torch.distributed.init_process_group(
-            backend=self._backend,
-            rank=0,
-            world_size=world_size,
-            timeout=_DIST_TIMEOUT,
-        )
+        if self._manage_receiver_connect:
+            self._receiver_connect_futures = [
+                actor._connect_weights_scheme.remote(model_version=self._model_version)
+                for actor in self._remote_collectors
+            ]
+        prefix_store = torch.distributed.PrefixStore(prefix, self._store)
+        if self._backend == "nccl":
+            self._process_group = torch.distributed.ProcessGroupNCCL(
+                prefix_store, 0, world_size
+            )
+        else:
+            self._process_group = torch.distributed.ProcessGroupGloo(
+                prefix_store, 0, world_size, _DIST_TIMEOUT
+            )
+        for transport in self.sender_transports.values():
+            if isinstance(transport, RayTransport):
+                transport.set_process_group(self._process_group, self._store)
+                transport.set_model_version(self._model_version)
         self._dist_initialized = True
 
     def _setup_connection_and_weights_on_sender_impl(
@@ -695,28 +825,38 @@ class RayWeightSyncScheme(WeightSyncScheme):
         """
         # Set up distributed connection (with wait for workers to be ready)
         if not self._dist_initialized:
-            self._setup_distributed_connection_sender()
+            self._setup_distributed_connection_sender(weights=weights)
 
         # Send the initial weights
+        if weights is not None:
+            self.weights = weights
+            self._stateful_model = True
         if self._stateful_model:
-            self._send_weights_distributed()
+            self._send_weights_distributed(weights)
+        if self._receiver_connect_futures:
+            self.ray.get(self._receiver_connect_futures)
+            self._receiver_connect_futures = []
 
-    def _send_weights_distributed(self) -> None:
+    def _send_weights_distributed(self, weights=None) -> None:
         """Send weights to all workers via torch.distributed.
 
         Raises:
             RuntimeError: If no weights are available to send.
         """
         # Extract weights from model
-        weights = self.weights
+        weights = self.weights if weights is None else weights
         if weights is None:
             raise RuntimeError("No weights available to send")
 
         # Send weights to each worker (ranks 1 to num_workers)
         futures = []
+        tensors = _transport_tensors(weights, self._backend)
         for worker_idx in range(self._num_workers):
             rank = worker_idx + 1
-            futures.extend(weights.isend(dst=rank, return_early=True))
+            futures.extend(
+                self._process_group.send([tensor], rank, tag)
+                for tag, tensor in enumerate(tensors)
+            )
         # Wait for all sends to complete
         for future in futures:
             future.wait()
@@ -748,18 +888,34 @@ class RayWeightSyncScheme(WeightSyncScheme):
             )
             self._dist_initialized = True
 
-    @staticmethod
-    def _find_free_port() -> int:
-        """Find a free port on the local machine.
+    def shutdown(self) -> None:
+        """Release only this scheme's standalone communication resources."""
+        super().shutdown()
+        actor = getattr(self, "_connection_info_actor", None)
+        if actor is not None and hasattr(self, "ray"):
+            try:
+                self.ray.kill(actor, no_restart=True)
+            except Exception:
+                pass
+        self._connection_info_actor = None
+        for transport in (self._sender_transports or {}).values():
+            if isinstance(transport, RayTransport):
+                transport.set_process_group(None, None)
+        if isinstance(self._receiver_transport, RayTransport):
+            self._receiver_transport.set_process_group(None, None)
+        self._process_group = None
+        self._store = None
+        self._receiver_connect_futures = []
+        self._dist_initialized = False
 
-        Returns:
-            int: An available port number.
-        """
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            s.listen(1)
-            port = s.getsockname()[1]
-        return port
+    def __getstate__(self):
+        state = super().__getstate__()
+        state["_process_group"] = None
+        state["_store"] = None
+        state["_connection_info_actor"] = None
+        state["_dist_initialized"] = False
+        state["_receiver_connect_futures"] = []
+        return state
 
 
 class RayModuleTransformScheme(RayWeightSyncScheme):
@@ -860,6 +1016,7 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
 
         # Single worker (the transform's actor)
         self._num_workers = 1
+        self._remote_collectors = [ray_transform._actor]
 
         # Create transport for the transform's actor
         # The actor handle is ray_transform._actor
@@ -925,74 +1082,6 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
             transport.set_model(model)
         self._register_transport_receiver(transport=transport)
 
-    def _setup_distributed_connection_sender(self, timeout: float = 300.0) -> None:
-        """Set up torch.distributed for the single transform actor.
-
-        Overrides parent to work with a single RayModuleTransform instead of
-        multiple remote collectors.
-
-        Args:
-            timeout (float): Maximum time in seconds to wait for connection setup.
-                Defaults to 300.0 (5 minutes).
-
-        Raises:
-            RuntimeError: If ``ray_transform`` is not set.
-        """
-        if self._dist_initialized:
-            return
-
-        if self._ray_transform is None:
-            raise RuntimeError(
-                "_setup_distributed_connection() requires ray_transform to be set. "
-                "Did you pass the scheme to RayModuleTransform?"
-            )
-
-        # Get master address (hostname/IP)
-        hostname = socket.gethostname()
-        try:
-            master_addr = socket.gethostbyname(hostname)
-        except socket.gaierror:
-            master_addr = "127.0.0.1"
-
-        # Find an available port
-        master_port = self._find_free_port()
-        world_size = 2  # Sender (rank 0) + Transform (rank 1)
-
-        # Check if model has weights
-        try:
-            w = self.weights
-            stateful_model = w is not None
-        except (AttributeError, RuntimeError, ValueError):
-            stateful_model = False
-        self._stateful_model = stateful_model
-
-        # Connection info to share with the transform's actor
-        RemoteConnectionInfo = self.ray.remote(num_cpus=0)(ConnectionInfo).options(
-            name=self.connection_info_name
-        )
-        self._connection_info_actor = RemoteConnectionInfo.remote(
-            master_addr=master_addr,
-            master_port=master_port,
-            world_size=world_size,
-            stateful_model=stateful_model,
-        )
-
-        # Set environment variables for torch.distributed
-        os.environ["MASTER_ADDR"] = master_addr
-        os.environ["MASTER_PORT"] = str(master_port)
-
-        # Now initialize process group on sender (rank 0)
-        # The receiver is concurrently joining via the Ray call above
-        if torch.distributed.is_initialized():
-            torch.distributed.destroy_process_group()
-        torch.distributed.init_process_group(
-            backend=self._backend,
-            rank=0,
-            world_size=world_size,
-            timeout=_DIST_TIMEOUT,
-        )
-        self._dist_initialized = True
-
     def _setup_connection_and_weights_on_sender_impl(
         self,
         *,
@@ -1011,30 +1100,6 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
             scheme=self, model_id=self.model_id
         )
 
-        if not self._dist_initialized:
-            self._setup_distributed_connection_sender()
-
-        if self._stateful_model:
-            self._send_weights_distributed(weights=weights)
+        super()._setup_connection_and_weights_on_sender_impl(weights=weights)
 
         self.ray.get(receiver_future)
-
-    def _send_weights_distributed(self, weights: Any | None = None) -> None:
-        """Send weights to the transform actor via torch.distributed.
-
-        Args:
-            weights (optional): Pre-extracted weights to send. If None, weights
-                are extracted from the model via :attr:`weights`.
-
-        Raises:
-            RuntimeError: If no weights are available to send.
-        """
-        if weights is None:
-            weights = self.weights
-        if weights is None:
-            raise RuntimeError("No weights available to send")
-
-        # Send weights to the transform (rank 1)
-        futures = weights.isend(dst=1, return_early=True)
-        for future in futures:
-            future.wait()

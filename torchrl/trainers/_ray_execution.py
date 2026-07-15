@@ -16,6 +16,7 @@ from typing import Any, Literal
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl._comm.ray_runtime import _RayRuntimeLease
@@ -28,6 +29,7 @@ from torchrl.trainers._distributed import (
 )
 from torchrl.trainers._execution import _ExecutionStep, _Learner
 from torchrl.trainers.trainers import OptimizationStepper
+from torchrl.weight_update.utils import _weight_tensor_signature
 
 _has_ray = importlib.util.find_spec("ray") is not None
 if _has_ray:
@@ -51,6 +53,9 @@ class _RayLearnerWorker:
         self.replay_client = replay_client
         self.master_store = None
         self.learner = None
+        self.weight_sync_scheme = None
+        self._expected_weight_signature = None
+        self.generation = 0
 
     def create_store(self, host: str | None, timeout: float) -> tuple[str, int]:
         self.master_store, coordinates = _create_tcp_store(host=host, timeout=timeout)
@@ -102,6 +107,7 @@ class _RayLearnerWorker:
             clip_norm=clip_norm,
             update_replay_priority=update_replay_priority,
         ).initialize()
+        self.generation = generation
         return {
             "rank": rank,
             "model_version": self.learner.model_version,
@@ -117,6 +123,71 @@ class _RayLearnerWorker:
         return self._require_learner().get_weights(
             model_id, expected_version=expected_version
         )
+
+    def configure_weight_sync(self, scheme) -> None:
+        remote_collectors = scheme._remote_collectors
+        scheme.init_on_sender(
+            model_id="policy",
+            remote_collectors=remote_collectors,
+            num_workers=len(remote_collectors),
+        )
+        self.weight_sync_scheme = scheme
+        self._expected_weight_signature = None
+
+    def publish_weights(
+        self,
+        *,
+        expected_generation: int,
+        expected_version: int,
+        model_weights_key: NestedKey | None,
+        auxiliary_weights: TensorDictBase | None,
+    ) -> int:
+        if expected_generation != self.generation:
+            raise RuntimeError(
+                f"Stale learner generation {expected_generation}; active generation "
+                f"is {self.generation}."
+            )
+        if self.weight_sync_scheme is None:
+            raise RuntimeError("Learner weight synchronization is not configured.")
+        weights = self._require_learner().get_weights(
+            "policy", expected_version=expected_version
+        )
+        if model_weights_key is not None:
+            payload = (
+                TensorDict()
+                if auxiliary_weights is None
+                else auxiliary_weights.detach().clone()
+            )
+            payload.set(model_weights_key, weights)
+            weights = payload
+        current_signature = _weight_tensor_signature(weights)
+        if self._expected_weight_signature is None:
+            target_signatures = ray.get(
+                [
+                    target._weight_sync_signature.remote("policy")
+                    for target in self.weight_sync_scheme._remote_collectors
+                ]
+            )
+            for worker_idx, target_signature in enumerate(target_signatures):
+                if target_signature != current_signature:
+                    raise RuntimeError(
+                        "Learner and weight receiver tensor schemas differ for "
+                        f"worker {worker_idx}: sender={current_signature}, "
+                        f"receiver={target_signature}."
+                    )
+            self._expected_weight_signature = current_signature
+        elif current_signature != self._expected_weight_signature:
+            raise RuntimeError(
+                "Learner weight tensor schema changed after transport setup: "
+                f"expected={self._expected_weight_signature}, "
+                f"sender={current_signature}."
+            )
+        self.weight_sync_scheme._set_model_version(expected_version)
+        if not self.weight_sync_scheme.synchronized_on_sender:
+            self.weight_sync_scheme.connect(weights=weights)
+        else:
+            self.weight_sync_scheme.send(weights=weights)
+        return expected_version
 
     def state_dict(self) -> dict[str, Any]:
         return self._require_learner().state_dict()
@@ -139,6 +210,10 @@ class _RayLearnerWorker:
         if self.learner is not None:
             self.learner.close()
             self.learner = None
+        if self.weight_sync_scheme is not None:
+            self.weight_sync_scheme.shutdown()
+            self.weight_sync_scheme = None
+        self._expected_weight_signature = None
         self.master_store = None
 
     def _require_learner(self) -> _Learner:
@@ -164,6 +239,8 @@ class _RayTrainerExecution:
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
         update_replay_priority: bool = True,
+        weight_sync_scheme: Any | None = None,
+        weight_sync_factory: Any | None = None,
     ) -> None:
         if not _has_ray:
             raise ImportError("learner_backend='ray' requires the ray package.")
@@ -225,6 +302,8 @@ class _RayTrainerExecution:
         self.clip_grad_norm = clip_grad_norm
         self.clip_norm = clip_norm
         self.update_replay_priority = update_replay_priority
+        self.weight_sync_scheme = weight_sync_scheme
+        self.weight_sync_factory = weight_sync_factory
         self.generation = 0
         self.last_round = 0
         self.model_version = 0
@@ -248,6 +327,10 @@ class _RayTrainerExecution:
         self.model_version = 0
         self._failed = False
         try:
+            if self.weight_sync_factory is not None:
+                self.weight_sync_scheme = self.weight_sync_factory(
+                    new_generation=self.generation > 1
+                )
             bundle = self._placement_bundle(self.resources_per_rank)
             bundles = [dict(bundle) for _ in range(self.world_size)]
             self._placement_group = placement_group(
@@ -299,6 +382,13 @@ class _RayTrainerExecution:
                 )
             self.model_version = versions.pop()
             self.last_round = rounds.pop()
+            if self.weight_sync_scheme is not None:
+                ray.get(
+                    self._actors[0].configure_weight_sync.remote(
+                        self.weight_sync_scheme
+                    ),
+                    timeout=self.setup_timeout,
+                )
         except BaseException:
             self._failed = True
             self.shutdown()
@@ -337,6 +427,31 @@ class _RayTrainerExecution:
             self._actors[0].get_weights.remote(model_id, expected_version),
             timeout=self.command_timeout,
         )
+
+    def publish_weights(
+        self,
+        *,
+        expected_version: int,
+        model_weights_key: NestedKey | None = None,
+        auxiliary_weights: TensorDictBase | None = None,
+    ) -> int:
+        self._require_alive()
+        try:
+            return int(
+                ray.get(
+                    self._actors[0].publish_weights.remote(
+                        expected_generation=self.generation,
+                        expected_version=expected_version,
+                        model_weights_key=model_weights_key,
+                        auxiliary_weights=auxiliary_weights,
+                    ),
+                    timeout=self.command_timeout,
+                )
+            )
+        except BaseException:
+            self._failed = True
+            self.shutdown()
+            raise
 
     def state_dict(self) -> dict[str, Any]:
         self._require_alive()

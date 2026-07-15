@@ -28,6 +28,7 @@ from torchrl.collectors.weight_update import RayWeightUpdater, WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import EnvCreator
+from torchrl.weight_update._ray import RayWeightSyncScheme
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 RAY_ERR = None
@@ -703,9 +704,6 @@ class RayCollector(BaseCollector):
             torchrl_logger.debug("RayCollector: Setting up weight receivers...")
             self.register_scheme_receiver(weight_recv_schemes)
 
-        if not self._weight_sync_initialized:
-            self._lazy_initialize_weight_sync()
-
         # Print info of all remote workers (fire and forget - no need to wait)
         for e in self.remote_collectors:
             e.print_remote_collector_info.remote()
@@ -721,6 +719,10 @@ class RayCollector(BaseCollector):
         2. Users may want to train the policy first before syncing weights
         3. Different sub-collectors may have different policies via policy_factory
         """
+        if getattr(self, "_external_weight_sender", False):
+            raise RuntimeError(
+                "Collector weight synchronization is owned by the learner backend."
+            )
         if self._weight_sync_initialized:
             return
 
@@ -759,6 +761,58 @@ class RayCollector(BaseCollector):
         self._weight_sync_initialized = True
         torchrl_logger.debug("RayCollector: Weight synchronization complete")
 
+    def _learner_weight_sync(self, *, new_generation: bool = False) -> WeightSyncScheme:
+        """Prepare the policy receiver topology for learner-rank publication."""
+        if (
+            not new_generation
+            and getattr(self, "_learner_weight_sync_scheme", None) is not None
+        ):
+            return self._learner_weight_sync_scheme
+        if self._weight_sync_initialized and not getattr(
+            self, "_external_weight_sender", False
+        ):
+            raise RuntimeError(
+                "Weight synchronization was already initialized on the controller."
+            )
+        if self._policy_service is not None:
+            scheme = RayWeightSyncScheme()
+            targets = [self._policy_service._actor]
+        else:
+            if (
+                not self._weight_sync_schemes
+                or "policy" not in self._weight_sync_schemes
+            ):
+                raise RuntimeError(
+                    "RayCollector requires a policy WeightSyncScheme for remote "
+                    "learner publication."
+                )
+            configured = self._weight_sync_schemes["policy"]
+            if not isinstance(configured, RayWeightSyncScheme):
+                raise TypeError(
+                    "Ray learner publication currently requires "
+                    "RayWeightSyncScheme for collector-owned policies."
+                )
+            scheme = configured._copy_uninitialized()
+            targets = list(self.remote_collectors)
+        scheme.init_on_sender(
+            model_id="policy",
+            remote_collectors=targets,
+            num_workers=len(targets),
+        )
+        scheme._manage_receiver_connect = True
+        ray.get(
+            [
+                target.register_scheme_receiver.remote(
+                    {"policy": scheme}, synchronize_weights=False
+                )
+                for target in targets
+            ]
+        )
+        self._external_weight_sender = True
+        self._weight_sync_initialized = True
+        self._learner_weight_sync_scheme = scheme
+        return scheme
+
     def _weight_update_impl(
         self,
         policy_or_weights: TensorDictBase | nn.Module | dict | None = None,
@@ -773,6 +827,11 @@ class RayCollector(BaseCollector):
         When using policy_factory without a central policy, weight synchronization
         is deferred until this method is called with actual weights.
         """
+        if getattr(self, "_external_weight_sender", False):
+            raise RuntimeError(
+                "Policy weights are published by the learner backend for this "
+                "collector."
+            )
         if self._policy_service is not None:
             weights = policy_or_weights
             if weights is None and weights_dict is not None:

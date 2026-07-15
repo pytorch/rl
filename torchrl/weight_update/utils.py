@@ -3,6 +3,30 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from tensordict import NestedKey, TensorDictBase
+
+
+def _sorted_tensor_keys(weights: TensorDictBase) -> list[NestedKey]:
+    """Return tensor keys in the canonical weight-transport order."""
+    return sorted(
+        weights.keys(include_nested=True, leaves_only=True),
+        key=lambda key: (key,) if isinstance(key, str) else tuple(key),
+    )
+
+
+def _weight_tensor_signature(
+    weights: TensorDictBase,
+) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
+    """Return the canonical key, shape, and dtype schema for transported weights."""
+    return tuple(
+        (
+            key if isinstance(key, tuple) else (key,),
+            tuple(weights.get(key).shape),
+            str(weights.get(key).dtype),
+        )
+        for key in _sorted_tensor_keys(weights)
+    )
+
 
 def _resolve_attr(context: Any, attr_path: str) -> Any:
     """Resolve an attribute path like 'policy' or 'env.value_net' to actual object.
