@@ -105,6 +105,9 @@ def _main_async_collector(
         # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
         # it detects the RB. When trajs_per_batch is None, keep existing behavior.
         collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
+        runner_handles_replay_buffer = replay_buffer is not None and bool(
+            collector_class._ignore_rb
+        )
         inner_collector = collector_class(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
@@ -121,7 +124,10 @@ def _main_async_collector(
             env_device=env_device,
             exploration_type=exploration_type,
             reset_when_done=reset_when_done,
-            return_same_td=replay_buffer is None,
+            # The runner consumes this rollout immediately and writes it to the
+            # replay buffer before asking the collector for another one. There
+            # is no need to clone a rollout solely to protect it from reuse.
+            return_same_td=replay_buffer is None or runner_handles_replay_buffer,
             interruptor=interruptor,
             set_truncated=set_truncated,
             use_buffers=use_buffers,
