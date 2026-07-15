@@ -1,95 +1,260 @@
 name: Continuous Benchmark (PR)
-# Opt-in only: the baseline-vs-head comparison costs 2 x ~40-60 min GPU jobs
-# per PR push, and most PRs don't touch performance-relevant code. Add the
-# "benchmarks/upload" CI-trigger label to a PR to run it (the "labeled"
-# trigger starts the run as soon as the label is applied). The gate must NOT
-# match the auto-applied "Benchmarks" category label: contains() compares
-# case-insensitively, so a plain "benchmarks" gate would fire on every PR
-# the labeler tags.
+# Opt-in only: add the "benchmarks/upload" label to run the comparison. The
+# baseline and PR legs run concurrently on separate runners. Measurements that
+# could change the 5% report are repeated sequentially on one runner. Both legs
+# use the benchmark definitions archived from the PR base SHA.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
 
 permissions:
-  contents: read
   actions: read
+  contents: read
 
 concurrency:
-  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
-  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  prepare-definitions:
+    name: Pin benchmark definitions
+    if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout baseline benchmark definitions
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Archive benchmark definitions
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euxo pipefail
+          mkdir -p benchmark-definitions/payload
+          cp -a benchmarks benchmark-definitions/payload/
+          (
+            cd benchmark-definitions/payload
+            find benchmarks -type f -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > ../definitions.sha256
+            tar -czf ../benchmark-definitions.tar.gz benchmarks
+          )
+          DEFINITIONS_SHA="$(sha256sum benchmark-definitions/definitions.sha256 | cut -d' ' -f1)"
+          export DEFINITIONS_SHA
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-  benchmark:
-    name: ${{ matrix.device }} Pytest benchmark
+          Path("benchmark-definitions/manifest.json").write_text(
+              json.dumps(
+                  {
+                      "source_sha": os.environ["PR_BASE_SHA"],
+                      "definitions_sha256": os.environ["DEFINITIONS_SHA"],
+                  },
+                  indent=2,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          PY
+          rm -rf benchmark-definitions/payload
+      - name: Upload pinned benchmark definitions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: benchmark-definitions
+          path: benchmark-definitions
+          retention-days: 3
+
+  prepare-environment:
+    name: Prepare pinned benchmark environment
     if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
     runs-on: linux.g5.4xlarge.nvidia.gpu
-    env:
-      PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
-      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - device: CPU
-            image: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
-          - device: GPU
-            image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
+    container:
+      image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04@sha256:b3e7fba84d169f46939f00c25be7d016f712a8d651f4756d6a55e693d84d94f2
+      options: --gpus all --shm-size=8g
     defaults:
       run:
         shell: bash -l {0}
+    steps:
+      - name: Install checkout dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y --no-install-recommends ca-certificates git
+          rm -rf /var/lib/apt/lists/*
+      - name: Checkout environment lock
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Set up pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.10.20'
+      - name: Restore or create benchmark environment
+        id: benchmark-env-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .benchmark-venv
+          key: pr-benchmark-venv-v1-${{ runner.os }}-${{ hashFiles('.github/benchmark-versions.env', '.github/benchmark-requirements.txt') }}
+      - name: Install pinned benchmark dependencies
+        if: steps.benchmark-env-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          source .github/benchmark-versions.env
+          python -m venv .benchmark-venv
+          source .benchmark-venv/bin/activate
+          python -m pip install \
+            "pip==${PIP_VERSION}" \
+            "setuptools==${SETUPTOOLS_VERSION}" \
+            "wheel==${WHEEL_VERSION}"
+          python -m pip install --pre --no-build-isolation \
+            -r .github/benchmark-requirements.txt \
+            --index-url https://pypi.org/simple \
+            --extra-index-url https://download.pytorch.org/whl/nightly/cu126
+          python -m pip check
+          python -m pip freeze --all > .benchmark-venv/benchmark-freeze.txt
+      - name: Validate pinned benchmark environment
+        run: |
+          set -euxo pipefail
+          source .github/benchmark-versions.env
+          source .benchmark-venv/bin/activate
+          python - <<'PY'
+          import importlib.metadata
+          import os
+
+          import torch
+          import torchvision
+
+          assert torch.__version__ == os.environ["TORCH_VERSION"]
+          assert torchvision.__version__ == os.environ["TORCHVISION_VERSION"]
+          direct_url = importlib.metadata.distribution("tensordict").read_text(
+              "direct_url.json"
+          )
+          assert os.environ["TENSORDICT_COMMIT"] in (direct_url or "")
+          PY
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
+
+  benchmark:
+    name: ${{ matrix.device }} ${{ matrix.revision }} benchmark
+    if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
+    needs: [prepare-definitions, prepare-environment]
+    runs-on: linux.g5.4xlarge.nvidia.gpu
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - device: CPU
+            revision: baseline
+            repository: ${{ github.event.pull_request.base.repo.full_name }}
+            sha: ${{ github.event.pull_request.base.sha }}
+            image: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04@sha256:5f0d2d827f6436b3cb7468fd8acbdc8c1d41261614e579ae49afe6141da51133
+          - device: CPU
+            revision: contender
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            sha: ${{ github.event.pull_request.head.sha }}
+            image: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04@sha256:5f0d2d827f6436b3cb7468fd8acbdc8c1d41261614e579ae49afe6141da51133
+          - device: GPU
+            revision: baseline
+            repository: ${{ github.event.pull_request.base.repo.full_name }}
+            sha: ${{ github.event.pull_request.base.sha }}
+            image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04@sha256:b3e7fba84d169f46939f00c25be7d016f712a8d651f4756d6a55e693d84d94f2
+          - device: GPU
+            revision: contender
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            sha: ${{ github.event.pull_request.head.sha }}
+            image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04@sha256:b3e7fba84d169f46939f00c25be7d016f712a8d651f4756d6a55e693d84d94f2
     container:
       image: ${{ matrix.image }}
       options: --gpus all --shm-size=8g
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      COMPOSITE_LP_AGGREGATE: '0'
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PYTHONHASHSEED: '0'
+      PYTHONNOUSERSITE: '1'
+      TD_GET_DEFAULTS_TO_NONE: '1'
+      TORCHDYNAMO_INLINE_INBUILT_NN_MODULES: '1'
+      TZ: Europe/London
     steps:
-      - name: Who triggered this?
-        run: |
-          echo "Action triggered by ${{ github.event.pull_request.html_url }}"
-      - name: Check ldd --version
-        run: ldd --version
-      - name: Install git for checkout
+      - name: Install pinned system environment
         run: |
           apt-get update -y
-          apt-get install -y git ca-certificates
-      - name: Checkout
-        uses: actions/checkout@v4
+          apt-get install -y --no-install-recommends \
+            ca-certificates g++ gcc git libgl1-mesa-glx libgles2-mesa-dev \
+            libglew-dev libglfw3-dev libglu1-mesa libosmesa6 libz-dev
+          rm -rf /var/lib/apt/lists/*
+      - name: Checkout workflow inputs
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Python Setup
-        uses: actions/setup-python@v5
+      - name: Checkout ${{ matrix.revision }} source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          python-version: '3.10'
-      - name: Setup Environment
+          fetch-depth: 1
+          path: source
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.sha }}
+      - name: Set up pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.10.20'
+      - name: Restore pinned benchmark environment
+        id: benchmark-env-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          fail-on-cache-miss: true
+          path: .benchmark-venv
+          key: pr-benchmark-venv-v1-${{ runner.os }}-${{ hashFiles('.github/benchmark-versions.env', '.github/benchmark-requirements.txt') }}
+      - name: Download pinned benchmark definitions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: benchmark-definitions
+          path: benchmark-definitions
+      - name: Install ${{ matrix.revision }} source
+        env:
+          TORCHRL_BENCHMARK_DEVICE: ${{ matrix.device }}
         run: |
-          export TZ=Europe/London
-          export DEBIAN_FRONTEND=noninteractive  # tzdata bug
-          apt-get update -y
-          apt-get install software-properties-common cmake -y
-          add-apt-repository ppa:git-core/candidate -y
-          apt-get update -y
-          apt-get upgrade -y
-          apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev libpython3.10-dev
-      - name: Setup git
-        run: git config --global --add safe.directory /__w/rl/rl
-      - name: setup Path
+          set -euxo pipefail
+          source .benchmark-venv/bin/activate
+          if [ "${TORCHRL_BENCHMARK_DEVICE}" = CPU ]; then
+            export CUDA_VISIBLE_DEVICES=
+          else
+            export CUDA_VISIBLE_DEVICES=0
+          fi
+          rm -rf source/build
+          python -m pip install -e source --no-build-isolation --no-deps
+          if [ "${TORCHRL_BENCHMARK_DEVICE}" = GPU ]; then
+            nvcc --version
+            python -c "import torch; assert torch.cuda.device_count()"
+            python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
+          fi
+      - name: Run ${{ matrix.revision }} benchmarks
+        env:
+          TORCHRL_BENCHMARK_DEVICE: ${{ matrix.device }}
         run: |
-          echo /usr/local/bin >> "$GITHUB_PATH"
-      - name: Setup benchmarks
-        run: |
-          BENCHMARK_SITE_DIR="$(mktemp -d)"
-          {
-            echo "BASE_SHA=${PR_BASE_SHA:0:8}"
-            echo "HEAD_SHA=${PR_HEAD_SHA:0:8}"
-            echo "BASELINE_JSON=$(mktemp)"
-            echo "CONTENDER_JSON=$(mktemp)"
-            echo "BENCHMARK_SITE_DIR=${BENCHMARK_SITE_DIR}"
-          } >> "$GITHUB_ENV"
-          cat > "${BENCHMARK_SITE_DIR}/sitecustomize.py" <<'PY'
+          set -euxo pipefail
+          source .benchmark-venv/bin/activate
+          if [ "${TORCHRL_BENCHMARK_DEVICE}" = CPU ]; then
+            export CUDA_VISIBLE_DEVICES=
+          else
+            export CUDA_VISIBLE_DEVICES=0
+          fi
+          mkdir -p .benchmark-site "benchmark-result/${TORCHRL_BENCHMARK_DEVICE}"
+          cat > .benchmark-site/sitecustomize.py <<'PY'
           import warnings
 
           try:
@@ -99,141 +264,317 @@ jobs:
           except (AttributeError, ImportError):
               pass
           PY
-      - name: Install benchmark dependencies
+          export PYTHONPATH="${GITHUB_WORKSPACE}/.benchmark-site"
+          tar -xzf benchmark-definitions/benchmark-definitions.tar.gz \
+            -C benchmark-definitions
+          RESULT_JSON="${GITHUB_WORKSPACE}/benchmark-result/${TORCHRL_BENCHMARK_DEVICE}/${{ matrix.revision }}.json"
+          cd benchmark-definitions/benchmarks
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
+            --benchmark-json "${RESULT_JSON}" --ignore test_llm.py .
+      - name: Record benchmark metadata
+        if: always()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BENCHMARK_COMMAND: python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --ignore test_llm.py .
+          DEVICE: ${{ matrix.device }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          IMAGE: ${{ matrix.image }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVISION: ${{ matrix.revision }}
+          REVISION_SHA: ${{ matrix.sha }}
         run: |
           set -euxo pipefail
-          python3.10 -m venv --system-site-packages ./py310
-          source ./py310/bin/activate
-          export PYTHON_INCLUDE_DIR=/usr/include/python3.10
+          source .benchmark-venv/bin/activate
+          DEPENDENCY_LOCK_SHA="$(cat .github/benchmark-versions.env .github/benchmark-requirements.txt | sha256sum | cut -d' ' -f1)"
+          DEPENDENCY_ENVIRONMENT_SHA="$(sha256sum .benchmark-venv/benchmark-freeze.txt | cut -d' ' -f1)"
+          DEFINITIONS_SHA="$(python -c 'import json; print(json.load(open("benchmark-definitions/manifest.json"))["definitions_sha256"])')"
+          DEFINITIONS_SOURCE_SHA="$(python -c 'import json; print(json.load(open("benchmark-definitions/manifest.json"))["source_sha"])')"
+          PYTHON_VERSION="$(python -c 'import platform; print(platform.python_version())')"
+          SYSTEM_ENVIRONMENT_SHA="$(dpkg-query -W -f='${Package}=${Version}\n' | sort | sha256sum | cut -d' ' -f1)"
+          export DEPENDENCY_ENVIRONMENT_SHA DEPENDENCY_LOCK_SHA DEFINITIONS_SHA DEFINITIONS_SOURCE_SHA PYTHON_VERSION SYSTEM_ENVIRONMENT_SHA
+          mkdir -p "benchmark-result/${DEVICE}"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-          # NB: the nightly/cu128 channel is frozen (torch and torchvision builds
-          # drifted out of sync there, making install ResolutionImpossible). Use the
-          # live cu126 nightly channel; its CUDA 12.6 wheels run fine on the GPU
-          # runner via driver backward-compatibility.
-          # The --extra-index-url onto PyPI is required: torch nightly pulls in
-          # transitive deps (e.g. spmd-types) that are only shipped as sdists on the
-          # torch channel, and building those sdists needs setuptools/wheel which the
-          # torch index does not host. Install torch separately so torchvision's
-          # exact torch dependency cannot make pip backtrack into PyPI stable
-          # torch. Then install nightly torchvision without dependencies and
-          # constrain later dependency installs so PyPI stable releases cannot
-          # upgrade torch/torchvision before the version assertion.
-          python3.10 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu126 --extra-index-url https://pypi.org/simple -U
-          python3.10 -m pip install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cu126 --no-deps -U
-          python3.10 - <<'PY' > /tmp/torch-constraints.txt
-          from importlib.metadata import version
-
-          print(f"torch=={version('torch')}")
-          print(f"torchvision=={version('torchvision')}")
-          PY
-          python3.10 -m pip install -c /tmp/torch-constraints.txt ninja pytest pytest-benchmark pytest-timeout "hoptorch>=0.1.4" "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "gym[accept-rom-license,atari]" transformers accelerate ray
-          python3.10 -m pip install -c /tmp/torch-constraints.txt "pybind11[global]"
-          python3.10 -m pip install -c /tmp/torch-constraints.txt cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
-          python3.10 -m pip install --no-deps git+https://github.com/pytorch/tensordict
-          python3.10 -m pip install -c /tmp/torch-constraints.txt safetensors tqdm pandas numpy matplotlib
-
-          bash .github/unittest/helpers/assert_torch_version.sh nightly
-          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
-      - name: Run baseline benchmarks
-        run: |
-          set -euxo pipefail
-          source ./py310/bin/activate
-          export PYTHON_INCLUDE_DIR=/usr/include/python3.10
-          export TORCHRL_BENCHMARK_DEVICE="${{ matrix.device }}"
-          if [ "${TORCHRL_BENCHMARK_DEVICE}" = "CPU" ]; then
-            export CUDA_VISIBLE_DEVICES=
-          fi
-          git fetch --no-tags --depth=1 "https://github.com/${PR_BASE_REPO}.git" "${PR_BASE_SHA}"
-          git checkout --detach "${PR_BASE_SHA}"
-          rm -rf build
-          python3.10 -m pip install -e . --no-build-isolation --no-deps
-
-          if [ "${{ matrix.device }}" = "GPU" ]; then
-            # test import and fail early if the GPU runner did not expose CUDA
-            nvcc --version
-            python -c "import torch; assert torch.cuda.device_count()"
-            python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
-          fi
-
-          # The PR workflow compares against the base SHA. If the base
-          # checkout cannot repeatedly execute this benchmark, skip it in both
-          # legs so the remaining benchmark suite still compares like-for-like.
-          if ! python - <<'PY'
-          import torch
-          from torchrl.data.vla import OpenVLAImagePreprocessor
-
-          preprocessor = OpenVLAImagePreprocessor(size=32, backend="torchvision")
-          images = torch.zeros(1, 3, 32, 32, dtype=torch.uint8)
-          preprocessor(images)
-          preprocessor(images)
-          PY
-          then
-            echo "Skipping VLA preprocessing benchmarks because the baseline cannot run them."
-            echo "TORCHRL_BENCHMARK_IGNORE=test_vla_preprocessing_benchmark.py" >> "${GITHUB_ENV}"
-            export TORCHRL_BENCHMARK_IGNORE=test_vla_preprocessing_benchmark.py
-          fi
-
-          REPO_ROOT="$(pwd)"
-          cd "${REPO_ROOT}/benchmarks"
-          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          export COMPOSITE_LP_AGGREGATE=0
-          export TD_GET_DEFAULTS_TO_NONE=1
-          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-          benchmark_ignore_args=()
-          if [ -n "${TORCHRL_BENCHMARK_IGNORE:-}" ]; then
-            benchmark_ignore_args=(--ignore "${TORCHRL_BENCHMARK_IGNORE}")
-          fi
-          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py "${benchmark_ignore_args[@]}" .
-      - name: Run PR benchmarks
-        run: |
-          set -euxo pipefail
-          source ./py310/bin/activate
-          export PYTHON_INCLUDE_DIR=/usr/include/python3.10
-          export TORCHRL_BENCHMARK_DEVICE="${{ matrix.device }}"
-          if [ "${TORCHRL_BENCHMARK_DEVICE}" = "CPU" ]; then
-            export CUDA_VISIBLE_DEVICES=
-          fi
-          git checkout --detach "${PR_HEAD_SHA}"
-          rm -rf build
-          python3.10 -m pip install -e . --no-build-isolation --no-deps
-
-          if [ "${{ matrix.device }}" = "GPU" ]; then
-            # test import and fail early if the GPU runner did not expose CUDA
-            nvcc --version
-            python -c "import torch; assert torch.cuda.device_count()"
-            python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
-          fi
-
-          REPO_ROOT="$(pwd)"
-          cd "${REPO_ROOT}/benchmarks"
-          export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
-          export COMPOSITE_LP_AGGREGATE=0
-          export TD_GET_DEFAULTS_TO_NONE=1
-          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-          benchmark_ignore_args=()
-          if [ -n "${TORCHRL_BENCHMARK_IGNORE:-}" ]; then
-            benchmark_ignore_args=(--ignore "${TORCHRL_BENCHMARK_IGNORE}")
-          fi
-          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py "${benchmark_ignore_args[@]}" .
-      - name: Upload PR benchmark results
-        if: ${{ always() }}
-        run: |
-          set -euxo pipefail
-          mkdir -p benchmark-results
-          cp "${BASELINE_JSON}" benchmark-results/baseline.json
-          cp "${CONTENDER_JSON}" benchmark-results/contender.json
-          cat > benchmark-results/metadata.json <<EOF
-          {
-            "device": "${{ matrix.device }}",
-            "pr_number": ${{ github.event.pull_request.number }},
-            "base_sha": "${PR_BASE_SHA}",
-            "head_sha": "${PR_HEAD_SHA}",
-            "run_id": "${{ github.run_id }}"
+          metadata = {
+              "device": os.environ["DEVICE"],
+              "revision": os.environ["REVISION"],
+              "sha": os.environ["REVISION_SHA"],
+              "pr_number": int(os.environ["PR_NUMBER"]),
+              "base_sha": os.environ["BASE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "runner": "linux.g5.4xlarge.nvidia.gpu",
+              "image": os.environ["IMAGE"],
+              "python_version": os.environ["PYTHON_VERSION"],
+              "system_environment_sha256": os.environ["SYSTEM_ENVIRONMENT_SHA"],
+              "dependency_lock_sha256": os.environ["DEPENDENCY_LOCK_SHA"],
+              "dependency_environment_sha256": os.environ[
+                  "DEPENDENCY_ENVIRONMENT_SHA"
+              ],
+              "benchmark_definitions_source_sha": os.environ[
+                  "DEFINITIONS_SOURCE_SHA"
+              ],
+              "benchmark_definitions_sha256": os.environ["DEFINITIONS_SHA"],
+              "benchmark_command": os.environ["BENCHMARK_COMMAND"],
+              "benchmark_environment": {
+                  "COMPOSITE_LP_AGGREGATE": "0",
+                  "CUDA_VISIBLE_DEVICES": "" if os.environ["DEVICE"] == "CPU" else "0",
+                  "LANG": "C.UTF-8",
+                  "LC_ALL": "C.UTF-8",
+                  "MKL_NUM_THREADS": "1",
+                  "OMP_NUM_THREADS": "1",
+                  "PYTHONHASHSEED": "0",
+                  "PYTHONNOUSERSITE": "1",
+                  "TD_GET_DEFAULTS_TO_NONE": "1",
+                  "TORCHDYNAMO_INLINE_INBUILT_NN_MODULES": "1",
+                  "TZ": "Europe/London",
+              },
+              "run_id": os.environ["GITHUB_RUN_ID"],
           }
-          EOF
-      - name: Upload PR benchmark artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+          output = Path("benchmark-result") / os.environ["DEVICE"]
+          (output / f"{os.environ['REVISION']}-metadata.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Upload ${{ matrix.device }} ${{ matrix.revision }} JSON
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ matrix.device }}-benchmark-pr-results
-          path: benchmark-results
+          name: ${{ matrix.device }}-${{ matrix.revision }}-benchmark-json
+          path: benchmark-result
+          retention-days: 3
+
+  compare:
+    name: Compare parallel benchmark results
+    if: contains(github.event.pull_request.labels.*.name, 'benchmarks/upload')
+    needs: benchmark
+    runs-on: ubuntu-22.04
+    outputs:
+      confirmation_matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Checkout comparison tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Download baseline and PR JSON artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          merge-multiple: true
+          path: raw-results
+          pattern: '*-benchmark-json'
+      - name: Compare results and plan confirmations
+        id: plan
+        run: |
+          set -euxo pipefail
+          python .github/scripts/compare_pr_benchmarks.py plan \
+            --raw-root raw-results \
+            --plan-root confirmation-plan \
+            --matrix-output confirmation-matrix.json \
+            --reporting-threshold 5 \
+            --threshold-margin 2 \
+            --image 'CPU=nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04@sha256:5f0d2d827f6436b3cb7468fd8acbdc8c1d41261614e579ae49afe6141da51133' \
+            --image 'GPU=nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04@sha256:b3e7fba84d169f46939f00c25be7d016f712a8d651f4756d6a55e693d84d94f2'
+          echo "matrix=$(cat confirmation-matrix.json)" >> "${GITHUB_OUTPUT}"
+      - name: Upload confirmation plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: benchmark-confirmation-plan
+          path: confirmation-plan
+          retention-days: 3
+
+  confirmation:
+    name: ${{ matrix.device }} same-runner confirmation
+    if: needs.compare.outputs.confirmation_matrix != '{"include":[]}'
+    needs: compare
+    runs-on: linux.g5.4xlarge.nvidia.gpu
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.compare.outputs.confirmation_matrix) }}
+    container:
+      image: ${{ matrix.image }}
+      options: --gpus all --shm-size=8g
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      COMPOSITE_LP_AGGREGATE: '0'
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      MKL_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PR_BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PYTHONHASHSEED: '0'
+      PYTHONNOUSERSITE: '1'
+      TD_GET_DEFAULTS_TO_NONE: '1'
+      TORCHDYNAMO_INLINE_INBUILT_NN_MODULES: '1'
+      TORCHRL_BENCHMARK_DEVICE: ${{ matrix.device }}
+      TZ: Europe/London
+    steps:
+      - name: Install pinned system environment
+        run: |
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
+            ca-certificates g++ gcc git libgl1-mesa-glx libgles2-mesa-dev \
+            libglew-dev libglfw3-dev libglu1-mesa libosmesa6 libz-dev
+          rm -rf /var/lib/apt/lists/*
+      - name: Checkout workflow inputs
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Checkout PR source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          path: source
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Fetch baseline source
+        run: |
+          git -C source fetch --no-tags --depth=1 \
+            "https://github.com/${PR_BASE_REPO}.git" "${PR_BASE_SHA}"
+      - name: Set up pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.10.20'
+      - name: Restore pinned benchmark environment
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          fail-on-cache-miss: true
+          path: .benchmark-venv
+          key: pr-benchmark-venv-v1-${{ runner.os }}-${{ hashFiles('.github/benchmark-versions.env', '.github/benchmark-requirements.txt') }}
+      - name: Download pinned benchmark definitions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: benchmark-definitions
+          path: benchmark-definitions
+      - name: Download confirmation plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: benchmark-confirmation-plan
+          path: confirmation-plan
+      - name: Run baseline then PR on the same runner
+        run: |
+          set -euxo pipefail
+          source .benchmark-venv/bin/activate
+          if [ "${TORCHRL_BENCHMARK_DEVICE}" = CPU ]; then
+            export CUDA_VISIBLE_DEVICES=
+          else
+            export CUDA_VISIBLE_DEVICES=0
+          fi
+          mkdir -p .benchmark-site "confirmation-result/${TORCHRL_BENCHMARK_DEVICE}"
+          cat > .benchmark-site/sitecustomize.py <<'PY'
+          import warnings
+
+          try:
+              import torch
+
+              torch._dynamo.config.reorderable_logging_functions.add(warnings.warn)
+          except (AttributeError, ImportError):
+              pass
+          PY
+          export PYTHONPATH="${GITHUB_WORKSPACE}/.benchmark-site"
+          tar -xzf benchmark-definitions/benchmark-definitions.tar.gz \
+            -C benchmark-definitions
+          mapfile -t NODEIDS < <(
+            python -c 'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["nodeids"]))' \
+              "confirmation-plan/${TORCHRL_BENCHMARK_DEVICE}.json"
+          )
+          test "${#NODEIDS[@]}" -gt 0
+
+          run_revision() {
+            local sha="$1"
+            local revision="$2"
+            git -C source checkout --detach "${sha}"
+            git -C source clean -ffdx
+            rm -rf source/build
+            rm -rf "${HOME}/.cache/torch" /tmp/torchinductor_* /tmp/triton*
+            python -m pip install -e source --no-build-isolation --no-deps
+            if [ "${TORCHRL_BENCHMARK_DEVICE}" = GPU ]; then
+              nvcc --version
+              python -c "import torch; assert torch.cuda.device_count()"
+              python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
+            fi
+            local result_json="${GITHUB_WORKSPACE}/confirmation-result/${TORCHRL_BENCHMARK_DEVICE}/${revision}.json"
+            (
+              cd benchmark-definitions/benchmarks
+              python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
+                --benchmark-json "${result_json}" "${NODEIDS[@]}"
+            )
+          }
+
+          run_revision "${PR_BASE_SHA}" baseline
+          run_revision "${PR_HEAD_SHA}" contender
+      - name: Upload same-runner confirmation JSON
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ matrix.device }}-benchmark-confirmation
+          path: confirmation-result
+          retention-days: 3
+
+  finalize:
+    name: Finalize benchmark comparison
+    if: >-
+      always() &&
+      contains(github.event.pull_request.labels.*.name, 'benchmarks/upload') &&
+      needs.compare.result == 'success' &&
+      (needs.confirmation.result == 'success' || needs.confirmation.result == 'skipped')
+    needs: [compare, confirmation]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout comparison tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Download baseline and PR JSON artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          merge-multiple: true
+          path: raw-results
+          pattern: '*-benchmark-json'
+      - name: Download confirmation plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: benchmark-confirmation-plan
+          path: confirmation-plan
+      - name: Download same-runner confirmations
+        if: needs.confirmation.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          merge-multiple: true
+          path: confirmation-results
+          pattern: '*-benchmark-confirmation'
+      - name: Replace noisy measurements and compare
+        run: |
+          set -euxo pipefail
+          mkdir -p confirmation-results
+          python .github/scripts/compare_pr_benchmarks.py finalize \
+            --raw-root raw-results \
+            --plan-root confirmation-plan \
+            --confirmation-root confirmation-results \
+            --output-root final-results \
+            --summary final-summary.md
+          cat final-summary.md >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload final CPU benchmark comparison
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: CPU-benchmark-pr-results
+          path: final-results/CPU
+          retention-days: 30
+      - name: Upload final GPU benchmark comparison
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: GPU-benchmark-pr-results
+          path: final-results/GPU
+          retention-days: 30

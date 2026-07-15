@@ -72,6 +72,7 @@ def _collect_results(root: Path) -> list[dict]:
 
 
 def _comparison_rows(result: dict) -> list[dict]:
+    confirmed_benchmarks = set(result["metadata"].get("confirmed_benchmarks", []))
     baseline = {
         _benchmark_name(benchmark): benchmark
         for benchmark in result["baseline"].get("benchmarks", [])
@@ -93,6 +94,7 @@ def _comparison_rows(result: dict) -> list[dict]:
                 "baseline_ops": baseline_ops,
                 "contender_ops": contender_ops,
                 "change": change,
+                "confirmed": name in confirmed_benchmarks,
             }
         )
     return rows
@@ -101,21 +103,23 @@ def _comparison_rows(result: dict) -> list[dict]:
 def _table(rows: list[dict], max_rows: int) -> list[str]:
     selected = sorted(rows, key=lambda row: abs(row["change"]), reverse=True)[:max_rows]
     lines = [
-        "| Benchmark | main ops | PR ops | Change |",
-        "| --- | ---: | ---: | ---: |",
+        "| Benchmark | main ops | PR ops | Change | Measurement |",
+        "| --- | ---: | ---: | ---: | --- |",
     ]
     for row in selected:
         lines.append(
-            "| `{}` | {} | {} | {} |".format(
+            "| `{}` | {} | {} | {} | {} |".format(
                 _truncate(row["name"]),
                 _format_number(row["baseline_ops"]),
                 _format_number(row["contender_ops"]),
                 _format_percent(row["change"]),
+                "same runner" if row["confirmed"] else "parallel",
             )
         )
     if len(rows) > max_rows:
         lines.append(
-            f"| ... | ... | ... | Showing {max_rows} of {len(rows)} comparisons, sorted by absolute change. |"
+            f"| ... | ... | ... | ... | Showing {max_rows} of {len(rows)} "
+            "comparisons, sorted by absolute change. |"
         )
     return lines
 
@@ -123,13 +127,18 @@ def _table(rows: list[dict], max_rows: int) -> list[str]:
 def _device_section(result: dict, max_rows: int) -> list[str]:
     metadata = result["metadata"]
     rows = _comparison_rows(result)
-    regressions = sum(row["change"] <= -5.0 for row in rows)
-    improvements = sum(row["change"] >= 5.0 for row in rows)
+    reporting_threshold = float(metadata.get("reporting_threshold_pct", 5.0))
+    regressions = sum(row["change"] <= -reporting_threshold for row in rows)
+    improvements = sum(row["change"] >= reporting_threshold for row in rows)
+    confirmations = sum(row["confirmed"] for row in rows)
     device = metadata["device"]
     lines = [
         f"#### {device}",
         "",
-        f"Compared {len(rows)} benchmarks. Regressions over 5%: {regressions}. Improvements over 5%: {improvements}.",
+        f"Compared {len(rows)} benchmarks. Regressions over "
+        f"{reporting_threshold:g}%: {regressions}. Improvements over "
+        f"{reporting_threshold:g}%: {improvements}.",
+        f"Sequential same-runner confirmations: {confirmations}.",
         "",
     ]
     lines.extend(_table(rows, max_rows))
