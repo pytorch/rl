@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
+import logging
 import sys
 
 import pytest
@@ -14,11 +16,13 @@ from _transforms_common import TransformBase
 from tensordict import LazyStackedTensorDict, TensorDict
 from torch import nn
 
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import Compose, SerialEnv, StepCounter, Timer, TransformedEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.record.recorder import VideoRecorder
 
 from torchrl.testing import (  # noqa
+    AddPixelsTransform,
     BREAKOUT_VERSIONED,
     dtype_fixture,
     get_default_devices,
@@ -29,6 +33,8 @@ from torchrl.testing import (  # noqa
     retry,
 )
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+
+_has_matplotlib = importlib.util.find_spec("matplotlib", None) is not None
 
 
 class TestTimer(TransformBase):
@@ -127,6 +133,23 @@ class TestTimer(TransformBase):
         raise pytest.skip("Tested elsewhere")
 
 
+class _CaptureVideoLogger:
+    """Duck-typed logger that stores each ``log_video`` call."""
+
+    def __init__(self):
+        self.calls = []
+
+    def log_video(self, name=None, video=None, step=None, **kwargs):
+        self.calls.append({"name": name, "video": video, "step": step, **kwargs})
+
+
+def _make_pixels_env(max_steps=None):
+    transforms = [AddPixelsTransform()]
+    if max_steps is not None:
+        transforms.append(StepCounter(max_steps=max_steps))
+    return TransformedEnv(ContinuousActionVecMockEnv(), Compose(*transforms))
+
+
 class TestVideoRecorder:
     # TODO: add more tests
     def test_can_init_with_fps(self):
@@ -145,6 +168,22 @@ class TestVideoRecorder:
         stored = recorder.obs[0]
         assert stored.shape == (3, 64, 64)
 
+    @pytest.mark.skipif(not _has_matplotlib, reason="matplotlib not installed")
+    def test_video_recorder_to_animation(self):
+        from matplotlib.animation import ArtistAnimation
+
+        recorder = VideoRecorder(None, None, fps=30)
+        obs = torch.randint(0, 255, (3, 16, 16), dtype=torch.uint8)
+        recorder._apply_transform(obs)
+        obs_buffer = recorder.obs
+
+        anim = recorder.to_animation(title="test", clear=True)
+
+        assert isinstance(anim, ArtistAnimation)
+        assert recorder.obs == []
+        assert recorder.obs is obs_buffer
+        assert recorder.count == 0
+
     def test_video_recorder_grayscale_batched(self):
         """Test that VideoRecorder handles batched grayscale observations."""
         recorder = VideoRecorder(None, None, fps=30)
@@ -155,3 +194,78 @@ class TestVideoRecorder:
         assert len(recorder.obs) == 4
         for frame in recorder.obs:
             assert frame.shape == (3, 64, 64)
+
+    def test_video_recorder_batched_env_grid(self):
+        """A recorder attached outside a batched env records one grid video."""
+        logger = _CaptureVideoLogger()
+        env = TransformedEnv(
+            SerialEnv(2, _make_pixels_env),
+            VideoRecorder(logger, tag="grid_video"),
+        )
+        env.rollout(3)
+        env.transform.dump(step=0)
+        env.close()
+        assert len(logger.calls) == 1
+        video = logger.calls[0]["video"]
+        # one reset frame + 3 step frames, each a 1x2 grid of 8x8 workers
+        assert video.shape == (1, 4, 3, 8, 16)
+
+    def test_video_recorder_max_frames(self):
+        with pytest.raises(ValueError, match="max_frames"):
+            VideoRecorder(None, None, max_frames=0)
+
+        recorder = VideoRecorder(None, None, max_frames=3)
+        for _ in range(5):
+            recorder._apply_transform(torch.zeros(3, 16, 16, dtype=torch.uint8))
+        assert len(recorder.obs) == 3
+        # dump empties the buffer, then recording resumes
+        recorder.dump()
+        recorder._apply_transform(torch.zeros(3, 16, 16, dtype=torch.uint8))
+        assert len(recorder.obs) == 1
+
+    def test_video_recorder_max_frames_batched(self):
+        """The frame cap also truncates flattened batch extensions."""
+        recorder = VideoRecorder(None, None, max_frames=5, make_grid=False)
+        recorder._apply_transform(torch.zeros(4, 3, 16, 16, dtype=torch.uint8))
+        recorder._apply_transform(torch.zeros(4, 3, 16, 16, dtype=torch.uint8))
+        recorder._apply_transform(torch.zeros(4, 3, 16, 16, dtype=torch.uint8))
+        assert len(recorder.obs) == 5
+
+    @pytest.mark.parametrize("batched", [False, True])
+    def test_video_recorder_dump_on_done(self, batched):
+        logger = _CaptureVideoLogger()
+        recorder = VideoRecorder(logger, tag="done_video", dump_on_done=True, skip=1)
+        if batched:
+            base = SerialEnv(2, lambda: _make_pixels_env(max_steps=4))
+        else:
+            base = _make_pixels_env(max_steps=4)
+        env = TransformedEnv(base, recorder)
+        env.rollout(10)
+        env.close()
+        # the episode-ending step (StepCounter truncation) triggered the dump
+        assert len(logger.calls) == 1
+        video = logger.calls[0]["video"]
+        # one reset frame + 4 step frames
+        assert video.shape[1] == 5
+        assert not recorder.obs
+
+    def test_video_recorder_in_batched_worker_warns(self):
+        records = []
+
+        class _Handler(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        handler = _Handler()
+        torchrl_logger.addHandler(handler)
+        try:
+            SerialEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    Compose(AddPixelsTransform(), VideoRecorder(None, None)),
+                ),
+            )
+        finally:
+            torchrl_logger.removeHandler(handler)
+        assert any("VideoRecorder" in message for message in records)

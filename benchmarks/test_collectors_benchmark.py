@@ -3,18 +3,72 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import functools
 import time
 
 import pytest
 import torch.cuda
 import tqdm
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
-from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data import (
+    Binary,
+    Categorical,
+    Composite,
+    LazyTensorStorage,
+    ReplayBuffer,
+    Unbounded,
+)
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv
+from torchrl.envs import (
+    EnvBase,
+    EnvCreator,
+    GymEnv,
+    ParallelEnv,
+    StepCounter,
+    TransformedEnv,
+)
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.modules import RandomPolicy
+
+
+class _PayloadEnv(EnvBase):
+    """Zero-work environment with a configurable observation payload."""
+
+    def __init__(self, payload_size: int = 65536):
+        super().__init__()
+        self.observation_spec = Composite(
+            observation=Unbounded((payload_size,)), shape=self.batch_size
+        )
+        self.action_spec = Binary(1, shape=(1,))
+        self.reward_spec = Unbounded((1,))
+        self.done_spec = Categorical(2, shape=(1,), dtype=torch.bool)
+        self.register_buffer("observation", torch.zeros(payload_size))
+
+    def _set_seed(self, seed: int | None) -> None:
+        return None
+
+    def _reset(self, tensordict: TensorDictBase | None = None) -> TensorDictBase:
+        return TensorDict(
+            {
+                "observation": self.observation,
+                "done": torch.zeros(1, dtype=torch.bool),
+                "terminated": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=self.batch_size,
+        )
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return TensorDict(
+            {
+                "observation": self.observation,
+                "reward": torch.zeros(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+                "terminated": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=self.batch_size,
+        )
 
 
 def single_collector_setup():
@@ -55,6 +109,31 @@ def sync_collector_setup():
     return ((c,), {})
 
 
+def sync_collector_setup_preempt():
+    """Sync collector with preemption: exercises the per-step interruptor polling
+    in the workers and the masking path in the main process."""
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = EnvCreator(
+        lambda: TransformedEnv(
+            DMControlEnv("cheetah", "run", device=device), StepCounter(50)
+        )
+    )
+    c = MultiSyncCollector(
+        [env, env],
+        RandomPolicy(env().action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        preemptive_threshold=0.9,
+        cat_results="stack",
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c,), {})
+
+
 def async_collector_setup():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = EnvCreator(
@@ -74,6 +153,21 @@ def async_collector_setup():
         if i == 10:
             break
     return ((c,), {})
+
+
+def parallel_env_compact_obs_setup(payload_size):
+    env = ParallelEnv(4, functools.partial(_PayloadEnv, payload_size))
+    collector = Collector(
+        env,
+        RandomPolicy(env.action_spec),
+        total_frames=-1,
+        frames_per_batch=128,
+        compact_obs=True,
+    )
+    collector = iter(collector)
+    next(collector)
+    next(collector)
+    return ((collector,), {})
 
 
 def single_collector_setup_pixels():
@@ -197,9 +291,62 @@ def single_collector_with_rb_setup_pixels():
     return ((c, rb), {})
 
 
+def sync_collector_with_rb_setup():
+    """Setup a multi-process collector whose workers write whole rollouts."""
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = EnvCreator(
+        lambda: TransformedEnv(
+            DMControlEnv("cheetah", "run", device=device), StepCounter(50)
+        )
+    )
+    rb = ReplayBuffer(storage=LazyTensorStorage(10000))
+    c = MultiSyncCollector(
+        [env, env],
+        RandomPolicy(env().action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        replay_buffer=rb,
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c, rb), {})
+
+
+def sync_payload_collector_with_rb_setup():
+    """Setup replay writes where rollout materialization dominates env work."""
+    env = EnvCreator(_PayloadEnv)
+    rb = ReplayBuffer(storage=LazyTensorStorage(512))
+    c = MultiSyncCollector(
+        [env, env],
+        RandomPolicy(env().action_spec),
+        total_frames=-1,
+        frames_per_batch=64,
+        replay_buffer=rb,
+    )
+    c = iter(c)
+    next(c)
+    next(c)
+    return ((c, rb), {})
+
+
 def test_single_with_rb(benchmark):
     """Benchmark single collector with replay buffer (lazy stack path)."""
     (c, rb), _ = single_collector_with_rb_setup()
+    benchmark(execute_collector_with_rb, c, rb)
+
+
+def test_sync_with_rb(benchmark):
+    """Benchmark the runner-managed replay-buffer write path."""
+    (c, rb), _ = sync_collector_with_rb_setup()
+    benchmark(execute_collector_with_rb, c, rb)
+
+
+def test_sync_payload_with_rb(benchmark):
+    """Benchmark clone avoidance for large runner-managed rollouts."""
+    (c, rb), _ = sync_payload_collector_with_rb_setup()
     benchmark(execute_collector_with_rb, c, rb)
 
 
@@ -220,8 +367,20 @@ def test_sync(benchmark):
     benchmark(execute_collector, c)
 
 
+def test_sync_preempt(benchmark):
+    (c,), _ = sync_collector_setup_preempt()
+    benchmark(execute_collector, c)
+
+
 def test_async(benchmark):
     (c,), _ = async_collector_setup()
+    benchmark(execute_collector, c)
+
+
+@pytest.mark.parametrize("payload_size", [65536, 262144], ids=["256KiB", "1MiB"])
+def test_parallel_env_compact_obs(benchmark, payload_size):
+    """Benchmark copies for a collector over a large-payload ParallelEnv."""
+    (c,), _ = parallel_env_compact_obs_setup(payload_size)
     benchmark(execute_collector, c)
 
 

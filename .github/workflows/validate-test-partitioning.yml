@@ -35,6 +35,7 @@ jobs:
           pip install pytest tensordict
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           bash .github/unittest/helpers/assert_torch_version.sh stable
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh stable
 
       - name: Validate test partitioning
         env:

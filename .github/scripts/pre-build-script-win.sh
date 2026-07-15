@@ -2,6 +2,7 @@
 
 pip install --upgrade setuptools packaging
 ${CONDA_RUN} pip install "pybind11[global]"
+${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 
 # Determine tensordict installation source based on branch/tag
 # - release/* branches or release tags: use PyPI stable release
@@ -28,5 +29,3 @@ install_tensordict() {
 }
 
 install_tensordict
-
-export TORCHRL_BUILD_VERSION=0.10.0

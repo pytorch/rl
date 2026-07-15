@@ -74,10 +74,10 @@ export pybind11_DIR
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     # Install tensordict dependencies (since we use --no-deps)
-    uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
+    uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
-    uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
+    uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-deps tensordict
 fi
 
@@ -212,12 +212,16 @@ printf "* Running tests for different gym versions\n"
 # Test gym 0.13 (already installed)
 printf "* Testing gym 0.13\n"
 run_tests "gym==0.13" || true
-uv pip uninstall gym atari-py || true
+# Keep atari-py installed after importing ROMs above. Gym 0.19 still uses the
+# atari-py backend for Pong-v4, and removing it here leaves a stale Atari module
+# without get_game_path on CI.
+uv pip uninstall gym || true
 
 # Test gym 0.19 (broken metadata, needs pip<24.1)
 printf "* Testing gym 0.19\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
-pip install gym==0.19
+pip install 'gym[atari]==0.19'
+python -m atari_py.import_roms Roms
 run_tests "gym==0.19" || true
 pip uninstall -y gym wheel || true
 pip install --upgrade pip setuptools wheel  # restore latest versions
@@ -227,6 +231,7 @@ printf "* Testing gym 0.20\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
 pip install 'gym[atari]==0.20'
 pip install 'ale-py==0.7.4'
+ale-import-roms Roms
 run_tests "gym==0.20" || true
 pip uninstall -y gym ale-py wheel || true
 pip install --upgrade pip setuptools wheel  # restore latest versions

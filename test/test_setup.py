@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import os
 import shutil
@@ -9,6 +10,14 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
 _IS_WINDOWS = sys.platform == "win32"
+_has_pytest_timeout = importlib.util.find_spec("pytest_timeout") is not None
+
+# The install tests shell out to full pip/uv builds and legitimately run for
+# minutes (243s observed in CI, longer on a loaded runner), so a suite-wide
+# --timeout=120 is too tight for them. The marker is applied only when
+# pytest-timeout is installed: the minimal setup-test job runs this file
+# without the plugin.
+pytestmark = [pytest.mark.timeout(600)] if _has_pytest_timeout else []
 
 
 def _run(cmd, *, cwd, env=None, timeout=60 * 60) -> str:
@@ -17,6 +26,8 @@ def _run(cmd, *, cwd, env=None, timeout=60 * 60) -> str:
         cwd=str(cwd),
         env=env,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         timeout=timeout,
@@ -38,6 +49,8 @@ def _pip_uninstall(pkg: str) -> None:
         [sys.executable, "-m", "pip", "uninstall", "-y", pkg],
         cwd=str(_ROOT),
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,

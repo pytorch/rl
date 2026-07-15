@@ -6,7 +6,7 @@ Profiling collectors and envs
 TorchRL ships with a lightweight, opt-in profiling layer built on top of
 ``torch.profiler.record_function``. When enabled, the collector pipeline,
 environment ``step`` / ``reset`` / ``rollout``, vectorised environments,
-``TransformedEnv``, and the policy call inside the collector all emit named
+:class:`~torchrl.envs.transforms.TransformedEnv`, and the policy call inside the collector all emit named
 ranges that show up directly in a Chrome trace or TensorBoard timeline.
 
 When disabled — which is the default — every instrumentation site is a true

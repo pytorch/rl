@@ -257,9 +257,9 @@ def _maybe_append_env_transforms_from_module(
     transforms = _compute_missing_env_transforms(env, module, init_key)
     if not transforms:
         return env
-    from torchrl.envs.transforms import Compose
-
-    return env.append_transform(Compose(*transforms))
+    for transform in transforms:
+        env = env.append_transform(transform)
+    return env
 
 
 def _unpad_tensors(tensors, mask, as_nested: bool = True) -> torch.Tensor:

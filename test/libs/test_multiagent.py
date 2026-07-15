@@ -19,7 +19,11 @@ from torch import nn
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
-from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
+from torchrl.envs.libs.pettingzoo import (
+    _has_pettingzoo,
+    PettingZooEnv,
+    PettingZooWrapper,
+)
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType
@@ -58,26 +62,43 @@ class TestPettingZoo:
     def test_dead_agents_done(self, seed=0):
         scenario_args = {"n_walkers": 3, "terminate_on_fall": False}
 
-        env = PettingZooEnv(
-            task="multiwalker_v9",
-            parallel=True,
-            seed=seed,
-            use_mask=False,
-            done_on_any=False,
-            **scenario_args,
-        )
-        td_reset = env.reset(seed=seed)
-        with pytest.raises(
-            ValueError,
-            match="Dead agents found in the environment, "
-            "you need to set use_mask=True to allow this.",
-        ):
-            env.rollout(
-                max_steps=500,
-                break_when_any_done=True,  # This looks at root done set with done_on_any
-                auto_reset=False,
-                tensordict=td_reset,
+        # With use_mask=False, a walker that falls (and is removed from
+        # env.agents) before *all* walkers are done must raise a ValueError.
+        # pettingzoo and its physics deps are pinned (pettingzoo[all]==1.24.3 ->
+        # box2d-py==2.3.5, pymunk==6.2.0), so this is not a pettingzoo API change;
+        # but the multiwalker trajectory still depends on numpy (unpinned) and
+        # torch (installed as nightly), so whether a walker falls within a fixed
+        # step budget drifts across CI runs. Sweep a few seeds with a larger
+        # budget so a fall (and the error) is reliably triggered.
+        raised = False
+        for trial_seed in range(seed, seed + 5):
+            env = PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=trial_seed,
+                use_mask=False,
+                done_on_any=False,
+                **scenario_args,
             )
+            td_reset = env.reset(seed=trial_seed)
+            try:
+                env.rollout(
+                    max_steps=2000,
+                    break_when_any_done=True,  # root done uses done_on_any
+                    auto_reset=False,
+                    tensordict=td_reset,
+                )
+            except ValueError as err:
+                assert (
+                    "Dead agents found in the environment, "
+                    "you need to set use_mask=True to allow this." in str(err)
+                )
+                raised = True
+                break
+        assert raised, (
+            "Expected a dead agent (use_mask=False) to raise ValueError within "
+            "the step budget for at least one seed."
+        )
 
         for done_on_any in [True, False]:
             env = PettingZooEnv(
@@ -90,7 +111,7 @@ class TestPettingZoo:
             )
             td_reset = env.reset(seed=seed)
             td = env.rollout(
-                max_steps=500,
+                max_steps=2000,
                 break_when_any_done=True,  # This looks at root done set with done_on_any
                 auto_reset=False,
                 tensordict=td_reset,
@@ -108,6 +129,90 @@ class TestPettingZoo:
             assert done[
                 ~mask
             ].all()  # When mask is false (dead agent), all agents are done
+
+    def test_action_mask_parallel_dead_agents(self):
+        """Regression test for #3702.
+
+        Parallel env + per-agent action mask + ``done_on_any=False``: when an
+        agent is removed from ``env.agents`` mid-episode, PettingZoo also drops
+        it from the observation dict, so ``_update_action_mask`` must skip
+        agents missing from ``observation_dict`` instead of indexing it blindly.
+        No stock PettingZoo env exercises this combination, so we use a tiny
+        custom ``ParallelEnv``.
+        """
+        import numpy as np
+        from gymnasium import spaces
+        from pettingzoo.utils.env import ParallelEnv
+
+        class _MaskedParallelEnv(ParallelEnv):
+            metadata = {"name": "masked_parallel_v0", "is_parallelizable": True}
+
+            def __init__(self):
+                self.possible_agents = ["a_0", "a_1", "a_2"]
+                self.agents = list(self.possible_agents)
+                self._n_actions = 2
+                self._obs_space = spaces.Dict(
+                    {
+                        "observation": spaces.Box(
+                            low=0.0, high=1.0, shape=(3,), dtype=np.float32
+                        ),
+                        "action_mask": spaces.MultiBinary(self._n_actions),
+                    }
+                )
+                self._act_space = spaces.Discrete(self._n_actions)
+                self._step_count = 0
+
+            def observation_space(self, agent):
+                return self._obs_space
+
+            def action_space(self, agent):
+                return self._act_space
+
+            def _agent_obs(self):
+                return {
+                    "observation": np.zeros(3, dtype=np.float32),
+                    "action_mask": np.ones(self._n_actions, dtype=np.int8),
+                }
+
+            def reset(self, seed=None, options=None):
+                self.agents = list(self.possible_agents)
+                self._step_count = 0
+                obs = {a: self._agent_obs() for a in self.agents}
+                infos = {a: {} for a in self.agents}
+                return obs, infos
+
+            def step(self, actions):
+                self._step_count += 1
+                # Drop a_0 starting from the 2nd step — mirrors PettingZoo's
+                # behavior when an agent terminates: it disappears from
+                # self.agents and from every per-agent dict returned by step.
+                if self._step_count >= 2 and "a_0" in self.agents:
+                    self.agents.remove("a_0")
+                obs = {a: self._agent_obs() for a in self.agents}
+                rewards = {a: 0.0 for a in self.agents}
+                terms = {a: False for a in self.agents}
+                truncs = {a: False for a in self.agents}
+                infos = {a: {} for a in self.agents}
+                return obs, rewards, terms, truncs, infos
+
+        env = PettingZooWrapper(
+            env=_MaskedParallelEnv(),
+            use_mask=True,
+            done_on_any=False,
+            seed=0,
+        )
+        try:
+            assert env.has_action_mask["a"]
+            # Pre-fix this rollout raises KeyError inside _update_action_mask
+            # the first time a_0 is missing from observation_dict.
+            td = env.rollout(max_steps=3, break_when_any_done=False)
+            # a_0 (index 0) is alive in step 1, dead in steps 2 and 3.
+            assert td["next", "a", "mask"][0, 0]
+            assert not td["next", "a", "mask"][1:, 0].any()
+            # The two surviving agents are alive throughout.
+            assert td["next", "a", "mask"][:, 1:].all()
+        finally:
+            env.close()
 
     @pytest.mark.parametrize(
         "wins_player_0",

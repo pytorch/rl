@@ -10,8 +10,6 @@ dependencies:
     - numpy
     - pyglet==1.5.27
     - six
-    - torch
-    - vmas
     - zipp
     - pytest
     - pytest-cov

@@ -17,7 +17,6 @@ from _objectives_common import (
     _has_transformers,
     FUNCTORCH_ERR,
     LossModuleTestBase,
-    make_functional_with_buffers,
     MARLEnv,
 )
 
@@ -1175,7 +1174,6 @@ class TestPPO(LossModuleTestBase):
         loss_val = loss(**kwargs)
         torch.manual_seed(self.seed)
         if beta is not None:
-
             loss.beta = beta.clone()
         loss_val_td = loss(td)
 
@@ -1314,6 +1312,105 @@ class TestPPO(LossModuleTestBase):
             # Test it works with value key
             loss = loss_fn(td)
             assert "loss_critic" in loss.keys()
+
+    def test_ppo_asymmetric_clip_epsilon(self):
+        # a (low, high) clip_epsilon pair registers DAPO-style separate
+        # bounds; a float keeps the legacy schedulable clip_epsilon buffer
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_ppo()
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        advantage = GAE(gamma=0.9, lmbda=0.9, value_network=value)
+        advantage(td)
+
+        loss_sym = ClipPPOLoss(actor, value, clip_epsilon=0.2)
+        loss_asym = ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.28))
+        sym_buffers = dict(loss_sym.named_buffers())
+        asym_buffers = dict(loss_asym.named_buffers())
+        assert "clip_epsilon" in sym_buffers
+        assert "clip_epsilon_low" not in sym_buffers
+        assert "clip_epsilon" not in asym_buffers
+        assert asym_buffers["clip_epsilon_low"] == 0.2
+        assert asym_buffers["clip_epsilon_high"] == 0.28
+        low, high = loss_asym._clip_bounds
+        torch.testing.assert_close(low, torch.tensor(0.8).log())
+        torch.testing.assert_close(high, torch.tensor(1.28).log())
+
+        # an equal-bounds tuple matches the symmetric float exactly
+        loss_eq = ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.2))
+        torch.manual_seed(self.seed)
+        out_sym = loss_sym(td.clone())
+        torch.manual_seed(self.seed)
+        out_eq = loss_eq(td.clone())
+        torch.testing.assert_close(out_sym["loss_objective"], out_eq["loss_objective"])
+        # the asymmetric loss runs end-to-end
+        loss_asym(td.clone())
+
+        # both buffer flavors accept scheduled scalar assignment
+        loss_sym.clip_epsilon = 0.1
+        assert loss_sym.clip_epsilon == 0.1
+        loss_asym.clip_epsilon_high = 0.5
+        assert loss_asym.clip_epsilon_high == 0.5
+        assert isinstance(loss_asym.clip_epsilon_high, torch.Tensor)
+        # scheduling the wrong flavor fails loudly instead of silently
+        # creating a shadow attribute that the clipping never reads
+        with pytest.raises(AttributeError, match="asymmetric"):
+            loss_asym.clip_epsilon = 0.1
+        with pytest.raises(AttributeError, match="symmetric"):
+            loss_sym.clip_epsilon_low = 0.1
+
+    def test_ppo_asymmetric_clip_epsilon_validation(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        with pytest.raises(ValueError, match="length 2"):
+            ClipPPOLoss(actor, value, clip_epsilon=(0.1, 0.2, 0.3))
+        with pytest.raises(ValueError, match="non-negative"):
+            ClipPPOLoss(actor, value, clip_epsilon=(-0.1, 0.2))
+        with pytest.raises(ValueError, match="must be < 1"):
+            ClipPPOLoss(actor, value, clip_epsilon=(1.0, 0.2))
+        with pytest.raises(ValueError, match="clip_value=True"):
+            ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.28), clip_value=True)
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    def test_ppo_flat_advantage_raises(self, loss_class):
+        # a flat [B] advantage against the [B, 1] log-weight would silently
+        # broadcast to a [B, B] outer product: the loss must refuse it
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_ppo()
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = loss_class(actor, value)
+        td["advantage"] = torch.randn(td.shape)
+        td["value_target"] = torch.randn(*td.shape, 1)
+        td["state_value"] = torch.randn(*td.shape, 1)
+        with pytest.raises(ValueError, match="outer\\s+product"):
+            loss_fn(td)
+        # the canonical [B, 1] advantage passes
+        td["advantage"] = td["advantage"].unsqueeze(-1)
+        loss_fn(td)
+
+    def test_broadcast_advantage_to_log_weight(self):
+        # per-token objectives carry a [*B, *token_dims, 1] log-weight; a
+        # decision-level [*B, 1] advantage is broadcast over the token dims so
+        # the surrogate stays elementwise (no caller-side expand).
+        from torchrl.objectives.ppo import _broadcast_advantage_to_log_weight
+
+        adv = torch.randn(4, 1)
+        lw = torch.randn(4, 3, 7, 1)  # [B, chunk, dims, 1]
+        out = _broadcast_advantage_to_log_weight(adv, lw)
+        assert out.shape == lw.shape
+        # every token shares its decision's advantage
+        torch.testing.assert_close(out, adv.reshape(4, 1, 1, 1).expand(4, 3, 7, 1))
+        # no-op when shapes already match (the standard one-ratio-per-sample case)
+        match = torch.randn(4, 1)
+        assert _broadcast_advantage_to_log_weight(match, torch.randn(4, 1)) is match
+        # a flat [B] advantage (no trailing value dim) is left untouched, so the
+        # outer-product guard still fires on it
+        flat = torch.randn(4)
+        assert _broadcast_advantage_to_log_weight(flat, torch.randn(4, 1)) is flat
+        # a non-prefix batch is left untouched (guard catches genuine mismatches)
+        bad = torch.randn(5, 1)
+        assert _broadcast_advantage_to_log_weight(bad, torch.randn(4, 3, 1)) is bad
 
     def test_ppo_composite_dists(self):
         d = torch.distributions
@@ -1595,6 +1692,52 @@ class TestPPO(LossModuleTestBase):
 
         assert isinstance(clip_fraction, TensorDict)
         assert isinstance(explained_variance, TensorDict)
+
+
+def test_ppo_ess_preserves_feature_shape_for_singleton_batch():
+    class TokenActor(nn.Module):
+        def __init__(self, vocab_size):
+            super().__init__()
+            self.bias = nn.Parameter(torch.zeros(vocab_size))
+            self.in_keys = ["logits"]
+
+        def get_dist(self, tensordict):
+            return torch.distributions.Categorical(
+                logits=tensordict["logits"] + self.bias
+            )
+
+    chunk_size, action_dim, vocab_size = 8, 7, 4
+    actor = TokenActor(vocab_size)
+    loss = ClipPPOLoss(actor, critic_network=None, entropy_bonus=False)
+    loss.set_keys(
+        action="action",
+        sample_log_prob="sample_log_prob",
+        advantage="advantage",
+    )
+
+    ess = []
+    for batch_size in (2, 1):
+        logits = torch.randn(batch_size, chunk_size, action_dim, vocab_size)
+        action = torch.randint(vocab_size, (batch_size, chunk_size, action_dim))
+        sample_log_prob = torch.distributions.Categorical(logits=logits).log_prob(
+            action
+        )
+        data = TensorDict(
+            {
+                "logits": logits,
+                "action": action,
+                "sample_log_prob": sample_log_prob,
+                "advantage": torch.ones(batch_size, chunk_size, action_dim, 1),
+            },
+            batch_size=[batch_size],
+        )
+
+        output = loss(data)
+        assert output["ESS"].shape == (chunk_size, action_dim)
+        torch.testing.assert_close(output["ESS"], torch.ones(chunk_size, action_dim))
+        ess.append(output["ESS"])
+
+    assert torch.stack(ess).shape == (2, chunk_size, action_dim)
 
 
 class TestA2C(LossModuleTestBase):
@@ -2063,6 +2206,8 @@ class TestA2C(LossModuleTestBase):
             raise NotImplementedError
 
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+
+        from functorch import make_functional_with_buffers
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 
@@ -2916,3 +3061,7 @@ class TestReinforce(LossModuleTestBase):
             # Test it works with value key
             loss = loss_fn(td)
             assert "loss_value" in loss.keys()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

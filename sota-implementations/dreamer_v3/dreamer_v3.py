@@ -40,7 +40,7 @@ from tensordict.nn import (
 )
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer, Unbounded
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import StepCounter, TransformedEnv
@@ -325,7 +325,7 @@ def main(cfg: DictConfig):
         ),
     )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         explore_env,
         actor_model,
         frames_per_batch=cfg.collector.frames_per_batch,

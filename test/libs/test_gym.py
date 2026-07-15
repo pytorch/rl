@@ -77,9 +77,6 @@ _has_gym_regular = importlib.util.find_spec("gym") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
 
-if _has_gymnasium:
-    import gymnasium
-
 try:
     from torch.utils._pytree import tree_flatten
 
@@ -1664,6 +1661,7 @@ class TestGym:
 
     def test_is_from_pixels_simple_env(self):
         """Test that _is_from_pixels correctly identifies non-pixel environments."""
+
         # Test with a simple environment that doesn't have pixels
         class SimpleEnv:
             def __init__(self):
@@ -1681,6 +1679,7 @@ class TestGym:
 
     def test_is_from_pixels_box_env(self):
         """Test that _is_from_pixels correctly identifies pixel Box environments."""
+
         # Test with a pixel-like environment
         class PixelEnv:
             def __init__(self):
@@ -1700,6 +1699,7 @@ class TestGym:
 
     def test_is_from_pixels_dict_env(self):
         """Test that _is_from_pixels correctly identifies Dict environments with pixels."""
+
         # Test with a Dict environment that has pixels
         class DictPixelEnv:
             def __init__(self):
@@ -1724,6 +1724,7 @@ class TestGym:
 
     def test_is_from_pixels_dict_env_no_pixels(self):
         """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
+
         # Test with a Dict environment that doesn't have pixels
         class DictNoPixelEnv:
             def __init__(self):
@@ -1869,6 +1870,7 @@ class TestGym:
     def test_gymnasium_num_envs(self, num_envs, request):
         if not _has_gymnasium:
             pytest.skip("gymnasium not found")
+        import gymnasium
 
         gym_version = version.parse(gymnasium.__version__)
         if version.parse("1.0.0") <= gym_version < version.parse("1.1.0"):
@@ -1904,6 +1906,8 @@ class TestMiniGrid:
         ],
     )
     def test_minigrid(self, id):
+        import gymnasium
+
         env_base = gymnasium.make(id)
         env = GymWrapper(env_base)
         check_env_specs(env)

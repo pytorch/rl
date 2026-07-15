@@ -28,6 +28,15 @@ logger:
   num_test_episodes: 5
   video: False
 
+# Checkpoint
+checkpoint:
+  path: null
+  interval: 0
+  format: archive
+  strict: error
+  resume: false
+  include_replay_buffer: true
+
 # Optim
 optim:
   lr: 2.5e-4

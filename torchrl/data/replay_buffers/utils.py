@@ -28,7 +28,11 @@ from tensordict import (
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils._pytree import LeafSpec, tree_flatten, tree_unflatten
-from torchrl._utils import implement_for, logger as torchrl_logger
+
+# DEFAULT_DONE_KEYS lives in torchrl._utils (dependency-light so envs and
+# collectors can share it) and is re-exported here and as
+# torchrl.data.DEFAULT_DONE_KEYS, the public path.
+from torchrl._utils import DEFAULT_DONE_KEYS, implement_for, logger as torchrl_logger
 
 SINGLE_TENSOR_BUFFER_NAME = os.environ.get(
     "SINGLE_TENSOR_BUFFER_NAME", "_-single-tensor-_"
@@ -120,6 +124,226 @@ def _is_int(index):
     return False
 
 
+def find_start_stop_traj(
+    *,
+    trajectory: torch.Tensor | None = None,
+    end: torch.Tensor | None = None,
+    at_capacity: bool,
+    cursor: int | torch.Tensor | range | None = None,
+    device: torch.device | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Recover trajectory boundaries from trajectory ids or end-of-trajectory flags.
+
+    This is the canonical trajectory-boundary recovery routine used by
+    :class:`~torchrl.data.replay_buffers.SliceSampler` and its subclasses. It
+    understands the storage layout of TorchRL's replay buffers: circular
+    (ring-buffer) storages where a trajectory may span the wrap point, and
+    partially-filled storages where the write cursor acts as an implicit
+    truncation. See :ref:`the trajectory-boundary documentation
+    <ref_traj_boundaries>` for the full contract.
+
+    Keyword Args:
+        trajectory (torch.Tensor, optional): a tensor of trajectory ids laid
+            out in storage order, with time along dim ``0`` and any extra
+            batch dims after it (shape ``[T, *B]``). A boundary is detected
+            wherever the id changes between two consecutive steps. Exclusive
+            with ``end``.
+        end (torch.Tensor, optional): a boolean tensor of end-of-trajectory
+            flags laid out in storage order (shape ``[T, *B]``, time along
+            dim ``0``). ``True`` marks the last step of a trajectory.
+            Exclusive with ``trajectory``.
+        at_capacity (bool): whether the storage is full and behaves as a
+            circular buffer. If ``True``, a trajectory that has no end flag
+            after the last row is assumed to continue at row ``0`` (it spans
+            the wrap point). If ``False``, the last valid row is always
+            treated as an end.
+        cursor (int, torch.Tensor or range, optional): the index of the last
+            written row (e.g. ``storage._last_cursor``). Only used when
+            ``at_capacity=True``: the row under the cursor is forced to be an
+            end, since the data that followed it has been overwritten and the
+            stored trajectory is implicitly truncated there.
+        device (torch.device, optional): a device on which to run the
+            boundary computation (the underlying ``nonzero()`` call can
+            benefit from an accelerator for large storages). Results are
+            returned on the device of the input tensor. Defaults to ``None``
+            (compute where the input lives).
+
+    Returns:
+        A ``(start, stop, lengths)`` tuple where ``start`` and ``stop`` are
+        ``[N, 1 + len(B)]`` integer tensors holding, for each of the ``N``
+        recovered trajectories, the time index of its first (resp. last,
+        inclusive) step in column ``0`` and the batch coordinates in the
+        remaining columns; ``lengths`` is a ``[N]`` tensor of trajectory
+        lengths. For a trajectory spanning the wrap point of a full circular
+        storage, ``start[i, 0] > stop[i, 0]`` and the length accounts for the
+        wrap.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data import find_start_stop_traj
+        >>> # A full circular storage with 10 rows and end flags at rows 2 and 7.
+        >>> # The write cursor sits at row 4: row 4 is an implicit truncation.
+        >>> end = torch.zeros(10, dtype=torch.bool)
+        >>> end[2] = end[7] = True
+        >>> start, stop, lengths = find_start_stop_traj(end=end, at_capacity=True, cursor=4)
+        >>> start.squeeze(-1)  # the trajectory starting at row 8 wraps around to row 2
+        tensor([8, 3, 5])
+        >>> stop.squeeze(-1)
+        tensor([2, 4, 7])
+        >>> lengths
+        tensor([5, 2, 3])
+        >>> # The same boundaries recovered from trajectory ids
+        >>> trajectory = torch.tensor([5, 5, 5, 0, 0, 1, 1, 1, 5, 5])
+        >>> start, stop, lengths = find_start_stop_traj(trajectory=trajectory, at_capacity=True)
+        >>> start.squeeze(-1), stop.squeeze(-1), lengths
+        (tensor([8, 3, 5]), tensor([2, 4, 7]), tensor([5, 2, 3]))
+
+    .. seealso::
+
+        :func:`~torchrl.collectors.utils.split_trajectories` splits a
+        contiguous *rollout batch* (fresh collector output) into a padded
+        ``[B, T]`` layout. This function instead operates on *storage-order*
+        data and returns indices, leaving the data untouched.
+    """
+    end, length = _derive_end_flags(
+        trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
+    )
+    return _end_to_start_stop(end=end, length=length, device=device)
+
+
+def _derive_end_flags(
+    *,
+    trajectory: torch.Tensor | None = None,
+    end: torch.Tensor | None = None,
+    at_capacity: bool,
+    cursor: int | torch.Tensor | range | None = None,
+) -> tuple[torch.Tensor, int]:
+    """Preprocessing stage of :func:`find_start_stop_traj`.
+
+    Turns trajectory ids or raw end flags into a fully-marked ``[T, *B]``
+    boolean end tensor (every trajectory has at least one end flag, the
+    cursor and partial-storage implicit truncations are applied) and returns
+    it together with the time length ``T``.
+    """
+    if (trajectory is None) == (end is None):
+        raise TypeError(
+            "Exactly one of `trajectory` and `end` must be provided, got "
+            f"trajectory={trajectory} and end={end}."
+        )
+    signal = trajectory if trajectory is not None else end
+    if signal.ndim == 0:
+        raise RuntimeError(
+            "Expected the end-of-trajectory signal to be at least 1-dimensional."
+        )
+    if signal.shape[0] == 0:
+        raise RuntimeError(
+            "Cannot recover trajectory boundaries from an empty (T=0) input."
+        )
+    if trajectory is not None:
+        # slower
+        # _, stop_idx = torch.unique_consecutive(trajectory, return_counts=True)
+        # stop_idx = stop_idx.cumsum(0) - 1
+
+        # even slower
+        # t = trajectory.unsqueeze(0)
+        # w = torch.tensor([1, -1], dtype=torch.int).view(1, 1, 2)
+        # stop_idx = torch.conv1d(t, w).nonzero()
+
+        # faster
+        end = trajectory[:-1] != trajectory[1:]
+        if not at_capacity:
+            # ones_like(trajectory[:1]) rather than ones_like(end[:1]): for a
+            # single-step (T=1) input the diff above is empty, and the last
+            # valid row must still be marked as an end.
+            end = torch.cat([end, torch.ones_like(trajectory[:1], dtype=torch.bool)], 0)
+        else:
+            end = torch.cat([end, trajectory[-1:] != trajectory[:1]], 0)
+        length = trajectory.shape[0]
+    else:
+        # We presume that not done at the end means that the traj spans across end and beginning of storage
+        length = end.shape[0]
+        if not at_capacity:
+            end = end.clone()
+            end[length - 1] = True
+
+    if at_capacity:
+        # we must have at least one end by traj to individuate trajectories
+        # so if no end can be found we set it manually
+        if cursor is not None:
+            if isinstance(cursor, torch.Tensor):
+                cursor = cursor.reshape(-1)
+                if not cursor.numel():
+                    raise RuntimeError("cursor must not be an empty tensor.")
+                cursor = cursor[-1].item()
+            elif isinstance(cursor, range):
+                if not len(cursor):
+                    raise RuntimeError("cursor must not be an empty range.")
+                cursor = cursor[-1]
+            if not _is_int(cursor):
+                raise RuntimeError(
+                    "cursor should be an integer or a 1d tensor or a range."
+                )
+            end = torch.index_fill(
+                end,
+                index=torch.tensor(cursor, device=end.device, dtype=torch.long),
+                dim=0,
+                value=1,
+            )
+        if not end.any(0).all():
+            mask = ~end.any(0, True)
+            mask = torch.cat([torch.zeros_like(end[:-1]), mask])
+            end = torch.masked_fill(mask, end, 1)
+    return end, length
+
+
+def _end_to_start_stop(
+    end: torch.Tensor, length: int, device: torch.device | None = None
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Convert a time-first end-flag tensor into ``(start, stop, lengths)`` indices.
+
+    Low-level companion of :func:`find_start_stop_traj`: expects a boolean
+    ``[T, *B]`` tensor where every trajectory has at least one end flag, and
+    returns the boundary indices in the format documented there.
+    """
+    orig_device = None
+    if device is not None and end.device != device:
+        orig_device = end.device
+        end = end.to(device)
+    # Using transpose ensures the start and stop are sorted the same way
+    stop_idx = end.transpose(0, -1).nonzero()
+    stop_idx[:, [0, -1]] = stop_idx[:, [-1, 0]].clone()
+    # First build the start indices as the stop + 1, we'll shift it later
+    start_idx = stop_idx.clone()
+    start_idx[:, 0] += 1
+    start_idx[:, 0] %= end.shape[0]
+    # shift start: to do this, we check when the non-first dim indices are identical
+    # and get a mask like [False, True, True, False, True, ...] where False means
+    # that there's a switch from one dim to another (ie, a switch from one element of the batch
+    # to another). We roll this one step along the time dimension and these two
+    # masks provide us with the indices of the permutation matrix we need
+    # to apply to start_idx.
+    if start_idx.shape[0] > 1:
+        start_idx_mask = (start_idx[1:, 1:] == start_idx[:-1, 1:]).all(-1)
+        m1 = torch.cat([torch.zeros_like(start_idx_mask[:1]), start_idx_mask])
+        m2 = torch.cat([start_idx_mask, torch.zeros_like(start_idx_mask[:1])])
+        start_idx_replace = torch.empty_like(start_idx)
+        start_idx_replace[m1] = start_idx[m2]
+        start_idx_replace[~m1] = start_idx[~m2]
+        start_idx = start_idx_replace
+    else:
+        # In this case we have only one start and stop has already been set
+        pass
+    lengths = stop_idx[:, 0] - start_idx[:, 0] + 1
+    lengths[lengths <= 0] = lengths[lengths <= 0] + length
+    if orig_device is not None:
+        return (
+            start_idx.to(orig_device),
+            stop_idx.to(orig_device),
+            lengths.to(orig_device),
+        )
+    return start_idx, stop_idx, lengths
+
+
 class TED2Flat:
     """A storage saving hook to serialize TED data in a compact format.
 
@@ -131,7 +355,8 @@ class TED2Flat:
         is_full_key (NestedKey, optional): the key where the is_full attribute will be written.
             Defaults to "is_full".
         done_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the done entries.
-            Defaults to ("done", "truncated", "terminated")
+            Defaults to :data:`~torchrl.data.DEFAULT_DONE_KEYS`, i.e.
+            ``("done", "truncated", "terminated")``.
         reward_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the reward entries.
             Defaults to ("reward",)
 
@@ -187,7 +412,7 @@ class TED2Flat:
         done_key=("next", "done"),
         shift_key="shift",
         is_full_key="is_full",
-        done_keys=("done", "truncated", "terminated"),
+        done_keys=DEFAULT_DONE_KEYS,
         reward_keys=("reward",),
     ):
         self.done_key = done_key
@@ -361,7 +586,8 @@ class Flat2TED:
         is_full_key (NestedKey, optional): the key where the is_full attribute will be written.
             Defaults to "is_full".
         done_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the done entries.
-            Defaults to ("done", "truncated", "terminated")
+            Defaults to :data:`~torchrl.data.DEFAULT_DONE_KEYS`, i.e.
+            ``("done", "truncated", "terminated")``.
         reward_keys (Tuple[NestedKey], optional): a tuple of nested keys indicating the reward entries.
             Defaults to ("reward",)
 
@@ -428,7 +654,7 @@ class Flat2TED:
         done_key="done",
         shift_key="shift",
         is_full_key="is_full",
-        done_keys=("done", "truncated", "terminated"),
+        done_keys=DEFAULT_DONE_KEYS,
         reward_keys=("reward",),
     ):
         self.done_key = done_key
@@ -608,7 +834,15 @@ class Flat2TED:
 
 
 class TED2Nested(TED2Flat):
-    """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory."""
+    """Converts a TED-formatted dataset into a tensordict populated with nested tensors where each row is a trajectory.
+
+    .. seealso::
+
+        Trajectory lengths are recovered with
+        :func:`~torchrl.data.find_start_stop_traj`; see :ref:`the
+        trajectory-boundary documentation <ref_traj_boundaries>` for the
+        conventions this class relies on.
+    """
 
     _shift: int | None = None
     _is_full: bool | None = None
@@ -637,14 +871,11 @@ class TED2Nested(TED2Flat):
         # else:
         done.view(storage_shape)[..., -1] = True
 
-        ntraj = done.sum()
-
-        nz = done.nonzero(as_tuple=True)[0]
-        traj_lengths = torch.cat([nz[:1] + 1, nz.diff()])
-        # if not is_full:
-        #     traj_lengths = torch.cat(
-        #         [traj_lengths, (done.shape[0] - traj_lengths.sum()).unsqueeze(0)]
-        #     )
+        # The ring has been linearized by TED2Flat and the final boundary of
+        # every row was forced above, so the flat end flags fully delimit the
+        # trajectories.
+        _, _, traj_lengths = find_start_stop_traj(end=done, at_capacity=False)
+        ntraj = traj_lengths.numel()
 
         keys_to_expand, keys_to_keep = zip(
             *[
