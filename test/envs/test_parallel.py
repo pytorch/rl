@@ -104,6 +104,24 @@ class TestParallel:
                 4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
             )
 
+    def test_compact_collector_skips_next_observation_copy(
+        self, maybe_fork_ParallelEnv
+    ):
+        class CompactCollector:
+            _compact_next_keys = (("next", "observation"),)
+
+        env = maybe_fork_ParallelEnv(2, CountingEnv, use_buffers=True)
+        collector = CompactCollector()
+        env.register_collector(collector)
+        try:
+            data = env.rand_action(env.reset())
+            step, post_reset = env.step_and_maybe_reset(data)
+            assert ("next", "observation") not in step.keys(True, True)
+            assert ("next", "reward") in step.keys(True, True)
+            assert "observation" in post_reset.keys()
+        finally:
+            env.close(raise_if_closed=False)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
