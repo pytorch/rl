@@ -1,8 +1,9 @@
 name: Continuous Benchmark (PR)
 # Opt-in only: add the "benchmarks/upload" label to run the comparison. The
 # baseline and PR legs run concurrently on separate runners. Measurements that
-# could change the 5% report are repeated sequentially on one runner. Both legs
-# use the benchmark definitions archived from the PR base SHA.
+# could change the 5% report are repeated twice in balanced order on one runner
+# and compared using median duration. Both legs use benchmark definitions
+# archived from the PR base SHA.
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
@@ -471,7 +472,7 @@ jobs:
         with:
           name: benchmark-confirmation-plan
           path: confirmation-plan
-      - name: Run baseline then PR on the same runner
+      - name: Run balanced baseline and PR repetitions on the same runner
         run: |
           set -euxo pipefail
           source .benchmark-venv/bin/activate
@@ -480,7 +481,10 @@ jobs:
           else
             export CUDA_VISIBLE_DEVICES=0
           fi
-          mkdir -p .benchmark-site "confirmation-result/${TORCHRL_BENCHMARK_DEVICE}"
+          mkdir -p \
+            .benchmark-site \
+            "confirmation-result/${TORCHRL_BENCHMARK_DEVICE}" \
+            "confirmation-result/repetitions/${TORCHRL_BENCHMARK_DEVICE}"
           cat > .benchmark-site/sitecustomize.py <<'PY'
           import warnings
 
@@ -503,6 +507,7 @@ jobs:
           run_revision() {
             local sha="$1"
             local revision="$2"
+            local repetition="$3"
             git -C source checkout --detach "${sha}"
             git -C source clean -ffdx
             rm -rf source/build
@@ -513,16 +518,28 @@ jobs:
               python -c "import torch; assert torch.cuda.device_count()"
               python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
             fi
-            local result_json="${GITHUB_WORKSPACE}/confirmation-result/${TORCHRL_BENCHMARK_DEVICE}/${revision}.json"
+            local result_json="${GITHUB_WORKSPACE}/confirmation-result/repetitions/${TORCHRL_BENCHMARK_DEVICE}/${revision}-${repetition}.json"
             (
               cd benchmark-definitions/benchmarks
               python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only \
+                --benchmark-min-rounds 10 \
                 --benchmark-json "${result_json}" "${NODEIDS[@]}"
             )
           }
 
-          run_revision "${PR_BASE_SHA}" baseline
-          run_revision "${PR_HEAD_SHA}" contender
+          run_revision "${PR_BASE_SHA}" baseline 1
+          run_revision "${PR_HEAD_SHA}" contender 1
+          run_revision "${PR_HEAD_SHA}" contender 2
+          run_revision "${PR_BASE_SHA}" baseline 2
+
+          python .github/scripts/compare_pr_benchmarks.py aggregate \
+            --output "confirmation-result/${TORCHRL_BENCHMARK_DEVICE}/baseline.json" \
+            "confirmation-result/repetitions/${TORCHRL_BENCHMARK_DEVICE}/baseline-1.json" \
+            "confirmation-result/repetitions/${TORCHRL_BENCHMARK_DEVICE}/baseline-2.json"
+          python .github/scripts/compare_pr_benchmarks.py aggregate \
+            --output "confirmation-result/${TORCHRL_BENCHMARK_DEVICE}/contender.json" \
+            "confirmation-result/repetitions/${TORCHRL_BENCHMARK_DEVICE}/contender-1.json" \
+            "confirmation-result/repetitions/${TORCHRL_BENCHMARK_DEVICE}/contender-2.json"
       - name: Upload same-runner confirmation JSON
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

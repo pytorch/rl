@@ -55,6 +55,24 @@ def _metadata(device: str, revision: str) -> dict:
     }
 
 
+def test_workflow_uses_balanced_confirmation_order():
+    workflow = (_REPO_ROOT / ".github" / "workflows" / "benchmarks_pr.yml").read_text(
+        encoding="utf-8"
+    )
+    expected_order = [
+        'run_revision "${PR_BASE_SHA}" baseline 1',
+        'run_revision "${PR_HEAD_SHA}" contender 1',
+        'run_revision "${PR_HEAD_SHA}" contender 2',
+        'run_revision "${PR_BASE_SHA}" baseline 2',
+    ]
+
+    positions = [workflow.index(command) for command in expected_order]
+
+    assert positions == sorted(positions)
+    assert "--benchmark-min-rounds 10" in workflow
+    assert workflow.count("compare_pr_benchmarks.py aggregate") == 2
+
+
 def _write_raw_pair(root: Path) -> None:
     device_root = root / "CPU"
     device_root.mkdir(parents=True)
@@ -90,10 +108,95 @@ def _write_raw_pair(root: Path) -> None:
 
 @pytest.mark.parametrize(
     ("change", "expected"),
-    [(-20.0, True), (-8.0, True), (-4.0, True), (4.0, True), (8.0, False)],
+    [
+        (-20.0, True),
+        (-8.0, True),
+        (-4.0, True),
+        (2.0, False),
+        (4.0, True),
+        (8.0, True),
+        (20.0, True),
+    ],
 )
 def test_confirmation_selection(change, expected):
     assert comparison.needs_confirmation(change, 5.0, 2.0) is expected
+
+
+def test_comparison_prefers_median_duration_to_mean_ops():
+    baseline = {
+        "benchmarks": [
+            {
+                "fullname": "test_bench.py::test_noisy",
+                "stats": {"median": 1.0, "ops": 0.1},
+            }
+        ]
+    }
+    contender = {
+        "benchmarks": [
+            {
+                "fullname": "test_bench.py::test_noisy",
+                "stats": {"median": 2.0, "ops": 0.1},
+            }
+        ]
+    }
+
+    [row] = comparison.comparison_rows(baseline, contender)
+
+    assert row["baseline_ops"] == pytest.approx(1.0)
+    assert row["contender_ops"] == pytest.approx(0.5)
+    assert row["change"] == pytest.approx(-50.0)
+
+
+def test_comment_prefers_median_duration_to_mean_ops():
+    result = {
+        "metadata": {"confirmed_benchmarks": []},
+        "baseline": {
+            "benchmarks": [
+                {"fullname": "test_noisy", "stats": {"median": 1.0, "ops": 0.1}}
+            ]
+        },
+        "contender": {
+            "benchmarks": [
+                {"fullname": "test_noisy", "stats": {"median": 2.0, "ops": 0.1}}
+            ]
+        },
+    }
+
+    [row] = comments._comparison_rows(result)
+
+    assert row["change"] == pytest.approx(-50.0)
+
+
+def test_aggregate_uses_equal_weight_per_confirmation_repetition():
+    documents = [
+        {
+            "benchmarks": [
+                {
+                    "fullname": "test_bench.py::test_noisy",
+                    "extra_info": {},
+                    "stats": {"median": duration, "rounds": rounds},
+                }
+            ]
+        }
+        for duration, rounds in ((1.0, 100), (3.0, 10))
+    ]
+
+    result = comparison.aggregate_benchmark_documents(documents)
+    [benchmark] = result["benchmarks"]
+
+    assert benchmark["stats"]["median"] == pytest.approx(2.0)
+    assert benchmark["stats"]["ops"] == pytest.approx(0.5)
+    assert benchmark["stats"]["data"] == [1.0, 3.0]
+    assert benchmark["stats"]["rounds"] == 2
+    assert benchmark["extra_info"]["confirmation_repetitions"] == 2
+    assert benchmark["extra_info"]["confirmation_total_measurement_rounds"] == 110
+
+
+def test_aggregate_rejects_different_benchmark_sets():
+    with pytest.raises(RuntimeError, match="different benchmarks"):
+        comparison.aggregate_benchmark_documents(
+            [_document({"test_a": 1.0}), _document({"test_b": 1.0})]
+        )
 
 
 def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
@@ -116,6 +219,7 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
     assert set(plan["nodeids"]) == {
         "test_bench.py::test_regression",
         "test_bench.py::test_near_threshold",
+        "test_bench.py::test_clear_improvement",
     }
     assert set(plan["pytest_nodeids"]) == set(plan["nodeids"])
 
@@ -127,6 +231,7 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
                 {
                     "test_bench.py::test_regression": 100.0,
                     "test_bench.py::test_near_threshold": 100.0,
+                    "test_bench.py::test_clear_improvement": 100.0,
                 }
             )
         ),
@@ -138,6 +243,7 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
                 {
                     "test_bench.py::test_regression": 98.0,
                     "test_bench.py::test_near_threshold": 106.0,
+                    "test_bench.py::test_clear_improvement": 102.0,
                 }
             )
         ),
@@ -157,12 +263,12 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
     rows = {row["name"]: row for row in result["benchmarks"]}
     assert rows["test_bench.py::test_regression"]["change"] == pytest.approx(-2.0)
     assert rows["test_bench.py::test_near_threshold"]["change"] == pytest.approx(6.0)
-    assert rows["test_bench.py::test_clear_improvement"]["change"] == pytest.approx(8.0)
+    assert rows["test_bench.py::test_clear_improvement"]["change"] == pytest.approx(2.0)
     assert rows["test_bench.py::test_regression"]["measurement"] == (
         "same-runner-confirmation"
     )
     assert rows["test_bench.py::test_clear_improvement"]["measurement"] == (
-        "parallel-runners"
+        "same-runner-confirmation"
     )
 
     final_metadata = json.loads(
@@ -182,8 +288,8 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
         ],
         "https://example.com/run",
     )
-    assert "Sequential same-runner confirmations: 2." in body
-    assert "same runner" in body
+    assert "Balanced same-runner confirmations: 3." in body
+    assert "balanced same runner" in body
 
 
 def test_plan_uses_nodeids_relative_to_benchmark_working_directory(tmp_path):

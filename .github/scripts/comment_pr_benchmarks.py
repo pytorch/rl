@@ -23,12 +23,15 @@ def _benchmark_name(benchmark: dict) -> str:
 
 def _benchmark_ops(benchmark: dict) -> float | None:
     stats = benchmark.get("stats", {})
-    ops = stats.get("ops")
-    if ops is not None:
-        return float(ops)
+    median = stats.get("median")
+    if median:
+        return 1.0 / float(median)
     mean = stats.get("mean")
     if mean:
         return 1.0 / float(mean)
+    ops = stats.get("ops")
+    if ops is not None:
+        return float(ops)
     return None
 
 
@@ -103,7 +106,7 @@ def _comparison_rows(result: dict) -> list[dict]:
 def _table(rows: list[dict], max_rows: int) -> list[str]:
     selected = sorted(rows, key=lambda row: abs(row["change"]), reverse=True)[:max_rows]
     lines = [
-        "| Benchmark | main ops | PR ops | Change | Measurement |",
+        "| Benchmark | main median ops | PR median ops | Change | Measurement |",
         "| --- | ---: | ---: | ---: | --- |",
     ]
     for row in selected:
@@ -113,7 +116,7 @@ def _table(rows: list[dict], max_rows: int) -> list[str]:
                 _format_number(row["baseline_ops"]),
                 _format_number(row["contender_ops"]),
                 _format_percent(row["change"]),
-                "same runner" if row["confirmed"] else "parallel",
+                "balanced same runner" if row["confirmed"] else "parallel",
             )
         )
     if len(rows) > max_rows:
@@ -138,7 +141,7 @@ def _device_section(result: dict, max_rows: int) -> list[str]:
         f"Compared {len(rows)} benchmarks. Regressions over "
         f"{reporting_threshold:g}%: {regressions}. Improvements over "
         f"{reporting_threshold:g}%: {improvements}.",
-        f"Sequential same-runner confirmations: {confirmations}.",
+        f"Balanced same-runner confirmations: {confirmations}.",
         "",
     ]
     lines.extend(_table(rows, max_rows))
@@ -164,7 +167,8 @@ def build_comment(results: list[dict], run_url: str) -> tuple[int, str]:
             "",
             f"Benchmark run: {run_url}",
             "",
-            "Higher ops/sec is better. Tables are sorted by largest absolute change.",
+            "Higher median ops/sec is better. Tables are sorted by largest "
+            "absolute change.",
             "",
         ]
         for result in sorted(results, key=lambda item: item["metadata"]["device"]):

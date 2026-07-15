@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
+import statistics
 from pathlib import Path
 
 
@@ -44,15 +46,23 @@ def _benchmark_name(benchmark: dict) -> str:
     return benchmark.get("fullname") or benchmark.get("name") or "<unknown>"
 
 
-def _benchmark_ops(benchmark: dict) -> float | None:
+def _benchmark_duration(benchmark: dict) -> float | None:
     stats = benchmark.get("stats", {})
-    ops = stats.get("ops")
-    if ops is not None:
-        return float(ops)
+    median = stats.get("median")
+    if median:
+        return float(median)
     mean = stats.get("mean")
     if mean:
-        return 1.0 / float(mean)
+        return float(mean)
+    ops = stats.get("ops")
+    if ops:
+        return 1.0 / float(ops)
     return None
+
+
+def _benchmark_ops(benchmark: dict) -> float | None:
+    duration = _benchmark_duration(benchmark)
+    return None if duration is None else 1.0 / duration
 
 
 def _benchmark_map(document: dict) -> dict[str, dict]:
@@ -85,11 +95,80 @@ def comparison_rows(baseline: dict, contender: dict) -> list[dict]:
 def needs_confirmation(
     change: float, reporting_threshold: float, threshold_margin: float
 ) -> bool:
-    significant_regression = change <= -reporting_threshold
+    significant_change = abs(change) >= reporting_threshold
     near_reporting_threshold = (
         abs(abs(change) - reporting_threshold) <= threshold_margin
     )
-    return significant_regression or near_reporting_threshold
+    return significant_change or near_reporting_threshold
+
+
+def aggregate_benchmark_documents(documents: list[dict]) -> dict:
+    if not documents:
+        raise ValueError("At least one benchmark document is required.")
+
+    benchmark_maps = [_benchmark_map(document) for document in documents]
+    expected_names = set(benchmark_maps[0])
+    for index, benchmarks in enumerate(benchmark_maps[1:], start=2):
+        names = set(benchmarks)
+        if names != expected_names:
+            missing = sorted(expected_names - names)
+            unexpected = sorted(names - expected_names)
+            raise RuntimeError(
+                f"Confirmation repetition {index} has different benchmarks. "
+                f"Missing: {missing}; unexpected: {unexpected}."
+            )
+
+    result = copy.deepcopy(documents[0])
+    aggregated_benchmarks = []
+    for first_benchmark in documents[0].get("benchmarks", []):
+        name = _benchmark_name(first_benchmark)
+        durations = [
+            _benchmark_duration(benchmarks[name]) for benchmarks in benchmark_maps
+        ]
+        if any(duration is None for duration in durations):
+            raise RuntimeError(f"Confirmation repetitions lack timing data for {name}.")
+        durations = [float(duration) for duration in durations]
+        duration = statistics.median(durations)
+        if len(durations) == 1:
+            q1 = q3 = duration
+            stddev = 0.0
+        else:
+            q1, _, q3 = statistics.quantiles(durations, n=4, method="inclusive")
+            stddev = statistics.stdev(durations)
+
+        benchmark = copy.deepcopy(first_benchmark)
+        total_measurement_rounds = sum(
+            int(benchmarks[name].get("stats", {}).get("rounds", 0))
+            for benchmarks in benchmark_maps
+        )
+        benchmark["stats"] = {
+            "data": durations,
+            "iqr": q3 - q1,
+            "max": max(durations),
+            "mean": statistics.fmean(durations),
+            "median": duration,
+            "min": min(durations),
+            "ops": 1.0 / duration,
+            "q1": q1,
+            "q3": q3,
+            "rounds": len(durations),
+            "stddev": stddev,
+            "total": sum(durations),
+        }
+        extra_info = dict(benchmark.get("extra_info", {}))
+        extra_info.update(
+            {
+                "confirmation_repetitions": len(durations),
+                "confirmation_run_medians": durations,
+                "confirmation_total_measurement_rounds": total_measurement_rounds,
+            }
+        )
+        benchmark["extra_info"] = extra_info
+        aggregated_benchmarks.append(benchmark)
+
+    result["benchmarks"] = aggregated_benchmarks
+    result["confirmation_repetitions"] = len(documents)
+    return result
 
 
 def _device_directories(raw_root: Path) -> list[Path]:
@@ -170,6 +249,8 @@ def create_confirmation_plan(
             if needs_confirmation(row["change"], reporting_threshold, threshold_margin)
         ]
         plan = {
+            "comparison_statistic": "median duration",
+            "confirmation_repetitions_per_revision": 2,
             "device": device,
             "image": image_by_device[device],
             "reporting_threshold_pct": reporting_threshold,
@@ -231,14 +312,16 @@ def _summary_section(
         f"Compared {len(rows)} benchmarks: {regressions} regressions and "
         f"{improvements} improvements at the {reporting_threshold:g}% threshold. "
         f"Replaced {len(confirmed_names)} parallel measurements with sequential "
-        "same-runner confirmations.",
+        "balanced same-runner confirmations.",
         "",
-        "| Benchmark | Baseline ops | PR ops | Change | Measurement |",
+        "| Benchmark | Baseline median ops | PR median ops | Change | Measurement |",
         "| --- | ---: | ---: | ---: | --- |",
     ]
     selected = sorted(rows, key=lambda row: abs(row["change"]), reverse=True)[:50]
     for row in selected:
-        measurement = "same runner" if row["name"] in confirmed_names else "parallel"
+        measurement = (
+            "balanced same runner" if row["name"] in confirmed_names else "parallel"
+        )
         lines.append(
             f"| `{row['name']}` | {_format_number(row['baseline_ops'])} | "
             f"{_format_number(row['contender_ops'])} | {row['change']:+.2f}% | "
@@ -290,9 +373,16 @@ def finalize_results(
         metadata.update(
             {
                 "confirmed_benchmarks": sorted(confirmed_names),
+                "comparison_statistic": "median duration",
                 "reporting_threshold_pct": plan["reporting_threshold_pct"],
                 "threshold_margin_pct": plan["threshold_margin_pct"],
-                "confirmation_order": ["baseline", "contender"],
+                "confirmation_order": [
+                    "baseline-1",
+                    "contender-1",
+                    "contender-2",
+                    "baseline-2",
+                ],
+                "confirmation_repetitions_per_revision": 2,
             }
         )
         _write_json(output_dir / "baseline.json", baseline)
@@ -341,6 +431,10 @@ def main() -> None:
     finalize_parser.add_argument("--output-root", required=True, type=Path)
     finalize_parser.add_argument("--summary", required=True, type=Path)
 
+    aggregate_parser = subparsers.add_parser("aggregate")
+    aggregate_parser.add_argument("--output", required=True, type=Path)
+    aggregate_parser.add_argument("inputs", nargs="+", type=Path)
+
     args = parser.parse_args()
     if args.command == "plan":
         create_confirmation_plan(
@@ -351,7 +445,7 @@ def main() -> None:
             reporting_threshold=args.reporting_threshold,
             threshold_margin=args.threshold_margin,
         )
-    else:
+    elif args.command == "finalize":
         finalize_results(
             raw_root=args.raw_root,
             plan_root=args.plan_root,
@@ -359,6 +453,9 @@ def main() -> None:
             output_root=args.output_root,
             summary_path=args.summary,
         )
+    else:
+        documents = [_load_json(path) for path in args.inputs]
+        _write_json(args.output, aggregate_benchmark_documents(documents))
 
 
 if __name__ == "__main__":
