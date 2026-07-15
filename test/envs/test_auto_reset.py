@@ -51,7 +51,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.utils import check_env_specs
-from torchrl.testing import CARTPOLE_VERSIONED
+from torchrl.testing import CARTPOLE_VERSIONED, CountingVecNormV2
 from torchrl.testing.mocking_classes import (
     AutoResetHeteroCountingEnv,
     AutoResettingCountingEnv,
@@ -313,20 +313,6 @@ class TestAutoReset:
         assert env.base_env is base
 
     def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
-        class CountingVecNormV2(VecNormV2):
-            def __init__(self, *args, **kwargs):
-                self.step_calls = 0
-                self.reset_calls = 0
-                super().__init__(*args, **kwargs)
-
-            def _step(self, tensordict, next_tensordict):
-                self.step_calls += 1
-                return super()._step(tensordict, next_tensordict)
-
-            def _reset(self, tensordict, tensordict_reset):
-                self.reset_calls += 1
-                return super()._reset(tensordict, tensordict_reset)
-
         env = TransformedEnv(AutoResettingCountingEnv(3), InitTracker())
         env._torchrl_native_autoreset = True
         vecnorm = CountingVecNormV2(in_keys=["observation"])
