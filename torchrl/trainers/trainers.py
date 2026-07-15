@@ -446,6 +446,19 @@ class Trainer:
         self.learner_backend_options = dict(learner_backend_options or {})
         if learner_backend not in ("local", "ray"):
             raise ValueError("learner_backend must be 'local' or 'ray'.")
+        if learner_backend == "ray":
+            if isinstance(optim_steps_per_batch, bool) or not isinstance(
+                optim_steps_per_batch, int
+            ):
+                raise TypeError(
+                    "optim_steps_per_batch must be an integer with "
+                    "learner_backend='ray'."
+                )
+            if optim_steps_per_batch <= 0:
+                raise ValueError(
+                    "optim_steps_per_batch must be positive with "
+                    "learner_backend='ray'."
+                )
         if learner_poll_interval <= 0:
             raise ValueError("learner_poll_interval must be positive.")
         self.learner_poll_interval = float(learner_poll_interval)
@@ -657,8 +670,11 @@ class Trainer:
             register("replay_buffer", self.replay_buffer)
             register("collector", self.collector)
             register("trainer_state", self._checkpoint_state)
+            register("logger", self.logger)
             register("exploration", getattr(self, "greedy_module", None))
             register("exploration", getattr(self, "exploration_module", None))
+            for name, module in self._modules.items():
+                register(f"trainer_module.{name}", module)
             register("learner_execution", self._execution_checkpoint_state)
             return checkpoint
 
@@ -895,15 +911,46 @@ class Trainer:
             strict = kwargs.pop("strict", None)
             for key, value in _torch_load_defaults().items():
                 kwargs.setdefault(key, value)
-            result = self._sync_checkpoint_components(checkpoint).load(
-                file,
-                map_location=map_location,
-                tensor_load_kwargs=kwargs,
-                strict=strict,
-            )
-            if "learner_execution" in result.loaded:
+            checkpoint = self._sync_checkpoint_components(checkpoint)
+            if self.learner_backend == "ray":
+                # Service owners must be restored before learner actors create
+                # rank-aware clients. The learner state is deliberately last.
+                registered = set(checkpoint.components)
+                ordered = [
+                    name
+                    for name in ("replay_buffer", "collector")
+                    if name in registered
+                ]
+                ordered.extend(
+                    sorted(
+                        registered.difference(
+                            {"replay_buffer", "collector", "learner_execution"}
+                        )
+                    )
+                )
+                if "learner_execution" in registered:
+                    ordered.append("learner_execution")
+                loaded = set()
+                for name in ordered:
+                    result = checkpoint.load(
+                        file,
+                        components=[name],
+                        map_location=map_location,
+                        tensor_load_kwargs=kwargs,
+                        strict=strict,
+                    )
+                    loaded.update(result.loaded)
+            else:
+                result = checkpoint.load(
+                    file,
+                    map_location=map_location,
+                    tensor_load_kwargs=kwargs,
+                    strict=strict,
+                )
+                loaded = result.loaded
+            if "learner_execution" in loaded:
                 self._publish_execution_weights(force=True)
-            elif "policy" in result.loaded:
+            elif "policy" in loaded:
                 # The collector payload is restored before the independently
                 # registered policy component. Synchronize once more after all
                 # components have loaded so local copies, remote workers, and
@@ -975,6 +1022,19 @@ class Trainer:
         op: Callable,
         **kwargs,
     ) -> None:
+        if self.learner_backend == "ray" and dest not in {
+            "batch_process",
+            "post_steps",
+            "pre_steps_log",
+            "post_steps_log",
+            "setup",
+            "shutdown",
+        }:
+            raise RuntimeError(
+                f"The {dest!r} hook stage executes inside the local optimization "
+                "loop and is unavailable with learner_backend='ray'. Move this "
+                "behavior into an OptimizationStepper or a learner-owned component."
+            )
         # Wrap hook with timing for performance monitoring
         # Get hook name from registered modules if available
         hook_name = None
@@ -1384,7 +1444,7 @@ class Trainer:
                         ]
                     else:
                         replay_batch = replay_batch.reshape(-1)
-                    self.replay_buffer.extend(replay_batch.cpu())
+                    self.replay_buffer.extend(replay_batch)
                     self.collected_frames += current_frames * self.frame_skip
                     self._pre_steps_log_hook(batch)
                 else:
@@ -1403,8 +1463,12 @@ class Trainer:
                     receipt = backend.step(num_steps)
                     self._optim_count += receipt.optim_steps
                     metrics = receipt.metrics.flatten_keys(".").to_dict()
-                    self._log(optim_steps=self._optim_count, **metrics)
+                    if self.auto_log_optim_steps:
+                        metrics["optim_steps"] = self._optim_count
+                    self._log(**metrics)
                     self._publish_execution_weights()
+
+                self._post_steps_hook()
 
                 if batch is not None:
                     self._post_steps_log_hook(batch)
@@ -1412,7 +1476,11 @@ class Trainer:
                     self._pbar.update(self.collected_frames - previous_frames)
                     self._pbar_description()
                 if self._stop_training or self.collected_frames >= self.total_frames:
+                    self._save_execution_checkpoint(
+                        force_save=True, resume_collection=False
+                    )
                     break
+                self._save_execution_checkpoint()
                 if self.async_collection and current_frames == 0:
                     time.sleep(self.learner_poll_interval)
         finally:
@@ -1422,6 +1490,28 @@ class Trainer:
                 self.collector.shutdown()
             finally:
                 backend.shutdown()
+
+    def _save_execution_checkpoint(
+        self, *, force_save: bool = False, resume_collection: bool = True
+    ) -> None:
+        if self.save_trainer_file is None:
+            return
+        if (
+            not force_save
+            and (self.collected_frames - self._last_save) <= self.save_trainer_interval
+        ):
+            return
+        if self.async_collection:
+            pause = getattr(self.collector, "pause", None)
+            if not callable(pause):
+                raise RuntimeError(
+                    "Asynchronous remote checkpointing requires a collector "
+                    "with a pause() boundary."
+                )
+            with pause(resume=resume_collection):
+                self.save_trainer(force_save=force_save)
+        else:
+            self.save_trainer(force_save=force_save)
 
     def _publish_execution_weights(self, *, force: bool = False) -> None:
         backend = self._execution_backend

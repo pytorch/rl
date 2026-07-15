@@ -27,6 +27,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequ
 
 from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger
+from torchrl.checkpoint import Checkpoint
 
 from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.collectors.distributed import (
@@ -48,6 +49,7 @@ from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
 from torchrl.modules.inference_server import InferenceServer
 from torchrl.objectives import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
     snapshot_python_processes,
@@ -60,6 +62,7 @@ from torchrl.trainers._distributed import (
     _DDPProcessGroup,
 )
 from torchrl.trainers._ray_execution import _RayTrainerExecution
+from torchrl.trainers.algorithms import DQNTrainer
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -96,9 +99,25 @@ class ScalarRayLoss(LossModule):
         self.weight = nn.Parameter(torch.ones(()))
 
     def forward(self, tensordict):
-        return TensorDict(
-            {"loss": self.weight * tensordict["value"].mean()}, batch_size=[]
-        )
+        value = tensordict.get("value", None)
+        if value is None:
+            value = tensordict["observation"].float()
+        return TensorDict({"loss": self.weight * value.mean()}, batch_size=[])
+
+
+class CountingTargetUpdater(TargetNetUpdater):
+    def __init__(self, loss_module):
+        self.loss_module = loss_module
+        self.calls = 0
+
+    def step(self):
+        self.calls += 1
+
+    def state_dict(self):
+        return {"calls": self.calls}
+
+    def load_state_dict(self, state_dict):
+        self.calls = state_dict["calls"]
 
 
 def _run_ddp_reference_rank(rank, coordinates, result_queue):
@@ -795,6 +814,8 @@ class TestRayCollector(DistributedCollectorBase):
         return {"ray_init_config": ray_init_config, "remote_configs": remote_configs}
 
     def test_private_ray_trainer_execution_uses_replay_clients(self):
+        import ray
+
         replay = RayReplayBuffer(
             replay_buffer_cls=TensorDictReplayBuffer,
             storage=partial(LazyTensorStorage, 64),
@@ -834,8 +855,167 @@ class TestRayCollector(DistributedCollectorBase):
             assert backend.model_version == 2
             restored = backend.get_weights(expected_version=2)
             torch.testing.assert_close(restored["weight"], torch.tensor(0.8))
+
+            invalid_state = backend.state_dict()
+            invalid_state["ranks"][1]["loss_module"]["weight"] = torch.ones(2)
+            with pytest.raises(ray.exceptions.RayTaskError, match="size mismatch"):
+                backend.load_state_dict(invalid_state)
+            with pytest.raises(RuntimeError, match="failed"):
+                backend.step(1)
+
+            generation = backend.generation
+            backend.start()
+            assert backend.generation == generation + 1
+            assert backend.model_version == 0
+
+            generation = backend.generation
+            ray.kill(backend._actors[0], no_restart=True)
+            for _ in range(50):
+                if not backend.is_alive():
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Killed learner actor remained reachable.")
+            backend.start()
+            assert backend.generation == generation + 1
+            assert len(backend._actors) == backend.world_size
+            restarted = backend.step(1)
+            assert restarted.round_id == 1
+            assert restarted.model_version == 1
         finally:
             backend.shutdown()
+            replay.shutdown()
+
+    def test_private_ray_trainer_execution_rejects_fractional_nccl_gpu(self):
+        class ReplayOwner:
+            def clients(self, world_size):
+                return [None] * world_size
+
+        loss = ScalarRayLoss()
+        with pytest.raises(ValueError, match="whole GPU"):
+            _RayTrainerExecution(
+                loss_module=loss,
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                optimization_stepper=None,
+                target_net_updater=None,
+                replay_buffer=ReplayOwner(),
+                global_batch_size=8,
+                options={
+                    "world_size": 2,
+                    "resources_per_rank": {"num_cpus": 1, "num_gpus": 0.5},
+                },
+            )
+
+    def test_dqn_trainer_ray_backend(self, tmp_path):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 1},
+        )
+        collector = RayCollector(
+            create_env_fn=[CountingEnv, CountingEnv],
+            policy=CountingPolicy(),
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=16,
+            init_random_frames=16,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        try:
+            with pytest.warns(UserWarning, match="experimental"):
+                trainer = DQNTrainer(
+                    collector=collector,
+                    total_frames=16,
+                    frame_skip=1,
+                    optim_steps_per_batch=1,
+                    loss_module=loss,
+                    optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                    replay_buffer=replay,
+                    batch_size=8,
+                    target_net_updater=CountingTargetUpdater(loss),
+                    learner_backend="ray",
+                    learner_backend_options={
+                        "world_size": 2,
+                        "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                        "backend": "gloo",
+                        "setup_timeout": 60.0,
+                        "command_timeout": 60.0,
+                    },
+                    enable_logging=False,
+                    progress_bar=False,
+                    checkpoint=Checkpoint(),
+                    save_trainer_file=tmp_path / "checkpoint",
+                    save_trainer_interval=0,
+                )
+            trainer.train()
+            assert trainer.collected_frames == 16
+            assert trainer._optim_count == 1
+            assert trainer._published_model_version == 1
+            manifest = Checkpoint.manifest(tmp_path / "checkpoint")
+            assert {
+                "collector",
+                "learner_execution",
+                "replay_buffer",
+                "trainer_state",
+            }.issubset(manifest["components"])
+
+            restored_replay = RayReplayBuffer(
+                replay_buffer_cls=TensorDictReplayBuffer,
+                storage=partial(LazyTensorStorage, 64),
+                batch_size=8,
+                remote_config={"num_cpus": 1},
+            )
+            restored_collector = RayCollector(
+                create_env_fn=[CountingEnv, CountingEnv],
+                policy=CountingPolicy(),
+                collector_class=Collector,
+                frames_per_batch=8,
+                total_frames=16,
+                init_random_frames=16,
+                remote_configs={"num_cpus": 1, "num_gpus": 0},
+                sync=True,
+            )
+            restored_loss = ScalarRayLoss()
+            restored = None
+            try:
+                with pytest.warns(UserWarning, match="experimental"):
+                    restored = DQNTrainer(
+                        collector=restored_collector,
+                        total_frames=16,
+                        frame_skip=1,
+                        optim_steps_per_batch=1,
+                        loss_module=restored_loss,
+                        optimizer=torch.optim.SGD(restored_loss.parameters(), lr=0.1),
+                        replay_buffer=restored_replay,
+                        batch_size=8,
+                        target_net_updater=CountingTargetUpdater(restored_loss),
+                        learner_backend="ray",
+                        learner_backend_options={
+                            "world_size": 2,
+                            "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                            "backend": "gloo",
+                            "setup_timeout": 60.0,
+                            "command_timeout": 60.0,
+                        },
+                        enable_logging=False,
+                        progress_bar=False,
+                        checkpoint=Checkpoint(),
+                    )
+                restored.load_from_file(tmp_path / "checkpoint")
+                assert restored.collected_frames == 16
+                assert restored._optim_count == 1
+                assert restored._execution_backend.model_version == 1
+                assert restored._published_model_version == 1
+            finally:
+                if restored is not None and restored._execution_backend is not None:
+                    restored._execution_backend.shutdown()
+                restored_collector.shutdown()
+                restored_replay.shutdown()
+        finally:
+            collector.shutdown()
             replay.shutdown()
 
     def test_ray_owned_inference_and_replay(self):
@@ -871,6 +1051,48 @@ class TestRayCollector(DistributedCollectorBase):
             if collector is not None:
                 collector.shutdown()
             inference.shutdown()
+            replay.shutdown()
+
+    def test_ray_collector_pause_drains_and_resumes(self):
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 1000),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        collector = RayCollector(
+            create_env_fn=[CountingEnv],
+            policy=CountingPolicy(),
+            replay_buffer=replay,
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=1000,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=False,
+        )
+        try:
+            collector.start()
+            for _ in range(100):
+                if replay.write_count:
+                    break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("Collector did not write before pause.")
+            with collector.pause():
+                paused_count = replay.write_count
+                time.sleep(0.2)
+                assert replay.write_count == paused_count
+                assert collector.remote_collectors
+
+            for _ in range(100):
+                if replay.write_count > paused_count:
+                    break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("Collector did not resume after pause.")
+        finally:
+            collector.shutdown()
             replay.shutdown()
 
     @classmethod
