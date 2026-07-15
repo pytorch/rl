@@ -51,6 +51,7 @@ except ImportError:
         return tree_flat
 
 
+from torchrl._comm.replay_service import _DistributedReplayService, _extend_reply
 from torchrl._utils import (
     _RayServiceMetaClass,
     accept_remote_rref_udf_invocation,
@@ -225,6 +226,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             ``"ray"``. Defaults to ``"direct"``.
         service_backend_options (dict, optional): Ray initialization options.
             Accepted keys are ``ray_init_config`` and ``remote_config``.
+        transport (str, optional): physical transport used by a remote replay
+            owner. ``"auto"`` selects the backend default. Defaults to
+            ``"auto"``.
+        transport_options (dict, optional): options for the selected transport.
+            For ``transport="distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. TensorDict layouts are bound lazily on first use.
 
     Examples:
         >>> import torch
@@ -349,8 +356,18 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         delayed_init: bool | None = None,
         service_backend: Literal["direct", "ray"] = "direct",
         service_backend_options: dict[str, Any] | None = None,
+        transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
+        transport_options: dict[str, Any] | None = None,
     ) -> None:
-        del service_backend, service_backend_options
+        if service_backend == "direct" and transport not in ("auto", "direct"):
+            raise ValueError(
+                "A direct ReplayBuffer only supports transport='auto' or 'direct'."
+            )
+        if service_backend == "direct" and transport_options:
+            raise ValueError(
+                "transport_options are only valid for a remote ReplayBuffer."
+            )
+        del service_backend, service_backend_options, transport, transport_options
         if consume_after_n_samples is not None:
             if isinstance(consume_after_n_samples, bool) or not isinstance(
                 consume_after_n_samples, INT_CLASSES
@@ -534,6 +551,78 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
     def client(self) -> Self:
         """Return ``self`` for the zero-overhead direct backend."""
         return self
+
+    def _start_distributed_service(self, transport_options: dict[str, Any]) -> None:
+        """Start the private tensor transport inside a remote owner."""
+        if hasattr(self, "_distributed_service"):
+            raise RuntimeError("The distributed replay service is already running.")
+        options = dict(transport_options)
+        extend_spec = options.pop("extend_spec", None)
+        sample_spec = options.pop("sample_spec", None)
+        priority_spec = options.pop("priority_spec", None)
+        self._distributed_service = _DistributedReplayService(
+            self,
+            extend_spec=extend_spec,
+            sample_spec=sample_spec,
+            priority_spec=priority_spec,
+            **options,
+        ).start()
+
+    def _bootstrap_distributed_extend(self, data: TensorDictBase):
+        """Bind the extend schema and apply exactly one first operation."""
+        service = self._distributed_service
+        with service._lock:
+            if service.extend_transport is None:
+                result = self.extend(data)
+                reply = _extend_reply(result, service._wire_device)
+                service.bind_extend(data, reply)
+                return service.extend_client(), reply.get("result", None), True
+            return service.extend_client(), None, False
+
+    def _bootstrap_distributed_sample(self, batch_size: int):
+        """Bind the sample schema and return exactly one first sample."""
+        service = self._distributed_service
+        with service._lock:
+            if service.sample_transport is None:
+                result = self.sample(batch_size).to(service._wire_device)
+                service.bind_sample(result)
+                return service.sample_client(), result, True, batch_size
+            return (
+                service.sample_client(),
+                None,
+                False,
+                service._sample_batch_size,
+            )
+
+    def _bootstrap_distributed_priority(self, data: TensorDictBase):
+        """Bind the priority schema and apply exactly one first update."""
+        service = self._distributed_service
+        with service._lock:
+            if service.priority_transport is None:
+                update = getattr(self, "update_tensordict_priority", None)
+                if update is not None:
+                    update(data)
+                service.bind_priority(data)
+                return service.priority_client(), True
+            return service.priority_client(), False
+
+    def _distributed_control_client(self):
+        """Return a restricted control endpoint for length and write count."""
+        return self._distributed_service.control_client()
+
+    def _distributed_service_client(self):
+        """Create an independently routed client for the private service."""
+        service = getattr(self, "_distributed_service", None)
+        if service is None:
+            raise RuntimeError("The distributed replay service is not running.")
+        return service.client()
+
+    def _shutdown_distributed_service(self) -> None:
+        """Stop the private tensor transport when the remote owner closes."""
+        service = getattr(self, "_distributed_service", None)
+        if service is not None:
+            service.shutdown()
+            del self._distributed_service
 
     def shutdown(self, timeout: float | None = None) -> None:
         """Mark this direct replay-buffer owner as shut down."""

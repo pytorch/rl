@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import importlib.util
-import multiprocessing as mp
 from contextlib import ExitStack
 from functools import partial
 from pathlib import Path
@@ -20,19 +19,10 @@ from torch import nn
 
 from torchrl.data import ListStorage, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.envs import GymEnv
-from torchrl.modules.inference_server import (
-    InferenceServer,
-    MPTransport,
-    PolicyClientModule,
-    ProcessInferenceServer,
-    RayTransport,
-    ThreadingTransport,
-)
+from torchrl.modules.inference_server import InferenceServer, PolicyClientModule
 from torchrl.record import CSVLogger
 
 _has_ray = importlib.util.find_spec("ray") is not None
-if _has_ray:
-    import ray
 
 ExampleServiceBackend = Literal["direct", "process", "ray"]
 
@@ -96,17 +86,22 @@ def _make_replay_buffer(
 
 def _make_inference_server(service_backend: ExampleServiceBackend):
     if service_backend == "process":
-        context = mp.get_context("spawn")
-        transport = MPTransport(ctx=context)
-        server = ProcessInferenceServer(
+        server = InferenceServer(
             policy_factory=make_policy,
-            transport=transport,
-            mp_context=context,
+            service_backend="process",
+            service_backend_options={"mp_context": "spawn"},
+            transport="auto",
+        )
+    elif service_backend == "ray":
+        server = InferenceServer(
+            policy_factory=make_policy,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 1}},
+            transport="auto",
         )
     else:
-        transport = RayTransport() if service_backend == "ray" else ThreadingTransport()
-        server = InferenceServer(make_policy(), transport)
-    return server, transport
+        server = InferenceServer(make_policy(), transport="auto")
+    return server
 
 
 def run_training(
@@ -123,10 +118,6 @@ def run_training(
         raise ValueError("steps and batch_size must both be positive.")
 
     with ExitStack() as owners:
-        if service_backend == "ray" and not ray.is_initialized():
-            ray.init(num_cpus=4, ignore_reinit_error=True, log_to_driver=False)
-            owners.callback(ray.shutdown)
-
         logger_owner = _make_logger(service_backend, log_dir)
         owners.callback(logger_owner.shutdown)
         replay_owner = _make_replay_buffer(
@@ -135,10 +126,7 @@ def run_training(
             batch_size=batch_size,
         )
         owners.callback(replay_owner.shutdown)
-        inference_owner, transport = _make_inference_server(service_backend)
-        close_transport = getattr(transport, "close", None)
-        if callable(close_transport):
-            owners.callback(close_transport)
+        inference_owner = _make_inference_server(service_backend)
         owners.callback(inference_owner.shutdown)
         inference_owner.start()
 
