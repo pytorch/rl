@@ -33,11 +33,17 @@ Parameters:
 - **log_interval** (*int**,**optional*) - Interval for logging metrics. Defaults to 10000.
 - **save_trainer_file** (*str**|**pathlib.Path**,**optional*) - File path for saving trainer state.
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - Replay buffer for storing experiences. Defaults to None.
+- **batch_size** (*int**,**optional*) - Global learner batch size. Defaults to the
+replay buffer batch size.
+- **learner_backend** (*str*) - Optimization placement, `"local"` or `"ray"`.
+- **learner_backend_options** (*dict**,**optional*) - Ray world size and resources.
+- **learner_poll_interval** (*float*) - Remote replay polling interval.
 - **enable_logging** (*bool**,**optional*) - Whether to enable metric logging. Defaults to True.
 - **log_rewards** (*bool**,**optional*) - Whether to log reward statistics. Defaults to True.
 - **log_actions** (*bool**,**optional*) - Whether to log action statistics. Defaults to True.
 - **log_observations** (*bool**,**optional*) - Whether to log observation statistics. Defaults to False.
-- **target_net_updater** (*TargetNetUpdater**,**optional*) - Target network updater (typically SoftUpdate).
+- **target_net_updater** (*TargetNetUpdater*) - Target network updater (typically
+`SoftUpdate`).
 - **async_collection** (*bool**,**optional*) - Whether to use async data collection. Defaults to False.
 - **log_timings** (*bool**,**optional*) - Whether to log timing information for hooks. Defaults to False.
 - **done_key** (*NestedKey**,**optional*) - Done key used by losses and logging. Defaults to "done".
@@ -52,6 +58,10 @@ Note
 
 This is an experimental/prototype feature. The API may change in future versions.
 DDPG is designed for continuous action spaces. For discrete actions, use DQNTrainer.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
+
+Evaluate the configured loss through the active execution boundary.
 
 load_from_file(*file: str | Path*, ***kwargs*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)
 

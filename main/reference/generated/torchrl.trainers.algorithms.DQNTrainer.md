@@ -33,10 +33,20 @@ Parameters:
 - **log_interval** (*int**,**optional*) - Interval for logging metrics. Defaults to 10000.
 - **save_trainer_file** (*str**|**pathlib.Path**,**optional*) - File path for saving trainer state. Defaults to None.
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - Replay buffer for storing and sampling experiences. Defaults to None.
+- **batch_size** (*int**,**optional*) - Global learner batch size. When omitted, the
+replay buffer batch size is used.
+- **learner_backend** (*str*) - Optimization placement. `"local"` preserves
+the in-process Trainer path; `"ray"` creates private DDP learner
+actors. Defaults to `"local"`.
+- **learner_backend_options** (*dict**,**optional*) - Ray learner options, including
+`world_size` and `resources_per_rank`.
+- **learner_poll_interval** (*float*) - Replay polling interval for asynchronous
+remote collection. Defaults to `0.05` seconds.
 - **enable_logging** (*bool**,**optional*) - Whether to enable metric logging. Defaults to True.
 - **log_rewards** (*bool**,**optional*) - Whether to log reward statistics. Defaults to True.
 - **log_observations** (*bool**,**optional*) - Whether to log observation statistics. Defaults to False.
-- **target_net_updater** (*TargetNetUpdater**,**optional*) - Target network updater (typically HardUpdate). Defaults to None.
+- **target_net_updater** (*TargetNetUpdater*) - Target network updater (typically
+`HardUpdate`).
 - **greedy_module** ([*EGreedyModule*](torchrl.modules.EGreedyModule.html#torchrl.modules.EGreedyModule)*,**optional*) - Epsilon-greedy exploration module. When provided,
 the module's epsilon is annealed during training. Defaults to None.
 - **async_collection** (*bool**,**optional*) - Whether to use async data collection. Defaults to False.
@@ -97,6 +107,10 @@ Note
 This is an experimental/prototype feature. The API may change in future versions.
 DQN is designed for discrete action spaces (e.g., CartPole, Atari).
 For continuous control, consider using SACTrainer or DDPGTrainer instead.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
+
+Evaluate the configured loss through the active execution boundary.
 
 load_from_file(*file: str | Path*, ***kwargs*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)
 

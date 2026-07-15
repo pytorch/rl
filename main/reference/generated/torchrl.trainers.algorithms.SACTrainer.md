@@ -37,11 +37,15 @@ Parameters:
 - **save_trainer_file** (*str**|**pathlib.Path**,**optional*) - File path for saving trainer state. Defaults to None.
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - Replay buffer for storing and sampling experiences. Defaults to None.
 - **batch_size** (*int**,**optional*) - Batch size for sampling from replay buffer. Defaults to None.
+- **learner_backend** (*str*) - Optimization placement, `"local"` or `"ray"`.
+- **learner_backend_options** (*dict**,**optional*) - Ray world size and resources.
+- **learner_poll_interval** (*float*) - Remote replay polling interval.
 - **enable_logging** (*bool**,**optional*) - Whether to enable metric logging. Defaults to True.
 - **log_rewards** (*bool**,**optional*) - Whether to log reward statistics. Defaults to True.
 - **log_actions** (*bool**,**optional*) - Whether to log action statistics. Defaults to True.
 - **log_observations** (*bool**,**optional*) - Whether to log observation statistics. Defaults to False.
-- **target_net_updater** (*TargetNetUpdater**,**optional*) - Target network updater for soft updates. Defaults to None.
+- **target_net_updater** (*TargetNetUpdater*) - Target network updater for soft
+updates.
 - **done_key** (*NestedKey**,**optional*) - Done key used by losses and logging. Defaults to "done".
 - **terminated_key** (*NestedKey**,**optional*) - Terminated key used by losses and logging. Defaults to "terminated".
 - **reward_key** (*NestedKey**,**optional*) - Reward key used by losses and logging. Defaults to "reward".
@@ -56,6 +60,7 @@ Example
 >>> from torchrl.collectors import Collector
 >>> from torchrl.objectives import SACLoss
 >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+>>> from torchrl.objectives.utils import SoftUpdate
 >>> from torch import optim
 >>>
 >>> # Set up collector, loss, and replay buffer
@@ -63,6 +68,7 @@ Example
 >>> loss_module = SACLoss(actor_network, qvalue_network)
 >>> optimizer = optim.Adam(loss_module.parameters(), lr=3e-4)
 >>> replay_buffer = ReplayBuffer(storage=LazyTensorStorage(100000))
+>>> target_net_updater = SoftUpdate(loss_module, eps=0.995)
 >>>
 >>> # Create and run trainer
 >>> trainer = SACTrainer(
@@ -73,6 +79,7 @@ Example
 ... loss_module=loss_module,
 ... optimizer=optimizer,
 ... replay_buffer=replay_buffer,
+... target_net_updater=target_net_updater,
 ... )
 >>> trainer.train()
 ```
@@ -82,6 +89,10 @@ Note
 This is an experimental/prototype feature. The API may change in future versions.
 SAC is particularly effective for continuous control tasks and environments where
 exploration is crucial due to its entropy regularization.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
+
+Evaluate the configured loss through the active execution boundary.
 
 load_from_file(*file: str | Path*, ***kwargs*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)
 

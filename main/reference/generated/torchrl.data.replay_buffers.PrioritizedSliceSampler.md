@@ -214,12 +214,16 @@ The priority exponent.
 
 Note
 
-Changing `alpha` on a sampler that already holds priorities
+Setting `alpha` on a sampler that already holds priorities
 (e.g. when annealing it with a
 `ParameterScheduler`)
-does not re-transform the `(p + eps) ** alpha` values already
-written to the sum/min trees: old and new exponents mix until every
-entry's priority is updated again.
+re-transforms the `(p + eps) ** alpha` values stored in the
+sum/min trees to the new exponent in a single O(capacity) pass, so
+sampling probabilities stay consistent with the new value. The one
+exception is changing `alpha` away from exactly `0`: the raw
+priorities cannot be recovered from the trees in that regime, so the
+stored (uniform) values are kept - and a warning is emitted -
+until each entry's priority is next updated.
 
 update_priority(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *priority: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, ***, *storage: [TensorStorage](torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) | None = None*) → None
 

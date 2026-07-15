@@ -231,12 +231,7 @@ The shared transport.
 
 shutdown() → None
 
-Shutdown the scheme and release resources.
-
-This method stops any background threads and cleans up connections.
-It is safe to call multiple times. Subclasses should override this
-method to add custom cleanup logic, but should call super().shutdown()
-to ensure base cleanup is performed.
+Release only this scheme's standalone communication resources.
 
 *property*weights*: Any | None*
 

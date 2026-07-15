@@ -39,6 +39,11 @@ controlling delayed actor/critic updates. Defaults to None.
 - **save_trainer_file** (*str**|**pathlib.Path**,**optional*) - File path for saving trainer state. Defaults to None.
 - **num_epochs** (*int**,**optional*) - Number of epochs per batch. Defaults to 1 (typical for off-policy).
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - Replay buffer for storing and sampling experiences. Defaults to None.
+- **batch_size** (*int**,**optional*) - Global learner batch size. Defaults to the
+replay buffer batch size.
+- **learner_backend** (*str*) - Optimization placement, `"local"` or `"ray"`.
+- **learner_backend_options** (*dict**,**optional*) - Ray world size and resources.
+- **learner_poll_interval** (*float*) - Remote replay polling interval.
 - **enable_logging** (*bool**,**optional*) - Whether to enable metric logging. Defaults to True.
 - **log_rewards** (*bool**,**optional*) - Whether to log reward statistics. Defaults to True.
 - **log_actions** (*bool**,**optional*) - Whether to log action statistics. Defaults to True.
@@ -53,6 +58,10 @@ Note
 
 This is an experimental/prototype feature. The API may change in future versions.
 TD3 is particularly effective for continuous control tasks.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...]
+
+Evaluate the configured loss through the active execution boundary.
 
 load_from_file(*file: str | Path*, ***kwargs*) → [Trainer](torchrl.trainers.Trainer.html#torchrl.trainers.Trainer)
 

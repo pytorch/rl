@@ -4045,8 +4045,6 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.RayMCAdvantage.html#torchrl.objectives.llm.RayMCAdvantage.collector">(torchrl.objectives.llm.RayMCAdvantage property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.collectors.CollectorConfig.html#torchrl.trainers.algorithms.configs.collectors.CollectorConfig">CollectorConfig (class in torchrl.trainers.algorithms.configs.collectors)</a>
 </li>
       <li><a href="reference/generated/torchrl.collectors.distributed.DistributedWeightUpdater.html#torchrl.collectors.distributed.DistributedWeightUpdater.collectors">collectors (torchrl.collectors.distributed.DistributedWeightUpdater property)</a>
@@ -4067,6 +4065,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase.collectors">(torchrl.collectors.WeightUpdaterBase property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/glossary.html#term-compact_obs"><strong>compact_obs</strong></a>
 </li>
       <li><a href="reference/generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.compile">compile() (torchrl.data.llm.TopKRewardSelector method)</a>
@@ -4215,6 +4215,32 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.compute_factorizations">compute_factorizations() (torchrl.modules.GPWorldModel method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.trainers.algorithms.A2CTrainer.html#torchrl.trainers.algorithms.A2CTrainer.compute_loss">compute_loss() (torchrl.trainers.algorithms.A2CTrainer method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer.compute_loss">(torchrl.trainers.algorithms.CQLTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.DDPGTrainer.html#torchrl.trainers.algorithms.DDPGTrainer.compute_loss">(torchrl.trainers.algorithms.DDPGTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.DQNTrainer.html#torchrl.trainers.algorithms.DQNTrainer.compute_loss">(torchrl.trainers.algorithms.DQNTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.IQLTrainer.html#torchrl.trainers.algorithms.IQLTrainer.compute_loss">(torchrl.trainers.algorithms.IQLTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.OfflineToOnlineTrainer.html#torchrl.trainers.algorithms.OfflineToOnlineTrainer.compute_loss">(torchrl.trainers.algorithms.OfflineToOnlineTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.OnPolicyTrainer.html#torchrl.trainers.algorithms.OnPolicyTrainer.compute_loss">(torchrl.trainers.algorithms.OnPolicyTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.PPOTrainer.html#torchrl.trainers.algorithms.PPOTrainer.compute_loss">(torchrl.trainers.algorithms.PPOTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.ReinforceTrainer.html#torchrl.trainers.algorithms.ReinforceTrainer.compute_loss">(torchrl.trainers.algorithms.ReinforceTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.SACTrainer.html#torchrl.trainers.algorithms.SACTrainer.compute_loss">(torchrl.trainers.algorithms.SACTrainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.algorithms.TD3Trainer.html#torchrl.trainers.algorithms.TD3Trainer.compute_loss">(torchrl.trainers.algorithms.TD3Trainer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.trainers.Trainer.html#torchrl.trainers.Trainer.compute_loss">(torchrl.trainers.Trainer method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.ConditionalPolicySwitch.html#torchrl.envs.transforms.ConditionalPolicySwitch">ConditionalPolicySwitch (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig.html#torchrl.trainers.algorithms.configs.transforms.ConditionalPolicySwitchConfig">ConditionalPolicySwitchConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -17991,6 +18017,8 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.set_model">set_model() (torchrl.weight_update.RayTransport method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.set_model_version">set_model_version() (torchrl.weight_update.RayTransport method)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector.set_post_collect_hook">set_post_collect_hook() (torchrl.collectors.AsyncBatchedCollector method)</a>
 
       <ul>
@@ -18019,6 +18047,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector.set_post_collect_hook">(torchrl.collectors.MultiSyncCollector method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.weight_update.RayTransport.html#torchrl.weight_update.RayTransport.set_process_group">set_process_group() (torchrl.weight_update.RayTransport method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.set_provisional_n">set_provisional_n() (torchrl.data.Binary method)</a>
 
       <ul>

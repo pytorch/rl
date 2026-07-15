@@ -420,9 +420,22 @@ map_fn(*method_name: str*, *list_of_args: list[tuple] | None = None*, *list_of_k
 
 Apply a method to each remote collector.
 
-pause()
+pause(*timeout: float = 30.0*, ***, *resume: bool = True*) → Iterator[None][[source]](../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.pause)
 
-Context manager that pauses the collector if it is running free.
+Pause background collection while the context is active.
+
+Any in-flight actor requests are drained before entering the context.
+The remote collectors remain alive and collection resumes when the
+context exits unless `resume=False`. This provides a quiescent
+boundary for checkpointing without changing the
+[`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) context-manager contract.
+
+Parameters:
+
+- **timeout** (*float*) - Maximum time to wait for in-flight collection.
+Defaults to `30.0` seconds.
+- **resume** (*bool*) - Whether to resume collection when the context exits.
+Defaults to `True`.
 
 *property*post_collect_hook*: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*
 

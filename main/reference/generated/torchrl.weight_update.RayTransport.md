@@ -70,6 +70,14 @@ Parameters:
 
 **model** - The model to receive weights into.
 
+set_model_version(*model_version: int | None*) → None[[source]](../../_modules/torchrl/weight_update/_ray.html#RayTransport.set_model_version)
+
+Attach the semantic model version to the next publication.
+
+set_process_group(*process_group*, *store=None*) → None[[source]](../../_modules/torchrl/weight_update/_ray.html#RayTransport.set_process_group)
+
+Attach the scheme-owned standalone process group.
+
 setup_connection_and_weights_on_receiver(***, *worker_idx: int*, *strategy: [WeightStrategy](torchrl.weight_update.WeightStrategy.html#torchrl.weight_update.WeightStrategy) | None = None*, *model: Any | None = None*, *weights: Any | None = None*) → Any[[source]](../../_modules/torchrl/weight_update/_ray.html#RayTransport.setup_connection_and_weights_on_receiver)
 
 Join torch.distributed process group and receive initial weights.

@@ -62,6 +62,20 @@ Default is False.
 keys of the averaged loss TensorDict at the end of every optimization loop, in addition
 to anything `post_optim_complete_log` hooks return. Set to False to fully delegate
 this logging to user-registered hooks. Default is True.
+- **replay_buffer** (*optional*) - Replay owner used by a remote learner backend.
+- **target_net_updater** (*TargetNetUpdater**,**optional*) - Target updater serialized
+with the learner object graph.
+- **batch_size** (*int**,**optional*) - Global learner batch size. Defaults to the
+replay buffer batch size.
+- **learner_backend** (*str*) - Optimization placement, `"local"` or `"ray"`.
+Defaults to `"local"`.
+- **learner_backend_options** (*dict**,**optional*) - Backend-specific options.
+- **learner_poll_interval** (*float*) - Remote replay polling interval. Defaults
+to `0.05` seconds.
+
+compute_loss(*sub_batch: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *method: str | None = None*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | tuple[Any, ...][[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.compute_loss)
+
+Evaluate the configured loss through the active execution boundary.
 
 load_from_file(*file: str | Path*, ***kwargs*) → Trainer[[source]](../../_modules/torchrl/trainers/trainers.html#Trainer.load_from_file)
 
