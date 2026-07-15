@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import random
 import string
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,7 +27,7 @@ from torchrl.data import (
     Unbounded,
 )
 from torchrl.data.utils import consolidate_spec
-from torchrl.envs import Transform
+from torchrl.envs import Transform, VecNormV2
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 from torchrl.envs.utils import (
@@ -1057,6 +1058,74 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
             device=self.device,
         )
         return td
+
+
+class AddPixelsTransform(Transform):
+    """Add a constant ``3 x 8 x 8`` uint8 pixel observation.
+
+    The transform preserves the input batch shape, making it useful for tests
+    that need inexpensive image observations without a rendering dependency.
+
+    Examples:
+        >>> transform = AddPixelsTransform()
+        >>> tensordict = transform._call(TensorDict({}, batch_size=[2]))
+        >>> tensordict["pixels"].shape
+        torch.Size([2, 3, 8, 8])
+    """
+
+    def __init__(self) -> None:
+        super().__init__(in_keys=[], out_keys=["pixels"])
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        next_tensordict.set(
+            "pixels",
+            torch.zeros(
+                (*next_tensordict.batch_size, 3, 8, 8),
+                dtype=torch.uint8,
+                device=next_tensordict.device,
+            ),
+        )
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        observation_spec["pixels"] = Unbounded(
+            shape=(*observation_spec.shape, 3, 8, 8),
+            dtype=torch.uint8,
+            device=observation_spec.device,
+        )
+        return observation_spec
+
+
+class CountingVecNormV2(VecNormV2):
+    """A :class:`~torchrl.envs.VecNormV2` that counts step and reset calls.
+
+    Examples:
+        >>> transform = CountingVecNormV2(in_keys=["observation"])
+        >>> transform.step_calls, transform.reset_calls
+        (0, 0)
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.step_calls = 0
+        self.reset_calls = 0
+        super().__init__(*args, **kwargs)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        self.step_calls += 1
+        return super()._step(tensordict, next_tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        self.reset_calls += 1
+        return super()._reset(tensordict, tensordict_reset)
 
 
 class ActionObsMergeLinear(nn.Module):
