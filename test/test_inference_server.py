@@ -1927,6 +1927,36 @@ class TestProcessInferenceServer:
         finally:
             server.shutdown()
 
+    def test_process_server_with_distributed_gloo_transport(self):
+        request_spec = TensorDict({"observation": torch.zeros(4)}, batch_size=[])
+        response_spec = TensorDict(
+            {
+                "action": torch.zeros(2),
+                "policy_version": torch.zeros((), dtype=torch.long),
+            },
+            batch_size=[],
+        )
+        server = InferenceServer(
+            policy_factory=_make_policy,
+            service_backend="process",
+            service_backend_options={"mp_context": "spawn"},
+            transport="distributed",
+            transport_options={"backend": "gloo", "timeout": 30.0},
+            request_spec=request_spec,
+            response_spec=response_spec,
+        )
+        try:
+            with server:
+                result = server.client()(
+                    TensorDict({"observation": torch.randn(4)}, batch_size=[]),
+                    timeout=30.0,
+                )
+                assert result["action"].shape == (2,)
+                assert server.transport_kind == "distributed"
+                assert not dist.is_initialized()
+        finally:
+            server.shutdown()
+
     def test_process_server_start_shutdown(self):
         ctx = mp.get_context("spawn")
         transport = MPTransport(ctx=ctx)
