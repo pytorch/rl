@@ -1,0 +1,25 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-json-report
+    - pytest-error-for-skips
+    - pytest-asyncio
+    - expecttest
+    - pybind11[global]
+    - pyyaml
+    - scipy
+    - hydra-core
+    - psutil
+    # MuJoCo backends are installed after PyTorch in install.sh so packages
+    # with a torch dependency cannot pull a stable PyPI torch wheel first.

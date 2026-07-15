@@ -143,7 +143,9 @@ class DiffusionBCLoss(LossModule):
         batch_size = clean_action.shape[0]
         device = clean_action.device
 
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             # Access the underlying _DDPMModule
             ddpm = self.actor_network.module
 

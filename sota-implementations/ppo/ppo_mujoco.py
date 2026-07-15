@@ -10,33 +10,104 @@ results from Schulman et al. 2017 for the on MuJoCo Environments.
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 
 import hydra
-from torchrl._utils import compile_with_warmup, get_available_device
+import torch
+import torch.optim
+import tqdm
+from omegaconf import DictConfig, OmegaConf
+from tensordict import TensorDict
+from tensordict.nn import CudaGraphModule
+from torchrl._utils import compile_with_warmup, get_available_device, timeit
+from torchrl.collectors import Collector
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.objectives import ClipPPOLoss, group_optimizers
+from torchrl.objectives.value.advantages import GAE
+from torchrl.record import VideoRecorder
+from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.render import save_render_checkpoint
+from utils_mujoco import eval_model, get_vecnorm_state, make_env, make_ppo_models
+
+torch.set_float32_matmul_precision("high")
+
+
+def _save_checkpoint(
+    path: str | Path | None,
+    *,
+    cfg: DictConfig,
+    model: torch.nn.Module,
+    collected_frames: int,
+    metrics: dict,
+    train_env=None,
+) -> Path | None:
+    """Saves a PPO checkpoint that can be consumed by ``rlrender``.
+
+    Args:
+        path: Destination checkpoint path. ``None`` disables checkpointing.
+        cfg: Hydra training configuration.
+        model: PPO actor module.
+        collected_frames: Number of training frames collected so far.
+        metrics: Scalar metrics recorded at checkpoint time.
+        train_env: Training environment used to extract frozen VecNorm
+            statistics so render environments can reproduce the observation
+            normalization seen during training.
+
+    Returns:
+        The written checkpoint path, or ``None`` when checkpointing is disabled.
+    """
+    env_metadata = {
+        "env_name": cfg.env.env_name,
+        "env_backend": cfg.env.backend,
+        "env_config_overrides": _to_container(cfg.env.config_overrides),
+        "env_num_envs": int(cfg.env.num_envs),
+        "env_batch_mode": cfg.env.batch_mode,
+        "normalize_observation": bool(cfg.env.normalize_observation),
+        "vecnorm": get_vecnorm_state(train_env) if train_env is not None else None,
+        "max_episode_steps": int(cfg.env.max_episode_steps)
+        if cfg.env.get("max_episode_steps")
+        else None,
+    }
+    return save_render_checkpoint(
+        path,
+        model,
+        env_metadata=env_metadata,
+        frames=collected_frames,
+        metrics=metrics,
+        config=OmegaConf.to_container(cfg, resolve=True),
+    )
+
+
+def _to_container(value: object) -> object:
+    if value is None:
+        return None
+    return OmegaConf.to_container(value, resolve=True)
+
+
+def _make_env_kwargs(cfg: DictConfig) -> dict[str, object]:
+    return {
+        "backend": cfg.env.backend,
+        "config_overrides": _to_container(cfg.env.config_overrides),
+        "num_envs": int(cfg.env.num_envs),
+        "batch_mode": cfg.env.batch_mode,
+        "normalize_observation": cfg.env.normalize_observation,
+        "max_episode_steps": int(cfg.env.max_episode_steps)
+        if cfg.env.get("max_episode_steps")
+        else None,
+    }
+
+
+def _make_eval_env_kwargs(cfg: DictConfig) -> dict[str, object]:
+    kwargs = _make_env_kwargs(cfg)
+    kwargs["num_envs"] = 1
+    kwargs["batch_mode"] = "parallel"
+    return kwargs
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
-def main(cfg: DictConfig):  # noqa: F821
-
-    import torch.optim
-    import tqdm
-
-    from tensordict import TensorDict
-    from tensordict.nn import CudaGraphModule
-
-    from torchrl._utils import timeit
-    from torchrl.collectors import Collector
-    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-    from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-    from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.objectives import ClipPPOLoss, group_optimizers
-    from torchrl.objectives.value.advantages import GAE
-    from torchrl.record import VideoRecorder
-    from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_mujoco import eval_model, make_env, make_ppo_models
-
-    torch.set_float32_matmul_precision("high")
-
+def main(cfg: DictConfig):
     device = (
         torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()
     )
@@ -57,12 +128,23 @@ def main(cfg: DictConfig):  # noqa: F821
             else:
                 compile_mode = "reduce-overhead"
 
+    env_kwargs = _make_env_kwargs(cfg)
+
     # Create models (check utils_mujoco.py)
-    actor, critic = make_ppo_models(cfg.env.env_name, device=device)
+    actor, critic = make_ppo_models(
+        cfg.env.env_name,
+        device=device,
+        **env_kwargs,
+    )
 
     # Create collector
+    train_env = make_env(
+        cfg.env.env_name,
+        device,
+        **env_kwargs,
+    )
     collector = Collector(
-        create_env_fn=make_env(cfg.env.env_name, device),
+        create_env_fn=train_env,
         policy=actor,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
@@ -134,7 +216,12 @@ def main(cfg: DictConfig):  # noqa: F821
         logger_video = False
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, device, from_pixels=logger_video)
+    test_env = make_env(
+        cfg.env.env_name,
+        device,
+        from_pixels=logger_video,
+        **_make_eval_env_kwargs(cfg),
+    )
     if logger_video:
         test_env = test_env.append_transform(
             VideoRecorder(logger, tag="rendering/test", in_keys=["pixels"])
@@ -145,8 +232,8 @@ def main(cfg: DictConfig):  # noqa: F821
         optim.zero_grad(set_to_none=True)
         # Linearly decrease the learning rate and clip epsilon
         alpha = torch.ones((), device=device)
-        if cfg_optim_anneal_lr:
-            alpha = 1 - (num_network_updates / total_network_updates)
+        if cfg_optim_anneal_lr and total_network_updates > 0:
+            alpha = (1 - (num_network_updates / total_network_updates)).clamp_min(0.0)
             for group in optim.param_groups:
                 group["lr"] = cfg_optim_lr * alpha
         if cfg_loss_anneal_clip_eps:
@@ -191,7 +278,12 @@ def main(cfg: DictConfig):  # noqa: F821
     cfg_loss_clip_epsilon = cfg.loss.clip_epsilon
     cfg_logger_test_interval = cfg.logger.test_interval
     cfg_logger_num_test_episodes = cfg.logger.num_test_episodes
+    cfg_env_max_episode_steps = int(cfg.env.max_episode_steps or 10_000_000)
     losses = TensorDict(batch_size=[cfg_loss_ppo_epochs, num_mini_batches])
+    checkpoint_path = cfg.checkpoint.path
+    checkpoint_interval = int(cfg.checkpoint.interval or 0)
+    last_checkpoint_frame = 0
+    latest_metrics = {}
 
     collector_iter = iter(collector)
     total_iter = len(collector)
@@ -262,12 +354,16 @@ def main(cfg: DictConfig):  # noqa: F821
         with torch.no_grad(), set_exploration_type(
             ExplorationType.DETERMINISTIC
         ), timeit("eval"):
-            if ((i - 1) * frames_in_batch) // cfg_logger_test_interval < (
-                i * frames_in_batch
-            ) // cfg_logger_test_interval:
+            prev_test_frame = ((i - 1) * frames_in_batch) // cfg_logger_test_interval
+            cur_test_frame = (i * frames_in_batch) // cfg_logger_test_interval
+            final = collected_frames >= cfg.collector.total_frames
+            if (i >= 1 and prev_test_frame < cur_test_frame) or final:
                 actor.eval()
                 test_rewards = eval_model(
-                    actor, test_env, num_episodes=cfg_logger_num_test_episodes
+                    actor,
+                    test_env,
+                    num_episodes=cfg_logger_num_test_episodes,
+                    max_steps=cfg_env_max_episode_steps,
                 )
                 metrics_to_log.update(
                     {
@@ -280,9 +376,32 @@ def main(cfg: DictConfig):  # noqa: F821
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
             logger.log_metrics(metrics_to_log, collected_frames)
+        latest_metrics = metrics_to_log
+        if (
+            checkpoint_path
+            and checkpoint_interval > 0
+            and collected_frames - last_checkpoint_frame >= checkpoint_interval
+        ):
+            _save_checkpoint(
+                checkpoint_path,
+                cfg=cfg,
+                model=actor,
+                collected_frames=collected_frames,
+                metrics=metrics_to_log,
+                train_env=train_env,
+            )
+            last_checkpoint_frame = collected_frames
 
         collector.update_policy_weights_()
 
+    _save_checkpoint(
+        checkpoint_path,
+        cfg=cfg,
+        model=actor,
+        collected_frames=collected_frames,
+        metrics=latest_metrics,
+        train_env=train_env,
+    )
     collector.shutdown()
     if not test_env.is_closed:
         test_env.close()

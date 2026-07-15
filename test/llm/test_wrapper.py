@@ -7,8 +7,10 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import sys
 import threading
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
 from typing import Any, TYPE_CHECKING
@@ -17,11 +19,13 @@ import pytest
 import torch
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
+from torch.nn.utils.rnn import pad_sequence
 from torchrl import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
+from torchrl.modules.llm.backends.vllm import vllm_async
 from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
@@ -141,6 +145,7 @@ def transformers_instance() -> (
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+    model.eval()
     tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
     tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
@@ -193,6 +198,38 @@ def sample_history_assistant():
         ],
     ]
     return History.from_chats(chats)
+
+
+def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
+    """AsyncVLLM should not reuse prompt KV caches across online weight updates."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_vllm = types.SimpleNamespace(
+        AsyncEngineArgs=FakeAsyncEngineArgs, __version__="0.10.0"
+    )
+    captured = {}
+
+    def fake_launch(engine_args, num_replicas):
+        captured["engine_args"] = engine_args
+        captured["num_replicas"] = num_replicas
+        return object()
+
+    monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(vllm_async.AsyncVLLM, "launch", staticmethod(fake_launch))
+
+    vllm_async.make_async_vllm_engine(model_name="Qwen/Qwen2.5-0.5B", verbose=False)
+    assert captured["engine_args"].enable_prefix_caching is False
+
+    vllm_async.make_async_vllm_engine(
+        model_name="Qwen/Qwen2.5-0.5B",
+        enable_prefix_caching=True,
+        verbose=False,
+    )
+    assert captured["engine_args"].enable_prefix_caching is True
 
 
 @pytest.fixture
@@ -1956,8 +1993,143 @@ class TestKLTransforms:
         assert reward is not None
 
 
+@pytest.mark.gpu
 class TestLogProbsComparison:
     """Test log-probability consistency between vLLM and Transformers wrappers."""
+
+    @staticmethod
+    def _get_padded(result, key, padding_value):
+        value = result.get(
+            key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=padding_value,
+        )
+        if value is not None:
+            return value
+        value = result.get(key, as_list=True)
+        if value is None:
+            return None
+        return pad_sequence(
+            [
+                item if isinstance(item, torch.Tensor) else torch.tensor(item)
+                for item in value
+            ],
+            batch_first=True,
+            padding_value=padding_value,
+            padding_side="left",
+        )
+
+    @classmethod
+    def _padded_tokens_log_probs_and_masks(cls, result, pad_token_id):
+        tokens = cls._get_padded(result, ("tokens", "full"), pad_token_id)
+        log_probs = cls._get_padded(result, ("log_probs", "full"), 0.0)
+        attention_mask = cls._get_padded(result, ("masks", "all_attention_mask"), 0)
+        assistant_mask = cls._get_padded(result, ("masks", "all_assistant_mask"), 0)
+        assert tokens is not None
+        assert log_probs is not None
+        assert attention_mask is not None
+        attention_mask = attention_mask.bool()
+        if assistant_mask is not None:
+            assistant_mask = assistant_mask.bool()
+        assert tokens.shape == log_probs.shape == attention_mask.shape
+        if assistant_mask is not None:
+            assert assistant_mask.shape == tokens.shape
+        return tokens, log_probs, attention_mask, assistant_mask
+
+    @staticmethod
+    def _response_token_list(result, pad_token_id):
+        response = result.get(
+            ("tokens", "response"),
+            as_padded_tensor=True,
+            padding_side="right",
+            padding_value=pad_token_id,
+        )
+        if response is not None:
+            return [row[row != pad_token_id].long() for row in response]
+        response = result.get(("tokens", "response"), as_list=True)
+        assert response is not None
+        return [tokens.long() for tokens in response]
+
+    @staticmethod
+    def _suffix_token_mask(tokens, attention_mask, response_tokens):
+        mask = torch.zeros_like(attention_mask, dtype=torch.bool)
+        for i, response in enumerate(response_tokens):
+            assert response.numel()
+            attended = attention_mask[i].nonzero(as_tuple=False).squeeze(-1)
+            full_tokens = tokens[i, attended].long()
+            assert response.numel() <= full_tokens.numel()
+            torch.testing.assert_close(full_tokens[-response.numel() :], response)
+            mask[i, attended[-response.numel() :]] = True
+        return mask
+
+    @classmethod
+    def _assert_backend_log_probs_match(
+        cls,
+        backend_result,
+        transformers_result,
+        response_tokens,
+        pad_token_id,
+        *,
+        use_assistant_mask,
+    ):
+        (
+            backend_tokens,
+            backend_log_probs,
+            backend_attention_mask,
+            backend_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_masks(backend_result, pad_token_id)
+        (
+            transformers_tokens,
+            transformers_log_probs,
+            transformers_attention_mask,
+            transformers_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_masks(transformers_result, pad_token_id)
+
+        torch.testing.assert_close(backend_attention_mask, transformers_attention_mask)
+        torch.testing.assert_close(
+            backend_tokens[backend_attention_mask].long(),
+            transformers_tokens[transformers_attention_mask].long(),
+        )
+
+        if use_assistant_mask:
+            assert backend_assistant_mask is not None
+            assert transformers_assistant_mask is not None
+            torch.testing.assert_close(
+                backend_assistant_mask, transformers_assistant_mask
+            )
+            for i, response in enumerate(response_tokens):
+                selected = backend_tokens[i, backend_assistant_mask[i]].long()
+                torch.testing.assert_close(selected, response)
+            comparison_mask = backend_assistant_mask
+        else:
+            response_mask = cls._suffix_token_mask(
+                backend_tokens, backend_attention_mask, response_tokens
+            )
+            comparison_mask = response_mask
+
+        assert comparison_mask.any()
+        backend_selected = backend_log_probs[comparison_mask].float()
+        transformers_selected = transformers_log_probs[comparison_mask].float()
+        assert torch.isfinite(backend_selected).all()
+        assert torch.isfinite(transformers_selected).all()
+        torch.testing.assert_close(
+            backend_selected, transformers_selected, atol=3e-1, rtol=1e-1
+        )
+        delta = backend_selected - transformers_selected
+        abs_delta = delta.abs()
+        mse = delta.square().mean().item()
+        max_abs = abs_delta.max().item()
+        mean_abs = abs_delta.mean().item()
+        importance_weights = torch.exp(delta.double())
+        ess = importance_weights.sum().square() / (
+            importance_weights.square().sum() * importance_weights.numel()
+        )
+        ess = ess.item()
+        assert ess > 0.99, (
+            "Backend and Transformers log-probs diverged: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -2009,27 +2181,19 @@ class TestLogProbsComparison:
             input_key=input_key,
             generate=True,
             pad_output=pad_output,
-            generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
-        )
-
-        # Create Transformers wrapper for generation
-        tf_gen_wrapper = TransformersWrapper(
-            tf_model,
-            tokenizer=tf_tokenizer,
-            input_mode=input_mode,
-            input_key=input_key,
-            generate=True,
-            pad_output=pad_output,
+            return_log_probs=False,
             generate_kwargs={
-                "max_new_tokens": 5,
-                "do_sample": False,
+                "max_tokens": 5,
                 "temperature": 0.0,
-            },  # Deterministic
+                "ignore_eos": True,
+            },  # Deterministic fixed-length response
         )
 
-        # Step 1: Generate tokens with both wrappers
+        # Step 1: Generate the canonical response tokens with vLLM.
         vllm_gen_result = vllm_gen_wrapper(data.copy())
-        tf_gen_wrapper(data.copy())
+        response_tokens = self._response_token_list(
+            vllm_gen_result, vllm_tokenizer.pad_token_id
+        )
 
         # Step 2: Extract generated tokens and create new input for log-probs computation
         if input_mode == "history":
@@ -2095,10 +2259,17 @@ class TestLogProbsComparison:
 
         # Step 4: Compute log-probs for the full sequence (original + generated)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
-        tf_lp_result = tf_lp_wrapper(new_data.copy())
+        with torch.inference_mode():
+            tf_lp_result = tf_lp_wrapper(new_data.copy())
+        check_output_shapes(vllm_lp_result, pad_output, requested_log_probs=True)
+        check_output_shapes(tf_lp_result, pad_output, requested_log_probs=True)
 
-        assert_close(
-            vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
+        self._assert_backend_log_probs_match(
+            vllm_lp_result,
+            tf_lp_result,
+            response_tokens,
+            vllm_tokenizer.pad_token_id,
+            use_assistant_mask=input_mode == "history",
         )
 
     @pytest.mark.gpu

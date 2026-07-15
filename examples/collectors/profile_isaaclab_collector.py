@@ -15,6 +15,7 @@ import argparse
 import logging
 import os
 import sys
+import typing
 from pathlib import Path
 
 os.environ.setdefault("TORCHRL_PROFILING", "1")
@@ -55,6 +56,36 @@ parser.add_argument(
     "--env-device",
     default="cuda:0",
     help="Device passed to the TorchRL IsaacLabWrapper.",
+)
+parser.add_argument(
+    "--native-autoreset",
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help="Use Isaac Lab native autoreset observations without synthetic reset calls.",
+)
+parser.add_argument(
+    "--track-traj-ids",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Track collector trajectory ids in emitted batches.",
+)
+parser.add_argument(
+    "--policy-mode",
+    default="rand_action",
+    choices=["rand_action", "fixed_zero"],
+    help="Policy used by the collector during profiling.",
+)
+parser.add_argument(
+    "--no-cuda-sync",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Disable CUDA synchronization in collector timing and profiling hooks.",
+)
+parser.add_argument(
+    "--trust-policy",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Trust the policy output and skip selected collector safety checks.",
 )
 parser.add_argument(
     "--activities",
@@ -103,17 +134,46 @@ import isaaclab_tasks  # noqa: F401
 import torch
 
 from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
 
-def make_env(task: str, device: str):
+class FixedZeroPolicy:
+    def __init__(self, env: IsaacLabWrapper):
+        self.action_key = env.action_key
+        self.action_spec = env.action_spec
+
+    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = self.action_spec.zero()
+        if isinstance(action, TensorDictBase):
+            tensordict.update(action)
+        else:
+            tensordict.set(self.action_key, action)
+        return tensordict
+
+
+def make_env(task: str, device: str, native_autoreset: bool):
     if task == "Isaac-Ant-v0":
         env = gym.make(task, cfg=AntEnvCfg())
     else:
         env = gym.make(task)
-    return IsaacLabWrapper(env, device=torch.device(device))
+    return IsaacLabWrapper(
+        env,
+        device=torch.device(device),
+        native_autoreset=native_autoreset,
+    )
+
+
+def make_policy(
+    env: IsaacLabWrapper, policy_mode: typing.Literal["rand_action", "fixed_zero"]
+):
+    if policy_mode == "rand_action":
+        return env.rand_action
+    if policy_mode == "fixed_zero":
+        return FixedZeroPolicy(env)
+    raise ValueError(f"Unknown policy mode {policy_mode}.")
 
 
 def main() -> None:
@@ -127,17 +187,22 @@ def main() -> None:
     trace_path = args_cli.output_dir / "collector_worker_{worker_idx}.json"
     worker_0_trace_path = args_cli.output_dir / "collector_worker_0.json"
 
-    torchrl_logger.info(f"Creating Isaac Lab env {args_cli.task}.")
-    env = make_env(args_cli.task, args_cli.env_device)
+    torchrl_logger.info(
+        f"Creating Isaac Lab env {args_cli.task} "
+        f"(native_autoreset={args_cli.native_autoreset})."
+    )
+    env = make_env(args_cli.task, args_cli.env_device, args_cli.native_autoreset)
     env.set_seed(args_cli.seed)
+    policy = make_policy(env, args_cli.policy_mode)
 
     collector = Collector(
         env,
-        env.rand_action,
+        policy,
         frames_per_batch=args_cli.frames_per_batch,
         total_frames=-1,
-        no_cuda_sync=True,
-        trust_policy=True,
+        no_cuda_sync=args_cli.no_cuda_sync,
+        trust_policy=args_cli.trust_policy,
+        track_traj_ids=args_cli.track_traj_ids,
     )
     collector.enable_profile(
         workers=[0],

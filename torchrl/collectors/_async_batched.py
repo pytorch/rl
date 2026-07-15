@@ -6,17 +6,27 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from collections import deque, OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from typing import Literal
 
 import torch
-from tensordict import lazy_stack, TensorDictBase
+from tensordict import lazy_stack, NestedKey, TensorDictBase
 
+from torchrl._comm import MailboxTransportError
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
-from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
+from torchrl.modules.inference_server import (
+    InferenceDeviceConfig,
+    InferenceServer,
+    InferenceServerConfig,
+    PolicyClientModule,
+    ProcessInferenceServer,
+    ThreadingTransport,
+)
+from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._transport import InferenceTransport
 
 _ENV_IDX_KEY = "env_index"
@@ -64,20 +74,24 @@ def _make_transport(
 def _env_loop(
     pool: AsyncEnvPool,
     env_id: int,
-    transport: InferenceTransport,
+    transport: InferenceTransport | None,
+    client: Callable | None,
     result_queue: queue.Queue,
     shutdown_event: threading.Event,
+    env_device: torch.device | None,
+    storing_device: torch.device | None,
 ):
-    """Per-env worker thread using pool slot for env execution and InferenceServer for policy.
+    """Per-env worker thread using a pool slot and inference-server policy.
 
     Each thread owns one slot in the :class:`~torchrl.envs.AsyncEnvPool` and
     one inference client.  The pool handles the actual environment execution in
     whatever backend it was configured with (threading, multiprocessing, etc.),
     while this thread coordinates the send/recv cycle and inference submission.
 
-        reset -> infer (blocking) -> step_send -> step_recv -> put transition -> infer -> ...
+        reset -> infer -> step_send -> step_recv -> put transition -> infer -> ...
     """
-    client = transport.client()
+    if client is None:
+        client = transport.client()
 
     try:
         pool.async_reset_send(env_index=env_id)
@@ -85,9 +99,13 @@ def _env_loop(
         action_td = client(obs)
 
         while not shutdown_event.is_set():
+            if env_device is not None:
+                action_td = action_td.to(env_device)
             pool.async_step_and_maybe_reset_send(action_td, env_index=env_id)
             cur_td, next_obs = pool.async_step_and_maybe_reset_recv(env_index=env_id)
             cur_td.set(_ENV_IDX_KEY, env_id)
+            if storing_device is not None:
+                cur_td = cur_td.to(storing_device)
             result_queue.put(cur_td)
             if shutdown_event.is_set():
                 break
@@ -98,7 +116,11 @@ def _env_loop(
 
 
 class AsyncBatchedCollector(BaseCollector):
-    """Asynchronous collector that pairs per-env threads with an :class:`~torchrl.envs.AsyncEnvPool` and an :class:`~torchrl.modules.InferenceServer`.
+    """Asynchronous collector with env slots and a policy server.
+
+    The collector pairs per-env coordinator threads with an
+    :class:`~torchrl.envs.AsyncEnvPool` and an
+    :class:`~torchrl.modules.InferenceServer`.
 
     Unlike :class:`~torchrl.collectors.Collector`, this collector fully
     decouples environment stepping from policy inference:
@@ -152,8 +174,24 @@ class AsyncBatchedCollector(BaseCollector):
             object.  When provided, it takes precedence over
             ``policy_backend``.  When ``None`` (default) a transport is
             created automatically from the resolved ``policy_backend``.
-        device (torch.device or str, optional): device for policy inference.
-            Passed to the inference server.  Defaults to ``None``.
+        device (torch.device or str, optional): device for policy inference
+            (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
+            Defaults to ``None``.
+        server_config (InferenceServerConfig, optional): structured server
+            configuration: execution ``backend`` (``"thread"`` runs the serve
+            loop in this process, ``"process"`` a dedicated server process
+            requiring ``policy_factory``), batching, and stats settings.
+            Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, and ``server_timeout`` keyword arguments.
+        device_config (InferenceDeviceConfig, optional): structured device
+            placement (``policy_device``, ``output_device``, ``env_device``,
+            ``storing_device``) for the whole collection pipeline. Mutually
+            exclusive with ``device``.
+        policy_version (int, optional): initial behavior-policy version
+            attached to server outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -178,6 +216,9 @@ class AsyncBatchedCollector(BaseCollector):
             collector yields individual completed trajectories as they finish
             rather than fixed-size batches.  ``frames_per_batch`` acts as the
             *minimum* number of frames to accumulate before yielding.
+            The synchronous and multi-process collectors expose the same
+            capability through the ``trajs_per_batch`` keyword argument (a
+            trajectory count rather than a flag).
             Defaults to ``False``.
         weight_sync: an optional
             :class:`~torchrl.weight_update.WeightSyncScheme` forwarded to the
@@ -218,9 +259,9 @@ class AsyncBatchedCollector(BaseCollector):
         policy_factory: Callable[[], Callable] | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        server_timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        server_timeout: float | None = None,
         transport: InferenceTransport | None = None,
         device: torch.device | str | None = None,
         backend: Literal[
@@ -236,14 +277,48 @@ class AsyncBatchedCollector(BaseCollector):
         weight_sync_model_id: str = "policy",
         verbose: bool = False,
         create_env_kwargs: dict | list[dict] | None = None,
+        server_config: InferenceServerConfig | None = None,
+        device_config: InferenceDeviceConfig | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
     ):
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
         if policy is None and policy_factory is None:
             raise TypeError("One of policy or policy_factory must be provided.")
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (max_batch_size, min_batch_size, server_timeout)
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, and server_timeout keyword arguments."
+            )
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        server_backend = _server_defaults.service_backend
+        if server_backend == "process" and policy_factory is None:
+            raise TypeError(
+                "InferenceServerConfig(service_backend='process') requires "
+                "policy_factory so the policy can be constructed inside the "
+                "server process."
+            )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if server_timeout is None:
+            server_timeout = _server_defaults.timeout
+        _devices = _resolve_device_config(device_config, device=device)
+        policy_device = _devices.policy_device
+        output_device = _devices.output_device
+        self._env_device = _devices.env_device
+        self._storing_device = _devices.storing_device
 
         # ---- resolve policy ---------------------------------------------------
-        if policy_factory is not None:
+        self._policy_factory = policy_factory
+        if policy_factory is not None and server_backend != "process":
             policy = policy_factory()
         self._policy = policy
 
@@ -265,6 +340,14 @@ class AsyncBatchedCollector(BaseCollector):
                 f"Expected one of {_ENV_BACKENDS}."
             )
         self._env_backend = effective_env_backend
+        self._server_backend = server_backend
+        if server_backend == "process":
+            if policy_backend not in (None, "multiprocessing"):
+                raise ValueError(
+                    "InferenceServerConfig(service_backend='process') requires "
+                    "policy_backend=None or 'multiprocessing'."
+                )
+            effective_policy_backend = "multiprocessing"
         self._policy_backend = effective_policy_backend
 
         # ---- build transport --------------------------------------------------
@@ -275,16 +358,40 @@ class AsyncBatchedCollector(BaseCollector):
         self._transport = transport
 
         # ---- build inference server -------------------------------------------
-        self._server = InferenceServer(
-            model=policy,
-            transport=transport,
-            max_batch_size=max_batch_size,
-            min_batch_size=min_batch_size,
-            timeout=server_timeout,
-            device=device,
-            weight_sync=weight_sync,
-            weight_sync_model_id=weight_sync_model_id,
-        )
+        if server_backend == "process":
+            self._server = ProcessInferenceServer(
+                policy_factory=policy_factory,
+                transport=transport,
+                max_batch_size=max_batch_size,
+                min_batch_size=min_batch_size,
+                timeout=server_timeout,
+                policy_device=policy_device,
+                output_device=output_device,
+                weight_sync=weight_sync,
+                weight_sync_model_id=weight_sync_model_id,
+                collect_stats=_server_defaults.collect_stats,
+                stats_window_size=_server_defaults.stats_window_size,
+                policy_version=policy_version,
+                policy_version_key=policy_version_key,
+            )
+        else:
+            self._server = InferenceServer(
+                model=policy,
+                transport=transport,
+                max_batch_size=max_batch_size,
+                min_batch_size=min_batch_size,
+                timeout=server_timeout,
+                policy_device=policy_device,
+                output_device=output_device,
+                weight_sync=weight_sync,
+                weight_sync_model_id=weight_sync_model_id,
+                collect_stats=_server_defaults.collect_stats,
+                stats_window_size=_server_defaults.stats_window_size,
+                policy_version=policy_version,
+                policy_version_key=policy_version_key,
+            )
+        self._policy_version_key = policy_version_key
+        self._max_inflight_per_env = _server_defaults.max_inflight_per_env
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -303,6 +410,7 @@ class AsyncBatchedCollector(BaseCollector):
         self._result_queue: queue.Queue | None = None
         self._env_pool: AsyncEnvPool | None = None
         self._workers: list[threading.Thread] = []
+        self._clients: list[Callable] | None = None
 
         # Per-env trajectory accumulators (for yield_completed_trajectories)
         self._yield_queues: list[deque] = [deque() for _ in range(self._num_envs)]
@@ -327,6 +435,17 @@ class AsyncBatchedCollector(BaseCollector):
             **kwargs,
         )
 
+        # Create clients before a process server starts so response queues are
+        # inherited by the child process.
+        if self._clients is None:
+            self._clients = [
+                PolicyClientModule(
+                    self._transport.client(),
+                    max_inflight=self._max_inflight_per_env,
+                )
+                for _ in range(self._num_envs)
+            ]
+
         # Start inference server
         if not self._server.is_alive:
             self._server.start()
@@ -343,8 +462,11 @@ class AsyncBatchedCollector(BaseCollector):
                     "pool": self._env_pool,
                     "env_id": i,
                     "transport": self._transport,
+                    "client": self._clients[i],
                     "result_queue": self._result_queue,
                     "shutdown_event": self._shutdown_event,
+                    "env_device": self._env_device,
+                    "storing_device": self._storing_device,
                 },
                 daemon=True,
                 name=f"AsyncBatchedCollector-env-{i}",
@@ -360,20 +482,95 @@ class AsyncBatchedCollector(BaseCollector):
 
     @property
     def policy(self) -> Callable:
-        """The policy passed to the inference server."""
-        return self._policy
+        """The policy passed to the inference server.
+
+        With ``InferenceServerConfig(service_backend="process")`` the policy only exists inside the
+        server process, so this returns the ``policy_factory`` instead.
+        """
+        if self._policy is not None:
+            return self._policy
+        return self._policy_factory
+
+    def server_stats(self, *, reset: bool = False) -> dict[str, float | int]:
+        """Return inference-server statistics when available."""
+        stats = getattr(self._server, "stats", None)
+        if stats is None:
+            return {}
+        return stats(reset=reset)
+
+    @property
+    def policy_version(self) -> int:
+        """The live behavior-policy version of the inference server."""
+        return self._server.policy_version
 
     # ------------------------------------------------------------------
     # Rollout: drain the result queue
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _check_worker_result(item):
-        """Re-raise exceptions propagated from coordinator threads."""
+    _SERVER_DEATH_GRACE_S = 2.0
+
+    def _check_worker_result(self, item):
+        """Re-raise exceptions propagated from coordinator threads.
+
+        Worker threads may observe a dying server before the liveness
+        watchdog does: their transport read errors out first, and process
+        teardown is asynchronous, so a killed server can still report alive
+        for a moment. Mailbox transport failures identify a dead peer by
+        construction and are attributed to the server immediately; other
+        worker errors give liveness a short grace window so the failure is
+        attributed to the dead server whenever that is the actual cause.
+        """
         if isinstance(item, BaseException):
+            if isinstance(item, MailboxTransportError):
+                raise RuntimeError(
+                    "The inference server died while the collector was "
+                    "waiting for transitions. Check the server process "
+                    "logs (e.g. OOM kills or exceptions in the policy)."
+                ) from item
+            deadline = time.monotonic() + self._SERVER_DEATH_GRACE_S
+            while True:
+                if not self._server.is_alive:
+                    raise RuntimeError(
+                        "The inference server died while the collector was "
+                        "waiting for transitions. Check the server process "
+                        "logs (e.g. OOM kills or exceptions in the policy)."
+                    ) from item
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.1)
             raise RuntimeError(
                 "A collector worker thread raised an exception."
             ) from item
+
+    _LIVENESS_POLL_S = 1.0
+
+    def _next_result(self) -> TensorDictBase:
+        """Block for the next transition, watching server and worker liveness.
+
+        A dead inference server (e.g. an OOM-killed server process) would
+        otherwise leave every coordinator thread blocked on a response and
+        this method blocked on the queue, hanging the iterator forever with
+        no error.
+        """
+        rq = self._result_queue
+        while True:
+            try:
+                td = rq.get(timeout=self._LIVENESS_POLL_S)
+            except queue.Empty:
+                if not self._server.is_alive:
+                    raise RuntimeError(
+                        "The inference server died while the collector was "
+                        "waiting for transitions. Check the server process "
+                        "logs (e.g. OOM kills or exceptions in the policy)."
+                    ) from None
+                if self._workers and not any(w.is_alive() for w in self._workers):
+                    raise RuntimeError(
+                        "All collector worker threads exited while the "
+                        "collector was waiting for transitions."
+                    ) from None
+                continue
+            self._check_worker_result(td)
+            return td
 
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_frames")
     def _rollout_frames(self) -> TensorDictBase:
@@ -384,8 +581,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         while collected < self.frames_per_batch:
             # Block for at least one transition
-            td = rq.get()
-            self._check_worker_result(td)
+            td = self._next_result()
             transitions.append(td)
             collected += td.numel()
             # Batch-drain any additional items already in the queue
@@ -394,6 +590,7 @@ class AsyncBatchedCollector(BaseCollector):
                     td = rq.get_nowait()
                 except queue.Empty:
                     break
+                self._check_worker_result(td)
                 transitions.append(td)
                 collected += td.numel()
             if self.verbose:
@@ -406,11 +603,8 @@ class AsyncBatchedCollector(BaseCollector):
     @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_yield_trajs")
     def _rollout_yield_trajs(self) -> TensorDictBase:
         """Drain transitions until a complete trajectory is available."""
-        rq = self._result_queue
-
         while not self._trajectory_queue:
-            td = rq.get()
-            self._check_worker_result(td)
+            td = self._next_result()
             env_id = 0
             eid = td.get(_ENV_IDX_KEY, default=None)
             if eid is not None:

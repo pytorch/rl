@@ -10,6 +10,14 @@ or PyTorch RPC with :class:`~.RPCCollector`) and launchers (``'ray'``,
 They can be efficiently used in synchronous or asynchronous mode, on a single
 node or across multiple nodes.
 
+``RayCollector`` uses Ray to place and control its worker actors, but an
+attached inference server or replay buffer selects its own payload transport.
+With a replay buffer attached, workers write rollouts directly through the
+replay endpoint instead of returning them to the driver. Without one, yielded
+rollouts use Ray's object store. See :ref:`ref_service_transports` for the
+backend/transport compatibility table and the recommended direct-to-replay
+topology.
+
 *Resources*: Find examples for these collectors in the
 `dedicated folder <https://github.com/pytorch/rl/examples/distributed/collectors>`_.
 
@@ -43,7 +51,7 @@ node or across multiple nodes.
   All distributed collectors support ``trajs_per_batch`` combined with
   ``replay_buffer``.  When set, each remote worker assembles **complete
   trajectories** and writes them to the shared buffer as flat 1-D sequences,
-  which is directly compatible with :class:`~torchrl.data.SliceSampler`.
+  which is directly compatible with :class:`~torchrl.data.replay_buffers.SliceSampler`.
   See :ref:`collectors_replay_trajs` for examples and best practices.
 
 .. autosummary::
@@ -53,18 +61,13 @@ node or across multiple nodes.
     DistributedCollector
     RPCCollector
     DistributedSyncCollector
-    DistributedDataCollector
-    RPCDataCollector
-    DistributedSyncDataCollector
     submitit_delayed_launcher
     RayCollector
     RayEvalWorker
 
-Legacy names
-------------
+Removed legacy names
+--------------------
 
-The following names are kept for backward compatibility:
-
-- ``DistributedDataCollector`` → ``DistributedCollector``
-- ``RPCDataCollector`` → ``RPCCollector``
-- ``DistributedSyncDataCollector`` → ``DistributedSyncCollector``
+The deprecated distributed collector aliases were removed in v0.13. Use
+``DistributedCollector``, ``RPCCollector``, and ``DistributedSyncCollector``
+directly.

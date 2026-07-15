@@ -10,6 +10,7 @@ from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger, WEIGHT_SYNC_TIMEOUT
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
     TransportBackend,
     WeightStrategy,
     WeightSyncScheme,
@@ -322,6 +323,7 @@ class SharedMemTransport:
         """No-op for shared memory - no acknowledgment needed."""
 
 
+@register_weight_sync_backend("shared")
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 
@@ -1035,7 +1037,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                             self.model, self._receiver_shared_weights, inplace=True
                         )
 
-                    # Cascade weight update to sub-collectors if context supports it
+                    # Cascade weight update to sub-collectors if context supports it.
+                    # When the context is a leaf Collector, its
+                    # update_policy_weights_ also bumps the local
+                    # PolicyVersion transform — so we don't need a separate
+                    # increment_version() call here.
                     model_id = self._model_id or "policy"
                     if self.context is not None and hasattr(
                         self.context, "update_policy_weights_"

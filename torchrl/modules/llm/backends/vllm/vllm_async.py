@@ -28,6 +28,7 @@ from torchrl._utils import implement_for, logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
+from .vllm_plugin import FP32_OVERRIDES_ENV_VAR
 
 
 _has_vllm = True
@@ -217,6 +218,7 @@ class _AsyncLLMEngine:
             prompt_token_ids: Alternative to prompts - token IDs for generation.
             use_tqdm: Whether to show progress bar (not used in async engine).
             lora_request: LoRA request for adapter-based generation.
+            prompt_adapter_request: prompt adapter request forwarded to vLLM.
             guided_options_request: Guided decoding options.
             timeout_seconds: Timeout for generation in seconds.
 
@@ -440,7 +442,16 @@ class _AsyncLLMEngine:
         Args:
             update_request: WeightTransferUpdateRequest (or dict) for the engine.
         """
-        return await self.engine.update_weights(update_request)
+        start_weight_update = getattr(self.engine, "start_weight_update", None)
+        finish_weight_update = getattr(self.engine, "finish_weight_update", None)
+        if start_weight_update is None:
+            return await self.engine.update_weights(update_request)
+        await start_weight_update(is_checkpoint_format=True)
+        try:
+            return await self.engine.update_weights(update_request)
+        finally:
+            if finish_weight_update is not None:
+                await finish_weight_update()
 
     def get_world_size(self):
         """Get the world size (TP * DP) for this engine instance."""
@@ -1919,10 +1930,13 @@ def make_async_vllm_engine(
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
         enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             This can help with numerical stability for certain models. Requires model-specific support in
-            torchrl.modules.llm.backends._models.
+            torchrl.modules.llm.backends.vllm._models.
         tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
         data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
         pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
+        enable_prefix_caching (bool, optional): Whether to enable vLLM prefix
+            caching. Defaults to ``False`` to avoid reusing prompt KV caches
+            across online weight updates.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1954,6 +1968,9 @@ def make_async_vllm_engine(
     # Set FP32 output environment variable if requested
     if enable_fp32_output:
         os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        # Opt the engine + its child vLLM processes into torchrl's FP32 model
+        # overrides (the general-plugin no-ops without this).
+        os.environ[FP32_OVERRIDES_ENV_VAR] = "1"
         torchrl_logger.info(
             "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
             "This will use FP32 for the final output layer if the model supports it."
@@ -1988,9 +2005,10 @@ def make_async_vllm_engine(
     if pipeline_parallel_size is None:
         pipeline_parallel_size = 1
 
-    # Create engine args
-    # Don't explicitly set enable_prefix_caching to avoid conflicts
-    kwargs.setdefault("enable_prefix_caching", True)
+    # Prefix caches are keyed by prompt content, not by the model weights that
+    # produced their KV entries. AsyncVLLM is commonly used with online weight
+    # updates, so keep prefix caching off unless the caller explicitly opts in.
+    kwargs.setdefault("enable_prefix_caching", False)
 
     # Set compilation flag - this controls whether vLLM will compile the model for better performance
     # Disabled by default in GRPO since it can cause issues during training

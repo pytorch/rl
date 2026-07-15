@@ -1330,15 +1330,16 @@ class TestNoisyLinear:
         # Eval outputs should be identical (noise is off)
         torch.testing.assert_close(y_eval_1, y_eval_2)
 
-    def test_noisy_linear_deprecation_warning(self, device):
-        """Test that FutureWarning is raised when use_exploration_type is None."""
-        # Should emit FutureWarning when use_exploration_type is not specified
-        with pytest.warns(FutureWarning, match="exploration_type"):
-            NoisyLinear(10, 5, device=device)
-
-        # Should NOT emit warning when use_exploration_type is explicitly set
+    def test_noisy_linear_default_uses_exploration_type(self, device):
+        """Test that NoisyLinear defaults to exploration_type-based control."""
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            # These should not raise FutureWarning
+            layer = NoisyLinear(10, 5, device=device)
+            layer_from_none = NoisyLinear(
+                10, 5, device=device, use_exploration_type=None
+            )
             NoisyLinear(10, 5, device=device, use_exploration_type=True)
             NoisyLinear(10, 5, device=device, use_exploration_type=False)
+
+        assert layer._use_exploration_type is True
+        assert layer_from_none._use_exploration_type is True

@@ -818,6 +818,9 @@ def check_env_specs(
             f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
         )
 
+    def _zeros_like_on_common_device(data):
+        return torch.zeros_like(data).to(torch.device("cpu"))
+
     from torchrl.envs.common import _has_dynamic_specs
 
     if _has_dynamic_specs(env.specs):
@@ -835,7 +838,9 @@ def check_env_specs(
                     ) from e
 
             fake = fake.apply(expand, real, named=True, nested_keys=True)
-            if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
+            if (
+                _zeros_like_on_common_device(real) != _zeros_like_on_common_device(fake)
+            ).any():
                 raise AssertionError(zeroing_err_msg())
 
             # Checks shapes and eventually dtypes of keys at all nesting levels
@@ -843,8 +848,8 @@ def check_env_specs(
 
     else:
         if (
-            torch.zeros_like(fake_tensordict_select)
-            != torch.zeros_like(real_tensordict_select)
+            _zeros_like_on_common_device(fake_tensordict_select)
+            != _zeros_like_on_common_device(real_tensordict_select)
         ).any():
             raise AssertionError(zeroing_err_msg())
 

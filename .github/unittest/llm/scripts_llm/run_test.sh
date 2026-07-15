@@ -6,7 +6,7 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 apt-get update && apt-get install -y git gcc cmake
-ln -s /usr/bin/swig3.0 /usr/bin/swig
+ln -s /usr/bin/swig3.0 /usr/bin/swig 2>/dev/null || true
 
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
