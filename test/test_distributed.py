@@ -47,6 +47,7 @@ from torchrl.data import (
 from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
 from torchrl.modules.inference_server import InferenceServer
+from torchrl.objectives import LossModule
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
     snapshot_python_processes,
@@ -58,6 +59,7 @@ from torchrl.trainers._distributed import (
     _create_tcp_store,
     _DDPProcessGroup,
 )
+from torchrl.trainers._ray_execution import _RayTrainerExecution
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -86,6 +88,17 @@ class CountingPolicy(TensorDictModuleBase):
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
         return tensordict
+
+
+class ScalarRayLoss(LossModule):
+    def __init__(self):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(()))
+
+    def forward(self, tensordict):
+        return TensorDict(
+            {"loss": self.weight * tensordict["value"].mean()}, batch_size=[]
+        )
 
 
 def _run_ddp_reference_rank(rank, coordinates, result_queue):
@@ -780,6 +793,90 @@ class TestRayCollector(DistributedCollectorBase):
             "memory": 1024**2,
         }
         return {"ray_init_config": ray_init_config, "remote_configs": remote_configs}
+
+    def test_private_ray_trainer_execution_uses_replay_clients(self):
+        import ray
+
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 1},
+        )
+        replay.extend(TensorDict({"value": torch.ones(32, 1)}, [32]))
+        loss = ScalarRayLoss()
+        backend = _RayTrainerExecution(
+            loss_module=loss,
+            optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+            optimization_stepper=None,
+            target_net_updater=None,
+            replay_buffer=replay,
+            global_batch_size=8,
+            options={
+                "world_size": 2,
+                "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                "backend": "gloo",
+                "setup_timeout": 60.0,
+                "command_timeout": 60.0,
+            },
+        )
+        try:
+            backend.start()
+            result = backend.step(2)
+            assert result.round_id == 1
+            assert result.model_version == 2
+            weights = backend.get_weights(expected_version=2)
+            torch.testing.assert_close(weights["weight"], torch.tensor(0.8))
+
+            invalid_state = backend.state_dict()
+            invalid_state["ranks"][1]["loss_module"]["weight"] = torch.ones(2)
+            with pytest.raises(ray.exceptions.RayTaskError, match="size mismatch"):
+                backend.load_state_dict(invalid_state)
+            with pytest.raises(RuntimeError, match="failed"):
+                backend.step(1)
+
+            generation = backend.generation
+            backend.start()
+            assert backend.generation == generation + 1
+            assert backend.model_version == 0
+
+            generation = backend.generation
+            ray.kill(backend._actors[0], no_restart=True)
+            for _ in range(50):
+                if not backend.is_alive():
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError("Killed learner actor remained reachable.")
+            backend.start()
+            assert backend.generation == generation + 1
+            assert len(backend._actors) == backend.world_size
+            restarted = backend.step(1)
+            assert restarted.round_id == 1
+            assert restarted.model_version == 1
+        finally:
+            backend.shutdown()
+            replay.shutdown()
+
+    def test_private_ray_trainer_execution_rejects_fractional_nccl_gpu(self):
+        class ReplayOwner:
+            def clients(self, world_size):
+                return [None] * world_size
+
+        loss = ScalarRayLoss()
+        with pytest.raises(ValueError, match="whole GPU"):
+            _RayTrainerExecution(
+                loss_module=loss,
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                optimization_stepper=None,
+                target_net_updater=None,
+                replay_buffer=ReplayOwner(),
+                global_batch_size=8,
+                options={
+                    "world_size": 2,
+                    "resources_per_rank": {"num_cpus": 1, "num_gpus": 0.5},
+                },
+            )
 
     def test_ray_owned_inference_and_replay(self):
         replay = TensorDictReplayBuffer(
