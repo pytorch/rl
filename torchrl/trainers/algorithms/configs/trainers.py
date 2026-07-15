@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict.nn import TensorDictModuleBase
@@ -28,6 +28,12 @@ from torchrl.trainers.algorithms.ppo import PPOTrainer
 from torchrl.trainers.algorithms.reinforce import ReinforceTrainer
 from torchrl.trainers.algorithms.sac import SACTrainer
 from torchrl.trainers.algorithms.td3 import TD3Trainer
+
+if TYPE_CHECKING:
+    _LearnerBackend = Literal["local", "ray"]
+else:
+    # OmegaConf structured configs do not support Literal on all supported versions.
+    _LearnerBackend = str
 
 
 @dataclass
@@ -691,6 +697,10 @@ class DQNTrainerConfig(TrainerConfig):
     logger: Any
     save_trainer_file: Any
     replay_buffer: Any
+    batch_size: int | None = None
+    learner_backend: _LearnerBackend = "local"
+    learner_backend_options: dict[str, Any] | None = None
+    learner_poll_interval: float = 0.05
     frame_skip: int = 1
     clip_grad_norm: bool = True
     clip_norm: float | None = None
@@ -747,6 +757,10 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     clip_norm = kwargs.pop("clip_norm")
     progress_bar = kwargs.pop("progress_bar", True)
     replay_buffer = kwargs.pop("replay_buffer")
+    batch_size = kwargs.pop("batch_size", None)
+    learner_backend = kwargs.pop("learner_backend", "local")
+    learner_backend_options = kwargs.pop("learner_backend_options", None)
+    learner_poll_interval = kwargs.pop("learner_poll_interval", 0.05)
     save_trainer_interval = kwargs.pop("save_trainer_interval", 10000)
     log_interval = kwargs.pop("log_interval", 10000)
     save_trainer_file = kwargs.pop("save_trainer_file")
@@ -856,6 +870,10 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         save_trainer_file=save_trainer_file,
         checkpoint=checkpoint,
         replay_buffer=replay_buffer,
+        batch_size=batch_size,
+        learner_backend=learner_backend,
+        learner_backend_options=learner_backend_options,
+        learner_poll_interval=learner_poll_interval,
         enable_logging=enable_logging,
         log_rewards=log_rewards,
         log_observations=log_observations,

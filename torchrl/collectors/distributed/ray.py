@@ -380,6 +380,7 @@ class RayCollector(BaseCollector):
             post_collect_hook=post_collect_hook,
         )
         self.frames_per_batch = frames_per_batch
+        self.init_random_frames = max(0, int(init_random_frames))
         if remote_configs is None:
             remote_configs = DEFAULT_REMOTE_CLASS_CONFIG
 

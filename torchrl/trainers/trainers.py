@@ -349,6 +349,16 @@ class Trainer:
             keys of the averaged loss TensorDict at the end of every optimization loop, in addition
             to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
             this logging to user-registered hooks. Default is True.
+        replay_buffer (optional): Replay owner used by a remote learner backend.
+        target_net_updater (TargetNetUpdater, optional): Target updater serialized
+            with the learner object graph.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+            Defaults to ``"local"``.
+        learner_backend_options (dict, optional): Backend-specific options.
+        learner_poll_interval (float): Remote replay polling interval. Defaults
+            to ``0.05`` seconds.
     """
 
     @classmethod
@@ -376,6 +386,12 @@ class Trainer:
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: OptimizationStepper | None = None,
+        replay_buffer: Any | None = None,
+        target_net_updater: TargetNetUpdater | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -395,6 +411,31 @@ class Trainer:
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
+        self.replay_buffer = replay_buffer
+        self.target_net_updater = target_net_updater
+        self.batch_size = batch_size
+        self.learner_backend = learner_backend
+        self.learner_backend_options = dict(learner_backend_options or {})
+        if learner_backend not in ("local", "ray"):
+            raise ValueError("learner_backend must be 'local' or 'ray'.")
+        if learner_backend == "ray":
+            if isinstance(optim_steps_per_batch, bool) or not isinstance(
+                optim_steps_per_batch, int
+            ):
+                raise TypeError(
+                    "optim_steps_per_batch must be an integer with "
+                    "learner_backend='ray'."
+                )
+            if optim_steps_per_batch <= 0:
+                raise ValueError(
+                    "optim_steps_per_batch must be positive with "
+                    "learner_backend='ray'."
+                )
+        if learner_poll_interval <= 0:
+            raise ValueError("learner_poll_interval must be positive.")
+        self.learner_poll_interval = float(learner_poll_interval)
+        self._execution_backend = None
+        self._published_model_version = -1
         self.logger = logger
         self.async_collection = async_collection
 
@@ -482,10 +523,14 @@ class Trainer:
         self._modules = {}
 
         self.optimization_stepper = optimization_stepper
-        if self.optimization_stepper is not None:
+        if self.optimization_stepper is not None and self.learner_backend == "local":
             self.optimization_stepper.register(self, name="optimization_stepper")
 
-        if self.optimizer is not None and self.optimization_stepper is None:
+        if (
+            self.optimizer is not None
+            and self.optimization_stepper is None
+            and self.learner_backend == "local"
+        ):
             # Only auto-create the OptimizerHook when no stepper is
             # provided.  When a stepper is present it may access
             # trainer.optimizer directly, so creating the hook would leave a
@@ -501,6 +546,38 @@ class Trainer:
 
         if self.checkpoint is not None:
             self._sync_checkpoint_components()
+
+        if self.learner_backend == "ray":
+            if replay_buffer is None:
+                raise ValueError(
+                    "replay_buffer is required with learner_backend='ray'."
+                )
+            if not isinstance(loss_module, LossModule):
+                raise TypeError(
+                    "learner_backend='ray' requires an ordinary LossModule object."
+                )
+            global_batch_size = batch_size
+            if global_batch_size is None:
+                global_batch_size = getattr(replay_buffer, "batch_size", None)
+            if global_batch_size is None:
+                raise ValueError(
+                    "batch_size is required when replay_buffer.batch_size is unset."
+                )
+            # Kept lazy to break the intentional Trainer/stepper import cycle.
+            from torchrl.trainers._ray_execution import _RayTrainerExecution
+
+            self._execution_backend = _RayTrainerExecution(
+                loss_module=loss_module,
+                optimizer=optimizer,
+                optimization_stepper=optimization_stepper,
+                target_net_updater=target_net_updater,
+                replay_buffer=replay_buffer,
+                global_batch_size=global_batch_size,
+                options=self.learner_backend_options,
+                seed=seed,
+                clip_grad_norm=clip_grad_norm,
+                clip_norm=clip_norm,
+            )
 
     def compute_loss(
         self, sub_batch: TensorDictBase, method: str | None = None
@@ -868,6 +945,19 @@ class Trainer:
         op: Callable,
         **kwargs,
     ) -> None:
+        if self.learner_backend == "ray" and dest not in {
+            "batch_process",
+            "post_steps",
+            "pre_steps_log",
+            "post_steps_log",
+            "setup",
+            "shutdown",
+        }:
+            raise RuntimeError(
+                f"The {dest!r} hook stage executes inside the local optimization "
+                "loop and is unavailable with learner_backend='ray'. Move this "
+                "behavior into an OptimizationStepper or a learner-owned component."
+            )
         # Wrap hook with timing for performance monitoring
         # Get hook name from registered modules if available
         hook_name = None
@@ -1173,6 +1263,8 @@ class Trainer:
             op(**kwargs)
 
     def train(self):
+        if self.learner_backend == "ray":
+            return self._train_with_execution_backend()
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = {}
@@ -1233,6 +1325,119 @@ class Trainer:
 
         self._shutdown_hook()
         self.collector.shutdown()
+
+    def _train_with_execution_backend(self) -> None:
+        """Run collection while the private backend owns optimization state."""
+        backend = self._execution_backend
+        if backend is None:
+            raise RuntimeError("The configured learner execution backend is missing.")
+        if self.progress_bar:
+            self._pbar = tqdm(total=self.total_frames, initial=self.collected_frames)
+            self._pbar_str = {}
+
+        setup_complete = False
+        try:
+            if hasattr(self.replay_buffer, "start"):
+                self.replay_buffer.start()
+            backend.start()
+            self._publish_execution_weights(force=True)
+            self._setup_hook()
+            setup_complete = True
+
+            previous_write_count = self._replay_write_count()
+            if self.async_collection:
+                self.collector.start()
+                iterator = itertools.repeat(None)
+            else:
+                iterator = iter(self.collector)
+
+            for batch in iterator:
+                previous_frames = self.collected_frames
+                if batch is not None:
+                    batch = self._process_batch_hook(batch)
+                    current_frames = int(
+                        batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                        .sum()
+                        .item()
+                    )
+                    replay_batch = batch
+                    if ("collector", "mask") in replay_batch.keys(True):
+                        replay_batch = replay_batch[
+                            replay_batch.get(("collector", "mask"))
+                        ]
+                    else:
+                        replay_batch = replay_batch.reshape(-1)
+                    self.replay_buffer.extend(replay_batch)
+                    self.collected_frames += current_frames * self.frame_skip
+                    self._pre_steps_log_hook(batch)
+                else:
+                    write_count = self._replay_write_count()
+                    current_frames = max(0, write_count - previous_write_count)
+                    previous_write_count = write_count
+                    self.collected_frames += current_frames * self.frame_skip
+
+                if (
+                    self.collected_frames
+                    >= getattr(self.collector, "init_random_frames", 0)
+                    and len(self.replay_buffer) >= backend.global_batch_size
+                    and current_frames > 0
+                ):
+                    num_steps = self.optim_steps_per_batch * self.num_epochs
+                    receipt = backend.step(num_steps)
+                    self._optim_count += receipt.optim_steps
+                    metrics = receipt.metrics.flatten_keys(".").to_dict()
+                    if self.auto_log_optim_steps:
+                        metrics["optim_steps"] = self._optim_count
+                    self._log(**metrics)
+                    self._publish_execution_weights()
+
+                self._post_steps_hook()
+
+                if batch is not None:
+                    self._post_steps_log_hook(batch)
+                if self.progress_bar and self.collected_frames > previous_frames:
+                    self._pbar.update(self.collected_frames - previous_frames)
+                    self._pbar_description()
+                if self._stop_training or self.collected_frames >= self.total_frames:
+                    break
+                if self.async_collection and current_frames == 0:
+                    time.sleep(self.learner_poll_interval)
+        finally:
+            if setup_complete:
+                self._shutdown_hook()
+            try:
+                self.collector.shutdown()
+            finally:
+                backend.shutdown()
+
+    def _publish_execution_weights(self, *, force: bool = False) -> None:
+        backend = self._execution_backend
+        model_version = backend.model_version
+        if not force and model_version <= self._published_model_version:
+            return
+        weights = backend.get_weights("policy", expected_version=model_version)
+        model_weights_key, auxiliary_weights = self._execution_weight_publication()
+        if model_weights_key is not None:
+            payload = (
+                TensorDict()
+                if auxiliary_weights is None
+                else auxiliary_weights.detach().clone()
+            )
+            payload.set(model_weights_key, weights)
+            weights = payload
+        self.collector.update_policy_weights_(weights, model_id="policy")
+        self._published_model_version = model_version
+
+    def _execution_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        return None, None
+
+    def _replay_write_count(self) -> int:
+        write_count = self.replay_buffer.write_count
+        if callable(write_count):
+            write_count = write_count()
+        return int(write_count)
 
     def _async_iterator(self):
         """Create an iterator for async collection that monitors replay buffer write_count.

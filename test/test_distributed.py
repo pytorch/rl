@@ -48,6 +48,7 @@ from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
 from torchrl.modules.inference_server import InferenceServer
 from torchrl.objectives import LossModule
+from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
     snapshot_python_processes,
@@ -60,6 +61,7 @@ from torchrl.trainers._distributed import (
     _DDPProcessGroup,
 )
 from torchrl.trainers._ray_execution import _RayTrainerExecution
+from torchrl.trainers.algorithms import DQNTrainer
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -96,9 +98,25 @@ class ScalarRayLoss(LossModule):
         self.weight = nn.Parameter(torch.ones(()))
 
     def forward(self, tensordict):
-        return TensorDict(
-            {"loss": self.weight * tensordict["value"].mean()}, batch_size=[]
-        )
+        value = tensordict.get("value", None)
+        if value is None:
+            value = tensordict["observation"].float()
+        return TensorDict({"loss": self.weight * value.mean()}, batch_size=[])
+
+
+class CountingTargetUpdater(TargetNetUpdater):
+    def __init__(self, loss_module):
+        self.loss_module = loss_module
+        self.calls = 0
+
+    def step(self):
+        self.calls += 1
+
+    def state_dict(self):
+        return {"calls": self.calls}
+
+    def load_state_dict(self, state_dict):
+        self.calls = state_dict["calls"]
 
 
 def _run_ddp_reference_rank(rank, coordinates, result_queue):
@@ -877,6 +895,55 @@ class TestRayCollector(DistributedCollectorBase):
                     "resources_per_rank": {"num_cpus": 1, "num_gpus": 0.5},
                 },
             )
+
+    def test_dqn_trainer_ray_backend(self):
+        replay = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=8,
+            remote_config={"num_cpus": 1},
+        )
+        collector = RayCollector(
+            create_env_fn=[CountingEnv, CountingEnv],
+            policy=CountingPolicy(),
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=16,
+            init_random_frames=16,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        try:
+            with pytest.warns(UserWarning, match="experimental"):
+                trainer = DQNTrainer(
+                    collector=collector,
+                    total_frames=16,
+                    frame_skip=1,
+                    optim_steps_per_batch=1,
+                    loss_module=loss,
+                    optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                    replay_buffer=replay,
+                    batch_size=8,
+                    target_net_updater=CountingTargetUpdater(loss),
+                    learner_backend="ray",
+                    learner_backend_options={
+                        "world_size": 2,
+                        "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                        "backend": "gloo",
+                        "setup_timeout": 60.0,
+                        "command_timeout": 60.0,
+                    },
+                    enable_logging=False,
+                    progress_bar=False,
+                )
+            trainer.train()
+            assert trainer.collected_frames == 16
+            assert trainer._optim_count == 1
+            assert trainer._published_model_version == 1
+        finally:
+            collector.shutdown()
+            replay.shutdown()
 
     def test_ray_owned_inference_and_replay(self):
         replay = TensorDictReplayBuffer(
