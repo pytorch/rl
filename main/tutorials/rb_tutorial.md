@@ -239,8 +239,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmp_4zt38dy/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmp_4zt38dy/b/c.memmap
+the 'a' tensor is stored in /tmp/tmpcvn1adeg/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpcvn1adeg/b/c.memmap
 samples: a= tensor([[ 4, 5, 6, 7],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
@@ -1135,7 +1135,7 @@ gc.collect()
 episode are grouped tensor([1, 1, 4, 4, 3, 3, 4, 4], dtype=torch.int32)
 steps are successive tensor([1, 2, 0, 1, 0, 1, 0, 1])
 
-1221
+1050
 ```
 
 ### Storing trajectories from a collector
@@ -1219,7 +1219,7 @@ which are based on our Replay Buffer API;
 such as [`TensorDictMaxValueWriter`](../reference/generated/torchrl.data.replay_buffers.TensorDictMaxValueWriter.html#torchrl.data.replay_buffers.TensorDictMaxValueWriter).
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.854 seconds)
+**Total running time of the script:** (0 minutes 0.866 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
