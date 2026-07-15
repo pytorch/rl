@@ -111,6 +111,10 @@ jobs:
             "pip==${PIP_VERSION}" \
             "setuptools==${SETUPTOOLS_VERSION}" \
             "wheel==${WHEEL_VERSION}"
+          python -m pip install --no-deps \
+            "$(grep -m1 '^click==' .github/benchmark-requirements.txt)" \
+            "$(grep -m1 '^cmake==' .github/benchmark-requirements.txt)" \
+            "$(grep -m1 '^ninja==' .github/benchmark-requirements.txt)"
           python -m pip install --pre --no-build-isolation \
             -r .github/benchmark-requirements.txt \
             --index-url https://pypi.org/simple \
