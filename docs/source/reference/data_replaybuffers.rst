@@ -39,50 +39,7 @@ the actor.
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
     RayReplayBuffer
-    DataParallelReplayBufferClient
     RemoteTensorDictReplayBuffer
-
-Data-parallel replay clients
-----------------------------
-
-A Ray replay-buffer client can be viewed by replicated learner ranks with
-:meth:`~torchrl.data.RayReplayBuffer.client` followed by ``data_parallel``.
-The configured and explicit sample batch sizes are **global**: with global
-batch size ``B`` and ``W`` ranks, every rank request samples ``B / W`` items
-from the single Ray owner. ``B`` must be divisible by ``W``.
-Phase 1 rejects data-parallel sampling when owner-side prefetching is enabled,
-because the prefetch queue is not keyed by requested batch size. Construct the
-owner with ``prefetch=0``.
-
-.. code-block:: python
-
-    from functools import partial
-    from torchrl.data import LazyTensorStorage, ReplayBuffer
-
-    global_batch_size = 128
-    owner = ReplayBuffer(
-        storage=partial(LazyTensorStorage, 10_000),
-        batch_size=global_batch_size,
-        service_backend="ray",
-    )
-    replay_buffer = owner.client().data_parallel(
-        rank=rank,
-        world_size=world_size,
-    )
-    local_batch = replay_buffer.sample(return_info=False)
-
-Writes and priority updates are forwarded unchanged and ``len(replay_buffer)``
-reports the owner's global sampleable length. The Ray actor serializes calls
-from every rank, so without-replacement and consuming sampler state, free-list
-reuse, and prioritized trees remain owner-coherent. Random and prioritized
-draws are distribution-equivalent to a global sample; independent rank calls
-do not promise a globally reproducible order.
-
-Shared ``next`` and iteration are unsupported because independent callers
-cannot safely delimit finite sampler epochs. For consuming workloads, every
-rank should wait until the global sampleable length is at least ``B`` before
-sampling. Strict cached global-round sampling is not part of this first
-implementation.
 
 
 Offline-to-online helpers

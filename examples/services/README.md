@@ -10,7 +10,8 @@ to construction; the training loop consumes domain-compatible clients.
 | --- | --- |
 | `multi_service_single_process.py` | Direct logger and replay buffer with threaded inference |
 | `multi_service_multiprocess.py` | Process logger and inference server with a direct replay buffer |
-| `multi_service_ray.py` | Ray logger and replay-buffer owners with Ray inference transport |
+| `multi_service_ray.py` | Ray logger, replay-buffer, and inference owners |
+| `ray_collector_services.py` | Ray-owned replay and inference composed with `RayCollector` |
 | `multi_service_utils.py` | Shared service construction and training loop |
 | `distributed_services.py` | Basic service-registry usage |
 
@@ -37,6 +38,7 @@ From the repository root:
 python examples/services/multi_service_single_process.py
 python examples/services/multi_service_multiprocess.py
 python examples/services/multi_service_ray.py
+python examples/services/ray_collector_services.py
 ```
 
 All entry points accept the same training arguments:
@@ -79,7 +81,7 @@ scalar tensor before backpropagation.
 | --- | --- | --- | --- | --- |
 | Single process | Background thread | Direct | Direct | Driver |
 | Multiprocess | Spawned process | Spawned process | Direct | Driver |
-| Ray | Ray transport to a driver-owned server | Ray actor | Ray actor | Driver |
+| Ray | Ray actor | Ray actor | Ray actor | Driver |
 
 Replay buffers expose direct and Ray service backends. The multiprocess profile
 therefore keeps its replay buffer in the driver while moving inference and
