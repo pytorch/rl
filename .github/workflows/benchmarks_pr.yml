@@ -111,12 +111,18 @@ jobs:
             "pip==${PIP_VERSION}" \
             "setuptools==${SETUPTOOLS_VERSION}" \
             "wheel==${WHEEL_VERSION}"
-          python -m pip install --no-deps \
-            "$(grep -m1 '^click==' .github/benchmark-requirements.txt)" \
-            "$(grep -m1 '^cmake==' .github/benchmark-requirements.txt)" \
-            "$(grep -m1 '^ninja==' .github/benchmark-requirements.txt)"
+          grep -vE '^(autorom-accept-rom-license==|tensordict @ )' \
+            .github/benchmark-requirements.txt \
+            > /tmp/benchmark-bootstrap-requirements.txt
+          grep -E '^(autorom-accept-rom-license==|tensordict @ )' \
+            .github/benchmark-requirements.txt \
+            > /tmp/benchmark-source-requirements.txt
           python -m pip install --pre --no-build-isolation \
-            -r .github/benchmark-requirements.txt \
+            -r /tmp/benchmark-bootstrap-requirements.txt \
+            --index-url https://pypi.org/simple \
+            --extra-index-url https://download.pytorch.org/whl/nightly/cu126
+          python -m pip install --pre --no-build-isolation --no-deps \
+            -r /tmp/benchmark-source-requirements.txt \
             --index-url https://pypi.org/simple \
             --extra-index-url https://download.pytorch.org/whl/nightly/cu126
           python -m pip check
