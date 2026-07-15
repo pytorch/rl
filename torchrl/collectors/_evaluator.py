@@ -87,7 +87,7 @@ from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+from torchrl.weight_update import MultiProcessWeightSyncScheme, WeightStrategy
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -344,6 +344,8 @@ class Evaluator:
             # process.  This eliminates custom process management and
             # uses the weight_sync_schemes infrastructure for weight
             # transfer.
+            if backend == "process" and weight_sync_schemes is None:
+                weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
             use_multi_collector = (
                 backend == "process" or weight_sync_schemes is not None
             )
