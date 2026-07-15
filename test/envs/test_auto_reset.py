@@ -14,6 +14,7 @@ import pytest
 import torch
 
 from _envs_common import _has_gym, _has_transformers, mp_ctx
+from packaging import version
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -24,10 +25,24 @@ from tensordict import (
 
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
-from torchrl.data.tensor_specs import NonTensor
-from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
+from torchrl.data.tensor_specs import (
+    Binary,
+    Categorical,
+    Composite,
+    NonTensor,
+    Unbounded,
+)
+from torchrl.envs import CatFrames, EnvBase, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import InitTracker, StepCounter, TransformedEnv, VecNormV2
+from torchrl.envs.transforms import (
+    Compose,
+    InitTracker,
+    RandomTruncationTransform,
+    RewardSum,
+    StepCounter,
+    TransformedEnv,
+    VecNormV2,
+)
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
@@ -36,7 +51,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
 )
 from torchrl.envs.utils import check_env_specs
-from torchrl.testing import CARTPOLE_VERSIONED
+from torchrl.testing import CARTPOLE_VERSIONED, CountingVecNormV2
 from torchrl.testing.mocking_classes import (
     AutoResetHeteroCountingEnv,
     AutoResettingCountingEnv,
@@ -47,23 +62,257 @@ from torchrl.testing.mocking_classes import (
     Str2StrEnv,
 )
 
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+
 
 class TestAutoReset:
-    def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
-        class CountingVecNormV2(VecNormV2):
+    @staticmethod
+    def _step_native_auto_reset_until_done(env):
+        tensordict = env.reset()
+        for _ in range(10):
+            tensordict.update(env.full_action_spec.one())
+            tensordict, tensordict_ = env.step_and_maybe_reset(
+                tensordict,
+            )
+            if tensordict["next", "done"].all():
+                return tensordict, tensordict_
+            tensordict = tensordict_
+        raise RuntimeError("Auto-resetting counting env did not terminate.")
+
+    def test_native_auto_reset_resets_transform_state(self):
+        class RewardingAutoResettingCountingEnv(AutoResettingCountingEnv):
+            def _step(self, tensordict):
+                tensordict = super()._step(tensordict)
+                tensordict["reward"] = torch.ones_like(tensordict["reward"])
+                return tensordict
+
+        env = TransformedEnv(
+            RewardingAutoResettingCountingEnv(3),
+            Compose(StepCounter(), RewardSum(), TrajCounter()),
+        )
+        env._torchrl_native_autoreset = True
+        env.full_observation_spec
+
+        tensordict, tensordict_ = self._step_native_auto_reset_until_done(env)
+
+        assert tensordict["next", "done"].all()
+        assert not tensordict_["done"].any()
+        assert (tensordict_["observation"] == 0).all()
+        assert (tensordict_["step_count"] == 0).all()
+        assert (tensordict_["episode_reward"] == 0).all()
+        assert (tensordict_["traj_count"] == 1).all()
+
+    def test_native_auto_reset_reset_mask_reaches_all_transforms(self):
+        class ResetMaskRecorder(Transform):
+            def __init__(self, key):
+                super().__init__()
+                self.key = key
+
+            def _reset_on_native_autoreset(self, tensordict, tensordict_reset):
+                tensordict_reset.set(self.key, tensordict.get("_reset"))
+                return tensordict_reset
+
+        env = TransformedEnv(
+            AutoResettingCountingEnv(3),
+            Compose(
+                ResetMaskRecorder("reset_before"),
+                StepCounter(),
+                ResetMaskRecorder("reset_after"),
+            ),
+        )
+        env._torchrl_native_autoreset = True
+        env.full_observation_spec
+
+        tensordict, tensordict_ = self._step_native_auto_reset_until_done(env)
+
+        assert tensordict["next", "done"].all()
+        assert not tensordict_["done"].any()
+        assert tensordict_["reset_before"].all()
+        assert tensordict_["reset_after"].all()
+        assert (tensordict_["step_count"] == 0).all()
+
+    def test_native_auto_reset_resets_catframes_state(self):
+        class FloatAutoResettingCountingEnv(AutoResettingCountingEnv):
             def __init__(self, *args, **kwargs):
-                self.step_calls = 0
-                self.reset_calls = 0
                 super().__init__(*args, **kwargs)
+                self.observation_spec = Composite(
+                    observation=Unbounded(
+                        (*self.batch_size, 1),
+                        dtype=torch.float32,
+                        device=self.device,
+                    ),
+                    shape=self.batch_size,
+                    device=self.device,
+                )
 
-            def _step(self, tensordict, next_tensordict):
-                self.step_calls += 1
-                return super()._step(tensordict, next_tensordict)
+            def _reset(self, tensordict=None):
+                tensordict = super()._reset(tensordict)
+                tensordict["observation"] = tensordict["observation"].to(torch.float32)
+                return tensordict
 
-            def _reset(self, tensordict, tensordict_reset):
-                self.reset_calls += 1
-                return super()._reset(tensordict, tensordict_reset)
+            def _step(self, tensordict):
+                tensordict = super()._step(tensordict)
+                tensordict["observation"] = tensordict["observation"].to(torch.float32)
+                return tensordict
 
+        env = TransformedEnv(
+            FloatAutoResettingCountingEnv(3),
+            CatFrames(N=2, dim=-1, in_keys=["observation"]),
+        )
+        env._torchrl_native_autoreset = True
+        env.full_observation_spec
+
+        tensordict, tensordict_ = self._step_native_auto_reset_until_done(env)
+
+        assert tensordict["next", "done"].all()
+        assert not tensordict_["done"].any()
+        assert (tensordict_["observation"] == 0).all()
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"),
+        reason="Dynamo cannot trace `EnvBase.device` (a class-level property "
+        "using `self.__dict__.get`) on PyTorch < 2.5.",
+    )
+    def test_native_auto_reset_compile_step_and_maybe_reset(self):
+        class BranchlessAutoResetCountingEnv(EnvBase):
+            def __init__(self, max_steps=3, **kwargs):
+                super().__init__(**kwargs)
+                self.max_steps = max_steps
+                self.observation_spec = Composite(
+                    observation=Unbounded((1,), dtype=torch.float32)
+                )
+                self.reward_spec = Unbounded((1,))
+                self.done_spec = Categorical(2, dtype=torch.bool, shape=(1,))
+                self.action_spec = Binary(n=1, shape=(1,))
+                self.register_buffer("count", torch.zeros(1, dtype=torch.float32))
+
+            def _reset(self, tensordict=None, **kwargs):
+                self.count.zero_()
+                done = self.count.bool()
+                return TensorDict(
+                    {
+                        "observation": self.count.clone(),
+                        "done": done,
+                        "terminated": done,
+                    },
+                    [],
+                )
+
+            def _step(self, tensordict):
+                next_count = self.count + tensordict["action"].to(torch.float32)
+                done = next_count > self.max_steps
+                count = torch.where(done, torch.zeros_like(next_count), next_count)
+                self.count.copy_(count)
+                return TensorDict(
+                    {
+                        "observation": count.clone(),
+                        "done": done,
+                        "terminated": done,
+                        "reward": torch.ones_like(count),
+                    },
+                    [],
+                )
+
+            def _set_seed(self, seed):
+                return None
+
+        env = TransformedEnv(
+            BranchlessAutoResetCountingEnv(3),
+            Compose(
+                StepCounter(),
+                RandomTruncationTransform(prob=1.0, min_horizon=1, max_horizon=3),
+                RewardSum(),
+                VecNormV2(in_keys=["observation"]),
+            ),
+        )
+        env._torchrl_native_autoreset = True
+        env.full_observation_spec
+        tensordict = env.reset()
+
+        env.compile(backend="eager", fullgraph=True)
+        for _ in range(6):
+            tensordict.update(env.full_action_spec.one())
+            tensordict, tensordict_ = env.step_and_maybe_reset(tensordict)
+            tensordict = tensordict_
+        env.eager()
+
+        assert tensordict["step_count"].le(3).all()
+        assert tensordict["episode_reward"].le(3).all()
+        assert "_compiled_step_and_maybe_reset" not in env.__dict__
+
+    def test_env_constructor_compile_kwarg(self):
+        env = CountingEnv(3, compile=False)
+        assert "_compiled_step_and_maybe_reset" not in env.__dict__
+
+        env = CountingEnv(3, compile=True)
+        assert "_compiled_step_and_maybe_reset" in env.__dict__
+
+        env = CountingEnv(
+            3,
+            compile={"warmup": 2, "backend": "eager", "fullgraph": True},
+        )
+        assert "_compiled_step_and_maybe_reset" in env.__dict__
+
+        env_t = TransformedEnv(
+            CountingEnv(3),
+            StepCounter(),
+            compile={"warmup": 1, "backend": "eager"},
+        )
+        assert "_compiled_step_and_maybe_reset" in env_t.__dict__
+
+        with pytest.raises(TypeError, match="compile must be"):
+            CountingEnv(3, compile="please")
+
+    def test_transformed_env_getattr_no_recursion_on_module_internals(self):
+        """TransformedEnv.__getattr__ short-circuits nn.Module internal slots.
+
+        ``nn.Module.__dir__`` reads ``_parameters``, ``_buffers``, ``_modules``
+        via attribute access; routing those through the base-env fallback
+        used to re-enter ``__getattr__`` and infinite-recurse under
+        ``torch.compile(step_and_maybe_reset)``. The fallback now refuses
+        the explicit set of nn.Module instance slots (and all dunders),
+        while still letting other single-underscore attributes (e.g. test
+        envs' ``_counter`` / wrapper handles' ``_env``) flow through to
+        ``base_env`` as before.
+        """
+        env = TransformedEnv(CountingEnv(3), StepCounter())
+        for name in (
+            "_parameters",
+            "_buffers",
+            "_modules",
+            "_backward_hooks",
+            "_forward_hooks",
+            "_non_persistent_buffers_set",
+            "__weakref__",
+        ):
+            with pytest.raises(AttributeError):
+                env.__getattr__(name)
+        assert "base_env" in dir(env)
+
+    def test_transformed_env_getattr_delegates_user_private_attrs(self):
+        """Non-internal single-underscore attrs still delegate to base_env.
+
+        Wrappers like ``GymEnv`` store the underlying gym handle as
+        ``_env``; ``CountingEnv``-style test fixtures store ``_counter``.
+        Both are public-by-convention private fields of the wrapped env
+        and the long-standing convention is that the
+        :class:`TransformedEnv` wrapper transparently forwards them.
+        """
+
+        class _UnderscoreAttrEnv(CountingEnv):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._sentinel = "marker"
+
+        base = _UnderscoreAttrEnv(3)
+        env = TransformedEnv(base, StepCounter())
+        # Delegation goes through __getattr__'s base_env fallback.
+        assert env._sentinel == "marker"
+        # And ``base_env`` is still accessible by name (regression for the
+        # ``"base_env" in self.__dir__()`` removal).
+        assert env.base_env is base
+
+    def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
         env = TransformedEnv(AutoResettingCountingEnv(3), InitTracker())
         env._torchrl_native_autoreset = True
         vecnorm = CountingVecNormV2(in_keys=["observation"])
@@ -402,6 +651,44 @@ class TestNonTensorEnv:
         try:
             r = env.rollout(N, break_when_any_done=bwad)
             assert r.get("non_tensor").tolist() == [list(range(N))] * 2
+        finally:
+            env.close(raise_if_closed=False)
+            del env
+            time.sleep(0.1)
+            gc.collect()
+
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel_partial_reset(self, use_buffers, maybe_fork_ParallelEnv):
+        """Regression: a *partial* reset (subset of workers) with NonTensor data.
+
+        ``out`` carries no NonTensor leaf (NonTensor is not shared-memory
+        backed), so a partial fancy-index assignment used to raise
+        ``IndexError: list index out of range``. The reset workers must get the
+        fresh value while the untouched worker keeps its current value.
+        """
+        env = maybe_fork_ParallelEnv(3, EnvWithMetadata, use_buffers=use_buffers)
+        try:
+            env.set_seed(0)
+            td = env.reset()
+            for _ in range(4):
+                td.set("action", torch.zeros(3, 1))
+                td = env.step_mdp(env.step(td))
+            assert td.get("non_tensor").tolist() == [4, 4, 4]
+            # partial reset: workers 0 and 2 only; worker 1 keeps its state
+            reset = td.select("non_tensor")
+            reset.set("_reset", torch.tensor([True, False, True]).reshape(3, 1))
+            out = env.reset(reset)
+            assert out.get("non_tensor").tolist() == [0, 4, 0]
+            if use_buffers:
+                # maybe_reset can call reset with only the reset mask;
+                # NonTensor values for workers that are not reset must come
+                # from the shared-buffer cache.
+                reset = TensorDict(
+                    {"_reset": torch.tensor([False, True, False]).reshape(3, 1)},
+                    batch_size=[3],
+                )
+                out = env.reset(reset)
+                assert out.get("non_tensor").tolist() == [0, 0, 0]
         finally:
             env.close(raise_if_closed=False)
             del env

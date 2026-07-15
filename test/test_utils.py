@@ -17,7 +17,12 @@ import torch
 
 import torchrl.envs.libs.gym as _gym_lib
 from packaging import version
-from torchrl import _utils
+from torchrl import (
+    _utils,
+    cuda_memory_profile,
+    cuda_memory_stats,
+    reset_cuda_peak_stats,
+)
 from torchrl._utils import _rng_decorator, as_remote, get_binary_env_var, implement_for
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
@@ -604,6 +609,122 @@ class TestProfilingDecorator:
 
         as_remote.__func__(Dummy, remote_config={"num_cpus": 1})
         assert "runtime_env" not in captured
+
+
+class TestCudaMemoryHelpers:
+    EXPECTED_KEYS = {
+        "allocated_gb",
+        "reserved_gb",
+        "max_allocated_gb",
+        "max_reserved_gb",
+    }
+
+    def test_stats_keys_and_types(self):
+        stats = cuda_memory_stats()
+        assert set(stats) == self.EXPECTED_KEYS
+        for key, value in stats.items():
+            assert isinstance(value, float), key
+            assert value >= 0.0, key
+
+    def test_stats_zero_on_cpu_device(self):
+        stats = cuda_memory_stats("cpu")
+        assert stats == {key: 0.0 for key in self.EXPECTED_KEYS}
+
+    def test_reset_peak_safe_without_cuda_target(self):
+        reset_cuda_peak_stats("cpu")
+        reset_cuda_peak_stats()
+
+    def test_int_device_is_normalized_as_cuda_ordinal(self, monkeypatch):
+        calls = []
+
+        def record_call(device):
+            calls.append(device)
+            return _utils._GB
+
+        monkeypatch.setattr(_utils.torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(_utils.torch.cuda, "memory_allocated", record_call)
+        monkeypatch.setattr(_utils.torch.cuda, "memory_reserved", record_call)
+        monkeypatch.setattr(_utils.torch.cuda, "max_memory_allocated", record_call)
+        monkeypatch.setattr(_utils.torch.cuda, "max_memory_reserved", record_call)
+
+        stats = cuda_memory_stats(0)
+
+        assert stats == {key: 1.0 for key in self.EXPECTED_KEYS}
+        assert calls == [torch.device("cuda", 0)] * 4
+
+    def test_reset_peak_accepts_int_device(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(_utils.torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(_utils.torch.cuda, "reset_peak_memory_stats", calls.append)
+
+        reset_cuda_peak_stats(1)
+
+        assert calls == [torch.device("cuda", 1)]
+
+    def test_profile_populates_stats_attribute(self):
+        with cuda_memory_profile("unit-test", log=False) as prof:
+            pass
+        assert set(prof.stats) == self.EXPECTED_KEYS
+        assert prof.label == "unit-test"
+
+    def test_profile_decorator_clone(self):
+        @cuda_memory_profile("decorated", log=False)
+        def f(x):
+            return x + 1
+
+        assert f(1) == 2
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_stats_reflect_allocation(self):
+        device = torch.device("cuda", torch.cuda.current_device())
+        reset_cuda_peak_stats(device)
+        before = cuda_memory_stats(device)["allocated_gb"]
+        x = torch.empty(1024 * 1024, dtype=torch.float32, device=device)
+        after = cuda_memory_stats(device)["allocated_gb"]
+        assert after > before
+        del x
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_profile_resets_peaks(self):
+        device = torch.device("cuda", torch.cuda.current_device())
+        big = torch.empty(2_000_000, dtype=torch.float32, device=device)
+        del big
+        # Outside the manager, prior max_allocated still reflects the big alloc.
+        baseline_max = cuda_memory_stats(device)["max_allocated_gb"]
+        with cuda_memory_profile("scoped", device=device, log=False) as prof:
+            small = torch.empty(1024, dtype=torch.float32, device=device)
+            del small
+        assert prof.stats["max_allocated_gb"] <= baseline_max
+
+
+class TestTimeitMark:
+    """Tests for the ``timeit.mark_start`` / ``mark_end`` non-context-manager API."""
+
+    def setup_method(self):
+        _utils.timeit._REG.clear()
+        _utils.timeit._MARKS.clear()
+
+    def test_mark_start_end_records_into_reg(self):
+        _utils.timeit.mark_start("alpha")
+        _utils.timeit.mark_end("alpha")
+        assert "alpha" in _utils.timeit._REG
+        avg, total, count = _utils.timeit._REG["alpha"]
+        assert count == 1
+        assert total >= 0.0
+        assert avg == total
+
+    def test_mark_end_pops_outstanding_mark(self):
+        _utils.timeit.mark_start("beta")
+        assert "beta" in _utils.timeit._MARKS
+        _utils.timeit.mark_end("beta")
+        assert "beta" not in _utils.timeit._MARKS
+
+    def test_context_manager_still_records(self):
+        with _utils.timeit("delta"):
+            pass
+        assert "delta" in _utils.timeit._REG
 
 
 if __name__ == "__main__":

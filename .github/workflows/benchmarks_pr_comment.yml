@@ -10,7 +10,10 @@ permissions:
   actions: read
   contents: read
   issues: write
-  pull-requests: read
+  # Creating an issue comment on a *pull request* requires pull-requests
+  # write for the app-scoped GITHUB_TOKEN (issues write only covers actual
+  # issues); with read the final POST in comment_pr_benchmarks.py 403s.
+  pull-requests: write
 
 jobs:
   benchmark-comment:
@@ -33,6 +36,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BENCHMARK_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
+          # On unlabeled PRs the benchmark job is skipped (label opt-in) and
+          # the run completes without artifacts; there is nothing to comment.
+          if [ ! -d benchmark-artifacts ] || [ -z "$(ls -A benchmark-artifacts)" ]; then
+            echo "No benchmark artifacts found (benchmark job was skipped); nothing to comment."
+            exit 0
+          fi
           python .github/scripts/comment_pr_benchmarks.py \
             --artifact-root benchmark-artifacts \
             --repository "${{ github.repository }}" \

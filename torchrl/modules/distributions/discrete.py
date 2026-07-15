@@ -360,7 +360,9 @@ class MaskedCategorical(D.Categorical):
                         original_value_shape = value.shape
                         value = value.flatten()
                     logits = logits.unsqueeze(0).expand(value.shape + logits.shape)
-                result = -torch.nn.functional.cross_entropy(logits, value, reduce=False)
+                result = -torch.nn.functional.cross_entropy(
+                    logits, value, reduction="none"
+                )
                 if original_value_shape is not None:
                     result = result.unflatten(0, original_value_shape)
             else:
@@ -391,7 +393,7 @@ class MaskedCategorical(D.Categorical):
                     original_idx_shape = idx.shape
                     idx = idx.flatten()
                 logits = logits.unsqueeze(0).expand(idx.shape + logits.shape)
-            ret = -torch.nn.functional.cross_entropy(logits, idx, reduce=False)
+            ret = -torch.nn.functional.cross_entropy(logits, idx, reduction="none")
             if original_idx_shape is not None:
                 ret = ret.unflatten(0, original_idx_shape)
         else:
@@ -841,7 +843,10 @@ class LLMMaskedCategorical(D.Distribution):
 
             # Compute cross_entropy with ignore_index
             log_probs_flat = -F.cross_entropy(
-                logits_flat, value_flat, reduce=False, ignore_index=self.ignore_index
+                logits_flat,
+                value_flat,
+                reduction="none",
+                ignore_index=self.ignore_index,
             )
 
             # Reshape back
@@ -850,7 +855,7 @@ class LLMMaskedCategorical(D.Distribution):
             log_probs = -F.cross_entropy(
                 logits,
                 value,
-                reduce=False,
+                reduction="none",
                 ignore_index=self.ignore_index,
             )
         return log_probs

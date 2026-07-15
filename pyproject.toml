@@ -39,19 +39,66 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
-    "pyvers",
+    "pyvers>=0.2.3",
+    "hoptorch>=0.1.4",
     "numpy",
     "packaging",
     "cloudpickle",
-    "tensordict>=0.12.0,<0.13.0",
+    "tensordict>=0.13.0,<0.14.0",
 ]
+
+[dependency-groups]
+dev = [
+    "gym",
+    "gymnasium",
+    "hydra-core>=1.1",
+    "hydra-submitit-launcher",
+    "imageio",
+    "moviepy",
+    "mujoco",
+    "mujoco-torch",
+    "pre-commit",
+    "pytest",
+    "tensorboard",
+    "tqdm",
+    "wandb",
+]
+
+[tool.uv]
+prerelease = "allow"
+conflicts = [
+    [
+        { extra = "mjlab" },
+        { extra = "genesis" },
+    ],
+]
+
+[[tool.uv.index]]
+name = "pytorch-nightly"
+url = "https://download.pytorch.org/whl/nightly/cpu"
+explicit = true
+
+[tool.uv.sources]
+tensordict = { git = "https://github.com/pytorch/tensordict" }
+torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
+torchvision = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
+
+[[tool.uv.dependency-metadata]]
+name = "lerobot"
+version = "0.5.1"
+requires-dist = ["datasets", "huggingface-hub", "av", "jsonlines", "packaging"]
 
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
-rendering = ["moviepy", "torchcodec>=0.10.0"]
+video = ["torchcodec>=0.10.0"]
+notebook = ["jupyterlab"]
+# lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
+# recent torch), so the extra is empty on older interpreters
+vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
+rendering = ["moviepy", "pygame", "pyyaml", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
@@ -76,6 +123,9 @@ utils = [
     "tqdm",
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
+    "pre-commit",
+    "autoflake",
+    "autopep8",
 ]
 checkpointing = ["torchsnapshot"]
 offline-data = [
@@ -92,6 +142,8 @@ offline-data = [
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
+mujoco_playground = ["jax>=0.7.0; python_version>='3.11'", "playground; python_version>='3.11'"]
+mjlab = ["mjlab>=1.4.0; python_version<'3.14'"]
 genesis = ["genesis-world"]
 procgen = ["procgen; python_version<'3.10'"]
 pilco = [
@@ -115,18 +167,18 @@ llm = [
 # LLM with vLLM backend
 llm-vllm = [
     "torchrl[llm]",
-    "vllm>=0.17",
+    "vllm>=0.17; platform_system == 'Linux'",
 ]
 # LLM with SGLang backend
 llm-sglang = [
     "torchrl[llm]",
-    "sglang[all]",
+    "sglang[all]; platform_system == 'Linux'",
 ]
 # LLM with both backends
 llm-all = [
     "torchrl[llm]",
-    "vllm>=0.17",
-    "sglang[all]",
+    "vllm>=0.17; platform_system == 'Linux'",
+    "sglang[all]; platform_system == 'Linux'",
 ]
 grpo = [
     # Core dependencies for GRPO training
@@ -147,6 +199,10 @@ dev = [
     "autoflake",
 ]
 
+[project.scripts]
+rlrender = "torchrl.render.cli:main"
+torchrl-render = "torchrl.render.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/pytorch/rl"
 Documentation = "https://pytorch.org/rl"
@@ -163,7 +219,7 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "torchrl/_version.py"
-fallback_version = "0.12.0"
+fallback_version = "0.13.0"
 
 [tool.setuptools.packages.find]
 exclude = [
@@ -177,7 +233,12 @@ exclude = [
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
-"torchrl" = ["csrc/*.h", "csrc/*.cu"]
+"torchrl" = [
+    "csrc/*.h",
+    "csrc/*.cu",
+    "envs/custom/mujoco/assets/*.xml",
+    "envs/custom/mujoco/assets/NOTICE",
+]
 
 [tool.codespell]
 skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/reference/generated,torchrl/_version.py,.worktrees,0.9"
@@ -186,12 +247,17 @@ skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/re
 # splitted: used as variable name
 # te: Telugu language code in ifeval
 # uncompressible: used as class/function name in benchmarks
-ignore-words-list = "multicat,nd,splitted,te,uncompressible"
+# dout: standard autograd shorthand for gradient w.r.t. ``out``
+ignore-words-list = "multicat,nd,splitted,te,uncompressible,dout"
 
 [tool.usort]
 first_party_detection = false
 
 [project.entry-points."vllm.general_plugins"]
-# Ensure FP32 overrides are registered in all vLLM processes (main, workers, and
-# the registry subprocess) before resolving model classes.
-fp32_overrides = "torchrl.modules.llm.backends.vllm.vllm_plugin:register_fp32_overrides"
+# Auto-loaded by vLLM in every process (main, workers, and the registry
+# subprocess), but a NO-OP unless that process opted in via
+# TORCHRL_VLLM_FP32_OVERRIDES (set by torchrl's vLLM backend when
+# enable_fp32_output=True). The unique name avoids colliding with other projects'
+# vllm.general_plugins entries: vLLM keys discovered plugins by name, so a shared
+# name would silently drop one of them.
+torchrl_fp32_overrides = "torchrl.modules.llm.backends.vllm.vllm_plugin:register_fp32_overrides"

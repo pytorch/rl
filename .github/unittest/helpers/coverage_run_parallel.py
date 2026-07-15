@@ -56,6 +56,21 @@ def main(argv: list[str]) -> int:
         os.environ["COVERAGE_RCFILE"] = str(
             config_path
         )  # This gets passed down to subprocesses
+        # Trace subprocesses that are not multiprocessing children (notably
+        # pytest-xdist execnet workers): the coverage_process_startup.pth
+        # installed in site-packages calls coverage.process_startup(), which
+        # is a no-op unless COVERAGE_PROCESS_START points at a config file.
+        #
+        # Opt-in via TORCHRL_COV_TRACE_SUBPROCESSES=1 (set by the xdist
+        # invocations in linux/scripts/run_all.sh). The variable reaches every
+        # Python interpreter spawned anywhere under the test run - parallel-env
+        # workers, collector workers, Ray workers - and starting a tracer in
+        # each of them roughly doubles worker startup (measured: torch+torchrl
+        # import 0.8s -> 1.5s) and line-traces everything the worker runs.
+        # Exporting it unconditionally pushed the serial optdeps job past its
+        # 2h CI timeout (~88min -> >120min of pytest).
+        if os.environ.get("TORCHRL_COV_TRACE_SUBPROCESSES") == "1":
+            os.environ["COVERAGE_PROCESS_START"] = str(config_path)
         write_config(config_path, argv)
         return subprocess.run(["coverage", "run"]).returncode
 

@@ -41,6 +41,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetReturn,
+    TerminateTransform,
     TrajCounter,
     TransformedEnv,
 )
@@ -1305,6 +1306,71 @@ class TestFrameSkipTransform(TransformBase):
             for key in td1.keys():
                 torch.testing.assert_close(td1[key], td2[key])
 
+    @pytest.mark.parametrize("skip", [2, 3])
+    def test_frame_skip_auto_append_metaclass(self, skip):
+        """The EnvBase metaclass auto-appends a FrameSkipTransform to an env
+        that declares ``frame_skip`` but does not implement it natively
+        (``_has_frame_skip = False``), and leaves alone an env that sets
+        ``_has_frame_skip = True``."""
+
+        class _NoFrameSkipEnv(CountingEnv):
+            # does not loop over frame_skip in `_step` -> metaclass must wrap
+            _has_frame_skip = False
+
+            def __init__(self, *args, frame_skip: int = 1, **kwargs):
+                super().__init__(*args, **kwargs)
+                # read by the EnvBase metaclass after construction
+                self.frame_skip = frame_skip
+
+        class _NativeFrameSkipEnv(_NoFrameSkipEnv):
+            # claims native frame_skip handling -> metaclass must NOT wrap
+            _has_frame_skip = True
+
+        # frame_skip == 1: no wrapping at all
+        env = _NoFrameSkipEnv(frame_skip=1)
+        assert not isinstance(env, TransformedEnv)
+
+        # frame_skip > 1 and not implemented natively -> auto FrameSkipTransform
+        env = _NoFrameSkipEnv(max_steps=100, frame_skip=skip)
+        assert isinstance(env, TransformedEnv)
+        assert isinstance(env.transform, FrameSkipTransform)
+        assert env.transform.frame_skip == skip
+        # one outer step advances the underlying CountingEnv by `skip` counts,
+        # proving the transform actually repeats the base env's `_step`.
+        env.set_seed(0)
+        td = env.reset()
+        td["action"] = torch.ones_like(env.action_spec.zero())
+        td = env.step(td)
+        torch.testing.assert_close(
+            td["next", "observation"],
+            torch.full_like(td["next", "observation"], skip),
+        )
+
+        # frame_skip > 1 but implemented natively -> NOT auto-wrapped
+        env = _NativeFrameSkipEnv(max_steps=100, frame_skip=skip)
+        assert not isinstance(env, TransformedEnv)
+
+    def test_frame_skip_metaclass_leaves_batched_envs_untouched(self):
+        """Regression: the metaclass must read ``frame_skip`` from ``__dict__``
+        and never via ``getattr`` -- otherwise constructing a (lazy) batched
+        env triggers ``__getattr__`` delegation, which starts the workers and
+        raises ``RuntimeError`` for a non-started env."""
+        # SerialEnv: constructs without error and is not frame-skip-wrapped
+        serial = SerialEnv(2, lambda: CountingEnv(max_steps=10))
+        try:
+            assert isinstance(serial, SerialEnv)
+            assert not isinstance(serial, TransformedEnv)
+        finally:
+            serial.close(raise_if_closed=False)
+        # ParallelEnv: constructs lazily, stays closed, no spurious worker start
+        parallel = ParallelEnv(2, lambda: CountingEnv(max_steps=10))
+        try:
+            assert isinstance(parallel, ParallelEnv)
+            assert not isinstance(parallel, TransformedEnv)
+            assert parallel.is_closed
+        finally:
+            parallel.close(raise_if_closed=False)
+
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for FrameSkipTransform")
 
@@ -2189,3 +2255,58 @@ class TestExpandAs(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse method for ExpandAs")
+
+
+class TestTerminateTransform:
+    def test_non_callable_raises(self):
+        with pytest.raises(ValueError, match="callable"):
+            TerminateTransform(stop=3)
+
+    def test_forward_raises(self):
+        t = TerminateTransform(lambda td: True)
+        with pytest.raises(RuntimeError, match="without a parent environment"):
+            t(TensorDict())
+
+    def test_check_env_specs(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=10),
+            TerminateTransform(lambda td: td["observation"].squeeze(-1) >= 5),
+        )
+        env.check_env_specs()
+
+    def test_terminates_when_predicate_true(self):
+        # CountingEnv observation increments 1, 2, 3, ...; stop once it hits 3.
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            TerminateTransform(lambda td: td["observation"].squeeze(-1) >= 3),
+        )
+        r = env.rollout(
+            max_steps=50,
+            actions=[torch.ones(1)] * 50,
+            break_when_any_done=True,
+        )
+        assert r.shape[-1] == 3
+        assert bool(r["next", "done"][..., -1, :].all())
+        assert bool(r["next", "terminated"][..., -1, :].all())
+
+    def test_write_done_true_sets_done_and_terminated(self):
+        # A python-bool predicate is coerced to a tensor.
+        env = TransformedEnv(
+            CountingEnv(max_steps=100), TerminateTransform(lambda td: True)
+        )
+        td = env.reset()
+        td["action"] = torch.ones(1)
+        out = env.step(td)
+        assert bool(out["next", "terminated"].all())
+        assert bool(out["next", "done"].all())
+
+    def test_write_done_false_writes_only_terminated(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            TerminateTransform(lambda td: True, write_done=False),
+        )
+        td = env.reset()
+        td["action"] = torch.ones(1)
+        out = env.step(td)
+        assert bool(out["next", "terminated"].all())
+        assert not bool(out["next", "done"].any())

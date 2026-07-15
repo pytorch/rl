@@ -8,6 +8,7 @@ from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
 from .act import ACTModel
 from .batchrenorm import BatchRenorm1d
+from .cross_group_critic import CrossCriticGroupSpec, CrossGroupCritic
 
 from .decision_transformer import DecisionTransformer
 from .exploration import (
@@ -55,6 +56,8 @@ from .utils import Squeeze2dLayer, SqueezeLayer
 __all__ = [
     "ACTModel",
     "BatchRenorm1d",
+    "CrossCriticGroupSpec",
+    "CrossGroupCritic",
     "ConsistentDropout",
     "ConsistentDropoutModule",
     "Conv2dNet",

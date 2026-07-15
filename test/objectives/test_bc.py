@@ -8,6 +8,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from torch import nn
 
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
@@ -237,3 +238,153 @@ class TestBCLoss:
         assert (
             final_loss < initial_loss
         ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
+
+    def test_custom_action_key(self):
+        # set_keys(action=...) must drive BOTH the expert read and the
+        # prediction read (the latter used to be hardcoded to "action")
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["my_action"]
+        )
+        loss = BCLoss(actor, loss_function="l2")
+        loss.set_keys(action="my_action")
+        assert "my_action" in loss.in_keys
+        td = TensorDict(
+            {"observation": torch.randn(2, n_obs), "my_action": torch.randn(2, n_act)},
+            batch_size=[2],
+        )
+        out = loss(td)["loss_bc"]
+        assert torch.isfinite(out)
+        out.backward()
+
+    def test_pad_mask(self):
+        # padded elements (pad_mask=True) are excluded from the loss; the mask
+        # broadcasts over trailing dims
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        loss = BCLoss(actor, loss_function="l1")
+        loss.set_keys(pad_mask="is_pad")
+        assert "is_pad" in loss.in_keys
+        td = TensorDict(
+            {"observation": torch.randn(2, n_obs), "action": torch.randn(2, n_act)},
+            batch_size=[2],
+        )
+        td["action"][1] = 1e6  # huge target on the padded sample
+        td["is_pad"] = torch.tensor([False, True])
+        masked = loss(td)["loss_bc"]
+        unmasked = loss(td.exclude("is_pad"))["loss_bc"]
+        assert masked < unmasked
+        # a missing mask entry behaves exactly like a loss with no pad_mask
+        no_mask_loss = BCLoss(actor, loss_function="l1")
+        torch.testing.assert_close(
+            unmasked, no_mask_loss(td.exclude("is_pad"))["loss_bc"]
+        )
+        # set_keys(pad_mask=None) resets the key and disables masking
+        loss.set_keys(pad_mask=None)
+        assert "is_pad" not in loss.in_keys
+        torch.testing.assert_close(loss(td)["loss_bc"], unmasked)
+
+    def test_pad_mask_reduction_none(self):
+        # with a mask, reduction="none" returns the flat 1D tensor of
+        # unmasked loss elements (the _reduce convention)
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        loss = BCLoss(actor, loss_function="l1", reduction="none")
+        loss.set_keys(pad_mask="is_pad")
+        td = TensorDict(
+            {
+                "observation": torch.randn(2, n_obs),
+                "action": torch.randn(2, n_act),
+                "is_pad": torch.tensor([False, True]),
+            },
+            batch_size=[2],
+        )
+        assert loss(td)["loss_bc"].shape == torch.Size([n_act])
+        assert loss(td.exclude("is_pad"))["loss_bc"].shape == torch.Size([2, n_act])
+
+    def test_pad_mask_requires_elementwise_loss(self):
+        # a [B, H]-style mask cannot apply to a distribution-based loss whose
+        # log_prob has consumed the event dims: expect an informative error
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        loss = BCLoss(actor, loss_function="l1")
+        loss.set_keys(pad_mask="is_pad")
+        td = TensorDict(
+            {
+                "observation": torch.randn(2, n_obs),
+                "action": torch.randn(2, n_act),
+                "is_pad": torch.zeros(2, n_act, 2, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        with pytest.raises(RuntimeError, match="more\\s+dimensions"):
+            loss(td)
+
+    def test_mismatched_action_key_raises(self):
+        # an actor that writes neither the configured action key nor the
+        # legacy "action" key must raise on every loss path, not silently
+        # regress the expert onto itself
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["prediction"]
+        )
+        td = TensorDict(
+            {
+                "observation": torch.randn(2, n_obs),
+                "expert_action": torch.randn(2, n_act),
+            },
+            batch_size=[2],
+        )
+        for kwargs in ({"loss_function": "l2"}, {}):  # explicit and autodetect
+            loss = BCLoss(actor, **kwargs)
+            loss.set_keys(action="expert_action")
+            with pytest.raises(RuntimeError, match="did not write a prediction"):
+                loss(td)
+
+    def test_legacy_action_key_fallback_warns(self):
+        # released behavior: expert at a custom key, actor writing "action";
+        # still works (prediction read from "action") but warns until v0.16
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        td = TensorDict(
+            {
+                "observation": torch.randn(2, n_obs),
+                "expert_action": torch.randn(2, n_act),
+            },
+            batch_size=[2],
+        )
+        for kwargs in ({"loss_function": "l2"}, {}):  # explicit and autodetect
+            loss = BCLoss(actor, **kwargs)
+            loss.set_keys(action="expert_action")
+            with pytest.warns(FutureWarning, match="hardcoded 'action' key"):
+                out = loss(td)["loss_bc"]
+            assert torch.isfinite(out)
+            assert out.requires_grad
+
+    def test_pad_mask_nested_key(self):
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        loss = BCLoss(actor, loss_function="l1")
+        loss.set_keys(pad_mask=("masks", "pad"))
+        td = TensorDict(
+            {
+                "observation": torch.randn(2, n_obs),
+                "action": torch.zeros(2, n_act),
+                "masks": {"pad": torch.tensor([False, True])},
+            },
+            batch_size=[2],
+        )
+        td["action"][1] = 100.0
+        full = loss(td.exclude("masks"))["loss_bc"]
+        masked = loss(td)["loss_bc"]
+        assert masked < full
