@@ -33,14 +33,27 @@ from .protocols import (
 )
 from .rate_limit import RateLimiter
 from .schema import json_schema_from_pydantic, validate_args
-from .tools import as_tool, FileReadTool, PythonTool, ShellTool, StopSignal, StopTool
+from .tools import (
+    as_tool,
+    FileReadTool,
+    HttpTool,
+    MCPServerConfig,
+    MCPToolset,
+    PythonTool,
+    ShellTool,
+    StopSignal,
+    StopTool,
+)
 
 __all__ = [
     "DispatchResult",
     "FileReadTool",
     "FileRefPart",
+    "HttpTool",
     "ImagePart",
     "JsonPart",
+    "MCPServerConfig",
+    "MCPToolset",
     "ParseResult",
     "ParsedCall",
     "PythonTool",

@@ -176,6 +176,7 @@ class ToolCompose(Compose):
         self._validate_inputs = validate_inputs
         self._setup_done = False
         self._async_runner: _AsyncRunner | None = None
+        self._toolsets: list[Any] = []
 
     # ----- introspection helpers -----
 
@@ -273,11 +274,47 @@ class ToolCompose(Compose):
             validate_inputs=self._validate_inputs,
         )
 
+    def add_toolset(self, toolset: Any) -> None:
+        """Open an async toolset and add its discovered tools.
+
+        The toolset is opened on the same persistent event loop used for tool
+        dispatch and is closed with this compose. It must expose async
+        ``open()`` / ``close()`` methods and a ``tools`` iterable after opening.
+
+        Args:
+            toolset: An async tool provider such as
+                :class:`~torchrl.envs.llm.agentic.MCPToolset`.
+        """
+        if self._setup_done:
+            raise RuntimeError("cannot add a toolset after tool setup")
+        self._run_async(toolset.open())
+        try:
+            tools = list(toolset.tools)
+            for tool in tools:
+                if not _is_tool(tool):
+                    raise TypeError(
+                        "toolset returned a non-Tool object: "
+                        f"{type(tool).__name__!r}"
+                    )
+            names = [tool.name for tool in tools]
+            duplicates = set(names) & set(self._tools_by_name)
+            duplicates.update(name for name in names if names.count(name) > 1)
+            if duplicates:
+                raise ValueError(f"duplicate tool names: {sorted(duplicates)!r}")
+        except Exception:
+            self._run_async(toolset.close())
+            raise
+        for tool in tools:
+            self.append_tool(tool)
+        self._toolsets.append(toolset)
+
     # ----- lifecycle -----
 
     async def _setup_tools(self) -> None:
         if self._setup_done:
             return
+        for toolset in self._toolsets:
+            await toolset.open()
         for tool in self._tool_list:
             try:
                 await tool.setup()
@@ -293,6 +330,11 @@ class ToolCompose(Compose):
                 torchrl_logger.exception(
                     "tool %r teardown raised; continuing", tool.name
                 )
+        for toolset in reversed(self._toolsets):
+            try:
+                await toolset.close()
+            except Exception:  # pragma: no cover
+                torchrl_logger.exception("toolset close raised; continuing")
         self._setup_done = False
 
     def close(self) -> None:  # type: ignore[override]
