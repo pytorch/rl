@@ -1228,6 +1228,9 @@ class TestEvaluatorProcessBackendAsMultiCollector:
     def test_process_backend_with_weights(self):
         """Process backend with weight transfer works."""
         train_policy = _make_policy()
+        with torch.no_grad():
+            for parameter in train_policy.parameters():
+                parameter.fill_(1.25)
         evaluator = Evaluator(
             _make_env,
             policy_factory=_make_policy,
@@ -1237,6 +1240,11 @@ class TestEvaluatorProcessBackendAsMultiCollector:
         try:
             metrics = evaluator.evaluate(weights=train_policy, step=0)
             assert "eval/reward" in metrics
+            worker_state = evaluator._backend._collector.state_dict()["worker0"][
+                "policy_state_dict"
+            ]
+            for key, value in train_policy.state_dict().items():
+                torch.testing.assert_close(worker_state[key], value)
         finally:
             evaluator.shutdown()
 
