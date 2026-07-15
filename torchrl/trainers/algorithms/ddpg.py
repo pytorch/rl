@@ -74,7 +74,8 @@ class DDPGTrainer(Trainer):
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
-        target_net_updater (TargetNetUpdater, optional): Target network updater (typically SoftUpdate).
+        target_net_updater (TargetNetUpdater): Target network updater (typically
+            :class:`~torchrl.objectives.utils.SoftUpdate`).
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.
         done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
@@ -134,6 +135,13 @@ class DDPGTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("DDPGTrainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "DDPGTrainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -208,7 +216,7 @@ class DDPGTrainer(Trainer):
                 terminated=terminated_key,
             )
 
-        if self.enable_logging and learner_backend == "local":
+        if self.enable_logging:
             self._setup_ddpg_logging()
 
     def _setup_ddpg_logging(self):

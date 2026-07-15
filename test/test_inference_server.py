@@ -51,6 +51,7 @@ from torchrl.modules.inference_server import (
 )
 from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.inference_server._monarch import MonarchTransport
+from torchrl.modules.inference_server._server import _RayInferenceServerActor
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_monarch = importlib.util.find_spec("monarch") is not None
@@ -614,6 +615,49 @@ class TestInferenceServerCore:
         assert stats["policy_version"] == 1
         assert stats["weight_updates"] == 1
         torch.testing.assert_close(after["action"], torch.ones(2))
+
+    def test_ray_actor_applies_received_weights_under_model_lock(self):
+        actor = _RayInferenceServerActor(
+            _make_policy,
+            ThreadingTransport(),
+            None,
+            None,
+            None,
+            None,
+            {},
+        )
+
+        class LockCheckingScheme:
+            def __init__(self):
+                self.synchronized_on_receiver = False
+                self.receive_locked = False
+                self.connect_locked = False
+
+            def receive(self):
+                self.receive_locked = actor.server._model_lock.locked()
+
+            def connect(self, worker_idx):
+                assert worker_idx == 0
+                self.connect_locked = actor.server._model_lock.locked()
+                self.synchronized_on_receiver = True
+
+            def shutdown(self):
+                return None
+
+        scheme = LockCheckingScheme()
+        actor._receiver_schemes["policy"] = scheme
+        try:
+            actor._receive_weights_scheme(model_version=7)
+            assert scheme.receive_locked
+            assert actor.server.policy_version == 7
+            assert actor.server.stats()["weight_updates"] == 1
+
+            actor._connect_weights_scheme(model_version=9)
+            assert scheme.connect_locked
+            assert actor.server.policy_version == 9
+            assert actor.server.stats()["weight_updates"] == 2
+        finally:
+            actor.shutdown()
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")

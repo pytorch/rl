@@ -524,9 +524,12 @@ class InferenceServer(metaclass=_InferenceServerMeta):
         """The current behavior-policy version served with inference outputs."""
         return self._policy_version
 
-    def _mark_weight_update(self) -> None:
+    def _mark_weight_update(self, model_version: int | None = None) -> None:
         with self._stats_lock:
-            self._policy_version += 1
+            if model_version is None:
+                self._policy_version += 1
+            else:
+                self._policy_version = int(model_version)
             self._num_weight_updates += 1
             if self._policy_version_shared is not None:
                 self._policy_version_shared.value = self._policy_version
@@ -1463,36 +1466,55 @@ class _RayInferenceServerActor:
             for scheme in self._receiver_schemes.values():
                 scheme.connect(worker_idx=0)
 
+    def _weight_sync_signature(
+        self, model_id: str
+    ) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
+        """Return the ordered tensor schema expected by this service."""
+        if model_id != "policy":
+            raise KeyError(f"Unknown inference model_id {model_id!r}.")
+        weights = TensorDict.from_module(self.model)
+        return tuple(
+            (
+                key if isinstance(key, tuple) else (key,),
+                tuple(value.shape),
+                str(value.dtype),
+            )
+            for key, value in weights.items(True, True)
+        )
+
     def _receive_weights_scheme(self, model_version: int | None = None) -> None:
         if not self._receiver_schemes:
             raise RuntimeError("No inference weight receiver is configured.")
-        for scheme in self._receiver_schemes.values():
-            scheme.receive()
         if self.server is None:
+            for scheme in self._receiver_schemes.values():
+                scheme.receive()
             current_version = int(self._server_kwargs.get("policy_version", 0))
             self._server_kwargs["policy_version"] = (
                 current_version + 1 if model_version is None else model_version
             )
-        elif model_version is None:
-            self.server.update_model(lambda model: None, mark_weight_update=True)
         else:
-            self.server._policy_version = model_version
+            with self.server._model_lock:
+                for scheme in self._receiver_schemes.values():
+                    scheme.receive()
+                self.server._mark_weight_update(model_version)
 
     def _connect_weights_scheme(self, model_version: int | None = None) -> None:
         if not self._receiver_schemes:
             raise RuntimeError("No inference weight receiver is configured.")
-        for scheme in self._receiver_schemes.values():
-            if not scheme.synchronized_on_receiver:
-                scheme.connect(worker_idx=0)
         if self.server is None:
+            for scheme in self._receiver_schemes.values():
+                if not scheme.synchronized_on_receiver:
+                    scheme.connect(worker_idx=0)
             current_version = int(self._server_kwargs.get("policy_version", 0))
             self._server_kwargs["policy_version"] = (
                 current_version + 1 if model_version is None else model_version
             )
-        elif model_version is None:
-            self.server.update_model(lambda model: None, mark_weight_update=True)
         else:
-            self.server._policy_version = model_version
+            with self.server._model_lock:
+                for scheme in self._receiver_schemes.values():
+                    if not scheme.synchronized_on_receiver:
+                        scheme.connect(worker_idx=0)
+                self.server._mark_weight_update(model_version)
 
     def shutdown(self) -> None:
         for scheme in self._receiver_schemes.values():

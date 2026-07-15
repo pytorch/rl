@@ -1104,8 +1104,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """Fallback weight update when no scheme is configured.
 
         Override in subclasses to provide custom fallback behavior.
-        By default, this is a no-op.
+        The base implementation fails rather than silently accepting an update
+        that cannot reach a policy.
         """
+        del policy_or_weights, model_id
+        raise RuntimeError(
+            "No weight updater, WeightSyncScheme, or concrete local policy "
+            "update path is configured for this collector."
+        )
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights
@@ -1122,6 +1128,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         for scheme in self._receiver_schemes.values():
             scheme.receive()
+        self._set_received_policy_version(model_version)
 
     def _connect_weights_scheme(self, model_version: int | None = None) -> None:
         """Connect all registered receiver schemes for initial publication."""
@@ -1130,6 +1137,34 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         for scheme in self._receiver_schemes.values():
             if not scheme.synchronized_on_receiver:
                 scheme.connect(worker_idx=self.worker_idx)
+        self._set_received_policy_version(model_version)
+
+    def _set_received_policy_version(self, model_version: int | None) -> None:
+        """Apply the sender's semantic policy version after a weight receive."""
+        if model_version is None:
+            return
+        tracker = getattr(self, "policy_version_tracker", None)
+        if tracker is not None:
+            tracker.version = int(model_version)
+
+    def _weight_sync_signature(
+        self, model_id: str
+    ) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
+        """Return the ordered tensor schema expected by a weight receiver."""
+        get_model = getattr(self, "get_model", None)
+        if not callable(get_model):
+            raise RuntimeError(
+                f"{type(self).__name__} cannot resolve weight model {model_id!r}."
+            )
+        weights = TensorDict.from_module(get_model(model_id))
+        return tuple(
+            (
+                key if isinstance(key, tuple) else (key,),
+                tuple(value.shape),
+                str(value.dtype),
+            )
+            for key, value in weights.items(True, True)
+        )
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload

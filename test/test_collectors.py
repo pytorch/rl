@@ -49,6 +49,7 @@ from torchrl._utils import (
 )
 from torchrl.collectors import (
     AsyncCollector,
+    BaseCollector,
     Collector,
     MultiAsyncCollector,
     MultiSyncCollector,
@@ -183,6 +184,11 @@ def test_weight_sync_scheme_from_backend_forwards_kwargs():
 def test_weight_sync_scheme_from_backend_rejects_unknown():
     with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
         WeightSyncScheme.from_backend("unknown")
+
+
+def test_missing_weight_update_path_raises():
+    with pytest.raises(RuntimeError, match="No weight updater"):
+        BaseCollector._maybe_fallback_update(object(), TensorDict())
 
 
 def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
@@ -5665,6 +5671,36 @@ class TestCollectorRB:
         assert rb.write_count >= 32
         assert len(rb) > 0
         assert rb.storage[: len(rb)].device == torch.device("cpu")
+
+    def test_runner_managed_replay_buffer_returns_uncloned_rollout(self):
+        class RunnerManagedCollector(Collector):
+            _ignore_rb = True
+
+        env = CountingEnv()
+        rb = ReplayBuffer(storage=LazyTensorStorage(32), batch_size=4)
+        postproc_inputs = []
+
+        def postproc(data):
+            postproc_inputs.append(data)
+            return data
+
+        collector = RunnerManagedCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=8,
+            total_frames=8,
+            replay_buffer=rb,
+            extend_buffer=True,
+            return_same_td=True,
+            postproc=postproc,
+        )
+        try:
+            data = next(iter(collector))
+            assert data is postproc_inputs[0]
+            rb.extend(data)
+            assert len(rb) == 8
+        finally:
+            collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize(

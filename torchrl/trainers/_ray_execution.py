@@ -157,6 +157,21 @@ class _RayLearnerWorker:
             )
             payload.set(model_weights_key, weights)
             weights = payload
+        if not self.weight_sync_scheme.synchronized_on_sender:
+            expected_signature = self._weight_signature(weights)
+            target_signatures = ray.get(
+                [
+                    target._weight_sync_signature.remote("policy")
+                    for target in self.weight_sync_scheme._remote_collectors
+                ]
+            )
+            for worker_idx, target_signature in enumerate(target_signatures):
+                if target_signature != expected_signature:
+                    raise RuntimeError(
+                        "Learner and weight receiver tensor schemas differ for "
+                        f"worker {worker_idx}: sender={expected_signature}, "
+                        f"receiver={target_signature}."
+                    )
         self.weight_sync_scheme._set_model_version(expected_version)
         if not self.weight_sync_scheme.synchronized_on_sender:
             self.weight_sync_scheme.connect(weights=weights)
@@ -164,17 +179,32 @@ class _RayLearnerWorker:
             self.weight_sync_scheme.send(weights=weights)
         return expected_version
 
+    @staticmethod
+    def _weight_signature(
+        weights: TensorDictBase,
+    ) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
+        return tuple(
+            (
+                key if isinstance(key, tuple) else (key,),
+                tuple(value.shape),
+                str(value.dtype),
+            )
+            for key, value in weights.items(True, True)
+        )
+
     def state_dict(self) -> dict[str, Any]:
         return self._require_learner().state_dict()
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> dict[str, int]:
         learner = self._require_learner()
         learner.load_state_dict(state_dict)
-        learner.synchronize_after_restore()
         return {
             "model_version": learner.model_version,
             "last_round": learner.last_round,
         }
+
+    def synchronize_after_restore(self) -> None:
+        self._require_learner().synchronize_after_restore()
 
     def probe(self) -> bool:
         return self.learner is not None
@@ -238,6 +268,18 @@ class _RayTrainerExecution:
             )
         if requested_backend not in ("gloo", "nccl"):
             raise ValueError("learner backend must be 'gloo' or 'nccl'.")
+        num_gpus = self.resources_per_rank.get("num_gpus", 0)
+        if requested_backend == "nccl" and (
+            isinstance(num_gpus, bool)
+            or not isinstance(num_gpus, (int, float))
+            or num_gpus < 1
+            or not float(num_gpus).is_integer()
+        ):
+            raise ValueError(
+                "The NCCL learner backend requires at least one whole GPU per "
+                "rank; fractional num_gpus allocations cannot provide isolated "
+                "CUDA devices."
+            )
         self.backend = requested_backend
         self.setup_timeout = float(options.pop("setup_timeout", 120.0))
         self.command_timeout = float(options.pop("command_timeout", 120.0))
@@ -275,6 +317,12 @@ class _RayTrainerExecution:
     def start(self) -> None:
         if self.is_alive():
             return
+        if (
+            self._actors
+            or self._placement_group is not None
+            or self._runtime_lease is not None
+        ):
+            self.shutdown()
         self._runtime_lease = _RayRuntimeLease.acquire(self.ray_init_config)
         self.generation += 1
         self.last_round = 0
@@ -322,7 +370,20 @@ class _RayTrainerExecution:
                 )
                 for rank, actor in enumerate(self._actors)
             ]
-            ray.get(setup, timeout=self.setup_timeout)
+            setup_receipts = ray.get(setup, timeout=self.setup_timeout)
+            ranks = {receipt["rank"] for receipt in setup_receipts}
+            versions = {receipt["model_version"] for receipt in setup_receipts}
+            rounds = {receipt["last_round"] for receipt in setup_receipts}
+            if (
+                ranks != set(range(self.world_size))
+                or len(versions) != 1
+                or len(rounds) != 1
+            ):
+                raise RuntimeError(
+                    "Learner ranks returned inconsistent setup receipts."
+                )
+            self.model_version = versions.pop()
+            self.last_round = rounds.pop()
             if self.weight_sync_scheme is not None:
                 ray.get(
                     self._actors[0].configure_weight_sync.remote(
@@ -422,17 +483,26 @@ class _RayTrainerExecution:
         rank_states = state_dict["ranks"]
         if len(rank_states) != self.world_size:
             raise ValueError("Checkpoint rank state count does not match world_size.")
-        restored = ray.get(
-            [
-                actor.load_state_dict.remote(rank_state)
-                for actor, rank_state in zip(self._actors, rank_states)
-            ],
-            timeout=self.command_timeout,
-        )
-        versions = {item["model_version"] for item in restored}
-        rounds = {item["last_round"] for item in restored}
-        if len(versions) != 1 or len(rounds) != 1:
-            raise RuntimeError("Restored learner ranks disagree on semantic state.")
+        try:
+            restored = ray.get(
+                [
+                    actor.load_state_dict.remote(rank_state)
+                    for actor, rank_state in zip(self._actors, rank_states)
+                ],
+                timeout=self.command_timeout,
+            )
+            versions = {item["model_version"] for item in restored}
+            rounds = {item["last_round"] for item in restored}
+            if len(versions) != 1 or len(rounds) != 1:
+                raise RuntimeError("Restored learner ranks disagree on semantic state.")
+            ray.get(
+                [actor.synchronize_after_restore.remote() for actor in self._actors],
+                timeout=self.command_timeout,
+            )
+        except BaseException:
+            self._failed = True
+            self.shutdown()
+            raise
         self.model_version = versions.pop()
         self.last_round = rounds.pop()
 

@@ -76,7 +76,8 @@ class SACTrainer(Trainer):
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
-        target_net_updater (TargetNetUpdater, optional): Target network updater for soft updates. Defaults to None.
+        target_net_updater (TargetNetUpdater): Target network updater for soft
+            updates.
         done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
         terminated_key (NestedKey, optional): Terminated key used by losses and logging. Defaults to "terminated".
         reward_key (NestedKey, optional): Reward key used by losses and logging. Defaults to "reward".
@@ -89,6 +90,7 @@ class SACTrainer(Trainer):
         >>> from torchrl.collectors import Collector
         >>> from torchrl.objectives import SACLoss
         >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> from torchrl.objectives.utils import SoftUpdate
         >>> from torch import optim
         >>>
         >>> # Set up collector, loss, and replay buffer
@@ -96,6 +98,7 @@ class SACTrainer(Trainer):
         >>> loss_module = SACLoss(actor_network, qvalue_network)
         >>> optimizer = optim.Adam(loss_module.parameters(), lr=3e-4)
         >>> replay_buffer = ReplayBuffer(storage=LazyTensorStorage(100000))
+        >>> target_net_updater = SoftUpdate(loss_module, eps=0.995)
         >>>
         >>> # Create and run trainer
         >>> trainer = SACTrainer(
@@ -106,6 +109,7 @@ class SACTrainer(Trainer):
         ...     loss_module=loss_module,
         ...     optimizer=optimizer,
         ...     replay_buffer=replay_buffer,
+        ...     target_net_updater=target_net_updater,
         ... )
         >>> trainer.train()
 
@@ -160,6 +164,13 @@ class SACTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("SACTrainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "SACTrainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         # try to get the action spec
         self._pass_action_spec_from_collector_to_loss(collector, loss_module)
 
@@ -241,7 +252,7 @@ class SACTrainer(Trainer):
             )
 
         # Set up comprehensive logging for SAC training
-        if self.enable_logging and learner_backend == "local":
+        if self.enable_logging:
             self._setup_sac_logging()
 
     def _pass_action_spec_from_collector_to_loss(
