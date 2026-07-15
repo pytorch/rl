@@ -664,9 +664,11 @@ class Trainer:
                 self._checkpoint_skip_warnings.add(name)
 
         if self.learner_backend == "ray":
-            # Restore service owners before constructing learner-local clients
-            # and process groups. Driver copies of loss/optimizer state are not
-            # authoritative in this mode and are intentionally omitted.
+            # These adapters refer to already-live services, so Checkpoint's
+            # deterministic name-based load order is safe. Driver copies of
+            # loss/optimizer state are not authoritative in this mode and are
+            # intentionally omitted. Policy weights are republished after the
+            # complete checkpoint has loaded.
             register("replay_buffer", self.replay_buffer)
             register("collector", self.collector)
             register("trainer_state", self._checkpoint_state)
