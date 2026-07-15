@@ -76,10 +76,17 @@ class AnthropicToolUseParser:
             if btype == "text":
                 text_parts.append(str(block.get("text", "")))
             elif btype == "tool_use":
+                tool_input = block.get("input")
+                if tool_input is None:
+                    tool_input = {}
+                elif not isinstance(tool_input, Mapping):
+                    continue
+                if not block.get("name"):
+                    continue
                 calls.append(
                     ParsedCall(
                         tool=str(block.get("name", "")),
-                        args=dict(block.get("input") or {}),
+                        args=dict(tool_input),
                         call_id=str(block.get("id") or uuid.uuid4().hex),
                         tag=None,
                     )

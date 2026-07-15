@@ -9,6 +9,7 @@ import json
 import re
 import uuid
 from collections.abc import Mapping
+from html import escape, unescape
 from typing import Any, ClassVar
 
 from ..protocols import ParsedCall, ParseResult, ToolResult
@@ -51,15 +52,15 @@ class XMLToolCallParser:
         calls: list[ParsedCall] = []
 
         def repl(m: re.Match) -> str:
-            tag = m.group("tag")
-            body = m.group("body")
+            tag = unescape(m.group("tag")) if m.group("tag") else None
+            body = unescape(m.group("body"))
             try:
                 args = json.loads(body) if body.strip() else {}
             except json.JSONDecodeError:
                 args = {"raw": body}
             calls.append(
                 ParsedCall(
-                    tool=m.group("name"),
+                    tool=unescape(m.group("name")),
                     args=args,
                     call_id=tag if tag else uuid.uuid4().hex,
                     tag=tag,
@@ -75,16 +76,17 @@ class XMLToolCallParser:
         # Otherwise an untagged parse -> render_call -> parse round-trip would
         # silently assign a different call_id.
         tag = call.tag or call.call_id
-        tag_attr = f' tag="{tag}"' if tag else ""
-        body = json.dumps(dict(call.args), ensure_ascii=False)
-        return f'<tool name="{call.tool}"{tag_attr}>{body}</tool>'
+        tag_attr = f' tag="{escape(tag, quote=True)}"' if tag else ""
+        body = escape(json.dumps(dict(call.args), ensure_ascii=False), quote=False)
+        return f'<tool name="{escape(call.tool, quote=True)}"{tag_attr}>{body}</tool>'
 
     def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
-        body = result.text
+        body = escape(result.text, quote=False)
         prefix = "[error] " if result.is_error else ""
         return {
             "role": "tool",
             "content": (
-                f'<tool_result call_id="{call_id}">{prefix}{body}</tool_result>'
+                f'<tool_result call_id="{escape(call_id, quote=True)}">'
+                f"{prefix}{body}</tool_result>"
             ),
         }

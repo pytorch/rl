@@ -27,6 +27,7 @@ import asyncio
 import json
 import threading
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +35,7 @@ import torch
 from tensordict import lazy_stack, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
+from torchrl.data.tensor_specs import Binary, Composite, TensorSpec
 from torchrl.envs.transforms import Compose, Transform
 
 from .protocols import (
@@ -202,17 +204,75 @@ class ToolCompose(Compose):
             "append_tool(tool) instead."
         )
 
+    def append(self, transform: Any) -> None:  # type: ignore[override]
+        """Reject generic transform insertion; use :meth:`append_tool`."""
+        raise TypeError(
+            "ToolCompose does not accept arbitrary transforms. Use "
+            "append_tool(tool) instead."
+        )
+
+    def insert(self, index: int, transform: Any) -> None:  # type: ignore[override]
+        """Reject generic transform insertion; use :meth:`append_tool`."""
+        raise TypeError(
+            "ToolCompose does not accept arbitrary transforms. Use "
+            "append_tool(tool) instead."
+        )
+
+    def __setitem__(self, index: Any, value: Any) -> None:
+        """Reject replacement that would desynchronise the tool registry."""
+        raise TypeError("ToolCompose tools cannot be replaced in place")
+
+    def __delitem__(self, index: Any) -> None:
+        """Reject deletion that would desynchronise the tool registry."""
+        raise TypeError("ToolCompose tools cannot be deleted in place")
+
+    def pop(self, index: int | None = None) -> Transform:
+        """Reject removal that would desynchronise the tool registry."""
+        raise TypeError("ToolCompose tools cannot be removed in place")
+
     def append_tool(self, tool: Tool) -> None:
         """Append a :class:`Tool` to the dispatch set."""
+        if self._setup_done:
+            raise RuntimeError("cannot append a tool after tool setup")
         if not _is_tool(tool):
             raise TypeError(f"append_tool requires a Tool; got {type(tool).__name__!r}")
         if tool.name in self._tools_by_name:
             raise ValueError(f"duplicate tool name: {tool.name!r}")
         shim = _ToolTransformShim(tool)
+        self.empty_cache()
         self.transforms.append(shim)
         shim.set_container(self)
         self._tool_list.append(tool)
         self._tools_by_name[tool.name] = tool
+        parent = self.parent
+        if parent is not None:
+            parent.empty_cache()
+
+    def clone(self) -> ToolCompose:
+        """Clone this compose with independent tools and async primitives."""
+        if getattr(self, "_toolsets", ()):
+            raise RuntimeError(
+                "ToolCompose instances with dynamic toolsets cannot be cloned; "
+                "construct a new toolset for each clone"
+            )
+        try:
+            tools = deepcopy(self._tool_list)
+            parser = deepcopy(self.parser)
+        except Exception as error:
+            raise RuntimeError(
+                "ToolCompose tools must be deepcopy-compatible"
+            ) from error
+        return type(self)(
+            tools=tools,
+            parser=parser,
+            rate_limits={
+                name: limiter.clone() for name, limiter in self._rate_limits.items()
+            },
+            per_call_timeout=self._per_call_timeout,
+            pass_state_to_tools=self._pass_state,
+            tool_role=self._tool_role,
+            validate_inputs=self._validate_inputs,
+        )
 
     def add_toolset(self, toolset: Any) -> None:
         """Open an async toolset and add its discovered tools.
@@ -289,6 +349,57 @@ class ToolCompose(Compose):
         finally:
             runner.close()
             self._async_runner = None
+
+    def _reset(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_reset: TensorDictBase,
+    ) -> TensorDictBase:
+        if self._setup_done:
+            self._run_async(self._teardown_tools())
+        tensordict_reset = super()._reset(tensordict, tensordict_reset)
+        for key in ("any_tool_calls", "any_error", "stop_requested"):
+            tensordict_reset.set(
+                ("agentic", key),
+                torch.zeros(
+                    tensordict_reset.batch_size,
+                    dtype=torch.bool,
+                    device=tensordict_reset.device,
+                ),
+            )
+        return tensordict_reset
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        """Register the agentic dispatch signals emitted on reset and step."""
+        observation_spec = super().transform_observation_spec(observation_spec)
+        if not isinstance(observation_spec, Composite):
+            raise TypeError(
+                "ToolCompose requires a Composite observation spec; got "
+                f"{type(observation_spec).__name__}"
+            )
+        shape = observation_spec.shape
+        device = observation_spec.device
+        observation_spec["agentic"] = Composite(
+            any_tool_calls=Binary(shape=shape, dtype=torch.bool, device=device),
+            any_error=Binary(shape=shape, dtype=torch.bool, device=device),
+            stop_requested=Binary(shape=shape, dtype=torch.bool, device=device),
+            shape=shape,
+            device=device,
+        )
+        return observation_spec
+
+    def transform_output_spec(self, output_spec: TensorSpec) -> TensorSpec:
+        """Apply child specs and register agentic observation signals."""
+        output_spec = super().transform_output_spec(output_spec)
+        if not isinstance(output_spec, Composite):
+            raise TypeError(
+                "ToolCompose requires a Composite output spec; got "
+                f"{type(output_spec).__name__}"
+            )
+        output_spec["full_observation_spec"] = self.transform_observation_spec(
+            output_spec["full_observation_spec"]
+        )
+        return output_spec
 
     # ----- the step path -----
 
@@ -428,6 +539,7 @@ class ToolCompose(Compose):
             sandbox=getattr(tool, "sandbox", None),
             repl=getattr(tool, "repl", None),
             compose=self,
+            batch_index=batch_index,
         )
         limiter = self._rate_limits.get(tool.name)
         timeout = self._per_call_timeout

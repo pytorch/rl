@@ -77,6 +77,22 @@ class HttpTool:
 
     async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         url = args["url"]
+        if not isinstance(url, str):
+            return ToolResult.from_text("'url' must be a string", is_error=True)
+        scheme = urlparse(url).scheme.lower()
+        if scheme not in {"http", "https"}:
+            return ToolResult(
+                parts=(
+                    TextPart(
+                        text=(
+                            f"URL scheme {scheme!r} is not allowed; "
+                            "expected 'http' or 'https'"
+                        )
+                    ),
+                ),
+                is_error=True,
+                meta={"blocked_scheme": scheme},
+            )
         method = (args.get("method") or "GET").upper()
         headers = dict(args.get("headers") or {})
         body = args.get("body")
@@ -137,15 +153,20 @@ def _host_of(url: str) -> str:
     return urlparse(url).hostname or ""
 
 
-class _AllowedHostsRedirectHandler(urllib_request.HTTPRedirectHandler):
-    """Reject redirects whose destination is outside ``allowed_hosts``."""
+class _SafeRedirectHandler(urllib_request.HTTPRedirectHandler):
+    """Restrict redirect schemes and optionally destination hosts."""
 
     def __init__(self, allowed_hosts: tuple[str, ...]) -> None:
         self.allowed_hosts = allowed_hosts
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        scheme = urlparse(newurl).scheme.lower()
+        if scheme not in {"http", "https"}:
+            raise urllib_error.URLError(
+                f"redirect URL scheme {scheme!r} is not allowed"
+            )
         host = _host_of(newurl)
-        if host not in self.allowed_hosts:
+        if self.allowed_hosts and host not in self.allowed_hosts:
             raise urllib_error.URLError(
                 f"redirect host {host!r} not in allowed_hosts "
                 f"{self.allowed_hosts!r}"
@@ -162,12 +183,11 @@ def _do_request(
     max_bytes: int,
     allowed_hosts: tuple[str, ...],
 ) -> tuple[int, bytes, Mapping[str, str], bool]:
+    scheme = urlparse(url).scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise urllib_error.URLError(f"URL scheme {scheme!r} is not allowed")
     req = urllib_request.Request(url, data=data, headers=dict(headers), method=method)
-    opener = urllib_request.build_opener(
-        _AllowedHostsRedirectHandler(allowed_hosts)
-        if allowed_hosts
-        else urllib_request.HTTPRedirectHandler()
-    )
+    opener = urllib_request.build_opener(_SafeRedirectHandler(allowed_hosts))
     with opener.open(req, timeout=timeout) as resp:
         body = resp.read(max_bytes + 1)
         truncated = len(body) > max_bytes

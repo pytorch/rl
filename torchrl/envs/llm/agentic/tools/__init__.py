@@ -14,7 +14,7 @@
 """
 from __future__ import annotations
 
-from .builtin import FileReadTool, PythonTool, ShellTool, StopTool, StopSignal
+from .builtin import FileReadTool, PythonTool, ShellTool, StopSignal, StopTool
 from .http import HttpTool
 from .legacy_adapter import as_tool
 from .mcp import MCPServerConfig, MCPToolset

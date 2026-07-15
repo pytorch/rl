@@ -34,6 +34,7 @@ from .protocols import (
 from .rate_limit import RateLimiter
 from .schema import json_schema_from_pydantic, validate_args
 from .tools import (
+    as_tool,
     FileReadTool,
     HttpTool,
     MCPServerConfig,
@@ -42,7 +43,6 @@ from .tools import (
     ShellTool,
     StopSignal,
     StopTool,
-    as_tool,
 )
 
 __all__ = [

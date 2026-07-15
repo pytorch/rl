@@ -172,7 +172,11 @@ class _LegacyToolAdapter:
             )
         # Legacy tools are sync; offload so we don't block the event loop.
         try:
-            results = await asyncio.to_thread(process, rendered, 0)
+            results = await asyncio.to_thread(
+                process,
+                rendered,
+                ctx.batch_index if ctx.batch_index is not None else 0,
+            )
         except Exception as e:  # pragma: no cover -- depends on legacy impl
             raise ToolError(str(e)) from e
         if not results:

@@ -53,18 +53,30 @@ class JSONToolCallParser:
         if not isinstance(data, Mapping):
             return ParseResult(text=str(data), calls=(), raw=response)
         tools_data = data.get("tools") or ()
-        calls = tuple(
-            ParsedCall(
-                tool=str(c["tool"]),
-                args=dict(c.get("args") or {}),
-                call_id=str(c.get("id") or c.get("call_id") or uuid.uuid4().hex),
-                tag=c.get("tag"),
+        if not isinstance(tools_data, (list, tuple)):
+            tools_data = ()
+        calls: list[ParsedCall] = []
+        for item in tools_data:
+            if not isinstance(item, Mapping) or not item.get("tool"):
+                continue
+            args = item.get("args")
+            if args is None:
+                args = {}
+            elif not isinstance(args, Mapping):
+                continue
+            calls.append(
+                ParsedCall(
+                    tool=str(item["tool"]),
+                    args=dict(args),
+                    call_id=str(
+                        item.get("id") or item.get("call_id") or uuid.uuid4().hex
+                    ),
+                    tag=item.get("tag"),
+                )
             )
-            for c in tools_data
-        )
         return ParseResult(
             text=str(data.get("message", "")),
-            calls=calls,
+            calls=tuple(calls),
             raw=response,
         )
 
