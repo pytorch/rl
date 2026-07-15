@@ -9,8 +9,9 @@ import pathlib
 import warnings
 
 from collections.abc import Callable
+
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictSequential
@@ -34,9 +35,6 @@ from torchrl.trainers.trainers import (
     UTDRHook,
 )
 
-if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup
-
 
 class DQNTrainer(Trainer):
     """A trainer class for Deep Q-Network (DQN) algorithm.
@@ -58,8 +56,7 @@ class DQNTrainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable, optional): The DQN loss module or a callable that
-            computes losses. Must be omitted when ``learner_group`` owns optimization state.
+        loss_module (LossModule | Callable): The DQN loss module or a callable that computes losses.
         optimizer (optim.Optimizer, optional): The optimizer for training.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
@@ -70,6 +67,15 @@ class DQNTrainer(Trainer):
         log_interval (int, optional): Interval for logging metrics. Defaults to 10000.
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.
+        batch_size (int, optional): Global learner batch size. When omitted, the
+            replay buffer batch size is used.
+        learner_backend (str): Optimization placement. ``"local"`` preserves
+            the in-process Trainer path; ``"ray"`` creates private DDP learner
+            actors. Defaults to ``"local"``.
+        learner_backend_options (dict, optional): Ray learner options, including
+            ``world_size`` and ``resources_per_rank``.
+        learner_poll_interval (float): Replay polling interval for asynchronous
+            remote collection. Defaults to ``0.05`` seconds.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
@@ -99,10 +105,6 @@ class DQNTrainer(Trainer):
             Defaults to ``"action"``.
         observation_key (NestedKey, optional): Key for observations used by logging. Defaults to
             ``"observation"``.
-        learner_group (LearnerGroup, optional): Remotely owned learner group. When provided,
-            replay sampling, loss evaluation, optimization, and target updates run inside learners.
-        learner_poll_interval (float): Controller polling interval while asynchronous collectors
-            populate replay. Defaults to ``0.05`` seconds.
 
     Example:
         >>> from torchrl.collectors import Collector
@@ -143,10 +145,8 @@ class DQNTrainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
-        learner_group: LearnerGroup | None = None,
-        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -157,6 +157,10 @@ class DQNTrainer(Trainer):
         save_trainer_file: str | pathlib.Path | None = None,
         checkpoint: Checkpoint | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_observations: bool = False,
@@ -181,14 +185,6 @@ class DQNTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
-        if learner_group is not None and target_net_updater is not None:
-            raise ValueError(
-                "target_net_updater must be constructed inside remote learners."
-            )
-        if learner_group is not None and mixing_strategy is not None:
-            raise ValueError(
-                "mixing_strategy is not supported by remote DQN learner groups."
-            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -196,8 +192,11 @@ class DQNTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
-            learner_group=learner_group,
             replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
             learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
@@ -212,6 +211,7 @@ class DQNTrainer(Trainer):
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
         )
+        self.replay_buffer = replay_buffer
         self.async_collection = async_collection
         self.mixing_strategy = mixing_strategy
         self.done_key = done_key
@@ -223,7 +223,7 @@ class DQNTrainer(Trainer):
         self.action_key = action_key
         self.observation_key = observation_key
 
-        if replay_buffer is not None and learner_group is None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -238,13 +238,13 @@ class DQNTrainer(Trainer):
             self.register_op("post_loss", rb_trainer.update_priority)
 
         self.target_net_updater = target_net_updater
-        if learner_group is None:
+        if learner_backend == "local":
             self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         self.greedy_module = greedy_module
         if greedy_module is not None:
             self._greedy_last_frames = 0
-        if learner_group is None:
+        if learner_backend == "local":
             if hasattr(self.loss_module, "value_network"):
                 weights_source = self.loss_module.value_network
             elif hasattr(self.loss_module, "local_value_network"):
@@ -278,25 +278,24 @@ class DQNTrainer(Trainer):
                 )
             self.register_op("batch_process", self._aggregate_agent_rewards)
 
-        if self.enable_logging and learner_group is None:
+        if self.enable_logging and learner_backend == "local":
             self._setup_dqn_logging()
 
-    def _prepare_learner_weights(self, weights: TensorDictBase) -> TensorDictBase:
+    def _execution_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
         if self.greedy_module is None:
-            return weights
+            return None, None
         self._step_greedy()
-        return TensorDict(
+        auxiliary_weights = TensorDict(
             {
                 "module": TensorDict(
-                    {
-                        "0": weights,
-                        "1": TensorDict.from_module(self.greedy_module),
-                    },
-                    batch_size=[],
+                    {"1": TensorDict.from_module(self.greedy_module)}, batch_size=[]
                 )
             },
             batch_size=[],
         )
+        return ("module", "0"), auxiliary_weights
 
     def _step_greedy(self):
         """Advance epsilon-greedy annealing by the number of frames collected since last call."""
