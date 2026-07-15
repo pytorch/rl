@@ -1567,7 +1567,10 @@ class TestRayTransport:
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
-    def test_ray_owned_inference_with_nccl_transport(self):
+    def test_ray_owned_inference_with_nccl_transport(self, monkeypatch):
+        # This test runs both NCCL ranks on the single GPU provided by the CI
+        # worker. Production deployments should normally assign one GPU per rank.
+        monkeypatch.setenv("NCCL_MULTI_RANK_GPU_ENABLE", "1")
         server = InferenceServer(
             policy_factory=lambda: TensorDictModule(
                 nn.Linear(4, 2),
@@ -1575,7 +1578,12 @@ class TestRayTransport:
                 out_keys=["action"],
             ),
             service_backend="ray",
-            service_backend_options={"remote_config": {"num_gpus": 1}},
+            service_backend_options={
+                "remote_config": {
+                    "num_gpus": 1,
+                    "runtime_env": {"env_vars": {"NCCL_MULTI_RANK_GPU_ENABLE": "1"}},
+                }
+            },
             transport="distributed",
             transport_options={"backend": "nccl", "timeout": 30.0},
             output_device="cuda:0",
