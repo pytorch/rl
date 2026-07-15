@@ -14,6 +14,7 @@ import time
 
 import pytest
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 
 from tensordict import lazy_stack, TensorDict
@@ -273,6 +274,33 @@ class TestInferenceTransportABC:
 
 
 class TestInferenceServerCore:
+    def test_canonical_thread_constructor(self):
+        with InferenceServer(_make_policy(), transport="auto") as server:
+            assert server.service_backend == "thread"
+            assert server.transport_kind == "thread"
+            result = server.client()(
+                TensorDict({"observation": torch.randn(4)}, batch_size=[])
+            )
+        assert result["action"].shape == (2,)
+
+    @pytest.mark.parametrize(
+        ("service_backend", "transport"),
+        [("thread", "ray"), ("process", "ray"), ("ray", "shared_memory")],
+    )
+    def test_invalid_backend_transport_rejected_before_start(
+        self, service_backend, transport
+    ):
+        kwargs = {
+            "service_backend": service_backend,
+            "transport": transport,
+        }
+        if service_backend == "thread":
+            kwargs["model"] = _make_policy()
+        else:
+            kwargs["policy_factory"] = _make_policy
+        with pytest.raises(ValueError, match="incompatible"):
+            InferenceServer(**kwargs)
+
     def test_start_and_shutdown(self):
         transport = _MockTransport()
         policy = _make_policy()
@@ -1474,6 +1502,98 @@ class TestRayTransport:
             assert "action" in result.keys()
             assert result["action"].shape == (2,)
 
+    def test_canonical_ray_owned_inference(self):
+        ray = _ray_lib()
+        server = InferenceServer(
+            policy_factory=lambda: TensorDictModule(
+                nn.Linear(4, 2),
+                in_keys=["observation"],
+                out_keys=["action"],
+            ),
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        try:
+            assert server.service_backend == "ray"
+            assert server.transport_kind == "ray"
+            clients = server.clients(2)
+            assert clients[0] is not clients[1]
+            result = clients[0](
+                TensorDict({"observation": torch.randn(4)}, batch_size=[])
+            )
+            assert result["action"].shape == (2,)
+            assert not hasattr(clients[0], "shutdown")
+        finally:
+            server.shutdown()
+        # The fixture owns Ray; component shutdown must leave it running.
+        assert ray.is_initialized()
+
+    def test_ray_owned_inference_with_gloo_transport(self):
+        server = InferenceServer(
+            policy_factory=lambda: TensorDictModule(
+                nn.Linear(4, 2),
+                in_keys=["observation"],
+                out_keys=["action"],
+            ),
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="distributed",
+            transport_options={"backend": "gloo", "timeout": 30.0},
+        )
+        try:
+            client = server.client()
+            result = client(
+                TensorDict(
+                    {"observation": torch.randn(4)},
+                    batch_size=[],
+                    device="cpu",
+                ),
+                timeout=30.0,
+            )
+            assert result["action"].shape == (2,)
+            assert server.transport_kind == "distributed"
+            assert not dist.is_initialized()
+            server.shutdown()
+            started = time.monotonic()
+            with pytest.raises((MailboxPeerClosedError, MailboxTransportError)):
+                client(
+                    TensorDict({"observation": torch.randn(4)}, batch_size=[]),
+                    timeout=5.0,
+                )
+            assert time.monotonic() - started < 3.0
+        finally:
+            server.shutdown()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_ray_owned_inference_with_nccl_transport(self):
+        server = InferenceServer(
+            policy_factory=lambda: TensorDictModule(
+                nn.Linear(4, 2),
+                in_keys=["observation"],
+                out_keys=["action"],
+            ),
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_gpus": 1}},
+            transport="distributed",
+            transport_options={"backend": "nccl", "timeout": 30.0},
+            output_device="cuda:0",
+        )
+        try:
+            result = server.client()(
+                TensorDict(
+                    {"observation": torch.randn(4, device="cuda")},
+                    batch_size=[],
+                    device="cuda",
+                ),
+                timeout=30.0,
+            )
+            assert result["action"].is_cuda
+            assert not dist.is_initialized()
+        finally:
+            server.shutdown()
+
     def test_concurrent_clients(self):
         """Multiple clients submit concurrently from threads (simulating Ray actors)."""
         transport = RayTransport()
@@ -1789,6 +1909,24 @@ def _make_slow_policy():
 
 
 class TestProcessInferenceServer:
+    def test_canonical_process_constructor(self):
+        server = InferenceServer(
+            policy_factory=_make_policy,
+            service_backend="process",
+            transport="auto",
+            service_backend_options={"mp_context": "spawn"},
+        )
+        try:
+            assert server.service_backend == "process"
+            assert server.transport_kind == "process"
+            with server:
+                result = server.client()(
+                    TensorDict({"observation": torch.randn(4)}, batch_size=[])
+                )
+            assert result["action"].shape == (2,)
+        finally:
+            server.shutdown()
+
     def test_process_server_start_shutdown(self):
         ctx = mp.get_context("spawn")
         transport = MPTransport(ctx=ctx)

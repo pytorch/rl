@@ -204,7 +204,8 @@ class InferenceServerConfig:
             ``"thread"`` runs the serve loop in a background thread of the
             constructing process; ``"process"`` runs a dedicated server
             process (which requires a picklable ``policy_factory`` and a
-            multiprocessing-capable transport). Defaults to ``"thread"``.
+            multiprocessing-capable transport); ``"ray"`` runs a dedicated
+            Ray actor and requires ``policy_factory``. Defaults to ``"thread"``.
         max_batch_size (int, optional): maximum number of requests per forward
             pass. Defaults to ``64``.
         min_batch_size (int, optional): minimum number of requests to
@@ -230,15 +231,13 @@ class InferenceServerConfig:
         >>> from torchrl.modules.inference_server import (
         ...     InferenceServer,
         ...     InferenceServerConfig,
-        ...     ThreadingTransport,
         ... )
         >>> policy = TensorDictModule(
         ...     nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
         ... )
-        >>> transport = ThreadingTransport()
         >>> config = InferenceServerConfig(max_batch_size=8, timeout=0.001)
-        >>> with InferenceServer(policy, transport, server_config=config) as server:
-        ...     client = transport.client()
+        >>> with InferenceServer(policy, transport="auto", server_config=config) as server:
+        ...     client = server.client()
         ...     result = client(TensorDict({"observation": torch.randn(4)}))
         >>> result["action"].shape
         torch.Size([2])
@@ -246,7 +245,7 @@ class InferenceServerConfig:
         8
     """
 
-    service_backend: Literal["thread", "process"] = "thread"
+    service_backend: Literal["thread", "process", "ray"] = "thread"
     max_batch_size: int = 64
     min_batch_size: int = 1
     timeout: float = 0.01
@@ -255,10 +254,10 @@ class InferenceServerConfig:
     max_inflight_per_env: int | None = None
 
     def __post_init__(self) -> None:
-        if self.service_backend not in ("thread", "process"):
+        if self.service_backend not in ("thread", "process", "ray"):
             raise ValueError(
                 f"service_backend={self.service_backend!r} is not supported. "
-                "Expected 'thread' or 'process'."
+                "Expected 'thread', 'process', or 'ray'."
             )
         if self.max_inflight_per_env is not None and self.max_inflight_per_env < 1:
             raise ValueError(
