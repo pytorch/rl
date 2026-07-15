@@ -1376,29 +1376,45 @@ class Collector(BaseCollector):
             self.storing_device is None or self.storing_device == self.env_device
         )
         rollout_step = self._final_rollout[..., 0] if self._use_buffers else None
-        rollout_step_bytes = (
-            sum(
-                value.numel() * value.element_size()
-                for value in rollout_step.values(True, True)
-                if isinstance(value, torch.Tensor)
+
+        def contains_lazy_stack(tensordict: TensorDictBase) -> bool:
+            if isinstance(tensordict, LazyStackedTensorDict):
+                return True
+            return any(
+                contains_lazy_stack(value)
+                for value in tensordict.values()
+                if isinstance(value, TensorDictBase)
             )
-            if rollout_step is not None
-            else 0
+
+        dense_rollout = rollout_step is not None and not contains_lazy_stack(
+            rollout_step
+        )
+        if not (
+            self._use_buffers
+            and supports_direct_output
+            and same_storage_device
+            and dense_rollout
+        ):
+            self._write_env_output_directly = False
+            self._yield_owning_rollout = False
+            self._direct_output_root_keys = ()
+            self._direct_output_next_keys = ()
+            return
+
+        rollout_step_values = tuple(rollout_step.values(True, True))
+        rollout_step_bytes = sum(
+            value.numel() * value.element_size()
+            for value in rollout_step_values
+            if isinstance(value, torch.Tensor)
         )
         # Per-step TensorDict updates have a fixed cost. Small payloads remain
         # faster on the regular clone-and-stack path; direct writes are reserved
         # for batches where memory traffic dominates that bookkeeping.
         large_enough = rollout_step_bytes >= self._DIRECT_ENV_OUTPUT_MIN_BYTES
-        tensor_only = rollout_step is not None and all(
-            isinstance(value, torch.Tensor) for value in rollout_step.values(True, True)
+        tensor_only = all(
+            isinstance(value, torch.Tensor) for value in rollout_step_values
         )
-        self._write_env_output_directly = bool(
-            self._use_buffers
-            and supports_direct_output
-            and same_storage_device
-            and large_enough
-            and tensor_only
-        )
+        self._write_env_output_directly = bool(large_enough and tensor_only)
         self._yield_owning_rollout = bool(
             self._write_env_output_directly and not self.return_same_td
         )
