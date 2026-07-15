@@ -32,8 +32,10 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.objectives import LossModule
 from torchrl.testing import PONG_VERSIONED
 from torchrl.trainers import LogValidationReward, Trainer
+from torchrl.trainers._execution import _Learner
 from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
@@ -1704,6 +1706,39 @@ class TestDefaultOptimizationStepper:
         assert all(
             torch.equal(b, a) for b, a in zip(model2_before, model2.parameters())
         )
+
+
+def test_private_learner_uses_ordinary_replay_api():
+    class ScalarLoss(LossModule):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(()))
+
+        def forward(self, td):
+            return TensorDict({"loss": self.weight * td["value"].mean()}, [])
+
+    replay = TensorDictReplayBuffer(storage=LazyTensorStorage(8), batch_size=4)
+    replay.extend(TensorDict({"value": torch.ones(8, 1)}, [8]))
+    loss = ScalarLoss()
+    learner = _Learner(
+        loss_module=loss,
+        replay_buffer=replay,
+        local_batch_size=4,
+        optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+        optimization_stepper=None,
+        target_net_updater=None,
+    ).initialize()
+
+    result = learner.step(num_steps=2, round_id=1)
+
+    assert result.round_id == 1
+    assert result.model_version == 2
+    torch.testing.assert_close(loss.weight, torch.tensor(0.8))
+    weights = learner.get_weights(expected_version=2)
+    assert weights["weight"].data_ptr() != loss.weight.data_ptr()
+    weights["weight"].zero_()
+    torch.testing.assert_close(loss.weight, torch.tensor(0.8))
+    learner.close()
 
 
 class TestLRSchedulerHook:

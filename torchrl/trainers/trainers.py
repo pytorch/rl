@@ -200,6 +200,10 @@ class OptimizationStepper(TrainerHookBase):
         """
         raise NotImplementedError
 
+    def _step(self, context: Any, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Run this stepper against a private optimization context."""
+        return self.step(context, sub_batch)
+
     def state_dict(self) -> dict[str, Any]:
         return {}
 
@@ -254,7 +258,7 @@ class DefaultOptimizationStepper(OptimizationStepper):
         return float(gn)
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
-        losses_td = trainer.loss_module(sub_batch)
+        losses_td = trainer.compute_loss(sub_batch)
 
         if trainer.optimizer is None:
             raise RuntimeError(
@@ -497,6 +501,14 @@ class Trainer:
 
         if self.checkpoint is not None:
             self._sync_checkpoint_components()
+
+    def compute_loss(
+        self, sub_batch: TensorDictBase, method: str | None = None
+    ) -> TensorDictBase | tuple[Any, ...]:
+        """Evaluate the configured loss through the active execution boundary."""
+        if method is None:
+            return self.loss_module(sub_batch)
+        return getattr(self.loss_module, method)(sub_batch)
 
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
