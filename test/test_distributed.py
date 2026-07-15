@@ -42,9 +42,11 @@ from torchrl.data import (
     ReplayBuffer,
     RoundRobinWriter,
     SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
 )
 from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
+from torchrl.modules.inference_server import InferenceServer
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
     snapshot_python_processes,
@@ -711,6 +713,41 @@ class TestRayCollector(DistributedCollectorBase):
         }
         return {"ray_init_config": ray_init_config, "remote_configs": remote_configs}
 
+    def test_ray_owned_inference_and_replay(self):
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        inference = InferenceServer(
+            policy_factory=CountingPolicy,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        collector = None
+        try:
+            collector = RayCollector(
+                create_env_fn=[CountingEnv],
+                policy=inference,
+                replay_buffer=replay,
+                collector_class=Collector,
+                frames_per_batch=8,
+                total_frames=16,
+                remote_configs={"num_cpus": 1, "num_gpus": 0},
+                sync=True,
+            )
+            assert all(batch is None for batch in collector)
+            assert len(replay) == 16
+            assert replay.sample().shape == (4,)
+        finally:
+            if collector is not None:
+                collector.shutdown()
+            inference.shutdown()
+            replay.shutdown()
+
     @classmethod
     def _start_worker(cls):
         pass
@@ -1023,7 +1060,7 @@ class TestRayTrajsPerBatch:
             "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
         }
         remote_configs = {"num_cpus": 1, "num_gpus": 0.0}
-        with pytest.raises(TypeError, match="RayReplayBuffer"):
+        with pytest.raises(TypeError, match="service_backend='ray'"):
             RayCollector(
                 [env_fn, env_fn],
                 policy,

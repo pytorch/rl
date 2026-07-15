@@ -242,6 +242,8 @@ class TestRayRB:
             rb.close()
 
     def test_construct_from_replay_buffer_service_backend(self):
+        import ray
+
         rb = ReplayBuffer(
             storage=partial(LazyTensorStorage, 100),
             service_backend="ray",
@@ -254,12 +256,70 @@ class TestRayRB:
             assert isinstance(rb, RayReplayBuffer)
             assert isinstance(rb, ReplayBuffer)
             assert rb.service_backend == "ray"
+            assert rb.transport_kind == "ray"
+            clients = rb.clients(2)
+            assert clients[0] is not clients[1]
             rb.extend(TensorDict({"x": torch.ones(4)}, batch_size=4))
             assert len(rb.client()) == 4
         finally:
             rb.shutdown()
         assert not rb.is_alive
+        assert ray.is_initialized()
         rb.shutdown()
+
+    def test_ray_replay_with_gloo_transport(self):
+        rb = ReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="distributed",
+            transport_options={"backend": "gloo", "timeout": 30.0},
+        )
+        try:
+            client = rb.client()
+            indices = client.extend(
+                TensorDict({"x": torch.arange(8)}, batch_size=[8]), timeout=30.0
+            )
+            assert indices.tolist() == list(range(8))
+            assert len(client) == 8
+            assert client.write_count == 8
+            assert client.sample(timeout=30.0).shape == (4,)
+            with pytest.raises((RuntimeError, ValueError)):
+                client.extend(
+                    TensorDict({"x": torch.arange(4)}, batch_size=[4]),
+                    timeout=30.0,
+                )
+            assert not hasattr(client, "shutdown")
+        finally:
+            rb.shutdown()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_ray_replay_with_nccl_transport(self):
+        rb = ReplayBuffer(
+            storage=partial(LazyTensorStorage, 100, device="cuda"),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_gpus": 1}},
+            transport="distributed",
+            transport_options={"backend": "nccl", "timeout": 30.0},
+        )
+        try:
+            client = rb.client()
+            client.extend(
+                TensorDict(
+                    {"x": torch.arange(8, device="cuda")},
+                    batch_size=[8],
+                    device="cuda",
+                ),
+                timeout=30.0,
+            )
+            sample = client.sample(timeout=30.0)
+            assert sample.shape == (4,)
+            assert sample.device.type == "cuda"
+        finally:
+            rb.shutdown()
 
     def test_ray_rb_mcadvantage_transform_factory(self):
         rb = RayReplayBuffer(
