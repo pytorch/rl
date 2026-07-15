@@ -244,15 +244,9 @@ async def _wrap_argv_via_sandbox(sandbox: Sandbox, argv: tuple[str, ...]) -> lis
     """
     builder = getattr(sandbox, "_build_argv", None)
     if callable(builder):
-        try:
-            return list(builder(list(argv), sandbox.limits, None))
-        except TypeError:
-            try:
-                return list(builder(list(argv), sandbox.limits))
-            except Exception:
-                return list(argv)
-        except Exception:
-            return list(argv)
+        # Hardened backends must fail closed. Falling back to the raw argv on a
+        # policy/configuration error would execute untrusted code on the host.
+        return list(builder(list(argv), sandbox.limits, None))
     return list(argv)
 
 

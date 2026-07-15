@@ -64,14 +64,18 @@ class RateLimiter:
                 self._tokens -= 1.0
                 return
             wait = (1.0 - self._tokens) / self._rate
+            # Reserve this future token while holding the lock. Without this,
+            # all concurrent waiters observe the same deficit, sleep together,
+            # and are released as an unbounded burst.
+            self._tokens -= 1.0
         await asyncio.sleep(wait)
-        async with self._lock:
-            self._tokens = max(0.0, self._tokens - 1.0)
 
     @asynccontextmanager
     async def slot(self):
-        """Acquire one slot. Blocks until both the semaphore and token
-        bucket allow."""
+        """Acquire one slot.
+
+        Blocks until both the semaphore and token bucket allow.
+        """
         await self._consume()
         if self._sem is None:
             yield

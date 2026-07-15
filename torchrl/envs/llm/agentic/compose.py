@@ -26,10 +26,8 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-import uuid
 from collections.abc import Iterable, Mapping
-from concurrent.futures import Future
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -96,8 +94,10 @@ class _ToolTransformShim(Transform):
 
 
 class ToolCompose(Compose):
-    """A :class:`Compose` of :class:`~torchrl.envs.llm.agentic.Tool` objects
-    with parallel async dispatch.
+    """Compose tools with parallel async dispatch.
+
+    This is a :class:`Compose` of
+    :class:`~torchrl.envs.llm.agentic.Tool` objects.
 
     Args:
         tools: The set of tools the LLM may call. Each must conform to the
@@ -173,6 +173,7 @@ class ToolCompose(Compose):
         self._tool_role = tool_role
         self._validate_inputs = validate_inputs
         self._setup_done = False
+        self._async_runner: _AsyncRunner | None = None
 
     # ----- introspection helpers -----
 
@@ -203,9 +204,7 @@ class ToolCompose(Compose):
     def append_tool(self, tool: Tool) -> None:
         """Append a :class:`Tool` to the dispatch set."""
         if not _is_tool(tool):
-            raise TypeError(
-                f"append_tool requires a Tool; got {type(tool).__name__!r}"
-            )
+            raise TypeError(f"append_tool requires a Tool; got {type(tool).__name__!r}")
         if tool.name in self._tools_by_name:
             raise ValueError(f"duplicate tool name: {tool.name!r}")
         shim = _ToolTransformShim(tool)
@@ -223,9 +222,7 @@ class ToolCompose(Compose):
             try:
                 await tool.setup()
             except Exception:  # pragma: no cover -- per-tool setup is best-effort
-                torchrl_logger.exception(
-                    "tool %r setup raised; continuing", tool.name
-                )
+                torchrl_logger.exception("tool %r setup raised; continuing", tool.name)
         self._setup_done = True
 
     async def _teardown_tools(self) -> None:
@@ -240,10 +237,16 @@ class ToolCompose(Compose):
 
     def close(self) -> None:  # type: ignore[override]
         super().close()
+        runner = self._async_runner
+        if runner is None:
+            return
         try:
-            _run_async(self._teardown_tools())
+            runner.run(self._teardown_tools())
         except Exception:  # pragma: no cover
             torchrl_logger.exception("teardown_tools raised; continuing")
+        finally:
+            runner.close()
+            self._async_runner = None
 
     # ----- the step path -----
 
@@ -256,21 +259,47 @@ class ToolCompose(Compose):
             return next_tensordict
         history = self._extract_history(next_tensordict)
         last = history[..., -1]
-        contents = last.content
-        if isinstance(contents, str):
-            contents = [contents]
+        responses = self._parser_inputs(last)
         # asyncio.gather across batch items.
-        dispatch_results: list[DispatchResult] = _run_async(
-            self._dispatch_batch(list(contents), next_tensordict)
+        dispatch_results: list[DispatchResult] = self._run_async(
+            self._dispatch_batch(responses, next_tensordict)
         )
         return self._inject_results(history, dispatch_results, next_tensordict)
+
+    def _parser_inputs(self, last: History) -> list[str | Mapping[str, Any]]:
+        """Build parser inputs without dropping structured provider fields."""
+        items = (
+            [last[index] for index in range(last.batch_size[0])]
+            if last.batch_dims
+            else [last]
+        )
+        responses: list[str | Mapping[str, Any]] = []
+        for item in items:
+            content = item.content
+            tool_calls = item.tool_calls
+            if tool_calls is not None or not isinstance(content, str):
+                response: dict[str, Any] = {
+                    "role": item.role,
+                    "content": content,
+                }
+                if tool_calls is not None:
+                    response["tool_calls"] = tool_calls
+                responses.append(response)
+            else:
+                responses.append(content)
+        return responses
+
+    def _run_async(self, coro):
+        """Run a coroutine on this compose's persistent event loop."""
+        runner = self._async_runner
+        if runner is None:
+            runner = self._async_runner = _AsyncRunner()
+        return runner.run(coro)
 
     def _extract_history(self, td: TensorDictBase) -> History:
         parent = self.parent
         if parent is None:
-            raise RuntimeError(
-                "ToolCompose must be used inside a TransformedEnv"
-            )
+            raise RuntimeError("ToolCompose must be used inside a TransformedEnv")
         base_env = parent.base_env
         if getattr(base_env, "input_mode", None) != "history":
             raise RuntimeError(
@@ -281,7 +310,9 @@ class ToolCompose(Compose):
         return td["history"].prompt
 
     async def _dispatch_batch(
-        self, contents: list[str], td: TensorDictBase
+        self,
+        responses: list[str | Mapping[str, Any]],
+        td: TensorDictBase,
     ) -> list[DispatchResult]:
         await self._setup_tools()
         # Each batch item runs concurrently with every other; within a
@@ -289,22 +320,25 @@ class ToolCompose(Compose):
         return list(
             await asyncio.gather(
                 *(
-                    self._dispatch_one(content, td, batch_index=i)
-                    for i, content in enumerate(contents)
+                    self._dispatch_one(response, td, batch_index=i)
+                    for i, response in enumerate(responses)
                 )
             )
         )
 
     async def _dispatch_one(
-        self, content: str, td: TensorDictBase, *, batch_index: int
+        self,
+        response: str | Mapping[str, Any],
+        td: TensorDictBase,
+        *,
+        batch_index: int,
     ) -> DispatchResult:
-        parsed: ParseResult = self.parser.parse(content)
+        parsed: ParseResult = self.parser.parse(response)
         if not parsed.calls:
             return DispatchResult(cleaned_text=parsed.text)
         # Parallel run all calls in this batch item.
         coros = [
-            self._run_one(call, td, batch_index=batch_index)
-            for call in parsed.calls
+            self._run_one(call, td, batch_index=batch_index) for call in parsed.calls
         ]
         outcomes = await asyncio.gather(*coros, return_exceptions=False)
         results: list[ToolResult] = []
@@ -326,9 +360,7 @@ class ToolCompose(Compose):
             stop_requested=stop,
         )
 
-    async def _run_one(
-        self, call: ParsedCall, td: TensorDictBase, *, batch_index: int
-    ):
+    async def _run_one(self, call: ParsedCall, td: TensorDictBase, *, batch_index: int):
         tool = self._tools_by_name.get(call.tool)
         if tool is None:
             return ToolResult.from_text(
@@ -348,9 +380,9 @@ class ToolCompose(Compose):
         ctx = ToolContext(
             call_id=call.call_id,
             tag=call.tag,
-            state=self._filter_state(td, batch_index) if self._pass_state and getattr(
-                tool, "wants_state", False
-            ) else None,
+            state=self._filter_state(td, batch_index)
+            if self._pass_state and getattr(tool, "wants_state", False)
+            else None,
             sandbox=getattr(tool, "sandbox", None),
             repl=getattr(tool, "repl", None),
             compose=self,
@@ -378,16 +410,14 @@ class ToolCompose(Compose):
             return ToolResult.from_text(
                 str(e), is_error=True, meta={"call_id": call.call_id}
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult.from_text(
                 f"tool {tool.name!r} timed out after {timeout}s",
                 is_error=True,
                 meta={"call_id": call.call_id, "timed_out": True},
             )
         except Exception as e:  # noqa: BLE001 -- failure isolation
-            torchrl_logger.exception(
-                "tool %r raised; reporting as error", tool.name
-            )
+            torchrl_logger.exception("tool %r raised; reporting as error", tool.name)
             return ToolResult.from_text(
                 f"{type(e).__name__}: {e}",
                 is_error=True,
@@ -422,16 +452,11 @@ class ToolCompose(Compose):
 
         per_item_messages: list[list[History]] = []
         for d in dispatches:
-            messages: list[History] = []
-            for call, result in zip(d.calls, d.results):
-                rendered = self.parser.render_result(call.call_id, result)
-                content = rendered.get("content", "")
-                if isinstance(content, list):
-                    content = json.dumps(content, ensure_ascii=False)
-                messages.append(
-                    History(role=self._tool_role, content=str(content))
-                )
-            per_item_messages.append(messages)
+            rendered_results = [
+                self.parser.render_result(call.call_id, result)
+                for call, result in zip(d.calls, d.results)
+            ]
+            per_item_messages.append(self._history_messages(rendered_results))
 
         max_len = max((len(m) for m in per_item_messages), default=0)
         if max_len > 0:
@@ -464,6 +489,43 @@ class ToolCompose(Compose):
         )
         return td
 
+    def _history_messages(
+        self, rendered_results: list[Mapping[str, Any]]
+    ) -> list[History]:
+        """Convert rendered provider results without dropping correlation data."""
+        if rendered_results and all(
+            rendered.get("role") == "user"
+            and isinstance(rendered.get("content"), list)
+            and all(
+                isinstance(block, Mapping) and block.get("type") == "tool_result"
+                for block in rendered["content"]
+            )
+            for rendered in rendered_results
+        ):
+            # Anthropic requires all tool_result blocks for a turn in one user
+            # message rather than one user message per call.
+            content = [
+                block for rendered in rendered_results for block in rendered["content"]
+            ]
+            return [History(role="user", content=content)]
+
+        messages: list[History] = []
+        for rendered in rendered_results:
+            role = str(rendered.get("role") or self._tool_role)
+            if role == "tool" and self._tool_role != "tool":
+                role = self._tool_role
+            content = rendered.get("content", "")
+            if not isinstance(content, (str, list)):
+                content = json.dumps(content, ensure_ascii=False)
+            messages.append(
+                History(
+                    role=role,
+                    content=content,
+                    tool_call_id=rendered.get("tool_call_id"),
+                )
+            )
+        return messages
+
 
 @dataclass
 class _StopMarker:
@@ -485,35 +547,50 @@ def _is_tool(obj: Any) -> bool:
     return all(hasattr(obj, a) for a in required) and callable(obj.run)
 
 
-# ----- async runner: nested-loop safe -----
+# ----- async runner: nested-loop safe and persistent across env steps -----
 
-def _run_async(coro):
-    """Run ``coro`` to completion regardless of whether the caller is
-    inside an event loop.
 
-    - No running loop: :func:`asyncio.run`.
-    - Running loop: dispatch on a worker thread that owns its own loop
-      and join. (Necessary because Compose._step is sync and may be
-      called from inside a Jupyter-style outer loop.)
-    """
-    try:
-        asyncio.get_running_loop()
-        running = True
-    except RuntimeError:
-        running = False
-    if not running:
-        return asyncio.run(coro)
-    fut: Future = Future()
+class _AsyncRunner:
+    """Own one event loop for the full lifecycle of a ToolCompose."""
 
-    def _target():
+    def __init__(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        self._ready = threading.Event()
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        self._ready.wait()
+
+    def _serve(self) -> None:
+        asyncio.set_event_loop(self._loop)
+        self._ready.set()
         try:
-            fut.set_result(asyncio.run(coro))
-        except BaseException as e:  # noqa: BLE001
-            fut.set_exception(e)
+            self._loop.run_forever()
+        finally:
+            pending = asyncio.all_tasks(self._loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                self._loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
+            self._loop.close()
 
-    t = threading.Thread(target=_target, daemon=True)
-    t.start()
-    return fut.result()
+    def run(self, coro):
+        """Run ``coro`` on the owned loop and return its result."""
+        if not self._thread.is_alive():
+            coro.close()
+            raise RuntimeError("ToolCompose async runner is not running")
+        if threading.current_thread() is self._thread:
+            coro.close()
+            raise RuntimeError("cannot synchronously enter ToolCompose from a tool")
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+
+    def close(self) -> None:
+        """Stop the loop and join its worker thread."""
+        if not self._thread.is_alive():
+            return
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join()
 
 
 __all__ = ["DispatchResult", "ToolCompose"]

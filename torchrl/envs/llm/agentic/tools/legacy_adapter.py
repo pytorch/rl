@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Adapter lifting a legacy ``ToolTransformBase`` into a
-:class:`~torchrl.envs.llm.agentic.Tool`.
+"""Adapt a legacy ``ToolTransformBase`` into an agentic ``Tool``.
 
 Existing user code -- ``PythonInterpreter``, ``BrowserTransform``,
 ``MCPToolTransform``, ``SimpleToolTransform`` -- can drop into
@@ -16,7 +15,7 @@ The legacy classes implement ``_process_batch_item(content, index)`` which
 takes the *raw assistant message string* and returns a list of result
 strings. The agentic dispatcher already parsed the response and called us
 with ``args``, so the adapter synthesises a single-call message in the
-shape the legacy class expects (XML by default, configurable), runs the
+shape the legacy class expects (auto-detected for built-ins, configurable), runs the
 legacy ``_process_batch_item``, and returns the joined output string.
 
 This means the legacy class re-parses the synthesised message internally;
@@ -28,8 +27,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
-from typing import Any, Callable
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from ..protocols import TextPart, ToolContext, ToolError, ToolResult
 
@@ -37,6 +36,25 @@ from ..protocols import TextPart, ToolContext, ToolError, ToolResult
 def _default_render(name: str, args: Mapping[str, Any]) -> str:
     body = json.dumps(dict(args), ensure_ascii=False)
     return f'<tool name="{name}">{body}</tool>'
+
+
+def _legacy_render(transform: Any) -> Callable[[str, Mapping[str, Any]], str]:
+    """Select the native call syntax used by built-in legacy transforms."""
+    class_names = {cls.__name__ for cls in type(transform).__mro__}
+    if "PythonInterpreter" in class_names:
+
+        def render_python(name: str, args: Mapping[str, Any]) -> str:
+            return f"```python\n{args.get('code', '')}\n```"
+
+        return render_python
+    if class_names & {"SimpleToolTransform", "BrowserTransform", "MCPToolTransform"}:
+
+        def render_named(name: str, args: Mapping[str, Any]) -> str:
+            body = json.dumps(dict(args), ensure_ascii=False)
+            return f"<tool>{name}\n{body}</tool>"
+
+        return render_named
+    return _default_render
 
 
 def as_tool(
@@ -48,18 +66,15 @@ def as_tool(
     wants_state: bool = False,
     render_call: Callable[[str, Mapping[str, Any]], str] | None = None,
 ):
-    """Wrap a legacy tool transform as a new-style
-    :class:`~torchrl.envs.llm.agentic.Tool`.
+    """Wrap a legacy tool transform as a new-style agentic tool.
 
     Args:
         transform: An instance of a legacy
             :class:`~torchrl.envs.llm.transforms.tools.ToolTransformBase`
             subclass (or anything with a compatible
             ``_process_batch_item(content: str, index: int) -> list[str] | None``).
-        name: Tool name to expose to the LLM. Should match the name the
-            legacy transform expects in the synthesised XML envelope (i.e.
-            the same string the model would write in
-            ``<tool name="...">``).
+        name: Tool name to expose to the LLM. It must match the name expected
+            by the legacy transform's native call syntax.
         input_schema: JSON Schema dict for the LLM. If ``None``, a
             permissive ``{"type": "object"}`` is used.
         description: Tool description for the LLM.
@@ -90,7 +105,7 @@ def as_tool(
         input_schema=input_schema or {"type": "object"},
         description=description,
         wants_state=wants_state,
-        render_call=render_call or _default_render,
+        render_call=render_call or _legacy_render(transform),
     )
 
 
@@ -147,9 +162,7 @@ class _LegacyToolAdapter:
                     pass
                 break
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         rendered = self._render(self.name, args)
         process = getattr(self._transform, "_process_batch_item", None)
         if not callable(process):

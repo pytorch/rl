@@ -22,13 +22,55 @@ dims and compose with TorchRL's batched envs.
 """
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import ClassVar, Literal, Protocol, runtime_checkable
 
 from tensordict import TensorClass
 
 
 _NetworkPolicy = Literal["none", "loopback", "allowlist", "full"]
+
+
+def _normalise_root(path: str) -> str:
+    """Return an absolute, normalised root without requiring it to exist."""
+    return os.path.abspath(os.path.normpath(path))
+
+
+def _path_is_within_roots(path: str, roots: Sequence[str]) -> bool:
+    """Return whether ``path`` resolves inside one of ``roots``."""
+    target = Path(path).resolve(strict=False)
+    for root in roots:
+        resolved_root = Path(root).resolve(strict=False)
+        if target == resolved_root or resolved_root in target.parents:
+            return True
+    return False
+
+
+def _intersect_roots(
+    first: Sequence[str],
+    second: Sequence[str],
+    *,
+    empty_is_unrestricted: bool,
+) -> tuple[str, ...]:
+    """Intersect two unions of filesystem subtrees."""
+    if not first or not second:
+        if empty_is_unrestricted:
+            return tuple(second or first)
+        return ()
+    intersection: set[str] = set()
+    for left in map(_normalise_root, first):
+        for right in map(_normalise_root, second):
+            try:
+                common = os.path.commonpath((left, right))
+            except ValueError:
+                continue
+            if common == left:
+                intersection.add(right)
+            elif common == right:
+                intersection.add(left)
+    return tuple(sorted(intersection))
 
 
 class SandboxError(RuntimeError):
@@ -106,18 +148,19 @@ class ResourceLimits(TensorClass["nocast"]):
             )
         else:
             allow = ()
-        if self.fs_read_roots and other.fs_read_roots:
-            read_roots = tuple(
-                sorted(set(self.fs_read_roots) & set(other.fs_read_roots))
-            )
-        else:
-            read_roots = self.fs_read_roots or other.fs_read_roots
-        if self.fs_write_roots and other.fs_write_roots:
-            write_roots = tuple(
-                sorted(set(self.fs_write_roots) & set(other.fs_write_roots))
-            )
-        else:
-            write_roots = self.fs_write_roots or other.fs_write_roots
+        # An empty read-root set means the backend default (unrestricted
+        # read-only host access), whereas an empty write-root set means no
+        # writes. Their intersections therefore have different identities.
+        read_roots = _intersect_roots(
+            self.fs_read_roots,
+            other.fs_read_roots,
+            empty_is_unrestricted=True,
+        )
+        write_roots = _intersect_roots(
+            self.fs_write_roots,
+            other.fs_write_roots,
+            empty_is_unrestricted=False,
+        )
         return ResourceLimits(
             cpu_seconds=_min_or(self.cpu_seconds, other.cpu_seconds),
             wall_seconds=_min_or(self.wall_seconds, other.wall_seconds),

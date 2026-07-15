@@ -465,6 +465,8 @@ class History(TensorClass["nocast"]):
         content (str): The content of the message.
         is_complete (bool): Whether the message was properly terminated with an end token. Defaults to `True`.
         tool_calls (list[dict] | None): Optional list of tool calls in the message.
+        tool_call_id (str | None): Identifier correlating a tool result with
+            the assistant tool call that produced it.
         tool_responses (list[str] | None): Optional list of tool responses.
 
     Methods:
@@ -525,6 +527,7 @@ class History(TensorClass["nocast"]):
     ]
     is_complete: bool = True
     tool_calls: list[dict] | None = None
+    tool_call_id: str | None = None
     tool_responses: list[str] | None = None
 
     def __post_init__(self):
