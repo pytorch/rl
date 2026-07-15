@@ -120,7 +120,7 @@ separate from policy observations. For API details, see
 [Rendering applications](../reference/render.html#ref-render) and the recorder utilities in
 [Recorders](../reference/envs_recorders.html#environment-recorders).
 
-**Total running time of the script:** (0 minutes 0.017 seconds)
+**Total running time of the script:** (0 minutes 0.018 seconds)
 
 [`Download Jupyter notebook: rlrender.ipynb`](../_downloads/07d25a201ce2a0f8643fe70b47f617ec/rlrender.ipynb)
 
