@@ -87,7 +87,7 @@ from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.weight_update.weight_sync_schemes import WeightStrategy
+from torchrl.weight_update import MultiProcessWeightSyncScheme, WeightStrategy
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -344,6 +344,9 @@ class Evaluator:
             # process.  This eliminates custom process management and
             # uses the weight_sync_schemes infrastructure for weight
             # transfer.
+            auto_process_weight_sync = (
+                backend == "process" and weight_sync_schemes is None
+            )
             use_multi_collector = (
                 backend == "process" or weight_sync_schemes is not None
             )
@@ -379,6 +382,7 @@ class Evaluator:
                 metrics_fn=metrics_fn,
                 weight_sync_schemes=weight_sync_schemes,
                 use_multi_collector=use_multi_collector,
+                auto_process_weight_sync=auto_process_weight_sync,
                 init_fn=init_fn,
             )
         elif backend == "ray":
@@ -999,6 +1003,7 @@ class _ThreadEvalBackend(_EvalBackend):
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
         weight_sync_schemes: dict[str, Any] | None = None,
         use_multi_collector: bool = False,
+        auto_process_weight_sync: bool = False,
         init_fn: Callable[[], None] | None = None,
     ) -> None:
         if policy is not None and policy_factory is not None:
@@ -1010,6 +1015,7 @@ class _ThreadEvalBackend(_EvalBackend):
             weight_sync_schemes is not None
         )
         self._weight_sync_schemes = weight_sync_schemes
+        self._auto_process_weight_sync = auto_process_weight_sync
         self._init_fn = init_fn
 
         env_is_callable = callable(env) and not isinstance(env, EnvBase)
@@ -1086,7 +1092,6 @@ class _ThreadEvalBackend(_EvalBackend):
     def run_sync(
         self, weights_dict: dict[str, TensorDictBase] | None, step: int
     ) -> dict[str, Any]:
-        self._ensure_collector()
         metrics = self._run_eval(weights_dict)
         metrics["_step"] = step
         return metrics
@@ -1167,7 +1172,6 @@ class _ThreadEvalBackend(_EvalBackend):
         self._thread.start()
 
     def _eval_loop(self) -> None:
-        self._ensure_collector()
         while not self._shutdown_flag:
             self._eval_ready.wait(timeout=1.0)
             if self._shutdown_flag:
@@ -1244,10 +1248,22 @@ class _ThreadEvalBackend(_EvalBackend):
                 **kwargs,
             )
 
+    def _enable_process_weight_sync(self) -> None:
+        """Install the default process scheme before the first weight update."""
+        if not self._auto_process_weight_sync or self._weight_sync_schemes is not None:
+            return
+        if self._collector is not None:
+            self._collector.shutdown()
+            self._collector = None
+            self._collector_iter = None
+        self._weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
+
     def _run_eval(
         self, weights_dict: dict[str, TensorDictBase] | None
     ) -> dict[str, Any]:
         """Run evaluation using the internal collector."""
+        if weights_dict:
+            self._enable_process_weight_sync()
         self._ensure_collector()
 
         if weights_dict:

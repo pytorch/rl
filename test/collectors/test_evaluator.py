@@ -31,6 +31,7 @@ from torchrl.envs.transforms import (
     Transform,
     VecNormV2,
 )
+from torchrl.modules import RandomPolicy
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers.process import ProcessLogger
 from torchrl.testing import AddPixelsTransform
@@ -1208,6 +1209,9 @@ class TestEvaluatorProcessBackendAsMultiCollector:
     def test_process_backend_with_weights(self):
         """Process backend with weight transfer works."""
         train_policy = _make_policy()
+        with torch.no_grad():
+            for parameter in train_policy.parameters():
+                parameter.fill_(1.25)
         evaluator = Evaluator(
             _make_env,
             policy_factory=_make_policy,
@@ -1217,6 +1221,57 @@ class TestEvaluatorProcessBackendAsMultiCollector:
         try:
             metrics = evaluator.evaluate(weights=train_policy, step=0)
             assert "eval/reward" in metrics
+            worker_state = evaluator._backend._collector.state_dict()["worker0"][
+                "policy_state_dict"
+            ]
+            for key, value in train_policy.state_dict().items():
+                torch.testing.assert_close(worker_state[key], value)
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_stateless_policy_without_weights(self):
+        """A stateless process policy does not initialize weight transport."""
+        action_spec = _make_env().action_spec
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=partial(RandomPolicy, action_spec),
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            assert not evaluator._backend._collector._weight_sync_schemes
+            with pytest.raises(TypeError, match="requires an nn.Module policy"):
+                evaluator.evaluate(weights=TensorDict({"weight": torch.ones(())}))
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_enables_weights_after_unweighted_eval(self):
+        """The first weight update rebuilds an unconfigured process collector."""
+        train_policy = _make_policy()
+        with torch.no_grad():
+            for parameter in train_policy.parameters():
+                parameter.fill_(1.25)
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=0)
+            unconfigured_collector = evaluator._backend._collector
+            assert not unconfigured_collector._weight_sync_schemes
+
+            evaluator.evaluate(weights=train_policy, step=1)
+
+            assert evaluator._backend._collector is not unconfigured_collector
+            worker_state = evaluator._backend._collector.state_dict()["worker0"][
+                "policy_state_dict"
+            ]
+            for key, value in train_policy.state_dict().items():
+                torch.testing.assert_close(worker_state[key], value)
         finally:
             evaluator.shutdown()
 
