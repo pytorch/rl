@@ -27,6 +27,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequ
 
 from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger
+from torchrl.checkpoint import Checkpoint
 
 from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.collectors.distributed import (
@@ -845,6 +846,15 @@ class TestRayCollector(DistributedCollectorBase):
             assert result.model_version == 2
             weights = backend.get_weights(expected_version=2)
             torch.testing.assert_close(weights["weight"], torch.tensor(0.8))
+            state = backend.state_dict()
+            generation = backend.generation
+            backend.shutdown()
+            backend.start()
+            assert backend.generation == generation + 1
+            backend.load_state_dict(state)
+            assert backend.model_version == 2
+            restored = backend.get_weights(expected_version=2)
+            torch.testing.assert_close(restored["weight"], torch.tensor(0.8))
 
             invalid_state = backend.state_dict()
             invalid_state["ranks"][1]["loss_module"]["weight"] = torch.ones(2)
@@ -896,7 +906,7 @@ class TestRayCollector(DistributedCollectorBase):
                 },
             )
 
-    def test_dqn_trainer_ray_backend(self):
+    def test_dqn_trainer_ray_backend(self, tmp_path):
         replay = RayReplayBuffer(
             replay_buffer_cls=TensorDictReplayBuffer,
             storage=partial(LazyTensorStorage, 64),
@@ -936,11 +946,74 @@ class TestRayCollector(DistributedCollectorBase):
                     },
                     enable_logging=False,
                     progress_bar=False,
+                    checkpoint=Checkpoint(),
+                    save_trainer_file=tmp_path / "checkpoint",
+                    save_trainer_interval=0,
                 )
             trainer.train()
             assert trainer.collected_frames == 16
             assert trainer._optim_count == 1
             assert trainer._published_model_version == 1
+            manifest = Checkpoint.manifest(tmp_path / "checkpoint")
+            assert {
+                "collector",
+                "learner_execution",
+                "replay_buffer",
+                "trainer_state",
+            }.issubset(manifest["components"])
+
+            restored_replay = RayReplayBuffer(
+                replay_buffer_cls=TensorDictReplayBuffer,
+                storage=partial(LazyTensorStorage, 64),
+                batch_size=8,
+                remote_config={"num_cpus": 1},
+            )
+            restored_collector = RayCollector(
+                create_env_fn=[CountingEnv, CountingEnv],
+                policy=CountingPolicy(),
+                collector_class=Collector,
+                frames_per_batch=8,
+                total_frames=16,
+                init_random_frames=16,
+                remote_configs={"num_cpus": 1, "num_gpus": 0},
+                sync=True,
+            )
+            restored_loss = ScalarRayLoss()
+            restored = None
+            try:
+                with pytest.warns(UserWarning, match="experimental"):
+                    restored = DQNTrainer(
+                        collector=restored_collector,
+                        total_frames=16,
+                        frame_skip=1,
+                        optim_steps_per_batch=1,
+                        loss_module=restored_loss,
+                        optimizer=torch.optim.SGD(restored_loss.parameters(), lr=0.1),
+                        replay_buffer=restored_replay,
+                        batch_size=8,
+                        target_net_updater=CountingTargetUpdater(restored_loss),
+                        learner_backend="ray",
+                        learner_backend_options={
+                            "world_size": 2,
+                            "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                            "backend": "gloo",
+                            "setup_timeout": 60.0,
+                            "command_timeout": 60.0,
+                        },
+                        enable_logging=False,
+                        progress_bar=False,
+                        checkpoint=Checkpoint(),
+                    )
+                restored.load_from_file(tmp_path / "checkpoint")
+                assert restored.collected_frames == 16
+                assert restored._optim_count == 1
+                assert restored._execution_backend.model_version == 1
+                assert restored._published_model_version == 1
+            finally:
+                if restored is not None and restored._execution_backend is not None:
+                    restored._execution_backend.shutdown()
+                restored_collector.shutdown()
+                restored_replay.shutdown()
         finally:
             collector.shutdown()
             replay.shutdown()
@@ -978,6 +1051,48 @@ class TestRayCollector(DistributedCollectorBase):
             if collector is not None:
                 collector.shutdown()
             inference.shutdown()
+            replay.shutdown()
+
+    def test_ray_collector_pause_drains_and_resumes(self):
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 1000),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        collector = RayCollector(
+            create_env_fn=[CountingEnv],
+            policy=CountingPolicy(),
+            replay_buffer=replay,
+            collector_class=Collector,
+            frames_per_batch=8,
+            total_frames=1000,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=False,
+        )
+        try:
+            collector.start()
+            for _ in range(100):
+                if replay.write_count:
+                    break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("Collector did not write before pause.")
+            with collector.pause():
+                paused_count = replay.write_count
+                time.sleep(0.2)
+                assert replay.write_count == paused_count
+                assert collector.remote_collectors
+
+            for _ in range(100):
+                if replay.write_count > paused_count:
+                    break
+                time.sleep(0.05)
+            else:
+                raise AssertionError("Collector did not resume after pause.")
+        finally:
+            collector.shutdown()
             replay.shutdown()
 
     @classmethod

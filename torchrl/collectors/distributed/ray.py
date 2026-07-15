@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import warnings
 from collections import OrderedDict
@@ -1158,6 +1159,40 @@ class RayCollector(BaseCollector):
             )
             self._collection_thread.start()
 
+    @contextlib.contextmanager
+    def pause(self, timeout: float = 30.0, *, resume: bool = True) -> Iterator[None]:
+        """Pause background collection while the context is active.
+
+        Any in-flight actor requests are drained before entering the context.
+        The remote collectors remain alive and collection resumes when the
+        context exits unless ``resume=False``. This provides a quiescent
+        boundary for checkpointing without changing the
+        :class:`~torchrl.collectors.BaseCollector` context-manager contract.
+
+        Args:
+            timeout (float): Maximum time to wait for in-flight collection.
+                Defaults to ``30.0`` seconds.
+            resume (bool): Whether to resume collection when the context exits.
+                Defaults to ``True``.
+        """
+        thread = self._collection_thread
+        if thread is None or not thread.is_alive():
+            self._collection_thread = None
+            yield None
+            return
+        self._stop_event.set()
+        thread.join(timeout=timeout)
+        if thread.is_alive():
+            raise TimeoutError(
+                "Timed out while waiting for RayCollector collection to pause."
+            )
+        self._collection_thread = None
+        try:
+            yield None
+        finally:
+            if resume:
+                self.start()
+
     async def async_shutdown(self, shutdown_ray: bool = False):
         """Finishes processes started by the collector during async execution.
 
@@ -1246,10 +1281,19 @@ class RayCollector(BaseCollector):
         """Calls parent method for each remote collector."""
         if isinstance(state_dict, OrderedDict):
             state_dicts = [state_dict]
-        if len(state_dict) == 1:
-            state_dicts = state_dict * len(self.remote_collectors)
+        else:
+            state_dicts = list(state_dict)
+        if len(state_dicts) == 1 and len(self.remote_collectors) > 1:
+            state_dicts *= len(self.remote_collectors)
+        elif len(state_dicts) != len(self.remote_collectors):
+            raise ValueError(
+                f"Expected one state dict or {len(self.remote_collectors)} per-worker "
+                f"state dicts, got {len(state_dicts)}."
+            )
+        futures = []
         for collector, state_dict in zip(self.remote_collectors, state_dicts):
-            collector.load_state_dict.remote(state_dict)
+            futures.append(collector.load_state_dict.remote(state_dict, strict=False))
+        ray.get(futures)
 
     def shutdown(
         self, timeout: float | None = None, shutdown_ray: bool = False

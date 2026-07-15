@@ -305,6 +305,17 @@ class DQNTrainer(Trainer):
         )
         return ("module", "0"), auxiliary_weights
 
+    def _execution_controller_state(self) -> dict[str, Any]:
+        state = super()._execution_controller_state()
+        if self.greedy_module is not None:
+            state["greedy_last_frames"] = self._greedy_last_frames
+        return state
+
+    def _load_execution_controller_state(self, state_dict: dict[str, Any]) -> None:
+        super()._load_execution_controller_state(state_dict)
+        if self.greedy_module is not None:
+            self._greedy_last_frames = int(state_dict.get("greedy_last_frames", 0))
+
     def _step_greedy(self):
         """Advance epsilon-greedy annealing by the number of frames collected since last call."""
         delta = self.collected_frames - self._greedy_last_frames

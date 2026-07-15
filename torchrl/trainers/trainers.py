@@ -117,6 +117,34 @@ class _TrainerCheckpointState:
         self.trainer._optim_count = state_dict["_optim_count"]
 
 
+class _ExecutionCheckpointState:
+    """Semantic state view over a private learner execution backend."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        backend = self.trainer._execution_backend
+        if backend is None or not backend.is_alive():
+            raise RuntimeError(
+                "Remote learner checkpointing requires a running learner backend."
+            )
+        return {
+            "backend": backend.state_dict(),
+            "controller": self.trainer._execution_controller_state(),
+        }
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        backend = self.trainer._execution_backend
+        if backend is None:
+            raise RuntimeError("Remote learner execution backend is missing.")
+        if not backend.is_alive():
+            backend.start()
+        backend.load_state_dict(state_dict["backend"])
+        self.trainer._load_execution_controller_state(state_dict.get("controller", {}))
+        self.trainer._published_model_version = -1
+
+
 def _state_dict_to_td(sd: dict) -> TensorDict:
     """Convert a state dict to a :class:`~tensordict.TensorDict`.
 
@@ -463,6 +491,7 @@ class Trainer:
         self.save_trainer_file = save_trainer_file
         self.checkpoint = checkpoint
         self._checkpoint_state = _TrainerCheckpointState(self)
+        self._execution_checkpoint_state = _ExecutionCheckpointState(self)
         self._checkpoint_skip_warnings: set[str] = set()
         self.auto_log_optim_steps = auto_log_optim_steps
 
@@ -544,9 +573,6 @@ class Trainer:
             log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
             log_timing_hook.register(self)
 
-        if self.checkpoint is not None:
-            self._sync_checkpoint_components()
-
         if self.learner_backend == "ray":
             if replay_buffer is None:
                 raise ValueError(
@@ -578,6 +604,9 @@ class Trainer:
                 clip_grad_norm=clip_grad_norm,
                 clip_norm=clip_norm,
             )
+
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
 
     def compute_loss(
         self, sub_batch: TensorDictBase, method: str | None = None
@@ -633,6 +662,23 @@ class Trainer:
                     type(component).__name__,
                 )
                 self._checkpoint_skip_warnings.add(name)
+
+        if self.learner_backend == "ray":
+            # These adapters refer to already-live services, so Checkpoint's
+            # deterministic name-based load order is safe. Driver copies of
+            # loss/optimizer state are not authoritative in this mode and are
+            # intentionally omitted. Policy weights are republished after the
+            # complete checkpoint has loaded.
+            register("replay_buffer", self.replay_buffer)
+            register("collector", self.collector)
+            register("trainer_state", self._checkpoint_state)
+            register("logger", self.logger)
+            register("exploration", getattr(self, "greedy_module", None))
+            register("exploration", getattr(self, "exploration_module", None))
+            for name, module in self._modules.items():
+                register(f"trainer_module.{name}", module)
+            register("learner_execution", self._execution_checkpoint_state)
+            return checkpoint
 
         register("policy", self._checkpoint_policy())
         register("loss_module", self.loss_module)
@@ -867,13 +913,46 @@ class Trainer:
             strict = kwargs.pop("strict", None)
             for key, value in _torch_load_defaults().items():
                 kwargs.setdefault(key, value)
-            result = self._sync_checkpoint_components(checkpoint).load(
-                file,
-                map_location=map_location,
-                tensor_load_kwargs=kwargs,
-                strict=strict,
-            )
-            if "policy" in result.loaded:
+            checkpoint = self._sync_checkpoint_components(checkpoint)
+            if self.learner_backend == "ray":
+                # Service owners must be restored before learner actors create
+                # rank-aware clients. The learner state is deliberately last.
+                registered = set(checkpoint.components)
+                ordered = [
+                    name
+                    for name in ("replay_buffer", "collector")
+                    if name in registered
+                ]
+                ordered.extend(
+                    sorted(
+                        registered.difference(
+                            {"replay_buffer", "collector", "learner_execution"}
+                        )
+                    )
+                )
+                if "learner_execution" in registered:
+                    ordered.append("learner_execution")
+                loaded = set()
+                for name in ordered:
+                    result = checkpoint.load(
+                        file,
+                        components=[name],
+                        map_location=map_location,
+                        tensor_load_kwargs=kwargs,
+                        strict=strict,
+                    )
+                    loaded.update(result.loaded)
+            else:
+                result = checkpoint.load(
+                    file,
+                    map_location=map_location,
+                    tensor_load_kwargs=kwargs,
+                    strict=strict,
+                )
+                loaded = result.loaded
+            if "learner_execution" in loaded:
+                self._publish_execution_weights(force=True)
+            elif "policy" in loaded:
                 # The collector payload is restored before the independently
                 # registered policy component. Synchronize once more after all
                 # components have loaded so local copies, remote workers, and
@@ -1399,7 +1478,11 @@ class Trainer:
                     self._pbar.update(self.collected_frames - previous_frames)
                     self._pbar_description()
                 if self._stop_training or self.collected_frames >= self.total_frames:
+                    self._save_execution_checkpoint(
+                        force_save=True, resume_collection=False
+                    )
                     break
+                self._save_execution_checkpoint()
                 if self.async_collection and current_frames == 0:
                     time.sleep(self.learner_poll_interval)
         finally:
@@ -1409,6 +1492,28 @@ class Trainer:
                 self.collector.shutdown()
             finally:
                 backend.shutdown()
+
+    def _save_execution_checkpoint(
+        self, *, force_save: bool = False, resume_collection: bool = True
+    ) -> None:
+        if self.save_trainer_file is None:
+            return
+        if (
+            not force_save
+            and (self.collected_frames - self._last_save) <= self.save_trainer_interval
+        ):
+            return
+        if self.async_collection:
+            pause = getattr(self.collector, "pause", None)
+            if not callable(pause):
+                raise RuntimeError(
+                    "Asynchronous remote checkpointing requires a collector "
+                    "with a pause() boundary."
+                )
+            with pause(resume=resume_collection):
+                self.save_trainer(force_save=force_save)
+        else:
+            self.save_trainer(force_save=force_save)
 
     def _publish_execution_weights(self, *, force: bool = False) -> None:
         backend = self._execution_backend
@@ -1432,6 +1537,18 @@ class Trainer:
         self,
     ) -> tuple[NestedKey | None, TensorDictBase | None]:
         return None, None
+
+    def _execution_controller_state(self) -> dict[str, Any]:
+        return {
+            "published_model_version": self._published_model_version,
+            "learner_generation": self._execution_backend.generation,
+        }
+
+    def _load_execution_controller_state(self, state_dict: Mapping[str, Any]) -> None:
+        # A restored backend always starts a fresh generation and republishes
+        # its semantic model version before collection resumes.
+        del state_dict
+        self._published_model_version = -1
 
     def _replay_write_count(self) -> int:
         write_count = self.replay_buffer.write_count
