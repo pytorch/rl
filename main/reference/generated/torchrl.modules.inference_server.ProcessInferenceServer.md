@@ -77,6 +77,10 @@ client() → Any[[source]](../../_modules/torchrl/modules/inference_server/_serv
 
 Return a restricted inference client from the owned transport.
 
+clients(*num_clients: int*) → list[Any][[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.clients)
+
+Return one independently routed client per concurrent consumer.
+
 health(***, *timeout: float = 5.0*) → dict[str, int | bool | None][[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.health)
 
 Return a lightweight child-process health snapshot.
@@ -97,6 +101,10 @@ Whether the child process is alive.
 *property*policy_version*: int*
 
 The live behavior-policy version of the child server.
+
+*property*service_backend*: str*
+
+Execution backend that owns the policy.
 
 shutdown(*timeout: float | None = 5.0*) → None[[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.shutdown)
 
@@ -121,6 +129,10 @@ Parameters:
 process after taking the snapshot.
 - **timeout** (*float**,**optional*) - seconds to wait for the child's
 answer. Defaults to `5.0`.
+
+*property*transport_kind*: str*
+
+Physical transport used for inference payloads.
 
 update_model_weights(*weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *mark_weight_update: bool = True*, *timeout: float = 300.0*) → dict[str, bool][[source]](../../_modules/torchrl/modules/inference_server/_server.html#ProcessInferenceServer.update_model_weights)
 

@@ -23,56 +23,21 @@ Transforms constructors should be passed through the transform_factory argument.
 Example
 
 ```
->>> import asyncio
->>> from tensordict.nn import TensorDictModule
->>> from torch import nn
->>> from torchrl.collectors.distributed.ray import RayCollector
->>> from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
->>> from torchrl.envs.libs.gym import GymEnv
->>>
->>> async def main():
-... # 1. Create environment factory
-... def env_maker():
-... return GymEnv("Pendulum-v1", device="cpu")
-...
-... policy = TensorDictModule(
-... nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"]
+>>> from functools import partial
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+>>> buffer = ReplayBuffer(
+... storage=partial(LazyTensorStorage, 100),
+... batch_size=4,
+... service_backend="ray",
+... service_backend_options={"remote_config": {"num_cpus": 0}},
+... transport="auto",
 ... )
-...
-... buffer = RayReplayBuffer()
-...
-... # 2. Define distributed collector
-... remote_config = {
-... "num_cpus": 1,
-... "num_gpus": 0,
-... "memory": 5 * 1024**3,
-... "object_store_memory": 2 * 1024**3,
-... }
-... distributed_collector = RayCollector(
-... [env_maker],
-... policy,
-... total_frames=600,
-... frames_per_batch=200,
-... remote_configs=remote_config,
-... replay_buffer=buffer,
-... )
-...
-... print("start")
-... distributed_collector.start()
-...
-... while True:
-... while not len(buffer):
-... print("waiting")
-... await asyncio.sleep(1) # Use asyncio.sleep instead of time.sleep
-... print("sample", buffer.sample(32))
-... # break at some point
-... break
-...
-... await distributed_collector.async_shutdown(shutdown_ray=False)
-... buffer.close() # Close buffer after collector
->>>
->>> if __name__ == "__main__":
-... asyncio.run(main())
+>>> buffer.extend(TensorDict({"value": torch.arange(8)}, batch_size=[8]))
+>>> buffer.sample().shape
+torch.Size([4])
+>>> buffer.shutdown()
 ```
 
 add(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.add)
@@ -138,9 +103,13 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) iterator.
 
-client() → _RayReplayBufferClient[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.client)
+client() → Any[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.client)
 
 Return a picklable client without actor shutdown rights.
+
+clients(*num_clients: int*) → list[Any][[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.clients)
+
+Return one independently routed client per concurrent consumer.
 
 close() → None[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.close)
 
@@ -472,6 +441,10 @@ The storage must be an instance of [`Storage`](torchrl.data.replay_buffers.Stora
 The transform of the replay buffer.
 
 The transform must be an instance of [`Transform`](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform).
+
+*property*transport_kind*: str*
+
+Physical transport used for replay payloads.
 
 update_(*input_dict_or_td*, *clone=False*, ***, *keys_to_update=None*)
 

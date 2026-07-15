@@ -63,6 +63,11 @@ Note
 If the policy needs to be passed as a policy factory (e.g., in case it mustn't be serialized /
 pickled directly), the `policy_factory` should be used instead.
 
+A Ray-owned
+[`InferenceServer`](torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) is also
+accepted. In that case each collector worker receives an independent
+restricted inference client and keeps no local policy copy.
+
 Keyword Arguments:
 
 - **policy_factory** (*Callable**[**[**]**,**Callable**]**,*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**Callable**[**[**]**,**Callable**]**,**optional*) -
@@ -190,11 +195,10 @@ For async collections, it may be that one worker has not seen its
 parameters being updated for a certain time even if `update_after_each_batch`
 is turned on.
 Defaults to -1 (no forced update).
-- **replay_buffer** ([*RayReplayBuffer*](torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer)*,**optional*) - if provided, the collector will not yield tensordicts
-but populate the buffer instead. Must be a [`RayReplayBuffer`](torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer) instance.
-Regular [`ReplayBuffer`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) instances cannot be shared across Ray actor
-boundaries (workers write to serialized copies, not the main process buffer).
-Defaults to `None`.
+- **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - if provided, the collector will
+populate it instead of yielding TensorDicts. The replay buffer must
+use `service_backend="ray"`; the collector creates restricted
+worker clients internally. Defaults to `None`.
 - **weight_updater** ([*WeightUpdaterBase*](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)*or**constructor**,**optional*) - (Deprecated) An instance of [`WeightUpdaterBase`](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)
 or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
 If not provided, a [`RayWeightUpdater`](torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater) will be used by default, leveraging

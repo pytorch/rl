@@ -118,6 +118,12 @@ and `False` otherwise.
 `"ray"`. Defaults to `"direct"`.
 - **service_backend_options** (*dict**,**optional*) - Ray initialization options.
 Accepted keys are `ray_init_config` and `remote_config`.
+- **transport** (*str**,**optional*) - physical transport used by a remote replay
+owner. `"auto"` selects the backend default. Defaults to
+`"auto"`.
+- **transport_options** (*dict**,**optional*) - options for the selected transport.
+For `transport="distributed"`, `backend` selects `"gloo"`
+or `"nccl"`. TensorDict layouts are bound lazily on first use.
 
 Examples
 

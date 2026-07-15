@@ -9,7 +9,10 @@ Replay buffers use `service_backend="direct"` by default, where
 `buffer.client() is buffer`. `service_backend="ray"` constructs a
 [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer) owner and `client()` returns the restricted,
 picklable handle intended for collector workers. Only the owner can shut down
-the actor.
+the actor. A Ray-owned replay buffer accepts either the flexible Ray payload
+transport or a fixed-layout Gloo/NCCL tensor transport. See
+[Choosing a payload transport](services_workflow.html#ref-service-transports) for the compatibility table, payload
+restrictions, and expected performance trade-offs.
 
 ```
 from functools import partial
@@ -19,6 +22,8 @@ buffer = ReplayBuffer(
  storage=partial(LazyTensorStorage, 1000),
  service_backend="ray",
  service_backend_options={"remote_config": {"num_cpus": 1}},
+ transport="distributed",
+ transport_options={"backend": "gloo"},
 )
 worker_buffer = buffer.client()
 buffer.shutdown()

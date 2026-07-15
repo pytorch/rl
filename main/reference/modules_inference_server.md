@@ -6,7 +6,7 @@ batches them, runs a single model forward pass, and routes results back.
 
 ## Core API
 
-| [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer)(model, transport, *[, ...]) | Auto-batching inference server. |
+| [`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer)([model, transport, ...]) | Auto-batching inference server. |
 | --- | --- |
 | [`InferenceServerConfig`](generated/torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)([service_backend, ...]) | Server-side execution, batching, timeout, and instrumentation settings. |
 | [`InferenceDeviceConfig`](generated/torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)([policy_device, ...]) | Device placement for asynchronous policy-server collection. |
@@ -16,6 +16,16 @@ batches them, runs a single model forward pass, and routes results back.
 | [`InferenceTransport`](generated/torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport)() | Abstract base class for inference server transport backends. |
 
 ## Transport Backends
+
+The transport can be selected behind the high-level
+[`InferenceServer`](generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer) constructor. Both process- and Ray-owned servers can
+use `transport="distributed"` with Gloo/NCCL for fixed-layout TensorDict
+payloads. A process-owned server requires explicit `request_spec` and
+`response_spec` values before its subprocess starts; a Ray-owned server can
+bind those layouts on first use. Ray-owned inference can instead use
+`transport="ray"` for dynamic or non-tensor payloads. See
+[Choosing a payload transport](services_workflow.html#ref-service-transports) for supported owner/transport combinations,
+restrictions, and expected performance.
 
 | [`ThreadingTransport`](generated/torchrl.modules.inference_server.ThreadingTransport.html#torchrl.modules.inference_server.ThreadingTransport)() | In-process transport for actors that are threads. |
 | --- | --- |

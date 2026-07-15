@@ -2505,8 +2505,8 @@ serving arbitrary requests.</p></li>
 important guarantees or fill the interface with operations that are
 meaningless for most implementations. The common abstraction therefore covers
 ownership and lifecycle; each domain retains its own communication contract.</p>
-<div class="pst-scrollable-table-container"><table class="table" id="id1">
-<caption><span class="caption-text">Service capabilities</span><a class="headerlink" href="#id1" title="Link to this table">#</a></caption>
+<div class="pst-scrollable-table-container"><table class="table" id="id3">
+<caption><span class="caption-text">Service capabilities</span><a class="headerlink" href="#id3" title="Link to this table">#</a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Domain</p></th>
 <th class="head"><p>Owner placement</p></th>
@@ -2535,6 +2535,228 @@ slots, Ray, or Monarch</p></td>
 process deployment can place inference and logging in child processes while
 keeping a replay buffer direct. This avoids presenting a process replay
 backend whose performance and data-movement contract have not been defined.</p>
+</section>
+<section id="choosing-a-payload-transport">
+<span id="ref-service-transports"></span><h2>Choosing a payload transport<a class="headerlink" href="#choosing-a-payload-transport" title="Link to this heading">#</a></h2>
+<p>Ray can be used for ownership without requiring TensorDict payloads to travel
+through Ray. With <code class="docutils literal notranslate"><span class="pre">service_backend=&quot;ray&quot;</span></code>, Ray creates, places, monitors, and
+stops the service actor. The separate <code class="docutils literal notranslate"><span class="pre">transport</span></code> argument selects how
+clients exchange payloads with that actor:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">transport=&quot;ray&quot;</span></code> uses Ray calls, queues, and the Ray object store. It is
+the flexible option for changing layouts and Python or non-tensor values.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">transport=&quot;distributed&quot;</span></code> uses standalone PyTorch distributed
+point-to-point groups for fixed-layout TensorDict payloads. Gloo carries CPU
+tensors and NCCL carries CUDA tensors.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">transport=&quot;auto&quot;</span></code> selects the placement default. For a Ray-owned service
+it currently resolves to <code class="docutils literal notranslate"><span class="pre">&quot;ray&quot;</span></code>; it does not inspect the payload or
+silently switch transports later.</p></li>
+</ul>
+<p>Ray remains the control and placement plane when the distributed payload path
+is selected. Transport-owned process groups do not replace or destroy the
+application’s default process group. The current distributed implementation
+is point-to-point request/reply. Collective data movement can be added behind
+the same selector when a component has a collective communication pattern.</p>
+<p>The supported combinations are listed below. An em dash means that the
+combination is rejected during construction rather than falling back to a
+different transport.</p>
+<div class="pst-scrollable-table-container"><table class="table" id="id4">
+<caption><span class="caption-text">Service-backend and transport compatibility</span><a class="headerlink" href="#id4" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 23.0%" />
+<col style="width: 12.0%" />
+<col style="width: 13.0%" />
+<col style="width: 13.0%" />
+<col style="width: 13.0%" />
+<col style="width: 26.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">service_backend</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">auto</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">ray</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">distributed</span></code></p></th>
+<th class="head"><p>Other supported transports</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
+<td><p>–</p></td>
+<td><p>–</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer" title="torchrl.data.RayReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayReplayBuffer</span></code></a> or a replay buffer constructed
+with <code class="docutils literal notranslate"><span class="pre">service_backend=&quot;ray&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ray</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ray</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Gloo or NCCL</p></td>
+<td><p>–</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer" title="torchrl.modules.inference_server.InferenceServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceServer</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">thread</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">thread</span></code></p></td>
+<td><p>–</p></td>
+<td><p>–</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">thread</span></code>, <code class="docutils literal notranslate"><span class="pre">queue</span></code>, or <code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer" title="torchrl.modules.inference_server.InferenceServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceServer</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">process</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">process</span></code></p></td>
+<td><p>–</p></td>
+<td><p>Gloo or NCCL <a class="footnote-reference brackets" href="#id2" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">process</span></code> or <code class="docutils literal notranslate"><span class="pre">shared_memory</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer" title="torchrl.modules.inference_server.InferenceServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">InferenceServer</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ray</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ray</span></code></p></td>
+<td><p>Yes</p></td>
+<td><p>Gloo or NCCL</p></td>
+<td><p>–</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id2" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<p>Process-owned distributed inference requires explicit
+<code class="docutils literal notranslate"><span class="pre">request_spec</span></code> and <code class="docutils literal notranslate"><span class="pre">response_spec</span></code> values. Ray-owned inference can bind
+those layouts lazily on first use.</p>
+</aside>
+</aside>
+<section id="transport-characteristics">
+<h3>Transport characteristics<a class="headerlink" href="#transport-characteristics" title="Link to this heading">#</a></h3>
+<p>Performance depends on payload size, request rate, topology, and batching.
+The following table describes expected trade-offs rather than promising a
+universal ordering.</p>
+<div class="pst-scrollable-table-container"><table class="table" id="id5">
+<caption><span class="caption-text">Payload transport characteristics</span><a class="headerlink" href="#id5" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 14.0%" />
+<col style="width: 18.0%" />
+<col style="width: 17.0%" />
+<col style="width: 15.0%" />
+<col style="width: 36.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Transport</p></th>
+<th class="head"><p>Layout</p></th>
+<th class="head"><p>Payload values</p></th>
+<th class="head"><p>Device</p></th>
+<th class="head"><p>Expected behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thread</span></code> / <code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
+<td><p>Dynamic</p></td>
+<td><p>Values accepted by the component</p></td>
+<td><p>Same process</p></td>
+<td><p>Lowest communication overhead. There is no serialization boundary;
+batching and model execution usually dominate.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">process</span></code></p></td>
+<td><p>Dynamic</p></td>
+<td><p>Pickle-compatible values, including non-tensor data</p></td>
+<td><p>Multiprocessing-supported</p></td>
+<td><p>Flexible, but queueing and serialization make large or frequent
+payloads more expensive than a preallocated tensor path.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">shared_memory</span></code></p></td>
+<td><p>Fixed keys, shapes, dtypes, and batch sizes</p></td>
+<td><p>Tensor leaves only</p></td>
+<td><p>CPU</p></td>
+<td><p>Preallocated slots avoid pickling tensor contents. This is generally a
+better process-local choice for large, stable CPU TensorDict payloads.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ray</span></code></p></td>
+<td><p>Dynamic</p></td>
+<td><p>Ray-serializable values, including strings and non-tensor data</p></td>
+<td><p>Ray-supported</p></td>
+<td><p>Easiest remote option and the compatibility fallback. Ray RPC, queue,
+and object-store overhead can dominate small, frequent RL messages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">distributed</span></code> with Gloo</p></td>
+<td><p>Fixed keys, shapes, dtypes, devices, and batch sizes</p></td>
+<td><p>Tensor leaves only</p></td>
+<td><p>CPU</p></td>
+<td><p>Avoids putting steady-state tensor payloads through Ray. It is usually
+preferable for stable CPU TensorDict traffic once rendezvous and group
+setup costs are amortized.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">distributed</span></code> with NCCL</p></td>
+<td><p>Fixed keys, shapes, dtypes, devices, and batch sizes</p></td>
+<td><p>Tensor leaves only</p></td>
+<td><p>CUDA</p></td>
+<td><p>Sends CUDA tensors without CPU staging. It is intended for stable,
+sufficiently large GPU payloads; setup and per-message latency may
+outweigh the benefit for small requests. Assign each NCCL rank a
+distinct GPU in normal deployments. Colocating ranks on one GPU is
+supported by NCCL only when <code class="docutils literal notranslate"><span class="pre">NCCL_MULTI_RANK_GPU_ENABLE=1</span></code> is set in
+every participating process.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Distributed layouts are bound to an endpoint generation. Extra TensorDict
+keys are not transmitted, while a missing declared key or a later incompatible
+shape, dtype, device, or replay sample batch size raises an error. There is no
+automatic fallback to Ray for an incompatible payload. Choose <code class="docutils literal notranslate"><span class="pre">&quot;ray&quot;</span></code> when
+the data contains strings, <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>, arbitrary Python
+objects, or genuinely changing tensor layouts.</p>
+</section>
+<section id="ray-collectors-and-service-transports">
+<h3>Ray collectors and service transports<a class="headerlink" href="#ray-collectors-and-service-transports" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code></a> deliberately has no
+<code class="docutils literal notranslate"><span class="pre">transport</span></code> argument. A transport belongs to the endpoint that receives and
+serves the data:</p>
+<ul class="simple">
+<li><p>policy requests use the attached inference server’s transport;</p></li>
+<li><p>replay writes use the attached replay buffer’s transport; and</p></li>
+<li><p>Ray continues to schedule and control the collector actors.</p></li>
+</ul>
+<p>When <code class="docutils literal notranslate"><span class="pre">replay_buffer</span></code> is provided, each collector worker receives its own
+restricted replay endpoint and writes its rollout directly to replay. The
+worker returns only completion to the driver, so the rollout is not copied
+through Ray a second time. This is the recommended high-throughput topology:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors.distributed</span> <span class="kn">import</span> <span class="n">RayCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules.inference_server</span> <span class="kn">import</span> <span class="n">InferenceServer</span>
+
+<span class="n">replay</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">partial</span><span class="p">(</span><span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="mi">100_000</span><span class="p">),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+    <span class="n">service_backend</span><span class="o">=</span><span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+    <span class="n">service_backend_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;remote_config&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;num_cpus&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}},</span>
+    <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+    <span class="n">transport_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;gloo&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">inference</span> <span class="o">=</span> <span class="n">InferenceServer</span><span class="p">(</span>
+    <span class="n">policy_factory</span><span class="o">=</span><span class="n">make_policy</span><span class="p">,</span>
+    <span class="n">service_backend</span><span class="o">=</span><span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+    <span class="n">service_backend_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;remote_config&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;num_cpus&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}},</span>
+    <span class="n">transport</span><span class="o">=</span><span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+    <span class="n">transport_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;gloo&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">RayCollector</span><span class="p">(</span>
+    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">8</span><span class="p">,</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">inference</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">replay</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>If no replay buffer is attached, iterating over <code class="docutils literal notranslate"><span class="pre">RayCollector</span></code> returns
+rollouts to the driver through Ray’s object store. That collector-to-driver
+path is not transport-selectable. Use direct-to-replay collection when the
+rollouts are large and do not need to be inspected by the driver. Use the Ray
+service transport instead of the distributed transport when the policy or
+replay payload contains non-tensor or dynamic data.</p>
+</section>
 </section>
 <section id="preserving-domain-apis">
 <h2>Preserving domain APIs<a class="headerlink" href="#preserving-domain-apis" title="Link to this heading">#</a></h2>
@@ -2824,6 +3046,11 @@ its concrete owners.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#owners-and-clients">Owners and clients</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement-does-not-define-communication">Placement does not define communication</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-a-payload-transport">Choosing a payload transport</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#transport-characteristics">Transport characteristics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#ray-collectors-and-service-transports">Ray collectors and service transports</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#preserving-domain-apis">Preserving domain APIs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#completion-and-failure-semantics">Completion and failure semantics</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lifecycle-belongs-to-the-owner">Lifecycle belongs to the owner</a></li>
@@ -3084,7 +3311,7 @@ its concrete owners.</p>
        "headline": "Designing Training Applications with Services",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/services_workflow.html",
-       "articleBody": "Designing Training Applications with Services# Distributed reinforcement learning combines components with very different resource and communication requirements. Actors need low-latency policy inference, replay buffers coordinate concurrent producers and consumers, and loggers own stateful SDKs, files, credentials, and artifact uploads. These components often need to live in different threads, processes, or cluster actors while remaining easy to use from the training loop. Making an object remote is not sufficient. A useful distributed API must also answer: Who constructs and owns the expensive resource? What can safely be copied or pickled into a worker? Which operations are available to workers, and which remain driver-only? When is an operation complete, and where are failures reported? Who shuts down child processes, actors, queues, and background threads? TorchRL services answer these questions with a common ownership model while preserving the domain API of each component. Owners and clients# A Service is the owner of a long-lived resource. The owner controls construction, liveness, and teardown through start(), is_alive, and shutdown(). Its client() method returns the object intended for consumers. Remote clients are lightweight, picklable capabilities. They expose domain operations such as policy calls, add and sample, or log_scalar, but not lifecycle operations. A worker can use a service without being able to terminate the process or actor shared by other workers. owner = make_service() owner.start() client = owner.client() send_to_worker(client) # The owner remains in the driver. owner.shutdown() Direct services make a deliberate exception to capability restriction: owner.client() is owner. Adding a proxy in the same process would impose overhead without creating a meaningful isolation boundary. Code that requires restricted capabilities should therefore rely on that guarantee only for remote backends. The owner/client split also ensures that heavy resources are constructed once. For example, a process logger constructs its concrete logging SDK inside the logging process, and a Ray replay buffer constructs its storage and sampler in its actor. Pickling a client does not reconstruct those resources. Placement does not define communication# service_backend selects where ownership lives. TorchRL uses the canonical backend vocabulary direct, thread, process, ray, monarch, and distributed, but each service supports only the placements that fit its implementation. Placement is intentionally separate from the operation protocol. The domains have incompatible communication requirements: Inference is request/reply traffic that benefits from batching and specialized tensor transports. Replay buffers combine writes, sampling, priority updates, and storage ownership. Logging carries small scalars as well as large videos and must preserve SDK completion and error semantics. Weight synchronization distributes versioned model state rather than serving arbitrary requests. Forcing these interactions behind one transport interface would either erase important guarantees or fill the interface with operations that are meaningless for most implementations. The common abstraction therefore covers ownership and lifecycle; each domain retains its own communication contract. Service capabilities# Domain Owner placement Worker-facing interface Inference thread or process; transport may use threads, process queues, slots, Ray, or Monarch Callable TensorDict policy through PolicyClientModule Logging direct, process, or ray log_* methods Replay buffer direct or ray add, extend, sample, and priority updates The supported combinations are explicit rather than emulated. For example, a process deployment can place inference and logging in child processes while keeping a replay buffer direct. This avoids presenting a process replay backend whose performance and data-movement contract have not been defined. Preserving domain APIs# Consumers should not branch on service placement. A policy client remains a TensorDict policy, a replay-buffer client remains a replay buffer, and a logger client retains its logging methods. Only construction and lifecycle belong to the owner. PolicyClientModule accepts an inference owner, transport, or callable client and obtains the restricted client automatically: from torchrl.modules.inference_server import PolicyClientModule policy = PolicyClientModule( inference_owner, in_keys=[\"observation\"], out_keys=[\"action\", \"policy_version\"], ) replay_buffer = replay_owner.client() logger = logger_owner.client() The resulting training code is independent of placement: td = env.reset() for step in range(num_steps): td = policy(td) step_td = env.step(td) replay_buffer.add(step_td) td = env.step_mdp(step_td) sample = replay_buffer.sample() optimizer.zero_grad() loss = loss_fn(sample) loss.sum(reduce=True).backward() optimizer.step() logger.log_scalar( \"train/loss\", float(loss[\"loss\"].detach()), step=step ) Moving an owner changes which calls cross an execution boundary; it does not change the loop that consumes its client. Completion and failure semantics# Remote execution should not silently weaken the contract of a domain method. TorchRL therefore uses acknowledged calls where their direct counterparts are complete on return: Logger methods return after the concrete logger method has run. Service-side failures are raised at the call site, and custom log_* methods preserve their return values. Video logging waits for encoding or upload so evaluation cannot finish while its artifact is still pending. CUDA payloads are moved to CPU for transport, while video shape, dtype, and content are preserved. Replay-buffer operations return their result or raise the remote failure. A synchronous policy call returns the inference result; asynchronous inference remains available through its domain-specific submission API. Acknowledgement adds a round trip to remote calls. For logging this favors correctness, bounded memory, and immediate error reporting over fire-and-forget throughput. Applications should avoid logging every hot-path intermediate and prefer meaningful aggregated metrics. Bounded queues and actor limits provide backpressure rather than allowing an unbounded backlog. Clients preserve submission order for each producer; independent producers do not imply a global ordering. When a process or actor exits before replying, clients report peer failure instead of waiting indefinitely. Startup also waits until the owned resource is ready, so obtaining a usable owner implies that its service construction has completed. Lifecycle belongs to the owner# Clients never stop shared infrastructure. The driver shuts services down only after collectors, evaluators, and other client users have finished. Explicit teardown releases processes, actors, queues, feeder threads, and SDK resources deterministically. from contextlib import ExitStack with ExitStack() as services: logger_owner = make_logger() services.callback(logger_owner.shutdown) replay_owner = make_replay_buffer() services.callback(replay_owner.shutdown) inference_owner = make_inference_server() services.callback(inference_owner.shutdown) run_training( policy=PolicyClientModule(inference_owner), replay_buffer=replay_owner.client(), logger=logger_owner.client(), ) Callbacks run in reverse registration order, so consumers should be registered after the services they use. Keeping the logger alive longest permits teardown metrics to be recorded before its final flush and shutdown. Shutdown is idempotent, which makes cleanup safe in both normal and exceptional paths. Integrations accept owners when they can# An integration that only needs domain operations can accept either a logger or logger owner and obtain the client internally. This keeps deployment plumbing out of recipes. VideoRecorder, for example, accepts a logger owner directly: from torchrl.record import VideoRecorder recorder = VideoRecorder(logger_owner, tag=\"eval/video\", fps=30) The recorder uses the restricted client and records vector-environment frames as a synchronized grid. Lifecycle remains with logger_owner. Environments are execution resources, not shared services# Environment instances carry trajectory state and require ordered, exclusive stepping. Giving several interchangeable clients access to one environment session would make reset and step ordering ambiguous. Their latency can also be low enough that a generic remote call on every step dominates collection cost. TorchRL therefore scales environments through serial, parallel, or asynchronous environment pools and through collectors that own environment replicas. The actor loop is normally placed with its environment and uses a policy client to reach shared inference when needed. This preserves session affinity and allows environment communication to use specialized shared-memory or asynchronous paths. Remote simulators and physical systems still require networked environment clients, but those clients need session leases, ordered step/reset semantics, timeouts, and trajectory-aware recovery. Those requirements form an environment-pool protocol rather than the generic shared-service contract. Discovery is optional# Explicitly passing clients is preferable when worker destinations are known at construction time. Discovery is useful when independently created Ray workers must locate a service by name. Registering a running owner stores its restricted client without transferring ownership; removing the discovery entry does not shut down that externally owned service. See Service owners and clients for registry and namespace behavior. Discovery does not replace the owner/client lifecycle and does not grant workers shutdown rights. Design compromises# The service model makes several trade-offs explicit: Direct clients use identity semantics for zero overhead and therefore do not provide capability isolation. Remote completion semantics add latency but prevent lost errors and preserve return values. Backend support differs by domain rather than exposing nominal combinations without a suitable transport and performance contract. Ownership is unified, while payload transport remains specialized for inference, logging, replay, commands, shared state, and weight updates. Environment execution remains a separate stateful abstraction. Discovery is opt-in and does not transfer lifecycle ownership. These boundaries keep the consumer API small without hiding costs or weakening domain guarantees. Runnable examples# The service examples demonstrate the same TensorDict training loop with direct, process, and Ray placement. Their README contains dependencies, commands, and the mapping from each profile to its concrete owners.",
+       "articleBody": "Designing Training Applications with Services# Distributed reinforcement learning combines components with very different resource and communication requirements. Actors need low-latency policy inference, replay buffers coordinate concurrent producers and consumers, and loggers own stateful SDKs, files, credentials, and artifact uploads. These components often need to live in different threads, processes, or cluster actors while remaining easy to use from the training loop. Making an object remote is not sufficient. A useful distributed API must also answer: Who constructs and owns the expensive resource? What can safely be copied or pickled into a worker? Which operations are available to workers, and which remain driver-only? When is an operation complete, and where are failures reported? Who shuts down child processes, actors, queues, and background threads? TorchRL services answer these questions with a common ownership model while preserving the domain API of each component. Owners and clients# A Service is the owner of a long-lived resource. The owner controls construction, liveness, and teardown through start(), is_alive, and shutdown(). Its client() method returns the object intended for consumers. Remote clients are lightweight, picklable capabilities. They expose domain operations such as policy calls, add and sample, or log_scalar, but not lifecycle operations. A worker can use a service without being able to terminate the process or actor shared by other workers. owner = make_service() owner.start() client = owner.client() send_to_worker(client) # The owner remains in the driver. owner.shutdown() Direct services make a deliberate exception to capability restriction: owner.client() is owner. Adding a proxy in the same process would impose overhead without creating a meaningful isolation boundary. Code that requires restricted capabilities should therefore rely on that guarantee only for remote backends. The owner/client split also ensures that heavy resources are constructed once. For example, a process logger constructs its concrete logging SDK inside the logging process, and a Ray replay buffer constructs its storage and sampler in its actor. Pickling a client does not reconstruct those resources. Placement does not define communication# service_backend selects where ownership lives. TorchRL uses the canonical backend vocabulary direct, thread, process, ray, monarch, and distributed, but each service supports only the placements that fit its implementation. Placement is intentionally separate from the operation protocol. The domains have incompatible communication requirements: Inference is request/reply traffic that benefits from batching and specialized tensor transports. Replay buffers combine writes, sampling, priority updates, and storage ownership. Logging carries small scalars as well as large videos and must preserve SDK completion and error semantics. Weight synchronization distributes versioned model state rather than serving arbitrary requests. Forcing these interactions behind one transport interface would either erase important guarantees or fill the interface with operations that are meaningless for most implementations. The common abstraction therefore covers ownership and lifecycle; each domain retains its own communication contract. Service capabilities# Domain Owner placement Worker-facing interface Inference thread or process; transport may use threads, process queues, slots, Ray, or Monarch Callable TensorDict policy through PolicyClientModule Logging direct, process, or ray log_* methods Replay buffer direct or ray add, extend, sample, and priority updates The supported combinations are explicit rather than emulated. For example, a process deployment can place inference and logging in child processes while keeping a replay buffer direct. This avoids presenting a process replay backend whose performance and data-movement contract have not been defined. Choosing a payload transport# Ray can be used for ownership without requiring TensorDict payloads to travel through Ray. With service_backend=\"ray\", Ray creates, places, monitors, and stops the service actor. The separate transport argument selects how clients exchange payloads with that actor: transport=\"ray\" uses Ray calls, queues, and the Ray object store. It is the flexible option for changing layouts and Python or non-tensor values. transport=\"distributed\" uses standalone PyTorch distributed point-to-point groups for fixed-layout TensorDict payloads. Gloo carries CPU tensors and NCCL carries CUDA tensors. transport=\"auto\" selects the placement default. For a Ray-owned service it currently resolves to \"ray\"; it does not inspect the payload or silently switch transports later. Ray remains the control and placement plane when the distributed payload path is selected. Transport-owned process groups do not replace or destroy the application\u2019s default process group. The current distributed implementation is point-to-point request/reply. Collective data movement can be added behind the same selector when a component has a collective communication pattern. The supported combinations are listed below. An em dash means that the combination is rejected during construction rather than falling back to a different transport. Service-backend and transport compatibility# Component service_backend auto ray distributed Other supported transports ReplayBuffer direct direct \u2013 \u2013 direct RayReplayBuffer or a replay buffer constructed with service_backend=\"ray\" ray ray Yes Gloo or NCCL \u2013 InferenceServer thread thread \u2013 \u2013 thread, queue, or direct InferenceServer process process \u2013 Gloo or NCCL [1] process or shared_memory InferenceServer ray ray Yes Gloo or NCCL \u2013 [1] Process-owned distributed inference requires explicit request_spec and response_spec values. Ray-owned inference can bind those layouts lazily on first use. Transport characteristics# Performance depends on payload size, request rate, topology, and batching. The following table describes expected trade-offs rather than promising a universal ordering. Payload transport characteristics# Transport Layout Payload values Device Expected behavior thread / direct Dynamic Values accepted by the component Same process Lowest communication overhead. There is no serialization boundary; batching and model execution usually dominate. process Dynamic Pickle-compatible values, including non-tensor data Multiprocessing-supported Flexible, but queueing and serialization make large or frequent payloads more expensive than a preallocated tensor path. shared_memory Fixed keys, shapes, dtypes, and batch sizes Tensor leaves only CPU Preallocated slots avoid pickling tensor contents. This is generally a better process-local choice for large, stable CPU TensorDict payloads. ray Dynamic Ray-serializable values, including strings and non-tensor data Ray-supported Easiest remote option and the compatibility fallback. Ray RPC, queue, and object-store overhead can dominate small, frequent RL messages. distributed with Gloo Fixed keys, shapes, dtypes, devices, and batch sizes Tensor leaves only CPU Avoids putting steady-state tensor payloads through Ray. It is usually preferable for stable CPU TensorDict traffic once rendezvous and group setup costs are amortized. distributed with NCCL Fixed keys, shapes, dtypes, devices, and batch sizes Tensor leaves only CUDA Sends CUDA tensors without CPU staging. It is intended for stable, sufficiently large GPU payloads; setup and per-message latency may outweigh the benefit for small requests. Assign each NCCL rank a distinct GPU in normal deployments. Colocating ranks on one GPU is supported by NCCL only when NCCL_MULTI_RANK_GPU_ENABLE=1 is set in every participating process. Distributed layouts are bound to an endpoint generation. Extra TensorDict keys are not transmitted, while a missing declared key or a later incompatible shape, dtype, device, or replay sample batch size raises an error. There is no automatic fallback to Ray for an incompatible payload. Choose \"ray\" when the data contains strings, NonTensorData, arbitrary Python objects, or genuinely changing tensor layouts. Ray collectors and service transports# RayCollector deliberately has no transport argument. A transport belongs to the endpoint that receives and serves the data: policy requests use the attached inference server\u2019s transport; replay writes use the attached replay buffer\u2019s transport; and Ray continues to schedule and control the collector actors. When replay_buffer is provided, each collector worker receives its own restricted replay endpoint and writes its rollout directly to replay. The worker returns only completion to the driver, so the rollout is not copied through Ray a second time. This is the recommended high-throughput topology: from functools import partial from torchrl.collectors.distributed import RayCollector from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer from torchrl.modules.inference_server import InferenceServer replay = TensorDictReplayBuffer( storage=partial(LazyTensorStorage, 100_000), batch_size=256, service_backend=\"ray\", service_backend_options={\"remote_config\": {\"num_cpus\": 1}}, transport=\"distributed\", transport_options={\"backend\": \"gloo\"}, ) inference = InferenceServer( policy_factory=make_policy, service_backend=\"ray\", service_backend_options={\"remote_config\": {\"num_cpus\": 1}}, transport=\"distributed\", transport_options={\"backend\": \"gloo\"}, ) collector = RayCollector( create_env_fn=[make_env] * 8, policy=inference, replay_buffer=replay, frames_per_batch=1024, ) If no replay buffer is attached, iterating over RayCollector returns rollouts to the driver through Ray\u2019s object store. That collector-to-driver path is not transport-selectable. Use direct-to-replay collection when the rollouts are large and do not need to be inspected by the driver. Use the Ray service transport instead of the distributed transport when the policy or replay payload contains non-tensor or dynamic data. Preserving domain APIs# Consumers should not branch on service placement. A policy client remains a TensorDict policy, a replay-buffer client remains a replay buffer, and a logger client retains its logging methods. Only construction and lifecycle belong to the owner. PolicyClientModule accepts an inference owner, transport, or callable client and obtains the restricted client automatically: from torchrl.modules.inference_server import PolicyClientModule policy = PolicyClientModule( inference_owner, in_keys=[\"observation\"], out_keys=[\"action\", \"policy_version\"], ) replay_buffer = replay_owner.client() logger = logger_owner.client() The resulting training code is independent of placement: td = env.reset() for step in range(num_steps): td = policy(td) step_td = env.step(td) replay_buffer.add(step_td) td = env.step_mdp(step_td) sample = replay_buffer.sample() optimizer.zero_grad() loss = loss_fn(sample) loss.sum(reduce=True).backward() optimizer.step() logger.log_scalar( \"train/loss\", float(loss[\"loss\"].detach()), step=step ) Moving an owner changes which calls cross an execution boundary; it does not change the loop that consumes its client. Completion and failure semantics# Remote execution should not silently weaken the contract of a domain method. TorchRL therefore uses acknowledged calls where their direct counterparts are complete on return: Logger methods return after the concrete logger method has run. Service-side failures are raised at the call site, and custom log_* methods preserve their return values. Video logging waits for encoding or upload so evaluation cannot finish while its artifact is still pending. CUDA payloads are moved to CPU for transport, while video shape, dtype, and content are preserved. Replay-buffer operations return their result or raise the remote failure. A synchronous policy call returns the inference result; asynchronous inference remains available through its domain-specific submission API. Acknowledgement adds a round trip to remote calls. For logging this favors correctness, bounded memory, and immediate error reporting over fire-and-forget throughput. Applications should avoid logging every hot-path intermediate and prefer meaningful aggregated metrics. Bounded queues and actor limits provide backpressure rather than allowing an unbounded backlog. Clients preserve submission order for each producer; independent producers do not imply a global ordering. When a process or actor exits before replying, clients report peer failure instead of waiting indefinitely. Startup also waits until the owned resource is ready, so obtaining a usable owner implies that its service construction has completed. Lifecycle belongs to the owner# Clients never stop shared infrastructure. The driver shuts services down only after collectors, evaluators, and other client users have finished. Explicit teardown releases processes, actors, queues, feeder threads, and SDK resources deterministically. from contextlib import ExitStack with ExitStack() as services: logger_owner = make_logger() services.callback(logger_owner.shutdown) replay_owner = make_replay_buffer() services.callback(replay_owner.shutdown) inference_owner = make_inference_server() services.callback(inference_owner.shutdown) run_training( policy=PolicyClientModule(inference_owner), replay_buffer=replay_owner.client(), logger=logger_owner.client(), ) Callbacks run in reverse registration order, so consumers should be registered after the services they use. Keeping the logger alive longest permits teardown metrics to be recorded before its final flush and shutdown. Shutdown is idempotent, which makes cleanup safe in both normal and exceptional paths. Integrations accept owners when they can# An integration that only needs domain operations can accept either a logger or logger owner and obtain the client internally. This keeps deployment plumbing out of recipes. VideoRecorder, for example, accepts a logger owner directly: from torchrl.record import VideoRecorder recorder = VideoRecorder(logger_owner, tag=\"eval/video\", fps=30) The recorder uses the restricted client and records vector-environment frames as a synchronized grid. Lifecycle remains with logger_owner. Environments are execution resources, not shared services# Environment instances carry trajectory state and require ordered, exclusive stepping. Giving several interchangeable clients access to one environment session would make reset and step ordering ambiguous. Their latency can also be low enough that a generic remote call on every step dominates collection cost. TorchRL therefore scales environments through serial, parallel, or asynchronous environment pools and through collectors that own environment replicas. The actor loop is normally placed with its environment and uses a policy client to reach shared inference when needed. This preserves session affinity and allows environment communication to use specialized shared-memory or asynchronous paths. Remote simulators and physical systems still require networked environment clients, but those clients need session leases, ordered step/reset semantics, timeouts, and trajectory-aware recovery. Those requirements form an environment-pool protocol rather than the generic shared-service contract. Discovery is optional# Explicitly passing clients is preferable when worker destinations are known at construction time. Discovery is useful when independently created Ray workers must locate a service by name. Registering a running owner stores its restricted client without transferring ownership; removing the discovery entry does not shut down that externally owned service. See Service owners and clients for registry and namespace behavior. Discovery does not replace the owner/client lifecycle and does not grant workers shutdown rights. Design compromises# The service model makes several trade-offs explicit: Direct clients use identity semantics for zero overhead and therefore do not provide capability isolation. Remote completion semantics add latency but prevent lost errors and preserve return values. Backend support differs by domain rather than exposing nominal combinations without a suitable transport and performance contract. Ownership is unified, while payload transport remains specialized for inference, logging, replay, commands, shared state, and weight updates. Environment execution remains a separate stateful abstraction. Discovery is opt-in and does not transfer lifecycle ownership. These boundaries keep the consumer API small without hiding costs or weakening domain guarantees. Runnable examples# The service examples demonstrate the same TensorDict training loop with direct, process, and Ray placement. Their README contains dependencies, commands, and the mapping from each profile to its concrete owners.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

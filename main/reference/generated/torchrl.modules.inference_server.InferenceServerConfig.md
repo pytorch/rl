@@ -1,6 +1,6 @@
 # InferenceServerConfig
 
-*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process'] = 'thread'*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
+*class*torchrl.modules.inference_server.InferenceServerConfig(*service_backend: Literal['thread', 'process', 'ray'] = 'thread'*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *timeout: float = 0.01*, *collect_stats: bool = True*, *stats_window_size: int = 1024*, *max_inflight_per_env: int | None = None*)[[source]](../../_modules/torchrl/modules/inference_server/_config.html#InferenceServerConfig)
 
 Server-side execution, batching, timeout, and instrumentation settings.
 
@@ -10,7 +10,8 @@ Parameters:
 `"thread"` runs the serve loop in a background thread of the
 constructing process; `"process"` runs a dedicated server
 process (which requires a picklable `policy_factory` and a
-multiprocessing-capable transport). Defaults to `"thread"`.
+multiprocessing-capable transport); `"ray"` runs a dedicated
+Ray actor and requires `policy_factory`. Defaults to `"thread"`.
 - **max_batch_size** (*int**,**optional*) - maximum number of requests per forward
 pass. Defaults to `64`.
 - **min_batch_size** (*int**,**optional*) - minimum number of requests to
@@ -38,15 +39,13 @@ Examples
 >>> from torchrl.modules.inference_server import (
 ... InferenceServer,
 ... InferenceServerConfig,
-... ThreadingTransport,
 ... )
 >>> policy = TensorDictModule(
 ... nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
 ... )
->>> transport = ThreadingTransport()
 >>> config = InferenceServerConfig(max_batch_size=8, timeout=0.001)
->>> with InferenceServer(policy, transport, server_config=config) as server:
-... client = transport.client()
+>>> with InferenceServer(policy, transport="auto", server_config=config) as server:
+... client = server.client()
 ... result = client(TensorDict({"observation": torch.randn(4)}))
 >>> result["action"].shape
 torch.Size([2])

@@ -190,6 +190,7 @@ and navigate to the previous ones whenever you want to learn more!
 
 - [Owners and clients](reference/services_workflow.html#owners-and-clients)
 - [Placement does not define communication](reference/services_workflow.html#placement-does-not-define-communication)
+- [Choosing a payload transport](reference/services_workflow.html#choosing-a-payload-transport)
 - [Preserving domain APIs](reference/services_workflow.html#preserving-domain-apis)
 - [Completion and failure semantics](reference/services_workflow.html#completion-and-failure-semantics)
 - [Lifecycle belongs to the owner](reference/services_workflow.html#lifecycle-belongs-to-the-owner)

@@ -211,6 +211,10 @@
 
 - [Owners and clients](services_workflow.html#owners-and-clients)
 - [Placement does not define communication](services_workflow.html#placement-does-not-define-communication)
+- [Choosing a payload transport](services_workflow.html#choosing-a-payload-transport)
+
+- [Transport characteristics](services_workflow.html#transport-characteristics)
+- [Ray collectors and service transports](services_workflow.html#ray-collectors-and-service-transports)
 - [Preserving domain APIs](services_workflow.html#preserving-domain-apis)
 - [Completion and failure semantics](services_workflow.html#completion-and-failure-semantics)
 - [Lifecycle belongs to the owner](services_workflow.html#lifecycle-belongs-to-the-owner)
