@@ -198,6 +198,8 @@ class ToolContext(TensorClass["nocast"]):
         repl: The compose-level REPL, if any.
         compose: Back-reference to the owning :class:`ToolCompose` for
             tool-to-tool dispatch from inside a tool body.
+        batch_index: Flattened batch index for this call. Legacy adapters use
+            it to preserve per-batch tool state.
     """
 
     call_id: str
@@ -206,6 +208,7 @@ class ToolContext(TensorClass["nocast"]):
     sandbox: Any | None = None
     repl: Any | None = None
     compose: Any | None = None
+    batch_index: int | None = None
 
 
 # ----- protocols -----
