@@ -106,7 +106,7 @@ six==1.17.0
 sympy==1.14.0
 tenacity==9.1.4
 tensordict @ git+https://github.com/pytorch/tensordict@401f3ae34f25a97358b59cbc1e417e724bfac66f
-tokenizers==0.23.1
+tokenizers==0.23.0rc0
 tomli==2.4.1
 torch==2.14.0.dev20260713+cu126
 torchvision==0.29.0.dev20260714+cu126
