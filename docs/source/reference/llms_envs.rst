@@ -1,5 +1,7 @@
 :orphan:
 
+.. _llm_envs:
+
 .. currentmodule:: torchrl.envs.llm
 
 LLM Environments
@@ -159,3 +161,70 @@ trades rich display for portability.
     ReplError
     JupyterRepl
     SubprocessRepl
+
+Built-in tools and adapters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.envs.llm.agentic
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    ToolCompose
+    DispatchResult
+    PythonTool
+    ShellTool
+    FileReadTool
+    StopTool
+    HttpTool
+    MCPServerConfig
+    MCPToolset
+    RateLimiter
+    as_tool
+
+Migration from legacy tool transforms
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Existing code built on :mod:`torchrl.envs.llm.transforms` keeps working:
+no ``DeprecationWarning`` is emitted in this release. Each legacy class
+has a ``.. seealso::`` block in its docstring pointing at the
+recommended replacement, summarised here.
+
+.. list-table:: Legacy transform → agentic counterpart
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Legacy
+     - Agentic
+     - Adapter recipe
+   * - ``ExecuteToolsInOrder``
+     - :class:`ToolCompose`
+     - Replace at the env stack level. ``ToolCompose`` runs calls
+       concurrently; pin sequential execution per-tool with
+       :class:`RateLimiter` ``max_concurrent=1`` if you depend on
+       ordering.
+   * - ``PythonInterpreter``
+     - :class:`PythonTool` + :class:`Sandbox` + :class:`Repl`
+     - For a soft migration, lift the existing transform: ``as_tool(PythonInterpreter(persistent=True), name="python", input_schema=...)``.
+   * - ``SimpleToolTransform``
+     - Native :class:`Tool` subclass
+     - Or ``as_tool(transform, name=..., input_schema=...)``.
+   * - ``BrowserTransform``
+     - :func:`tools.as_tool` of the existing transform
+     - A native :class:`Tool` for browser automation may land later;
+       until then the adapter is the recommended path.
+   * - ``MCPToolTransform``
+     - :class:`MCPToolset`
+     - One :class:`Tool` per remote tool, schemas auto-discovered.
+       Register it with ``ToolCompose.add_toolset`` so discovery,
+       dispatch, and shutdown share one event loop.
+   * - ``XMLBlockParser`` / ``JSONCallParser``
+     - :class:`parsers.XMLToolCallParser` / :class:`parsers.JSONToolCallParser`
+     - Same syntax; the agentic versions enforce a stable ``call_id``.
+   * - ``ToolService`` / ``ToolRegistry``
+     - The ``tools=[...]`` argument to :class:`ToolCompose`
+     - The registry pattern collapses into the compose container.
+
+For a guided walkthrough, see the
+:ref:`agentic ChatEnv tutorial <llm_agentic>`.

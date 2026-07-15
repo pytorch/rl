@@ -15,8 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import threading
 import time as _time
 import warnings
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
 import pytest
@@ -58,7 +60,8 @@ from torchrl.envs.llm.agentic.sandbox.subprocess_seatbelt import (
     _has_sandbox_exec,
     _profile,
 )
-from torchrl.envs.llm.agentic.tools import as_tool
+from torchrl.envs.llm.agentic.tools import as_tool, HttpTool
+from torchrl.envs.llm.agentic.tools.mcp import _has_mcp, _MCPTool, MCPServerConfig
 from torchrl.envs.llm.transforms import (
     IncrementalTokenizer,
     PythonInterpreter,
@@ -752,6 +755,38 @@ class TestToolCompose:
         assert "stop" in compose
         assert compose["stop"].name == "stop"
 
+    def test_toolset_uses_compose_event_loop_for_full_lifecycle(self):
+        class _ToolsetTool(_Echo):
+            def __init__(self, toolset):
+                self.toolset = toolset
+
+            async def run(self, args, ctx):
+                assert asyncio.get_running_loop() is self.toolset.loop
+                return await super().run(args, ctx)
+
+        class _Toolset:
+            def __init__(self):
+                self.loop = None
+                self.closed_on_loop = False
+                self.tools = (_ToolsetTool(self),)
+
+            async def open(self):
+                self.loop = asyncio.get_running_loop()
+
+            async def close(self):
+                self.closed_on_loop = asyncio.get_running_loop() is self.loop
+
+        toolset = _Toolset()
+        compose = ToolCompose(tools=[], parser=XMLToolCallParser())
+        compose.add_toolset(toolset)
+        env = TransformedEnv(ChatEnv(batch_size=(1,), input_mode="history"), compose)
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="echo">{"value": 1}</tool>')
+        nxt = env.step(obs)
+        assert not bool(nxt.get(("next", "agentic", "any_error")).item())
+        env.close()
+        assert toolset.closed_on_loop
+
     def test_parallel_dispatch_wall_time(self):
         env = _agentic_env([_Sleeper("a"), _Sleeper("b"), _Sleeper("c")])
         obs = env.reset(TensorDict({"query": "go"}, batch_size=(1,)))
@@ -1173,3 +1208,155 @@ class TestLegacyAdapter:
         tool = as_tool(_Legacy(), name="legacy")
         _run(tool.run({}, ToolContext(call_id="c", batch_index=3)))
         assert indices == [3]
+
+
+# ----- MCP and HTTP tools -----
+
+
+class TestMCPToolset:
+    def test_construction_requires_mcp_package(self):
+        if not _has_mcp:
+            with pytest.raises(ImportError):
+                from torchrl.envs.llm.agentic.tools import MCPToolset
+
+                MCPToolset(MCPServerConfig(command="true"))
+        else:
+            # When the package is installed we can at least construct
+            # without opening a session.
+            from torchrl.envs.llm.agentic.tools import MCPToolset
+
+            pool = MCPToolset(MCPServerConfig(command="true"))
+            assert pool.tools == ()
+
+    def test_server_config(self):
+        cfg = MCPServerConfig(command="npx", args=("@browsermcp/mcp@latest",))
+        assert cfg.command == "npx"
+        assert cfg.args == ("@browsermcp/mcp@latest",)
+
+    def test_tool_call_runs_on_opening_loop(self):
+        class _Response:
+            content = []
+            isError = False
+
+        class _Session:
+            async def call_tool(self, name, args):
+                assert name == "remote"
+                assert args == {"value": 1}
+                return _Response()
+
+        class _Toolset:
+            request_timeout = 1.0
+            _session = _Session()
+            _loop = None
+
+        async def go():
+            toolset = _Toolset()
+            toolset._loop = asyncio.get_running_loop()
+            tool = _MCPTool(
+                toolset=toolset,
+                remote_name="remote",
+                description="",
+                input_schema={"type": "object"},
+                exposed_name="remote",
+            )
+            return await tool.run({"value": 1}, ToolContext(call_id="mcp-call"))
+
+        result = _run(go())
+        assert not result.is_error
+
+
+class TestHttpTool:
+    def test_blocks_disallowed_host(self):
+        async def go():
+            tool = HttpTool(allowed_hosts=("api.example.com",))
+            await tool.setup()
+            res = await tool.run(
+                {"url": "https://other-host.example/foo"},
+                ToolContext(call_id="c"),
+            )
+            assert res.is_error
+            assert "allowed_hosts" in res.text
+            await tool.teardown()
+
+        _run(go())
+
+    def test_protocol_conformance(self):
+        tool = HttpTool()
+        # Sanity: it walks like a Tool.
+        assert tool.name == "http"
+        assert callable(tool.run)
+        assert "url" in tool.input_schema["properties"]
+
+    @pytest.mark.parametrize("scheme", ["file", "ftp"])
+    def test_blocks_non_http_schemes(self, scheme):
+        result = _run(
+            HttpTool().run(
+                {"url": f"{scheme}:///etc/hosts"},
+                ToolContext(call_id="scheme"),
+            )
+        )
+        assert result.is_error
+        assert result.meta["blocked_scheme"] == scheme
+
+    def test_blocks_redirect_to_disallowed_host(self):
+        class _TargetHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"private target")
+
+            def log_message(self, format, *args):
+                pass
+
+        target = ThreadingHTTPServer(("127.0.0.1", 0), _TargetHandler)
+
+        class _RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header(
+                    "Location", f"http://localhost:{target.server_port}/secret"
+                )
+                self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        redirect = ThreadingHTTPServer(("127.0.0.1", 0), _RedirectHandler)
+        threads = [
+            threading.Thread(target=server.serve_forever)
+            for server in (target, redirect)
+        ]
+        for thread in threads:
+            thread.start()
+        try:
+            exact = _run(
+                HttpTool(
+                    allowed_hosts=("127.0.0.1",),
+                    max_response_bytes=len(b"private target"),
+                ).run(
+                    {"url": f"http://127.0.0.1:{target.server_port}/"},
+                    ToolContext(call_id="exact"),
+                )
+            )
+            assert not exact.meta["truncated"]
+            assert exact.text == "private target"
+
+            result = _run(
+                HttpTool(allowed_hosts=("127.0.0.1",)).run(
+                    {"url": f"http://127.0.0.1:{redirect.server_port}/"},
+                    ToolContext(call_id="redirect"),
+                )
+            )
+            assert result.is_error
+            assert "redirect host" in result.text
+            assert "private target" not in result.text
+        finally:
+            for server in (redirect, target):
+                server.shutdown()
+                server.server_close()
+            for thread in threads:
+                thread.join()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
