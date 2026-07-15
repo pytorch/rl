@@ -17,19 +17,12 @@ from tensordict import LazyStackedTensorDict, TensorDict
 from torch import nn
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import Unbounded
-from torchrl.envs import (
-    Compose,
-    SerialEnv,
-    StepCounter,
-    Timer,
-    Transform,
-    TransformedEnv,
-)
+from torchrl.envs import Compose, SerialEnv, StepCounter, Timer, TransformedEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.record.recorder import VideoRecorder
 
 from torchrl.testing import (  # noqa
+    AddPixelsTransform,
     BREAKOUT_VERSIONED,
     dtype_fixture,
     get_default_devices,
@@ -140,31 +133,6 @@ class TestTimer(TransformBase):
         raise pytest.skip("Tested elsewhere")
 
 
-class _AddPixels(Transform):
-    """Writes a constant uint8 image so ``VideoRecorder`` has frames to record."""
-
-    def __init__(self):
-        super().__init__(in_keys=[], out_keys=["pixels"])
-
-    def _call(self, next_tensordict):
-        next_tensordict.set(
-            "pixels",
-            torch.zeros(*next_tensordict.batch_size, 3, 8, 8, dtype=torch.uint8),
-        )
-        return next_tensordict
-
-    def _reset(self, tensordict, tensordict_reset):
-        return self._call(tensordict_reset)
-
-    def transform_observation_spec(self, observation_spec):
-        observation_spec["pixels"] = Unbounded(
-            shape=(*observation_spec.shape, 3, 8, 8),
-            dtype=torch.uint8,
-            device=observation_spec.device,
-        )
-        return observation_spec
-
-
 class _CaptureVideoLogger:
     """Duck-typed logger that stores each ``log_video`` call."""
 
@@ -176,7 +144,7 @@ class _CaptureVideoLogger:
 
 
 def _make_pixels_env(max_steps=None):
-    transforms = [_AddPixels()]
+    transforms = [AddPixelsTransform()]
     if max_steps is not None:
         transforms.append(StepCounter(max_steps=max_steps))
     return TransformedEnv(ContinuousActionVecMockEnv(), Compose(*transforms))
@@ -295,7 +263,7 @@ class TestVideoRecorder:
                 2,
                 lambda: TransformedEnv(
                     ContinuousActionVecMockEnv(),
-                    Compose(_AddPixels(), VideoRecorder(None, None)),
+                    Compose(AddPixelsTransform(), VideoRecorder(None, None)),
                 ),
             )
         finally:
