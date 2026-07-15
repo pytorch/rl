@@ -11,7 +11,7 @@ import warnings
 from collections.abc import Callable
 
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -32,9 +32,6 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     UTDRHook,
 )
-
-if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup
 
 
 class DDPGTrainer(Trainer):
@@ -57,12 +54,8 @@ class DDPGTrainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable, optional): The DDPG loss module. Must
-            be omitted when ``learner_group`` owns optimization state.
+        loss_module (LossModule | Callable): The DDPG loss module.
         optimizer (optim.Optimizer, optional): The optimizer for training.
-        learner_group (LearnerGroup, optional): Remotely owned learner group.
-        learner_poll_interval (float): Controller polling interval while an
-            asynchronous collector populates replay. Defaults to ``0.05``.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
         clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.
@@ -72,6 +65,11 @@ class DDPGTrainer(Trainer):
         log_interval (int, optional): Interval for logging metrics. Defaults to 10000.
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state.
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing experiences. Defaults to None.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+        learner_backend_options (dict, optional): Ray world size and resources.
+        learner_poll_interval (float): Remote replay polling interval.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
@@ -99,10 +97,8 @@ class DDPGTrainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
-        learner_group: LearnerGroup | None = None,
-        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -113,6 +109,10 @@ class DDPGTrainer(Trainer):
         save_trainer_file: str | pathlib.Path | None = None,
         checkpoint: Checkpoint | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -134,10 +134,6 @@ class DDPGTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
-        if learner_group is not None and target_net_updater is not None:
-            raise ValueError(
-                "target_net_updater must be constructed inside remote learners."
-            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -145,8 +141,11 @@ class DDPGTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
-            learner_group=learner_group,
             replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
             learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
@@ -161,9 +160,10 @@ class DDPGTrainer(Trainer):
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
         )
+        self.replay_buffer = replay_buffer
         self.async_collection = async_collection
 
-        if replay_buffer is not None and learner_group is None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -178,9 +178,10 @@ class DDPGTrainer(Trainer):
             self.register_op("post_loss", rb_trainer.update_priority)
 
         self.target_net_updater = target_net_updater
-        if learner_group is None:
+        if learner_backend == "local":
             self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
+        if learner_backend == "local":
             policy_weights_getter = partial(
                 TensorDict.from_module, self.loss_module.actor_network
             )
@@ -200,14 +201,14 @@ class DDPGTrainer(Trainer):
         self.action_key = action_key
         self.observation_key = observation_key
 
-        if learner_group is None and hasattr(self.loss_module, "set_keys"):
+        if hasattr(self.loss_module, "set_keys"):
             self.loss_module.set_keys(
                 reward=reward_key,
                 done=done_key,
                 terminated=terminated_key,
             )
 
-        if self.enable_logging and learner_group is None:
+        if self.enable_logging and learner_backend == "local":
             self._setup_ddpg_logging()
 
     def _setup_ddpg_logging(self):
