@@ -1734,6 +1734,10 @@ def test_private_learner_uses_ordinary_replay_api():
     assert result.round_id == 1
     assert result.model_version == 2
     torch.testing.assert_close(loss.weight, torch.tensor(0.8))
+    weights = learner.get_weights(expected_version=2)
+    assert weights["weight"].data_ptr() != loss.weight.data_ptr()
+    weights["weight"].zero_()
+    torch.testing.assert_close(loss.weight, torch.tensor(0.8))
     learner.close()
 
 

@@ -418,6 +418,19 @@ class Trainer:
         self.learner_backend_options = dict(learner_backend_options or {})
         if learner_backend not in ("local", "ray"):
             raise ValueError("learner_backend must be 'local' or 'ray'.")
+        if learner_backend == "ray":
+            if isinstance(optim_steps_per_batch, bool) or not isinstance(
+                optim_steps_per_batch, int
+            ):
+                raise TypeError(
+                    "optim_steps_per_batch must be an integer with "
+                    "learner_backend='ray'."
+                )
+            if optim_steps_per_batch <= 0:
+                raise ValueError(
+                    "optim_steps_per_batch must be positive with "
+                    "learner_backend='ray'."
+                )
         if learner_poll_interval <= 0:
             raise ValueError("learner_poll_interval must be positive.")
         self.learner_poll_interval = float(learner_poll_interval)
@@ -932,6 +945,19 @@ class Trainer:
         op: Callable,
         **kwargs,
     ) -> None:
+        if self.learner_backend == "ray" and dest not in {
+            "batch_process",
+            "post_steps",
+            "pre_steps_log",
+            "post_steps_log",
+            "setup",
+            "shutdown",
+        }:
+            raise RuntimeError(
+                f"The {dest!r} hook stage executes inside the local optimization "
+                "loop and is unavailable with learner_backend='ray'. Move this "
+                "behavior into an OptimizationStepper or a learner-owned component."
+            )
         # Wrap hook with timing for performance monitoring
         # Get hook name from registered modules if available
         hook_name = None
@@ -1341,7 +1367,7 @@ class Trainer:
                         ]
                     else:
                         replay_batch = replay_batch.reshape(-1)
-                    self.replay_buffer.extend(replay_batch.cpu())
+                    self.replay_buffer.extend(replay_batch)
                     self.collected_frames += current_frames * self.frame_skip
                     self._pre_steps_log_hook(batch)
                 else:
@@ -1360,8 +1386,12 @@ class Trainer:
                     receipt = backend.step(num_steps)
                     self._optim_count += receipt.optim_steps
                     metrics = receipt.metrics.flatten_keys(".").to_dict()
-                    self._log(optim_steps=self._optim_count, **metrics)
+                    if self.auto_log_optim_steps:
+                        metrics["optim_steps"] = self._optim_count
+                    self._log(**metrics)
                     self._publish_execution_weights()
+
+                self._post_steps_hook()
 
                 if batch is not None:
                     self._post_steps_log_hook(batch)

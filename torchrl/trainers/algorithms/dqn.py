@@ -79,7 +79,8 @@ class DQNTrainer(Trainer):
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
-        target_net_updater (TargetNetUpdater, optional): Target network updater (typically HardUpdate). Defaults to None.
+        target_net_updater (TargetNetUpdater): Target network updater (typically
+            :class:`~torchrl.objectives.utils.HardUpdate`).
         greedy_module (EGreedyModule, optional): Epsilon-greedy exploration module. When provided,
             the module's epsilon is annealed during training. Defaults to None.
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
@@ -185,6 +186,13 @@ class DQNTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("DQNTrainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "DQNTrainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -278,7 +286,7 @@ class DQNTrainer(Trainer):
                 )
             self.register_op("batch_process", self._aggregate_agent_rewards)
 
-        if self.enable_logging and learner_backend == "local":
+        if self.enable_logging:
             self._setup_dqn_logging()
 
     def _execution_weight_publication(
