@@ -235,7 +235,10 @@ universal ordering.
      - CUDA
      - Sends CUDA tensors without CPU staging. It is intended for stable,
        sufficiently large GPU payloads; setup and per-message latency may
-       outweigh the benefit for small requests.
+       outweigh the benefit for small requests. Assign each NCCL rank a
+       distinct GPU in normal deployments. Colocating ranks on one GPU is
+       supported by NCCL only when ``NCCL_MULTI_RANK_GPU_ENABLE=1`` is set in
+       every participating process.
 
 Distributed layouts are bound to an endpoint generation. Extra TensorDict
 keys are not transmitted, while a missing declared key or a later incompatible
