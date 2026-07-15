@@ -42,6 +42,7 @@ class RateLimiter:
         rate_per_second: float | None = None,
         burst: float | None = None,
     ) -> None:
+        self._max_concurrent = max_concurrent
         self._sem: asyncio.Semaphore | None = (
             asyncio.Semaphore(max_concurrent) if max_concurrent else None
         )
@@ -50,6 +51,14 @@ class RateLimiter:
         self._tokens = self._capacity
         self._last = time.monotonic()
         self._lock = asyncio.Lock()
+
+    def clone(self) -> RateLimiter:
+        """Return a limiter with the same configuration and fresh async state."""
+        return type(self)(
+            max_concurrent=self._max_concurrent,
+            rate_per_second=self._rate,
+            burst=self._capacity,
+        )
 
     async def _consume(self) -> None:
         if not self._rate:
