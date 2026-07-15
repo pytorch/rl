@@ -5,7 +5,7 @@ from functools import partial
 from typing import Any, Literal
 
 import torch
-from tensordict import TensorDict, TensorDictBase
+from tensordict import NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictSequential
 from torch import optim
 
@@ -329,19 +329,8 @@ class TD3Trainer(Trainer):
 
     def _execution_weight_publication(
         self,
-    ) -> tuple[tuple[str, str] | None, TensorDictBase | None]:
-        if self.exploration_module is None:
-            return None, None
-        auxiliary_weights = TensorDict(
-            {
-                "module": TensorDict(
-                    {"1": TensorDict.from_module(self.exploration_module)},
-                    batch_size=[],
-                )
-            },
-            batch_size=[],
-        )
-        return ("module", "0"), auxiliary_weights
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        return self._compose_execution_weight_publication(self.exploration_module)
 
     def _setup_td3_logging(self):
         """Set up logging hooks for TD3-specific metrics."""

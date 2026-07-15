@@ -292,18 +292,9 @@ class DQNTrainer(Trainer):
     def _execution_weight_publication(
         self,
     ) -> tuple[NestedKey | None, TensorDictBase | None]:
-        if self.greedy_module is None:
-            return None, None
-        self._step_greedy()
-        auxiliary_weights = TensorDict(
-            {
-                "module": TensorDict(
-                    {"1": TensorDict.from_module(self.greedy_module)}, batch_size=[]
-                )
-            },
-            batch_size=[],
-        )
-        return ("module", "0"), auxiliary_weights
+        if self.greedy_module is not None:
+            self._step_greedy()
+        return self._compose_execution_weight_publication(self.greedy_module)
 
     def _execution_controller_state(self) -> dict[str, Any]:
         state = super()._execution_controller_state()
