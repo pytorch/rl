@@ -206,6 +206,11 @@ class SGLangCollectiveTransport:
         world_size: Total number of processes.
         device: Device to use for communication.
         timeout: HTTP request timeout in seconds.
+        flush_cache_on_update: Whether to ask the server to flush its radix
+            (prefix) cache as part of each weight update. Defaults to ``True``;
+            cached prefixes are keyed by prompt content and go stale when the
+            weights change. The ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE``
+            environment variable, when set, overrides this in either direction.
     """
 
     def __init__(
@@ -217,6 +222,7 @@ class SGLangCollectiveTransport:
         world_size: int,
         device: torch.device | str | int | None = None,
         timeout: float = 300.0,
+        flush_cache_on_update: bool = True,
     ):
         self.server_url = server_url.rstrip("/")
         self.master_address = master_address
@@ -224,10 +230,12 @@ class SGLangCollectiveTransport:
         self.rank = rank
         self.world_size = world_size
         self.timeout = timeout
+        self.flush_cache_on_update = flush_cache_on_update
         self._comm_group = None
         self._group_name = None
         self._model_metadata = None
         self._http_executor = ThreadPoolExecutor(max_workers=1)
+        self._flush_retract_warned = False
 
         # Handle device specification
         if device is None:
@@ -238,6 +246,49 @@ class SGLangCollectiveTransport:
             self.device = device.index if device.index is not None else 0
         else:
             self.device = device
+
+    def _build_update_payload(
+        self,
+        names: list[str],
+        dtypes: list[str],
+        shapes: list[list[int]],
+    ) -> dict:
+        """Build the JSON payload for ``/update_weights_from_distributed``.
+
+        The ``flush_cache`` flag defaults to :attr:`flush_cache_on_update`
+        (``True``) so the radix cache is invalidated together with the weight
+        swap; stale prefixes are keyed by prompt content and would otherwise
+        be reused after the update. ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE``
+        overrides the flag in either direction when set.
+        """
+        flush_cache = _truthy_env(
+            _SGLANG_FLUSH_CACHE_ENV, default=self.flush_cache_on_update
+        )
+        if (
+            flush_cache
+            and not self._flush_retract_warned
+            and _pause_generation_mode() == "retract"
+        ):
+            # SGLang skips the flush when retracted requests still sit in the
+            # waiting queue; those requests keep their (old-weights) prefixes
+            # until they complete.
+            torchrl_logger.warning(
+                "flush_cache is requested during SGLang weight sync while the "
+                "pause mode is 'retract'; the server may skip the flush if "
+                "retracted requests are still queued, in which case stale "
+                "prefix-cache entries persist until those requests complete."
+            )
+            self._flush_retract_warned = True
+        return {
+            "names": names,
+            "dtypes": dtypes,
+            "shapes": shapes,
+            "group_name": self._group_name,
+            "flush_cache": flush_cache,
+            # Keep SGLang's endpoint-level abort disabled: the explicit
+            # pause_generation call provides the scheduling barrier.
+            "abort_all_requests": False,
+        }
 
     def _pause_generation_for_update(self, model_id: str) -> None:
         """Pause SGLang generation before a live weight update.
@@ -520,18 +571,7 @@ class SGLangCollectiveTransport:
 
             # Step 1: Send a single HTTP request with all weight metadata.
             # The server will enter a broadcast-receive loop for each parameter.
-            # Keep SGLang's endpoint-level abort disabled: the explicit
-            # pause_generation call above provides the scheduling barrier.
-            # Cache flushing remains opt-in because retracted requests can sit
-            # in SGLang's waiting queue while paused.
-            update_data = {
-                "names": names,
-                "dtypes": dtypes,
-                "shapes": shapes,
-                "group_name": self._group_name,
-                "flush_cache": _truthy_env(_SGLANG_FLUSH_CACHE_ENV),
-                "abort_all_requests": False,
-            }
+            update_data = self._build_update_payload(names, dtypes, shapes)
             update_future = self._http_executor.submit(
                 requests.post,
                 f"{self.server_url}/update_weights_from_distributed",
@@ -599,6 +639,11 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
         num_gpus: Number of GPUs used by the SGLang server (tp_size * dp_size).
         strategy: Weight extraction strategy ("tensordict" or "state_dict").
         device: Device index for the trainer. Defaults to 0.
+        flush_cache_on_update: Whether to flush the server's radix (prefix)
+            cache as part of each weight update. Defaults to ``True``; cached
+            prefixes are keyed by prompt content and go stale when the weights
+            change. The ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE`` environment
+            variable, when set, overrides this in either direction.
 
     Example:
         >>> scheme = SGLangWeightSyncScheme(
@@ -620,6 +665,7 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
         num_gpus: int = 1,
         strategy: Literal["tensordict", "state_dict"] = "tensordict",
         device: torch.device | str | int = 0,
+        flush_cache_on_update: bool = True,
     ):
         self.server_url = server_url.rstrip("/")
         self.master_address = master_address or get_local_ip_address()
@@ -627,6 +673,7 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
         self.num_gpus = num_gpus
         self.strategy_name = strategy
         self.device = device
+        self.flush_cache_on_update = flush_cache_on_update
 
     @property
     def world_size(self) -> int:
@@ -642,6 +689,7 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
             rank=0,
             world_size=self.world_size,
             device=self.device,
+            flush_cache_on_update=self.flush_cache_on_update,
         )
 
     def create_sender(self) -> SGLangWeightSender:
