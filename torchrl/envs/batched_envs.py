@@ -2178,6 +2178,24 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             return result
         return out
 
+    def _get_collector_next_keys_to_exclude(self) -> tuple:
+        """Return keys that the registered collector will discard immediately."""
+        collector_ref = self._collector
+        if collector_ref is None or (collector := collector_ref()) is None:
+            return ()
+        cache = self.__dict__.get("_collector_next_keys_to_exclude")
+        if cache is not None and cache[0] is collector_ref:
+            return cache[1]
+        keys = []
+        for key in getattr(collector, "_compact_next_keys", ()):
+            if not isinstance(key, tuple) or not key or key[0] != "next":
+                continue
+            key = key[1:]
+            keys.append(key[0] if len(key) == 1 else key)
+        keys = tuple(keys)
+        self.__dict__["_collector_next_keys_to_exclude"] = (collector_ref, keys)
+        return keys
+
     @torch.no_grad()
     @_check_start
     @_maybe_record_function_decorator("ParallelEnv.step_and_maybe_reset")
@@ -2273,6 +2291,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
+        next_keys_to_exclude = self._get_collector_next_keys_to_exclude()
+        if next_keys_to_exclude:
+            # The post-reset root still carries these values for the next policy
+            # call. Avoid copying only the duplicate values in the step output.
+            next_td = next_td.exclude(*next_keys_to_exclude)
         device = self.device
         shared_device = shared_tensordict_parent.device
         if shared_device == device:
