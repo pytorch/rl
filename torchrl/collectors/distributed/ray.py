@@ -1222,7 +1222,7 @@ class RayCollector(BaseCollector):
             self._collection_thread.start()
 
     @contextlib.contextmanager
-    def pause(self, timeout: float = 30.0, *, resume: bool = True):
+    def pause(self, timeout: float = 30.0, *, resume: bool = True) -> Iterator[None]:
         """Pause background collection while the context is active.
 
         Any in-flight actor requests are drained before entering the context.
