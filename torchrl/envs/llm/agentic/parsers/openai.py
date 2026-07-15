@@ -68,24 +68,34 @@ class OpenAIToolCallParser:
             data = response
         if isinstance(data, Mapping):
             message = data.get("message", data)
-            content = message.get("content") or ""
-            tool_calls = message.get("tool_calls") or data.get("tool_calls") or ()
+            if isinstance(message, Mapping):
+                content = message.get("content") or ""
+                tool_calls = message.get("tool_calls") or data.get("tool_calls") or ()
+            else:
+                content = message if isinstance(message, str) else ""
+                tool_calls = data.get("tool_calls") or ()
         else:
             content = ""
             tool_calls = data or ()
+        if not isinstance(tool_calls, (list, tuple)):
+            tool_calls = ()
         calls: list[ParsedCall] = []
         for tc in tool_calls:
             if not isinstance(tc, Mapping):
                 continue
             fn = tc.get("function") or {}
+            if not isinstance(fn, Mapping) or not fn.get("name"):
+                continue
             raw_args = fn.get("arguments")
             if isinstance(raw_args, str):
                 try:
                     args = json.loads(raw_args) if raw_args else {}
                 except json.JSONDecodeError:
                     args = {"raw": raw_args}
-            else:
+            elif isinstance(raw_args, Mapping) or raw_args is None:
                 args = dict(raw_args or {})
+            else:
+                continue
             calls.append(
                 ParsedCall(
                     tool=str(fn.get("name", "")),
