@@ -30,9 +30,8 @@ from torchrl._utils import DEFAULT_DONE_KEYS
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
-    "cannot update its weights automatically. Calling update_policy_weights_ without a "
-    "configured synchronization mechanism will raise. Consider passing a local/weight_updater "
-    "object to your collector to handle the weight updates."
+    "update_policy_weights_ will be a no-op. Consider passing a local/weight_updater object "
+    "to your collector to handle the weight updates."
 )
 
 

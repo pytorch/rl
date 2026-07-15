@@ -10,17 +10,15 @@ import itertools
 import json
 import math
 import pathlib
-import random
 import sys
 import time
 import warnings
 import weakref
 from collections import defaultdict, OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import nullcontext
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, cast, Literal, Protocol, TYPE_CHECKING
+from typing import Any, Literal
 
 import numpy as np
 import torch.nn
@@ -53,9 +51,6 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
-
-if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup
 
 try:
     from tqdm import tqdm
@@ -91,7 +86,6 @@ REWARD_KEY = ("next", "reward")
 # the loaded tensors are alive, so the checkpoint could neither be deleted nor
 # safely re-saved. Only default to ``mmap=True`` on other platforms.
 _MMAP_CKPT_DEFAULT = sys.platform != "win32"
-_DISTRIBUTED_CHECKPOINT_VERSION = 1
 
 
 @implement_for("torch", "2.4")
@@ -123,17 +117,32 @@ class _TrainerCheckpointState:
         self.trainer._optim_count = state_dict["_optim_count"]
 
 
-class _DistributedControllerCheckpointState:
-    """State-dict view over learner-group controller state."""
+class _ExecutionCheckpointState:
+    """Semantic state view over a private learner execution backend."""
 
     def __init__(self, trainer: Trainer) -> None:
         self.trainer = trainer
 
     def state_dict(self) -> dict[str, Any]:
-        return self.trainer._distributed_controller_state_dict()
+        backend = self.trainer._execution_backend
+        if backend is None or not backend.is_alive():
+            raise RuntimeError(
+                "Remote learner checkpointing requires a running learner backend."
+            )
+        return {
+            "backend": backend.state_dict(),
+            "controller": self.trainer._execution_controller_state(),
+        }
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        self.trainer._load_distributed_controller_state_dict(dict(state_dict))
+        backend = self.trainer._execution_backend
+        if backend is None:
+            raise RuntimeError("Remote learner execution backend is missing.")
+        if not backend.is_alive():
+            backend.start()
+        backend.load_state_dict(state_dict["backend"])
+        self.trainer._load_execution_controller_state(state_dict.get("controller", {}))
+        self.trainer._published_model_version = -1
 
 
 def _state_dict_to_td(sd: dict) -> TensorDict:
@@ -188,38 +197,6 @@ class TrainerHookBase:
         raise NotImplementedError
 
 
-class OptimizationContext(Protocol):
-    """Minimal state required by an :class:`OptimizationStepper`.
-
-    Both :class:`Trainer` and distributed learners implement this protocol. The
-    protocol keeps optimization code independent from collection, logging, and
-    controller lifecycle concerns while preserving the released stepper calling
-    convention.
-
-    Example:
-        A custom execution boundary can accept any trainer or learner that
-        implements this protocol while preserving the stepper call contract:
-
-        >>> from torchrl.trainers import (
-        ...     DefaultOptimizationStepper, OptimizationContext
-        ... )
-        >>> def optimize_batch(context: OptimizationContext, batch):
-        ...     stepper = DefaultOptimizationStepper()
-        ...     return stepper.step(context, batch)
-    """
-
-    loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase]
-    optimizer: optim.Optimizer | None
-    clip_grad_norm: bool
-    clip_norm: float | None
-
-    def register_module(self, module_name: str, module: Any) -> None:
-        ...
-
-    def sync_gradients(self, optimizer: optim.Optimizer) -> None:
-        ...
-
-
 class OptimizationStepper(TrainerHookBase):
     """Performs a single optimization step in a Trainer.
 
@@ -237,8 +214,7 @@ class OptimizationStepper(TrainerHookBase):
     values suitable for logging.
     """
 
-    _trainer: OptimizationContext
-    supports_data_parallel = False
+    _trainer: Trainer
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
         """Perform one optimization step on a ``sub_batch``.
@@ -252,11 +228,9 @@ class OptimizationStepper(TrainerHookBase):
         """
         raise NotImplementedError
 
-    def _step(
-        self, context: OptimizationContext, sub_batch: TensorDictBase
-    ) -> TensorDictBase:
-        """Run the released step contract on an internal optimization context."""
-        return self.step(cast("Trainer", context), sub_batch)
+    def _step(self, context: Any, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Run this stepper against a private optimization context."""
+        return self.step(context, sub_batch)
 
     def state_dict(self) -> dict[str, Any]:
         return {}
@@ -282,8 +256,6 @@ class DefaultOptimizationStepper(OptimizationStepper):
     Optionally, a subset of loss entries can be selected via ``loss_components``.
     In that case, only the selected keys contribute to the backward pass.
     """
-
-    supports_data_parallel = True
 
     def __init__(self, loss_components: Sequence[str] | None = None) -> None:
         if loss_components is not None and not loss_components:
@@ -314,7 +286,7 @@ class DefaultOptimizationStepper(OptimizationStepper):
         return float(gn)
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
-        losses_td = trainer.loss_module(sub_batch)
+        losses_td = trainer.compute_loss(sub_batch)
 
         if trainer.optimizer is None:
             raise RuntimeError(
@@ -331,8 +303,6 @@ class DefaultOptimizationStepper(OptimizationStepper):
             items = [item for key, item in losses_td.items() if key.startswith("loss")]
         loss = sum(items)
         loss.backward()
-
-        trainer.sync_gradients(trainer.optimizer)
 
         gn = self._compute_and_clip_grad_norm(
             trainer.optimizer,
@@ -407,13 +377,16 @@ class Trainer:
             keys of the averaged loss TensorDict at the end of every optimization loop, in addition
             to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
             this logging to user-registered hooks. Default is True.
-        learner_group (LearnerGroup, optional): Remotely owned optimization
-            group. This is mutually exclusive with driver-owned ``loss_module``,
-            ``optimizer``, and ``optimization_stepper`` objects.
-        replay_buffer (optional): Replay owner coordinated by the controller in
-            learner-group mode.
-        learner_poll_interval (float): Polling interval used while asynchronous
-            collectors populate replay. Defaults to ``0.05`` seconds.
+        replay_buffer (optional): Replay owner used by a remote learner backend.
+        target_net_updater (TargetNetUpdater, optional): Target updater serialized
+            with the learner object graph.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+            Defaults to ``"local"``.
+        learner_backend_options (dict, optional): Backend-specific options.
+        learner_poll_interval (float): Remote replay polling interval. Defaults
+            to ``0.05`` seconds.
     """
 
     @classmethod
@@ -438,11 +411,14 @@ class Trainer:
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: OptimizationStepper | None = None,
-        learner_group: LearnerGroup | None = None,
         replay_buffer: Any | None = None,
+        target_net_updater: TargetNetUpdater | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
         learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
@@ -463,44 +439,20 @@ class Trainer:
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
-        self.data_parallel_context = None
-        self.learner_group = learner_group
         self.replay_buffer = replay_buffer
-        self.logger = logger
-        self.async_collection = async_collection
-
-        if learner_group is None:
-            if loss_module is None:
-                raise ValueError("loss_module is required in local Trainer mode.")
-        else:
-            mixed = []
-            if loss_module is not None:
-                mixed.append("loss_module")
-            if optimizer is not None:
-                mixed.append("optimizer")
-            if optimization_stepper is not None:
-                mixed.append("optimization_stepper")
-            if mixed:
-                raise ValueError(
-                    "learner_group owns optimization state; remove driver-owned "
-                    f"arguments: {', '.join(mixed)}."
-                )
-            if replay_buffer is None:
-                raise ValueError("replay_buffer is required with learner_group.")
-            if optim_steps_per_batch is None:
-                raise ValueError(
-                    "optim_steps_per_batch must be finite with learner_group."
-                )
+        self.target_net_updater = target_net_updater
+        self.batch_size = batch_size
+        self.learner_backend = learner_backend
+        self.learner_backend_options = dict(learner_backend_options or {})
+        if learner_backend not in ("local", "ray"):
+            raise ValueError("learner_backend must be 'local' or 'ray'.")
         if learner_poll_interval <= 0:
             raise ValueError("learner_poll_interval must be positive.")
         self.learner_poll_interval = float(learner_poll_interval)
-        self._learner_round = 0
-        self._learner_generation = 0
+        self._execution_backend = None
         self._published_model_version = -1
-        self._update_credit = 0.0
-        self._replay_write_baseline = 0
-        self._last_replay_write_count = 0
-        self._collected_frames_baseline = 0
+        self.logger = logger
+        self.async_collection = async_collection
 
         # Logging frequency control - how often to log each metric (in frames)
         self._log_interval = log_interval
@@ -526,7 +478,7 @@ class Trainer:
         self.save_trainer_file = save_trainer_file
         self.checkpoint = checkpoint
         self._checkpoint_state = _TrainerCheckpointState(self)
-        self._distributed_checkpoint_state = _DistributedControllerCheckpointState(self)
+        self._execution_checkpoint_state = _ExecutionCheckpointState(self)
         self._checkpoint_skip_warnings: set[str] = set()
         self.auto_log_optim_steps = auto_log_optim_steps
 
@@ -587,10 +539,14 @@ class Trainer:
         self._modules = {}
 
         self.optimization_stepper = optimization_stepper
-        if self.optimization_stepper is not None:
+        if self.optimization_stepper is not None and self.learner_backend == "local":
             self.optimization_stepper.register(self, name="optimization_stepper")
 
-        if self.optimizer is not None and self.optimization_stepper is None:
+        if (
+            self.optimizer is not None
+            and self.optimization_stepper is None
+            and self.learner_backend == "local"
+        ):
             # Only auto-create the OptimizerHook when no stepper is
             # provided.  When a stepper is present it may access
             # trainer.optimizer directly, so creating the hook would leave a
@@ -604,8 +560,58 @@ class Trainer:
             log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
             log_timing_hook.register(self)
 
+        if self.learner_backend == "ray":
+            if replay_buffer is None:
+                raise ValueError(
+                    "replay_buffer is required with learner_backend='ray'."
+                )
+            if not isinstance(loss_module, LossModule):
+                raise TypeError(
+                    "learner_backend='ray' requires an ordinary LossModule object."
+                )
+            global_batch_size = batch_size
+            if global_batch_size is None:
+                global_batch_size = getattr(replay_buffer, "batch_size", None)
+            if global_batch_size is None:
+                raise ValueError(
+                    "batch_size is required when replay_buffer.batch_size is unset."
+                )
+            # Kept lazy to break the intentional Trainer/stepper import cycle.
+            from torchrl.trainers._ray_execution import _RayTrainerExecution
+
+            prepare_weight_sync = getattr(collector, "_learner_weight_sync", None)
+            if prepare_weight_sync is None:
+                raise TypeError(
+                    "learner_backend='ray' requires a collector that exposes "
+                    "TorchRL WeightSyncScheme receivers."
+                )
+            self._execution_backend = _RayTrainerExecution(
+                loss_module=loss_module,
+                optimizer=optimizer,
+                optimization_stepper=optimization_stepper,
+                target_net_updater=target_net_updater,
+                replay_buffer=replay_buffer,
+                global_batch_size=global_batch_size,
+                options=self.learner_backend_options,
+                seed=seed,
+                clip_grad_norm=clip_grad_norm,
+                clip_norm=clip_norm,
+                update_replay_priority=not getattr(
+                    optimization_stepper, "updates_replay_priority", False
+                ),
+                weight_sync_factory=prepare_weight_sync,
+            )
+
         if self.checkpoint is not None:
             self._sync_checkpoint_components()
+
+    def compute_loss(
+        self, sub_batch: TensorDictBase, method: str | None = None
+    ) -> TensorDictBase | tuple[Any, ...]:
+        """Evaluate the configured loss through the active execution boundary."""
+        if method is None:
+            return self.loss_module(sub_batch)
+        return getattr(self.loss_module, method)(sub_batch)
 
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
@@ -654,6 +660,18 @@ class Trainer:
                 )
                 self._checkpoint_skip_warnings.add(name)
 
+        if self.learner_backend == "ray":
+            # Restore service owners before constructing learner-local clients
+            # and process groups. Driver copies of loss/optimizer state are not
+            # authoritative in this mode and are intentionally omitted.
+            register("replay_buffer", self.replay_buffer)
+            register("collector", self.collector)
+            register("trainer_state", self._checkpoint_state)
+            register("exploration", getattr(self, "greedy_module", None))
+            register("exploration", getattr(self, "exploration_module", None))
+            register("learner_execution", self._execution_checkpoint_state)
+            return checkpoint
+
         register("policy", self._checkpoint_policy())
         register("loss_module", self.loss_module)
 
@@ -691,15 +709,6 @@ class Trainer:
                 continue
             register(f"trainer_module.{name}", module)
         return checkpoint
-
-    def sync_gradients(self, optimizer: optim.Optimizer) -> None:
-        """Synchronize gradients when a data-parallel context is attached.
-
-        Local trainers do not attach a context, making this method a no-op and
-        preserving their existing numerical behavior.
-        """
-        if self.data_parallel_context is not None:
-            self.data_parallel_context.sync_gradients(optimizer)
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
@@ -786,9 +795,6 @@ class Trainer:
         self._stop_reason = reason
 
     def _save_trainer(self) -> None:
-        if self.learner_group is not None:
-            self._save_distributed_checkpoint()
-            return
         if self.checkpoint is not None:
             self._sync_checkpoint_components().save(self.save_trainer_file)
             return
@@ -891,8 +897,6 @@ class Trainer:
             remote workers observe the restored learner weights.
 
         """
-        if self.learner_group is not None and pathlib.Path(file).is_dir():
-            return self._load_distributed_checkpoint(pathlib.Path(file))
         if Checkpoint.is_checkpoint(file):
             checkpoint = self.checkpoint
             if checkpoint is None:
@@ -907,7 +911,9 @@ class Trainer:
                 tensor_load_kwargs=kwargs,
                 strict=strict,
             )
-            if "policy" in result.loaded:
+            if "learner_execution" in result.loaded:
+                self._publish_execution_weights(force=True)
+            elif "policy" in result.loaded:
                 # The collector payload is restored before the independently
                 # registered policy component. Synchronize once more after all
                 # components have loaded so local copies, remote workers, and
@@ -940,226 +946,6 @@ class Trainer:
                 state["state"] = json.load(f)
             self.load_state_dict(state)
         return self
-
-    def _save_distributed_checkpoint(self) -> pathlib.Path:
-        root = pathlib.Path(self.save_trainer_file)
-        if root.exists() and not root.is_dir():
-            raise ValueError(
-                "Learner-group checkpoints require save_trainer_file to be a "
-                "directory."
-            )
-        root.mkdir(parents=True, exist_ok=True)
-        pause = getattr(self.collector, "pause", None)
-        timeout = float(getattr(self.learner_group, "command_timeout", 30.0))
-        pause_context = (
-            pause(timeout=timeout)
-            if self.async_collection and callable(pause)
-            else nullcontext()
-        )
-        with pause_context:
-            if self.async_collection:
-                self._observe_replay_progress(update_collected_frames=True)
-            checkpoint_name = (
-                f"checkpoint-{self._optim_count:012d}-{self.collected_frames:012d}-"
-                f"{self._learner_round:012d}"
-            )
-            final_path = root / checkpoint_name
-            if final_path.exists():
-                return final_path
-            checkpoint = self._sync_distributed_checkpoint_components()
-            checkpoint.save(
-                final_path,
-                components=set(checkpoint.components),
-                format="directory",
-                metadata=self._distributed_checkpoint_metadata(),
-            )
-        return final_path
-
-    def _load_distributed_checkpoint(self, root: pathlib.Path) -> Trainer:
-        checkpoint_path, manifest = self._resolve_distributed_checkpoint(root)
-        expected_class = f"{type(self).__module__}.{type(self).__qualname__}"
-        metadata = manifest["metadata"]
-        if metadata["trainer_class"] != expected_class:
-            raise ValueError(
-                f"Checkpoint trainer_class={metadata['trainer_class']!r} does not "
-                f"match {expected_class!r}."
-            )
-
-        self.replay_buffer.start()
-        self.learner_group.start()
-        checkpoint = self._sync_distributed_checkpoint_components()
-        result = checkpoint.load(
-            checkpoint_path,
-            components=set(checkpoint.components),
-            map_location="cpu",
-            strict="error",
-        )
-        required = {
-            "collector",
-            "replay_buffer",
-            "learner_group",
-            "distributed_controller",
-        }
-        if not required.issubset(result.loaded):
-            raise RuntimeError(
-                "Distributed checkpoint did not restore required components: "
-                f"{sorted(required.difference(result.loaded))}."
-            )
-
-        group_round = getattr(self.learner_group, "last_round", self._learner_round)
-        group_version = getattr(
-            self.learner_group,
-            "model_version",
-            self._published_model_version,
-        )
-        if group_round != self._learner_round:
-            raise RuntimeError(
-                "Controller and learner-group rounds disagree after restore."
-            )
-        if group_version < self._published_model_version:
-            raise RuntimeError(
-                "Restored learner model predates the published controller version."
-            )
-        self._learner_generation = getattr(
-            self.learner_group, "generation", self._learner_generation + 1
-        )
-        self._replay_write_baseline = self._get_replay_write_count()
-        self._last_replay_write_count = self._replay_write_baseline
-        self._collected_frames_baseline = self.collected_frames
-        if hasattr(self.collector, "collected_frames"):
-            self.collector.collected_frames = self.collected_frames
-        return self
-
-    def _sync_distributed_checkpoint_components(self) -> Checkpoint:
-        checkpoint = self._sync_checkpoint_components(self.checkpoint)
-        for name, component in (
-            ("learner_group", self.learner_group),
-            ("distributed_controller", self._distributed_checkpoint_state),
-        ):
-            if name not in checkpoint:
-                checkpoint.register(name, component)
-        return checkpoint
-
-    def _distributed_checkpoint_metadata(self) -> dict[str, Any]:
-        return {
-            "trainer_mode": "learner_group",
-            "distributed_format_version": _DISTRIBUTED_CHECKPOINT_VERSION,
-            "trainer_class": f"{type(self).__module__}.{type(self).__qualname__}",
-            "controller": {
-                "collected_frames": self.collected_frames,
-                "optimizer_steps": self._optim_count,
-                "round": self._learner_round,
-                "published_model_version": self._published_model_version,
-            },
-            "learner_group": {
-                "generation": getattr(self.learner_group, "generation", 0),
-                "world_size": self.learner_group.world_size,
-                "global_batch_size": self.learner_group.global_batch_size,
-                "last_round": getattr(
-                    self.learner_group, "last_round", self._learner_round
-                ),
-                "model_version": getattr(
-                    self.learner_group,
-                    "model_version",
-                    self._published_model_version,
-                ),
-                "learner_id": getattr(self.learner_group, "learner_id", None),
-            },
-        }
-
-    def _distributed_controller_state_dict(self) -> dict[str, Any]:
-        return {
-            "format_version": _DISTRIBUTED_CHECKPOINT_VERSION,
-            "collected_frames": self.collected_frames,
-            "last_log": dict(self._last_log),
-            "last_save": self._last_save,
-            "optim_count": self._optim_count,
-            "learner_round": self._learner_round,
-            "learner_generation": self._learner_generation,
-            "published_model_version": self._published_model_version,
-            "update_credit": self._update_credit,
-            "rng": {
-                "python": random.getstate(),
-                "numpy": np.random.get_state(),
-                "torch": torch.get_rng_state(),
-                "cuda": (
-                    torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []
-                ),
-            },
-            "extension": self._controller_checkpoint_state(),
-        }
-
-    def _load_distributed_controller_state_dict(
-        self, state_dict: dict[str, Any]
-    ) -> None:
-        self.collected_frames = int(state_dict["collected_frames"])
-        self._last_log = defaultdict(int, state_dict.get("last_log", {}))
-        self._last_save = int(state_dict["last_save"])
-        self._optim_count = int(state_dict["optim_count"])
-        self._learner_round = int(state_dict["learner_round"])
-        self._learner_generation = int(state_dict["learner_generation"])
-        self._published_model_version = int(state_dict["published_model_version"])
-        self._update_credit = float(state_dict["update_credit"])
-        rng = state_dict["rng"]
-        random.setstate(rng["python"])
-        np.random.set_state(rng["numpy"])
-        torch.set_rng_state(rng["torch"])
-        if torch.cuda.is_available() and rng.get("cuda"):
-            torch.cuda.set_rng_state_all(rng["cuda"])
-        self._load_controller_checkpoint_state(state_dict.get("extension", {}))
-
-    def _controller_checkpoint_state(self) -> dict[str, Any]:
-        return {}
-
-    def _load_controller_checkpoint_state(self, state_dict: dict[str, Any]) -> None:
-        if state_dict:
-            raise ValueError(
-                "Checkpoint contains controller extension state unsupported by "
-                f"{type(self).__name__}."
-            )
-
-    @staticmethod
-    def _resolve_distributed_checkpoint(
-        root: pathlib.Path,
-    ) -> tuple[pathlib.Path, dict[str, Any]]:
-        def read_manifest(path: pathlib.Path) -> dict[str, Any] | None:
-            try:
-                manifest = Checkpoint.manifest(path)
-            except (OSError, RuntimeError, TypeError, ValueError):
-                return None
-            metadata = manifest.get("metadata", {})
-            if metadata.get("trainer_mode") != "learner_group":
-                return None
-            if (
-                metadata.get("distributed_format_version")
-                != _DISTRIBUTED_CHECKPOINT_VERSION
-            ):
-                return None
-            return manifest
-
-        direct_manifest = read_manifest(root)
-        if direct_manifest is not None:
-            return root, direct_manifest
-        candidates = []
-        if root.is_dir():
-            for path in root.iterdir():
-                if not path.is_dir():
-                    continue
-                manifest = read_manifest(path)
-                if manifest is not None:
-                    controller = manifest["metadata"]["controller"]
-                    key = (
-                        int(controller["optimizer_steps"]),
-                        int(controller["collected_frames"]),
-                        int(controller["round"]),
-                    )
-                    candidates.append((key, path, manifest))
-        if not candidates:
-            raise FileNotFoundError(
-                f"No complete distributed checkpoint found under {root}."
-            )
-        _, path, manifest = max(candidates, key=lambda item: item[0])
-        return path, manifest
 
     def set_seed(self):
         seed = self.collector.set_seed(self.seed, static_seed=False)
@@ -1504,8 +1290,8 @@ class Trainer:
             op(**kwargs)
 
     def train(self):
-        if self.learner_group is not None:
-            return self._train_with_learner_group()
+        if self.learner_backend == "ray":
+            return self._train_with_execution_backend()
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = {}
@@ -1567,190 +1353,126 @@ class Trainer:
         self._shutdown_hook()
         self.collector.shutdown()
 
-    def _train_with_learner_group(self) -> None:
-        """Run the central-controller path for a remote learner group."""
-        self._validate_learner_group_hooks()
+    def _train_with_execution_backend(self) -> None:
+        """Run collection while the private backend owns optimization state."""
+        backend = self._execution_backend
+        if backend is None:
+            raise RuntimeError("The configured learner execution backend is missing.")
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames, initial=self.collected_frames)
             self._pbar_str = {}
 
         setup_complete = False
         try:
-            self.replay_buffer.start()
-            self.learner_group.start()
-            self._learner_generation = getattr(
-                self.learner_group, "generation", self._learner_generation + 1
-            )
-            self._replay_write_baseline = self._get_replay_write_count()
-            self._last_replay_write_count = self._replay_write_baseline
-            self._collected_frames_baseline = self.collected_frames
-            self._publish_learner_weights(force=True)
+            if hasattr(self.replay_buffer, "start"):
+                self.replay_buffer.start()
+            backend.start()
+            self._publish_execution_weights(force=True)
             self._setup_hook()
             setup_complete = True
 
+            previous_write_count = self._replay_write_count()
             if self.async_collection:
                 self.collector.start()
-                self._run_async_learner_controller()
+                iterator = itertools.repeat(None)
             else:
-                self._run_sync_learner_controller()
+                iterator = iter(self.collector)
+
+            for batch in iterator:
+                previous_frames = self.collected_frames
+                if batch is not None:
+                    batch = self._process_batch_hook(batch)
+                    current_frames = int(
+                        batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                        .sum()
+                        .item()
+                    )
+                    replay_batch = batch
+                    if ("collector", "mask") in replay_batch.keys(True):
+                        replay_batch = replay_batch[
+                            replay_batch.get(("collector", "mask"))
+                        ]
+                    else:
+                        replay_batch = replay_batch.reshape(-1)
+                    self.replay_buffer.extend(replay_batch.cpu())
+                    self.collected_frames += current_frames * self.frame_skip
+                    self._pre_steps_log_hook(batch)
+                else:
+                    write_count = self._replay_write_count()
+                    current_frames = max(0, write_count - previous_write_count)
+                    previous_write_count = write_count
+                    self.collected_frames += current_frames * self.frame_skip
+
+                if (
+                    self.collected_frames
+                    >= getattr(self.collector, "init_random_frames", 0)
+                    and len(self.replay_buffer) >= backend.global_batch_size
+                    and current_frames > 0
+                ):
+                    num_steps = self.optim_steps_per_batch * self.num_epochs
+                    receipt = backend.step(num_steps)
+                    self._optim_count += receipt.optim_steps
+                    metrics = receipt.metrics.flatten_keys(".").to_dict()
+                    self._log(optim_steps=self._optim_count, **metrics)
+                    self._publish_execution_weights()
+
+                if batch is not None:
+                    self._post_steps_log_hook(batch)
+                if self.progress_bar and self.collected_frames > previous_frames:
+                    self._pbar.update(self.collected_frames - previous_frames)
+                    self._pbar_description()
+                if self._stop_training or self.collected_frames >= self.total_frames:
+                    break
+                if self.async_collection and current_frames == 0:
+                    time.sleep(self.learner_poll_interval)
         finally:
             if setup_complete:
                 self._shutdown_hook()
             try:
                 self.collector.shutdown()
             finally:
-                try:
-                    self.learner_group.shutdown()
-                finally:
-                    self.replay_buffer.shutdown()
+                backend.shutdown()
 
-    def _run_async_learner_controller(self) -> None:
-        while True:
-            previous_frames = self.collected_frames
-            progressed = self._observe_replay_progress(update_collected_frames=True)
-            updated = self._drain_learner_updates()
-            if updated:
-                self._post_steps_hook()
-
-            current_frames = self.collected_frames - previous_frames
-            if self.progress_bar and current_frames > 0:
-                self._pbar.update(current_frames)
-                self._pbar_description()
-
-            if self._stop_training:
-                self.save_trainer(force_save=True)
-                return
-            if self.collected_frames >= self.total_frames:
-                if self._update_credit >= 1 and not updated:
-                    raise RuntimeError(
-                        "Collection completed before replay contained enough data "
-                        "for the queued global-batch learner update."
-                    )
-                if self._update_credit < 1:
-                    self.save_trainer(force_save=True)
-                    return
-            self.save_trainer()
-            if not progressed and not updated:
-                time.sleep(self.learner_poll_interval)
-
-    def _run_sync_learner_controller(self) -> None:
-        for batch in self.collector:
-            if batch is None:
-                raise RuntimeError(
-                    "A synchronous collector without direct replay writes must "
-                    "return TensorDict batches."
-                )
-            batch = self._process_batch_hook(batch)
-            current_frames = (
-                batch.get(("collector", "mask"), torch.tensor(batch.numel()))
-                .sum()
-                .item()
-                * self.frame_skip
-            )
-            self.collected_frames += current_frames
-            self._pre_steps_log_hook(batch)
-            replay_batch = batch
-            if ("collector", "mask") in replay_batch.keys(True):
-                replay_batch = replay_batch[replay_batch.get(("collector", "mask"))]
-            else:
-                replay_batch = replay_batch.reshape(-1)
-            self.replay_buffer.extend(replay_batch.cpu())
-            self._observe_replay_progress(update_collected_frames=False)
-            if self.collected_frames >= getattr(
-                self.collector, "init_random_frames", 0
-            ):
-                updated = self._drain_learner_updates()
-                if updated:
-                    self._post_steps_hook()
-            self._post_steps_log_hook(batch)
-
-            if self.progress_bar:
-                self._pbar.update(current_frames)
-                self._pbar_description()
-            if self._stop_training or self.collected_frames >= self.total_frames:
-                self.save_trainer(force_save=True)
-                return
-            self.save_trainer()
-
-    def _observe_replay_progress(self, *, update_collected_frames: bool) -> bool:
-        write_count = self._get_replay_write_count()
-        delta = max(0, write_count - self._last_replay_write_count)
-        self._last_replay_write_count = write_count
-        if delta:
-            frames_per_batch = int(getattr(self.collector, "frames_per_batch", delta))
-            if frames_per_batch <= 0:
-                raise ValueError("collector.frames_per_batch must be positive.")
-            self._update_credit += delta / frames_per_batch
-        if update_collected_frames:
-            self.collected_frames = (
-                self._collected_frames_baseline
-                + (write_count - self._replay_write_baseline) * self.frame_skip
-            )
-        return bool(delta)
-
-    def _drain_learner_updates(self) -> bool:
-        updated = False
-        while self._update_credit >= 1 and not self._stop_training:
-            global_batch_size = self.learner_group.global_batch_size
-            if len(self.replay_buffer) < global_batch_size:
-                return updated
-            expected_round = self._learner_round + 1
-            num_steps = self.optim_steps_per_batch * self.num_epochs
-            metrics = self.learner_group.step(num_steps=num_steps)
-            if self.learner_group.last_round != expected_round:
-                raise RuntimeError(
-                    "Learner group returned an unexpected round: "
-                    f"{self.learner_group.last_round} != {expected_round}."
-                )
-            self._learner_round = self.learner_group.last_round
-            self._optim_count += num_steps
-            self._update_credit -= 1
-            metrics_dict = metrics.flatten_keys(".").to_dict()
-            self._log(optim_steps=self._optim_count, **metrics_dict)
-            self._publish_learner_weights()
-            updated = True
-        return updated
-
-    def _publish_learner_weights(self, *, force: bool = False) -> None:
-        model_version = self.learner_group.model_version
+    def _publish_execution_weights(self, *, force: bool = False) -> None:
+        backend = self._execution_backend
+        model_version = backend.model_version
         if not force and model_version <= self._published_model_version:
             return
-        model_weights_key, auxiliary_weights = self._learner_weight_publication()
-        self.learner_group.publish_weights(
-            self.collector,
-            "policy",
+        model_weights_key, auxiliary_weights = self._execution_weight_publication()
+        published_version = backend.publish_weights(
             expected_version=model_version,
             model_weights_key=model_weights_key,
             auxiliary_weights=auxiliary_weights,
         )
-        self._published_model_version = model_version
+        if published_version != model_version:
+            raise RuntimeError(
+                f"Published model version {published_version} does not match "
+                f"learner version {model_version}."
+            )
+        self._published_model_version = published_version
 
-    def _learner_weight_publication(
+    def _execution_weight_publication(
         self,
     ) -> tuple[NestedKey | None, TensorDictBase | None]:
         return None, None
 
-    def _get_replay_write_count(self) -> int:
+    def _execution_controller_state(self) -> dict[str, Any]:
+        return {
+            "published_model_version": self._published_model_version,
+            "learner_generation": self._execution_backend.generation,
+        }
+
+    def _load_execution_controller_state(self, state_dict: Mapping[str, Any]) -> None:
+        # A restored backend always starts a fresh generation and republishes
+        # its semantic model version before collection resumes.
+        del state_dict
+        self._published_model_version = -1
+
+    def _replay_write_count(self) -> int:
         write_count = self.replay_buffer.write_count
         if callable(write_count):
             write_count = write_count()
         return int(write_count)
-
-    def _validate_learner_group_hooks(self) -> None:
-        ambiguous = {
-            "pre_optim": self._pre_optim_ops,
-            "process_optim_batch": self._process_optim_batch_ops,
-            "post_loss": self._post_loss_ops,
-            "process_loss": self._process_loss_ops,
-            "optimizer": self._optimizer_ops,
-            "post_optim": self._post_optim_ops,
-        }
-        registered = [name for name, hooks in ambiguous.items() if hooks]
-        if registered:
-            raise RuntimeError(
-                "Learner-group mode cannot place legacy learner-side hooks. "
-                f"Remove or move hooks registered at: {', '.join(registered)}."
-            )
 
     def _async_iterator(self):
         """Create an iterator for async collection that monitors replay buffer write_count.

@@ -978,8 +978,6 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         Raises:
             TypeError: If ``worker_ids`` is provided but no ``weight_updater`` is configured.
             ValueError: If conflicting parameters are provided.
-            RuntimeError: If the collector has no configured or local mechanism
-                that can apply the requested update.
 
         .. note:: Users should extend the ``WeightUpdaterBase`` classes to customize
             the weight update logic for specific use cases.
@@ -1097,25 +1095,6 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             # No weight updater configured, try fallback
             self._maybe_fallback_update(policy_or_weights, model_id=model_id)
 
-    def _apply_weights_direct(
-        self,
-        weights: TensorDictBase | dict,
-        *,
-        model_id: str = "policy",
-    ) -> None:
-        """Apply actor-to-actor weights without consulting a parent receiver.
-
-        This internal entry point is used by learner actors publishing directly
-        to collector actors. It intentionally bypasses ``_receiver_schemes``,
-        which describe the parent controller's transport rather than the direct
-        learner transport. Nested collectors still cascade through their own
-        sender schemes via ``_weight_update_impl``.
-        """
-        self._weight_update_impl(
-            policy_or_weights=weights,
-            model_id=model_id,
-        )
-
     def _maybe_fallback_update(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -1125,20 +1104,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """Fallback weight update when no scheme is configured.
 
         Override in subclasses to provide custom fallback behavior.
-        The base implementation raises because returning successfully would
-        incorrectly acknowledge an update that was not applied.
+        By default, this is a no-op.
         """
-        raise RuntimeError(
-            f"{type(self).__name__} cannot update policy weights without a "
-            "weight updater, weight-sync scheme, or subclass implementation of "
-            "_maybe_fallback_update()."
-        )
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights
         scheme.send(weights=processed_weights, worker_ids=worker_ids)
 
-    def _receive_weights_scheme(self):
+    def _receive_weights_scheme(self, model_version: int | None = None):
         """Receive weights for all registered receiver schemes.
 
         scheme.receive() handles both applying weights locally and cascading
@@ -1149,6 +1122,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         for scheme in self._receiver_schemes.values():
             scheme.receive()
+
+    def _connect_weights_scheme(self, model_version: int | None = None) -> None:
+        """Connect all registered receiver schemes for initial publication."""
+        if not hasattr(self, "_receiver_schemes"):
+            raise RuntimeError("No receiver schemes registered.")
+        for scheme in self._receiver_schemes.values():
+            if not scheme.synchronized_on_receiver:
+                scheme.connect(worker_idx=self.worker_idx)
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload
@@ -1305,6 +1286,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         # Initialize each scheme on the receiver side
         for model_id, scheme in weight_recv_schemes.items():
+            previous_scheme = self._receiver_schemes.get(model_id)
+            if previous_scheme is not None and previous_scheme is not scheme:
+                previous_scheme.shutdown()
             if not scheme.initialized_on_receiver:
                 if scheme.initialized_on_sender:
                     raise RuntimeError(

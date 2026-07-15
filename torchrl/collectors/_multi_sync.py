@@ -470,5 +470,5 @@ class MultiSyncCollector(MultiCollector):
         return super().receive_weights(policy_or_weights)
 
     # for RPC
-    def _receive_weights_scheme(self):
-        return super()._receive_weights_scheme()
+    def _receive_weights_scheme(self, model_version: int | None = None):
+        return super()._receive_weights_scheme(model_version=model_version)

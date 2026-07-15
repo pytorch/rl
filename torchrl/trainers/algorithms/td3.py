@@ -1,15 +1,12 @@
-from __future__ import annotations
-
 import pathlib
 import warnings
 from collections.abc import Callable
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import Any, Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictSequential
-from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.checkpoint import Checkpoint
@@ -27,9 +24,6 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     UTDRHook,
 )
-
-if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup
 
 
 class TD3OptimizationStepper(OptimizationStepper):
@@ -58,7 +52,7 @@ class TD3OptimizationStepper(OptimizationStepper):
         the critic update using TD error from ``value_loss``.
     """
 
-    supports_data_parallel = True
+    updates_replay_priority = True
 
     def __init__(
         self,
@@ -106,9 +100,8 @@ class TD3OptimizationStepper(OptimizationStepper):
         clip_grad_norm = trainer.clip_grad_norm
         clip_norm = trainer.clip_norm
 
-        q_loss, q_metadata = trainer.loss_module.value_loss(sub_batch)
+        q_loss, q_metadata = trainer.compute_loss(sub_batch, method="value_loss")
         q_loss.backward()
-        trainer.sync_gradients(self.optimizer_critic)
 
         critic_params = list(self._params(self.optimizer_critic))
         if clip_grad_norm and clip_norm is not None:
@@ -121,9 +114,8 @@ class TD3OptimizationStepper(OptimizationStepper):
 
         actor_loss = q_loss.new_zeros(())
         if do_actor:
-            actor_loss, *_ = trainer.loss_module.actor_loss(sub_batch)
+            actor_loss, *_ = trainer.compute_loss(sub_batch, method="actor_loss")
             actor_loss.backward()
-            trainer.sync_gradients(self.optimizer_actor)
 
             actor_params = list(self._params(self.optimizer_actor))
             if clip_grad_norm and clip_norm is not None:
@@ -177,15 +169,10 @@ class TD3Trainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable, optional): The TD3 loss module or a
-            callable that computes losses. Must be omitted when
-            ``learner_group`` owns optimization state.
+        loss_module (LossModule | Callable): The TD3 loss module or a callable that computes losses.
         optimizer (optim.Optimizer, optional): Fallback optimizer for training. Defaults to None.
         optimization_stepper (TD3OptimizationStepper, optional): Custom optimization stepper
             controlling delayed actor/critic updates. Defaults to None.
-        learner_group (LearnerGroup, optional): Remotely owned learner group.
-        learner_poll_interval (float): Controller polling interval while an
-            asynchronous collector populates replay. Defaults to ``0.05``.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
         clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.
@@ -196,14 +183,18 @@ class TD3Trainer(Trainer):
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.
         num_epochs (int, optional): Number of epochs per batch. Defaults to 1 (typical for off-policy).
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+        learner_backend_options (dict, optional): Ray world size and resources.
+        learner_poll_interval (float): Remote replay polling interval.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
         async_collection (bool, optional): Whether to use async collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information. Defaults to False.
-        target_net_updater (TargetNetUpdater, optional): Target network updater
-            (typically SoftUpdate). Defaults to None.
+        target_net_updater (TargetNetUpdater): Target network updater (typically SoftUpdate).
         exploration_module (torch.nn.Module, optional): Optional exploration module appended
             to actor weights when syncing policy parameters to the collector. Defaults to None.
 
@@ -220,11 +211,9 @@ class TD3Trainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: TD3OptimizationStepper | None = None,
-        learner_group: LearnerGroup | None = None,
-        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -236,6 +225,10 @@ class TD3Trainer(Trainer):
         checkpoint: Checkpoint | None = None,
         num_epochs: int = 1,
         replay_buffer: ReplayBuffer | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -243,7 +236,7 @@ class TD3Trainer(Trainer):
         async_collection: bool = False,
         log_timings: bool = False,
         auto_log_optim_steps: bool = True,
-        target_net_updater: TargetNetUpdater | None = None,
+        target_net_updater: TargetNetUpdater,
         exploration_module: torch.nn.Module | None = None,
     ) -> None:
         warnings.warn(
@@ -252,10 +245,6 @@ class TD3Trainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
-        if learner_group is not None and target_net_updater is not None:
-            raise ValueError(
-                "target_net_updater must be constructed inside remote learners."
-            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -264,8 +253,11 @@ class TD3Trainer(Trainer):
             loss_module=loss_module,
             optimizer=optimizer,
             optimization_stepper=optimization_stepper,
-            learner_group=learner_group,
             replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
             learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
@@ -281,9 +273,10 @@ class TD3Trainer(Trainer):
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
         )
+        self.replay_buffer = replay_buffer
         self.async_collection = async_collection
 
-        if replay_buffer is not None and learner_group is None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -299,13 +292,14 @@ class TD3Trainer(Trainer):
         # stepper, as this step requires access to the critic loss.
 
         self.target_net_updater = target_net_updater
-        if learner_group is None:
+        if learner_backend == "local":
             self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         self.exploration_module = exploration_module
 
-        if learner_group is None:
-            # Mirror the collector policy structure when exploration is enabled.
+        # Here, we build a weight source that mirrors the collector policy structure when
+        # an exploration module is used, to allow for simpler weight synchronization.
+        if learner_backend == "local":
             weights_source = self.loss_module.actor_network
             if exploration_module is not None:
                 weights_source = TensorDictSequential(
@@ -323,20 +317,18 @@ class TD3Trainer(Trainer):
         self.log_actions = log_actions
         self.log_observations = log_observations
 
-        if self.enable_logging and learner_group is None:
+        if self.enable_logging and learner_backend == "local":
             self._setup_td3_logging()
 
-    def _learner_weight_publication(
+    def _execution_weight_publication(
         self,
-    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+    ) -> tuple[tuple[str, str] | None, TensorDictBase | None]:
         if self.exploration_module is None:
             return None, None
         auxiliary_weights = TensorDict(
             {
                 "module": TensorDict(
-                    {
-                        "1": TensorDict.from_module(self.exploration_module),
-                    },
+                    {"1": TensorDict.from_module(self.exploration_module)},
                     batch_size=[],
                 )
             },
