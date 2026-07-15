@@ -22,7 +22,6 @@ from torchrl.collectors._evaluator import (
     _freeze_vecnorm,
     _wrap_env_factory_frozen,
 )
-from torchrl.data import Unbounded
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.transforms import (
@@ -34,6 +33,7 @@ from torchrl.envs.transforms import (
 )
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers.process import ProcessLogger
+from torchrl.testing import AddPixelsTransform
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -81,31 +81,11 @@ class _VideoEventsLogger:
             file.write(f"{name}:{step}:{video.shape[1]}\n")
 
 
-class _AddPixels(Transform):
-    """Writes a constant uint8 image so ``VideoRecorder`` has frames to record."""
-
-    def __init__(self):
-        super().__init__(in_keys=[], out_keys=["pixels"])
-
-    def _call(self, next_tensordict):
-        next_tensordict.set("pixels", torch.zeros(3, 8, 8, dtype=torch.uint8))
-        return next_tensordict
-
-    def _reset(self, tensordict, tensordict_reset):
-        return self._call(tensordict_reset)
-
-    def transform_observation_spec(self, observation_spec):
-        observation_spec["pixels"] = Unbounded(
-            shape=(3, 8, 8), dtype=torch.uint8, device=observation_spec.device
-        )
-        return observation_spec
-
-
 def _make_video_env(video_logger):
     return TransformedEnv(
         _make_env(),
         Compose(
-            _AddPixels(),
+            AddPixelsTransform(),
             VideoRecorder(
                 video_logger,
                 tag="eval_video",
