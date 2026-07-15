@@ -110,7 +110,6 @@ class _DDPProcessGroup:
                 rank=rank,
                 world_size=world_size,
                 timeout=timedelta(seconds=timeout),
-                device_id=device,
             )
         elif backend == "gloo":
             device = torch.device("cpu")

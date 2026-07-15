@@ -272,7 +272,9 @@ class _Learner:
         weights = WeightStrategy(extract_as="tensordict").extract_weights(model)
         if not isinstance(weights, TensorDictBase):
             raise TypeError("Weight extraction must return TensorDictBase.")
-        return weights.detach().to("cpu")
+        # ``Tensor.to("cpu")`` aliases CPU tensors. Weight snapshots cross an
+        # execution boundary and must not retain references to live parameters.
+        return weights.detach().to("cpu").clone()
 
     def state_dict(self) -> dict[str, Any]:
         state = {
