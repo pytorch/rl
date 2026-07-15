@@ -1544,7 +1544,11 @@ class TestRayTransport:
         try:
             client = server.client()
             result = client(
-                TensorDict({"observation": torch.randn(4)}, batch_size=[]),
+                TensorDict(
+                    {"observation": torch.randn(4)},
+                    batch_size=[],
+                    device="cpu",
+                ),
                 timeout=30.0,
             )
             assert result["action"].shape == (2,)
