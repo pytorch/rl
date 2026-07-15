@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .learners import Learner, LearnerGroup, LocalLearnerGroup
 from .trainers import (
     BatchSubSampler,
     ClearCudaCache,
@@ -15,7 +14,6 @@ from .trainers import (
     LogValidationReward,
     LRSchedulerHook,
     mask_batch,
-    OptimizationContext,
     OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
@@ -39,11 +37,7 @@ __all__ = [
     "LogTiming",
     "LogValidationReward",
     "LRSchedulerHook",
-    "Learner",
-    "LearnerGroup",
-    "LocalLearnerGroup",
     "mask_batch",
-    "OptimizationContext",
     "OptimizationStepper",
     "OptimizerHook",
     "ReplayBufferTrainer",
