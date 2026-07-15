@@ -180,6 +180,8 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         loss_module = loss_module(
             actor_network=actor_network, critic_network=critic_network
         )
+    if target_net_updater is None:
+        raise ValueError("SACTrainerConfig requires target_net_updater.")
     if not isinstance(target_net_updater, TargetNetUpdater):
         # target_net_updater must be a partial taking the loss as input
         target_net_updater = target_net_updater(loss_module)
@@ -851,6 +853,8 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
                 f"got {mixing_strategy}."
             )
 
+    if target_net_updater is None:
+        raise ValueError("DQNTrainerConfig requires target_net_updater.")
     if not isinstance(target_net_updater, TargetNetUpdater):
         target_net_updater = target_net_updater(loss_module)
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -1022,6 +1026,8 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         loss_module = loss_module(
             actor_network=actor_network, value_network=critic_network
         )
+    if target_net_updater is None:
+        raise ValueError("DDPGTrainerConfig requires target_net_updater.")
     if not isinstance(target_net_updater, TargetNetUpdater):
         target_net_updater = target_net_updater(loss_module)
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -1508,6 +1514,8 @@ def _make_td3_trainer(*args, **kwargs):
     if value_estimator_gamma is not None:
         loss_module.make_value_estimator(gamma=value_estimator_gamma)
 
+    if target_net_updater is None:
+        raise ValueError("TD3TrainerConfig requires target_net_updater.")
     if not isinstance(target_net_updater, TargetNetUpdater):
         target_net_updater = target_net_updater(loss_module)
 

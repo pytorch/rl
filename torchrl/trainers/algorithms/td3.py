@@ -245,6 +245,13 @@ class TD3Trainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("TD3Trainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "TD3Trainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         super().__init__(
             collector=collector,
             total_frames=total_frames,
@@ -317,7 +324,7 @@ class TD3Trainer(Trainer):
         self.log_actions = log_actions
         self.log_observations = log_observations
 
-        if self.enable_logging and learner_backend == "local":
+        if self.enable_logging:
             self._setup_td3_logging()
 
     def _execution_weight_publication(
