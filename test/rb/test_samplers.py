@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pickle
 import warnings
@@ -1373,6 +1374,83 @@ class TestSamplers:
         assert rb.sampler._beta == rb2.sampler._beta
         assert rb.sampler._max_priority[0] == rb2.sampler._max_priority[0]
         assert rb.sampler._max_priority[1] == rb2.sampler._max_priority[1]
+
+    @pytest.mark.parametrize("alpha", [0.6, 1.0])
+    def test_prb_load_legacy_within_buffer_state_dict(self, alpha):
+        """A version-less ``state_dict`` predates pytorch/rl#3925, whose
+        within-buffer recompute persisted the transformed sum-tree value in
+        ``_max_priority``. On load, the raw max must be recomputed from the
+        restored trees instead of trusting the persisted value."""
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            sampler=PrioritizedSampler(
+                max_capacity=10, alpha=alpha, beta=1.0, max_priority_within_buffer=True
+            ),
+        )
+        eps = rb.sampler._eps
+        idx = rb.extend(torch.arange(6))
+        rb.update_priority(idx, torch.arange(1.0, 7.0))
+        sd = rb.sampler.state_dict()
+        assert sd["_schema_version"] == 1
+
+        # a version-tagged payload is trusted verbatim
+        sampler = PrioritizedSampler(
+            max_capacity=10, alpha=alpha, beta=1.0, max_priority_within_buffer=True
+        )
+        sampler.load_state_dict(sd)
+        assert float(sampler._max_priority[0]) == pytest.approx(6.0, rel=1e-4)
+
+        # simulate a pre-#3925 checkpoint: no version key, and the transformed
+        # tree value stored in _max_priority after a within-buffer recompute
+        legacy = dict(sd)
+        del legacy["_schema_version"]
+        legacy["_max_priority"] = (
+            torch.tensor((6.0 + eps) ** alpha, dtype=torch.float64),
+            torch.tensor(5),
+        )
+        sampler = PrioritizedSampler(
+            max_capacity=10, alpha=alpha, beta=1.0, max_priority_within_buffer=True
+        )
+        sampler.load_state_dict(legacy)
+        assert float(sampler._max_priority[0]) == pytest.approx(6.0, rel=1e-4)
+        assert int(sampler._max_priority[1]) == 5
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    def test_prb_loads_legacy_within_buffer_metadata(self, tmpdir):
+        """Same as ``test_prb_load_legacy_within_buffer_state_dict`` but for the
+        ``dumps``/``loads`` JSON metadata path."""
+        alpha = 0.6
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            sampler=PrioritizedSampler(
+                max_capacity=10, alpha=alpha, beta=1.0, max_priority_within_buffer=True
+            ),
+        )
+        eps = rb.sampler._eps
+        idx = rb.extend(torch.arange(6))
+        rb.update_priority(idx, torch.arange(1.0, 7.0))
+        rb.sampler.dumps(tmpdir)
+
+        metadata_path = os.path.join(tmpdir, "sampler_metadata.json")
+        with open(metadata_path) as file:
+            metadata = json.load(file)
+        assert metadata["_schema_version"] == 1
+
+        # rewrite the metadata as pre-#3925 code persisted it: no version key
+        # and a transformed tree value in _max_priority
+        del metadata["_schema_version"]
+        metadata["_max_priority"] = [float((6.0 + eps) ** alpha), 5.0]
+        with open(metadata_path, "w") as file:
+            json.dump(metadata, file)
+
+        sampler = PrioritizedSampler(
+            max_capacity=10, alpha=alpha, beta=1.0, max_priority_within_buffer=True
+        )
+        sampler.loads(tmpdir)
+        assert float(sampler._max_priority[0]) == pytest.approx(6.0, rel=1e-4)
+        assert int(sampler._max_priority[1]) == 5
 
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"

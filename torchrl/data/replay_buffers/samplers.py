@@ -1048,6 +1048,11 @@ class PrioritizedSampler(Sampler):
 
     """
 
+    # Version of the state_dict / dumps payload schema. Version 1 marks
+    # payloads whose _max_priority is stored in the raw priority domain
+    # (pytorch/rl#3925); version-less payloads are treated as pre-#3925.
+    _STATE_SCHEMA_VERSION: int = 1
+
     def __init__(
         self,
         max_capacity: int,
@@ -1073,7 +1078,6 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
-        self._warned_alpha_change = False
         self._device = torch.device(device) if device is not None else None
         self._init()
         if rl_warnings() and SumSegmentTreeFp32 is None:
@@ -1099,12 +1103,16 @@ class PrioritizedSampler(Sampler):
     def alpha(self):
         """The priority exponent.
 
-        .. note:: Changing ``alpha`` on a sampler that already holds priorities
+        .. note:: Setting ``alpha`` on a sampler that already holds priorities
           (e.g. when annealing it with a
           :class:`~torchrl.data.replay_buffers.scheduler.ParameterScheduler`)
-          does not re-transform the ``(p + eps) ** alpha`` values already
-          written to the sum/min trees: old and new exponents mix until every
-          entry's priority is updated again.
+          re-transforms the ``(p + eps) ** alpha`` values stored in the
+          sum/min trees to the new exponent in a single O(capacity) pass, so
+          sampling probabilities stay consistent with the new value. The one
+          exception is changing ``alpha`` away from exactly ``0``: the raw
+          priorities cannot be recovered from the trees in that regime, so the
+          stored (uniform) values are kept -- and a warning is emitted --
+          until each entry's priority is next updated.
         """
         return self._alpha
 
@@ -1114,23 +1122,10 @@ class PrioritizedSampler(Sampler):
             raise ValueError(
                 f"alpha must be greater or equal than 0, got alpha={value}"
             )
-        if (
-            value != self._alpha
-            and self._max_priority_within_buffer
-            and not self._warned_alpha_change
-            and self._max_priority[0] is not None
-        ):
-            self._warned_alpha_change = True
-            warnings.warn(
-                "Changing alpha on a PrioritizedSampler with "
-                "max_priority_within_buffer=True does not re-transform the "
-                "(p + eps) ** alpha values already stored in the sum/min trees, "
-                "and the max-priority recomputation inverts tree values with the "
-                "new alpha. Large changes to alpha can corrupt the tracked max "
-                "priority until the corresponding entries are updated again. "
-                "This warning is emitted once per sampler."
-            )
+        old_alpha = self._alpha
         self._alpha = value
+        if value != old_alpha:
+            self._retransform_priority_trees(old_alpha, value)
 
     @property
     def beta(self):
@@ -1277,6 +1272,71 @@ class PrioritizedSampler(Sampler):
             is_overwritten = bool(is_overwritten.item())
         if is_overwritten:
             self._max_priority = None
+
+    def _tree_argmax(self) -> tuple[torch.Tensor, torch.Tensor]:
+        device = self.device
+        indices = torch.arange(self._max_capacity, dtype=torch.long, device=device)
+        values = torch.as_tensor(self._sum_tree[indices], device=device)
+        return values.max(0)
+
+    def _retransform_priority_trees(self, old_alpha: float, new_alpha: float) -> None:
+        """Rewrites the tree entries from ``(p + eps) ** old_alpha`` to ``(p + eps) ** new_alpha``.
+
+        A single O(capacity) pass keeps the sampling probabilities (and the
+        within-buffer max-priority recomputation, which inverts tree values
+        with the current ``alpha``) consistent when ``alpha`` changes, e.g.
+        when annealed by a
+        :class:`~torchrl.data.replay_buffers.scheduler.ParameterScheduler`.
+        ``_max_priority`` is tracked in the raw domain and needs no update.
+        """
+        device = self.device
+        indices = torch.arange(self._max_capacity, dtype=torch.long, device=device)
+        values = torch.as_tensor(self._sum_tree[indices], device=device)
+        # Entries that were never written hold the sum-tree neutral value 0
+        # and must stay 0; written entries hold (p + eps) ** alpha > 0.
+        written = values > 0
+        if not written.any():
+            return
+        if old_alpha == 0:
+            # With alpha == 0 every written entry is 1.0, so the raw
+            # priorities cannot be recovered from the trees. Keep the stored
+            # (uniform) values; they are corrected as entries get their
+            # priority updated.
+            warnings.warn(
+                "Changing alpha away from 0 on a PrioritizedSampler that "
+                "already holds priorities cannot recover the raw priorities "
+                "from the sum/min trees (alpha == 0 stores 1.0 for every "
+                "written entry). Sampling stays uniform for those entries "
+                "until their priority is next updated, so annealing away "
+                "from exactly 0 is approximate."
+            )
+            return
+        indices = indices[written]
+        raw = (values[written].double() ** (1.0 / old_alpha) - self._eps).clamp_min(0)
+        new_values = ((raw + self._eps) ** new_alpha).to(self.dtype)
+        self._sum_tree[indices] = new_values
+        self._min_tree[indices] = new_values
+
+    def _recompute_max_priority_from_tree(self) -> None:
+        """Recomputes the raw ``_max_priority`` from the sum-tree entries.
+
+        The sum-tree stores ``(p + eps) ** alpha`` while the tracked max
+        priority lives in the raw domain, so the tree max is inverted before
+        being stored. Used when restoring a checkpoint saved before the
+        raw-domain convention (pytorch/rl#3925), whose persisted
+        ``_max_priority`` may hold a transformed tree value.
+        """
+        if self._alpha == 0:
+            # (p + eps) ** 0 == 1 for every written entry: the raw max cannot
+            # be recovered from the tree. Keep the restored value.
+            return
+        maxval, maxidx = self._tree_argmax()
+        if maxval <= 0:
+            # nothing was ever written to the trees
+            self._max_priority = None
+            return
+        maxval = (maxval ** (1.0 / self._alpha) - self._eps).clamp_min(0)
+        self._max_priority = (maxval, maxidx)
 
     @property
     def default_priority(self) -> float | torch.Tensor:
@@ -1487,14 +1547,9 @@ class PrioritizedSampler(Sampler):
                 # is raised later (see the ``alpha`` setter).
                 return
             if tree_device.type == "cuda":
-                all_indices = torch.arange(
-                    self._max_capacity, dtype=torch.long, device=tree_device
-                )
-                maxval, maxidx = self._sum_tree[all_indices].max(0)
+                maxval, maxidx = self._tree_argmax()
             elif (index == cur_max_priority_index).any():
-                maxval, maxidx = torch.tensor(
-                    [self._sum_tree[i] for i in range(self._max_capacity)]
-                ).max(0)
+                maxval, maxidx = self._tree_argmax()
             else:
                 return
             # ``maxval`` is read from the sum-tree, which stores (p + eps) ** alpha.
@@ -1511,6 +1566,7 @@ class PrioritizedSampler(Sampler):
 
     def state_dict(self) -> dict[str, Any]:
         return {
+            "_schema_version": self._STATE_SCHEMA_VERSION,
             "_alpha": self._alpha,
             "_beta": self._beta,
             "_eps": self._eps,
@@ -1520,6 +1576,9 @@ class PrioritizedSampler(Sampler):
         }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        # Version-less payloads predate pytorch/rl#3925, whose within-buffer
+        # recompute stored the transformed tree value in _max_priority.
+        version = state_dict.get("_schema_version", 0)
         self._alpha = state_dict["_alpha"]
         self._beta = state_dict["_beta"]
         self._eps = state_dict["_eps"]
@@ -1528,6 +1587,12 @@ class PrioritizedSampler(Sampler):
         self._max_priority = deepcopy(state_dict["_max_priority"])
         self._sum_tree = deepcopy(state_dict["_sum_tree"])
         self._min_tree = deepcopy(state_dict["_min_tree"])
+        if (
+            version < 1
+            and self._max_priority_within_buffer
+            and self._max_priority[0] is not None
+        ):
+            self._recompute_max_priority_from_tree()
 
     @implement_for("torch", None, "2.5.0")
     def dumps(self, path):
@@ -1565,20 +1630,19 @@ class PrioritizedSampler(Sampler):
         mm_mt.copy_(
             torch.as_tensor([self._min_tree[i] for i in range(self._max_capacity)])
         )
+        metadata = tree_map(
+            float,
+            {
+                "_alpha": self._alpha,
+                "_beta": self._beta,
+                "_eps": self._eps,
+                "_max_priority": self._max_priority,
+                "_max_capacity": self._max_capacity,
+            },
+        )
+        metadata["_schema_version"] = self._STATE_SCHEMA_VERSION
         with open(path / "sampler_metadata.json", "w") as file:
-            json.dump(
-                tree_map(
-                    float,
-                    {
-                        "_alpha": self._alpha,
-                        "_beta": self._beta,
-                        "_eps": self._eps,
-                        "_max_priority": self._max_priority,
-                        "_max_capacity": self._max_capacity,
-                    },
-                ),
-                file,
-            )
+            json.dump(metadata, file)
 
     @implement_for("torch", None, "2.5.0")
     def loads(self, path):
@@ -1589,6 +1653,9 @@ class PrioritizedSampler(Sampler):
         path = Path(path).absolute()
         with open(path / "sampler_metadata.json") as file:
             metadata = json.load(file)
+        # Version-less payloads predate pytorch/rl#3925, whose within-buffer
+        # recompute stored the transformed tree value in _max_priority.
+        version = metadata.get("_schema_version", 0)
         self._alpha = metadata["_alpha"]
         self._beta = metadata["_beta"]
         self._eps = metadata["_eps"]
@@ -1618,6 +1685,12 @@ class PrioritizedSampler(Sampler):
             self._sum_tree[i] = elt
         for i, elt in enumerate(mm_mt.tolist()):
             self._min_tree[i] = elt
+        if (
+            version < 1
+            and self._max_priority_within_buffer
+            and self._max_priority[0] is not None
+        ):
+            self._recompute_max_priority_from_tree()
 
 
 class SliceSampler(Sampler):
