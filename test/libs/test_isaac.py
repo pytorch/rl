@@ -29,12 +29,12 @@ from torchrl.collectors.distributed import RayCollector
 from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import InitTracker, RewardSum, StepCounter, TransformedEnv, VecNormV2
+from torchrl.envs import InitTracker, RewardSum, StepCounter, TransformedEnv
 from torchrl.envs.libs import gym as gym_lib, isaac_lab as isaac_lab_lib
 from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import LSTMModule, MLP
-from torchrl.testing import get_default_devices
+from torchrl.testing import CountingVecNormV2, get_default_devices
 from torchrl.testing.env_helper import (
     _isaac_app_launcher_init,
     make_isaac_env,
@@ -65,21 +65,6 @@ _isaac_env_maker_cuda1 = partial(
 # it can be used directly as a ``policy_factory``.
 _isaac_policy_maker = make_isaac_policy
 _isaac_policy_maker_cuda1 = partial(make_isaac_policy, device=torch.device("cuda:1"))
-
-
-class CountingVecNormV2(VecNormV2):
-    def __init__(self, *args, **kwargs):
-        self.step_calls = 0
-        self.reset_calls = 0
-        super().__init__(*args, **kwargs)
-
-    def _step(self, tensordict, next_tensordict):
-        self.step_calls += 1
-        return super()._step(tensordict, next_tensordict)
-
-    def _reset(self, tensordict, tensordict_reset):
-        self.reset_calls += 1
-        return super()._reset(tensordict, tensordict_reset)
 
 
 def _isaaclab_raw_env(env):
