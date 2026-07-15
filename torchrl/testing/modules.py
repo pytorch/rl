@@ -11,6 +11,7 @@ from torchrl.objectives.value.advantages import _vmap_func
 
 __all__ = [
     "BiasModule",
+    "CatLinear",
     "LSTMNet",
     "NonSerializableBiasModule",
     "call_value_nets",
@@ -26,6 +27,27 @@ class BiasModule(nn.Module):
 
     def forward(self, x):
         return x + self.bias
+
+
+class CatLinear(nn.Module):
+    """Concatenate input tensors along the last dimension and apply a linear layer.
+
+    Args:
+        in_features: Size of the concatenated input.
+        out_features: Size of the output.
+
+    Examples:
+        >>> layer = CatLinear(5, 2)
+        >>> layer(torch.zeros(3), torch.zeros(2)).shape
+        torch.Size([2])
+    """
+
+    def __init__(self, in_features: int, out_features: int) -> None:
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+
+    def forward(self, *tensors: torch.Tensor) -> torch.Tensor:
+        return self.linear(torch.cat(tensors, dim=-1))
 
 
 class NonSerializableBiasModule(BiasModule):
