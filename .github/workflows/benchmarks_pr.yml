@@ -495,7 +495,7 @@ jobs:
           tar -xzf benchmark-definitions/benchmark-definitions.tar.gz \
             -C benchmark-definitions
           mapfile -t NODEIDS < <(
-            python -c 'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["nodeids"]))' \
+            python -c 'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["pytest_nodeids"]))' \
               "confirmation-plan/${TORCHRL_BENCHMARK_DEVICE}.json"
           )
           test "${#NODEIDS[@]}" -gt 0

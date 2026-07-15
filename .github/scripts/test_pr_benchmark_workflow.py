@@ -117,6 +117,7 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
         "test_bench.py::test_regression",
         "test_bench.py::test_near_threshold",
     }
+    assert set(plan["pytest_nodeids"]) == set(plan["nodeids"])
 
     confirmation_device = confirmation_root / "CPU"
     confirmation_device.mkdir(parents=True)
@@ -183,6 +184,38 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
     )
     assert "Sequential same-runner confirmations: 2." in body
     assert "same runner" in body
+
+
+def test_plan_uses_nodeids_relative_to_benchmark_working_directory(tmp_path):
+    raw_root = tmp_path / "raw"
+    _write_raw_pair(raw_root)
+    for revision in ("baseline", "contender"):
+        result_path = raw_root / "CPU" / f"{revision}.json"
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        for benchmark in result["benchmarks"]:
+            benchmark["fullname"] = (
+                "benchmark-definitions/benchmarks/" + benchmark["fullname"]
+            )
+        result_path.write_text(json.dumps(result), encoding="utf-8")
+
+    comparison.create_confirmation_plan(
+        raw_root,
+        tmp_path / "plan",
+        tmp_path / "matrix.json",
+        {"CPU": "pinned-image"},
+        reporting_threshold=5.0,
+        threshold_margin=2.0,
+    )
+
+    plan = json.loads((tmp_path / "plan" / "CPU.json").read_text(encoding="utf-8"))
+    assert all(
+        nodeid.startswith("benchmark-definitions/benchmarks/")
+        for nodeid in plan["nodeids"]
+    )
+    assert all(
+        not nodeid.startswith("benchmark-definitions/benchmarks/")
+        for nodeid in plan["pytest_nodeids"]
+    )
 
 
 def test_plan_rejects_mismatched_environments(tmp_path):

@@ -175,6 +175,10 @@ def create_confirmation_plan(
             "reporting_threshold_pct": reporting_threshold,
             "threshold_margin_pct": threshold_margin,
             "nodeids": [row["name"] for row in candidates],
+            "pytest_nodeids": [
+                row["name"].removeprefix("benchmark-definitions/benchmarks/")
+                for row in candidates
+            ],
             "initial_changes": {row["name"]: row["change"] for row in candidates},
         }
         _write_json(plan_root / f"{device}.json", plan)
