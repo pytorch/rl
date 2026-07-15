@@ -28,11 +28,14 @@ Transport Backends
 ------------------
 
 The transport can be selected behind the high-level
-:class:`InferenceServer` constructor. In particular, a Ray-owned server can
-use ``transport="ray"`` for dynamic or non-tensor payloads, or
-``transport="distributed"`` with Gloo/NCCL for fixed-layout TensorDict
-payloads. See :ref:`ref_service_transports` for supported owner/transport
-combinations, restrictions, and expected performance.
+:class:`InferenceServer` constructor. Both process- and Ray-owned servers can
+use ``transport="distributed"`` with Gloo/NCCL for fixed-layout TensorDict
+payloads. A process-owned server requires explicit ``request_spec`` and
+``response_spec`` values before its subprocess starts; a Ray-owned server can
+bind those layouts on first use. Ray-owned inference can instead use
+``transport="ray"`` for dynamic or non-tensor payloads. See
+:ref:`ref_service_transports` for supported owner/transport combinations,
+restrictions, and expected performance.
 
 .. autosummary::
     :toctree: generated/
