@@ -11,7 +11,7 @@ import warnings
 from collections.abc import Callable
 
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
@@ -32,9 +32,6 @@ from torchrl.trainers.trainers import (
     UpdateWeights,
     UTDRHook,
 )
-
-if TYPE_CHECKING:
-    from torchrl.trainers.learners import LearnerGroup
 
 
 class SACTrainer(Trainer):
@@ -60,13 +57,8 @@ class SACTrainer(Trainer):
         total_frames (int): Total number of frames to collect during training.
         frame_skip (int): Number of frames to skip between policy updates.
         optim_steps_per_batch (int): Number of optimization steps per collected batch.
-        loss_module (LossModule | Callable, optional): The SAC loss module or a
-            callable that computes losses. Must be omitted when ``learner_group``
-            owns optimization state.
+        loss_module (LossModule | Callable): The SAC loss module or a callable that computes losses.
         optimizer (optim.Optimizer, optional): The optimizer for training. If None, must be configured elsewhere.
-        learner_group (LearnerGroup, optional): Remotely owned learner group.
-        learner_poll_interval (float): Controller polling interval while an
-            asynchronous collector populates replay. Defaults to ``0.05``.
         logger (Logger, optional): Logger for recording training metrics. Defaults to None.
         clip_grad_norm (bool, optional): Whether to clip gradient norms. Defaults to True.
         clip_norm (float, optional): Maximum gradient norm for clipping. Defaults to None.
@@ -77,6 +69,9 @@ class SACTrainer(Trainer):
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.
         batch_size (int, optional): Batch size for sampling from replay buffer. Defaults to None.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+        learner_backend_options (dict, optional): Ray world size and resources.
+        learner_poll_interval (float): Remote replay polling interval.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
@@ -128,10 +123,8 @@ class SACTrainer(Trainer):
         total_frames: int,
         frame_skip: int,
         optim_steps_per_batch: int,
-        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase] | None,
+        loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
-        learner_group: LearnerGroup | None = None,
-        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -143,6 +136,9 @@ class SACTrainer(Trainer):
         checkpoint: Checkpoint | None = None,
         replay_buffer: ReplayBuffer | None = None,
         batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -164,13 +160,8 @@ class SACTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
-        if learner_group is not None and target_net_updater is not None:
-            raise ValueError(
-                "target_net_updater must be constructed inside remote learners."
-            )
-        if learner_group is None:
-            # Try to get the action spec for a driver-owned loss module.
-            self._pass_action_spec_from_collector_to_loss(collector, loss_module)
+        # try to get the action spec
+        self._pass_action_spec_from_collector_to_loss(collector, loss_module)
 
         super().__init__(
             collector=collector,
@@ -179,8 +170,11 @@ class SACTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
-            learner_group=learner_group,
             replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
             learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
@@ -200,7 +194,7 @@ class SACTrainer(Trainer):
 
         # Note: SAC can use any sampler type, unlike PPO which requires SamplerWithoutReplacement
 
-        if replay_buffer is not None and learner_group is None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -214,9 +208,10 @@ class SACTrainer(Trainer):
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
         self.target_net_updater = target_net_updater
-        if learner_group is None:
+        if learner_backend == "local":
             self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
+        if learner_backend == "local":
             policy_weights_getter = partial(
                 TensorDict.from_module, self.loss_module.actor_network
             )
@@ -237,7 +232,7 @@ class SACTrainer(Trainer):
         self.action_key = action_key
         self.observation_key = observation_key
 
-        if learner_group is None and hasattr(self.loss_module, "set_keys"):
+        if hasattr(self.loss_module, "set_keys"):
             self.loss_module.set_keys(
                 reward=reward_key,
                 done=done_key,
@@ -246,7 +241,7 @@ class SACTrainer(Trainer):
             )
 
         # Set up comprehensive logging for SAC training
-        if self.enable_logging and learner_group is None:
+        if self.enable_logging and learner_backend == "local":
             self._setup_sac_logging()
 
     def _pass_action_spec_from_collector_to_loss(
