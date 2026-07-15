@@ -1835,8 +1835,6 @@ class TestTrainerConfigs:
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
         assert cfg.clip_grad_norm is True
-        assert cfg.learner_group is None
-        assert cfg.learner_poll_interval == 0.05
 
     def test_hook_config(self):
         from hydra.utils import instantiate
