@@ -421,6 +421,7 @@ class Collector(BaseCollector):
     """
 
     _ignore_rb: bool = False
+    _DIRECT_ENV_OUTPUT_MIN_BYTES = 256 * 1024
 
     def __init__(
         self,
@@ -602,6 +603,7 @@ class Collector(BaseCollector):
         # Create carrier and rollout buffers
         self._make_carrier()
         self._maybe_make_final_rollout(make_rollout=self._use_buffers)
+        self._setup_direct_env_output()
         self._set_truncated_keys()
 
         # Set up interruptor and frame tracking
@@ -1365,6 +1367,54 @@ class Collector(BaseCollector):
                 )
             self._final_rollout.refine_names(..., "time")
 
+    def _setup_direct_env_output(self) -> None:
+        """Configure direct writes from borrowed environment output buffers."""
+        supports_direct_output = getattr(
+            type(self.env), "_supports_collector_direct_output", False
+        )
+        same_storage_device = (
+            self.storing_device is None or self.storing_device == self.env_device
+        )
+        rollout_step = self._final_rollout[..., 0] if self._use_buffers else None
+        rollout_step_bytes = (
+            sum(
+                value.numel() * value.element_size()
+                for value in rollout_step.values(True, True)
+                if isinstance(value, torch.Tensor)
+            )
+            if rollout_step is not None
+            else 0
+        )
+        # Per-step TensorDict updates have a fixed cost. Small payloads remain
+        # faster on the regular clone-and-stack path; direct writes are reserved
+        # for batches where memory traffic dominates that bookkeeping.
+        large_enough = rollout_step_bytes >= self._DIRECT_ENV_OUTPUT_MIN_BYTES
+        tensor_only = rollout_step is not None and all(
+            isinstance(value, torch.Tensor) for value in rollout_step.values(True, True)
+        )
+        self._write_env_output_directly = bool(
+            self._use_buffers
+            and supports_direct_output
+            and same_storage_device
+            and large_enough
+            and tensor_only
+        )
+        self._yield_owning_rollout = bool(
+            self._write_env_output_directly and not self.return_same_td
+        )
+        if not self._write_env_output_directly:
+            self._direct_output_root_keys = ()
+            self._direct_output_next_keys = ()
+            return
+        self._direct_output_root_keys = tuple(
+            key
+            for key in self._final_rollout.keys(True, True)
+            if not (isinstance(key, tuple) and key[0] == "next")
+        )
+        self._direct_output_next_keys = tuple(
+            self._final_rollout.get("next").keys(True, True)
+        )
+
     def _set_truncated_keys(self):
         self._truncated_keys = []
         if self.set_truncated:
@@ -1549,6 +1599,12 @@ class Collector(BaseCollector):
                     yield
                     continue
                 self._increment_frames(tensordict_out.numel())
+                if self._yield_owning_rollout:
+                    # Hand the completed allocation to the caller and replace
+                    # the internal buffer before user code can mutate it.
+                    self._final_rollout = self._final_rollout.new_empty(
+                        *self._final_rollout.batch_size
+                    )
                 tensordict_out = self._postproc(tensordict_out)
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
@@ -1557,6 +1613,10 @@ class Collector(BaseCollector):
                         for event in events:
                             event.record()
                             event.synchronize()
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(tensordict_out)
+                    yield tensordict_out
+                elif self._yield_owning_rollout:
                     if self.post_collect_hook is not None:
                         self.post_collect_hook(tensordict_out)
                     yield tensordict_out
@@ -1857,9 +1917,22 @@ class Collector(BaseCollector):
                         env_input = self._carrier
                 else:
                     env_input = self._carrier
+                if self._write_env_output_directly:
+                    direct_output = self._final_rollout[..., t]
+                    direct_output.update_(
+                        self._carrier,
+                        keys_to_update=self._direct_output_root_keys,
+                        non_blocking=self.no_cuda_sync,
+                    )
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
-                if self._carrier is not env_output:
+                if self._write_env_output_directly:
+                    direct_output.get("next").update_(
+                        env_output.get("next"),
+                        keys_to_update=self._direct_output_next_keys,
+                        non_blocking=self.no_cuda_sync,
+                    )
+                elif self._carrier is not env_output:
                     # ad-hoc update carrier
                     next_data = env_output.get("next")
                     if self._carrier_has_no_device:
@@ -1875,7 +1948,9 @@ class Collector(BaseCollector):
                 else:
                     carrier_for_out = self._carrier
 
-                if (
+                if self._write_env_output_directly:
+                    pass
+                elif (
                     self.replay_buffer is not None
                     and not self._ignore_rb
                     and not self.extend_buffer
@@ -1919,7 +1994,9 @@ class Collector(BaseCollector):
                     ):
                         return
                     result = self._final_rollout
-                    if self._use_buffers:
+                    if self._write_env_output_directly:
+                        pass
+                    elif self._use_buffers:
                         try:
                             torch.stack(
                                 tensordicts,
@@ -1944,7 +2021,9 @@ class Collector(BaseCollector):
                         result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     break
             else:
-                if self._use_buffers:
+                if self._write_env_output_directly:
+                    result = self._final_rollout
+                elif self._use_buffers:
                     result = self._final_rollout
                     try:
                         result = torch.stack(

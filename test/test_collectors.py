@@ -155,6 +155,10 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
 
 
+class _DirectOutputCollector(Collector):
+    _DIRECT_ENV_OUTPUT_MIN_BYTES = 0
+
+
 @pytest.mark.parametrize(
     ("backend", "scheme_cls"),
     [
@@ -1466,6 +1470,76 @@ if __name__ == "__main__":
             ref_next = ref_data.get(full)[..., :-1, :]
             root_shifted = ref_data.get(k)[..., 1:, :]
             torch.testing.assert_close(ref_next[mask], root_shifted[mask])
+
+    def test_parallel_env_direct_output_is_correct_and_immutable(self):
+        env = ParallelEnv(2, lambda: CountingEnv(max_steps=100))
+        with patch.object(Collector, "_DIRECT_ENV_OUTPUT_MIN_BYTES", 0):
+            collector = Collector(
+                env,
+                CountingEnvCountPolicy(env.action_spec),
+                frames_per_batch=8,
+                total_frames=16,
+                use_buffers=True,
+                auto_register_policy_transforms=False,
+            )
+        try:
+            iterator = iter(collector)
+            first = next(iterator)
+            first_copy = first.clone()
+            second = next(iterator)
+
+            expected_first = (
+                torch.arange(4, dtype=torch.int32).view(1, 4, 1).expand(2, -1, -1)
+            )
+            expected_second = (
+                torch.arange(4, 8, dtype=torch.int32).view(1, 4, 1).expand(2, -1, -1)
+            )
+            torch.testing.assert_close(first["observation"], expected_first)
+            torch.testing.assert_close(
+                first[("next", "observation")], expected_first + 1
+            )
+            torch.testing.assert_close(second["observation"], expected_second)
+            assert_allclose_td(first, first_copy)
+        finally:
+            collector.shutdown()
+
+    def test_multisync_parallel_env_direct_output_is_correct(self):
+        def make_env():
+            return ParallelEnv(2, lambda: CountingEnv(max_steps=100))
+
+        probe = make_env()
+        try:
+            action_spec = probe.action_spec
+        finally:
+            probe.close(raise_if_closed=False)
+        collector = MultiSyncCollector(
+            [make_env, make_env],
+            CountingEnvCountPolicy(action_spec),
+            collector_class=_DirectOutputCollector,
+            frames_per_batch=16,
+            total_frames=32,
+            cat_results="stack",
+            auto_register_policy_transforms=False,
+        )
+        try:
+            iterator = iter(collector)
+            first = next(iterator)
+            first_copy = first.clone()
+            second = next(iterator)
+
+            expected_first = (
+                torch.arange(4, dtype=torch.int32).view(1, 1, 4, 1).expand(2, 2, -1, -1)
+            )
+            expected_second = (
+                torch.arange(4, 8, dtype=torch.int32)
+                .view(1, 1, 4, 1)
+                .expand(2, 2, -1, -1)
+            )
+            torch.testing.assert_close(first["observation"], expected_first)
+            torch.testing.assert_close(second["observation"], expected_second)
+            assert_allclose_td(first, first_copy)
+        finally:
+            collector.shutdown()
 
     @pytest.mark.parametrize("use_buffers", [True, False])
     def test_fake_tensordict_single_matches_iter(self, use_buffers):

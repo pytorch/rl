@@ -122,6 +122,28 @@ class TestParallel:
         finally:
             env.close(raise_if_closed=False)
 
+    def test_direct_collector_borrows_step_output(self, maybe_fork_ParallelEnv):
+        class DirectCollector:
+            _compact_next_keys = ()
+            _write_env_output_directly = True
+
+        env = maybe_fork_ParallelEnv(2, CountingEnv, use_buffers=True)
+        collector = DirectCollector()
+        env.register_collector(collector)
+        try:
+            data = env.rand_action(env.reset())
+            step, post_reset = env.step_and_maybe_reset(data)
+            assert (
+                step.get(("next", "observation")).data_ptr()
+                == env._shared_tensordict_parent_next.get("observation").data_ptr()
+            )
+            assert (
+                post_reset.get("observation").data_ptr()
+                == env._shared_tensordict_parent_root.get("observation").data_ptr()
+            )
+        finally:
+            env.close(raise_if_closed=False)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."

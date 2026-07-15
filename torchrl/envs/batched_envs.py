@@ -1810,6 +1810,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     """
 
     __doc__ += BatchedEnvBase.__doc__
+    _supports_collector_direct_output = True
     __doc__ += """
 
     .. note:: ParallelEnv will timeout after one of the worker is idle for a determinate amount of time.
@@ -2298,7 +2299,19 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             next_td = next_td.exclude(*next_keys_to_exclude)
         device = self.device
         shared_device = shared_tensordict_parent.device
-        if shared_device == device:
+        collector = self.collector
+        direct_collector_output = (
+            partial_steps is None
+            and collector is not None
+            and getattr(collector, "_write_env_output_directly", False)
+        )
+        if shared_device == device and direct_collector_output:
+            # The collector copies both root and next data into its rollout
+            # buffer before the workers can reuse these shared-memory views.
+            # Keep the input structure independent so adding ``next`` below
+            # does not mutate a borrowed root carrier.
+            tensordict = tensordict.copy()
+        elif shared_device == device:
             next_td = next_td.clone()
             tensordict_ = tensordict_.clone()
         elif device is not None:
