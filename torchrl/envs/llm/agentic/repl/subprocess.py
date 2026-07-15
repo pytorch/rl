@@ -137,7 +137,10 @@ class SubprocessRepl:
             raise SandboxError("REPL is not running; call open() first")
         async with self._lock:
             sentinel = "S" + uuid.uuid4().hex
-            n_lines = code.count("\n") + 1
+            # ``splitlines`` handles both terminated and unterminated final
+            # lines. Counting newlines directly over-counts code ending in a
+            # newline and leaves the child waiting for input forever.
+            n_lines = len(code.splitlines())
             payload = f"{sentinel} {n_lines}\n{code}"
             if not payload.endswith("\n"):
                 payload += "\n"
@@ -197,16 +200,12 @@ class SubprocessRepl:
         # Read stdout until "<sentinel>_END\n" appears, then drain stderr
         # until "<sentinel>_OK\n" or "<sentinel>_ERR\n" appears.
         assert self._proc is not None
-        out_buf: list[bytes] = []
         end = f"{sentinel}_END\n".encode()
         assert self._proc.stdout is not None
-        while True:
-            chunk = await self._proc.stdout.readline()
-            if not chunk:
-                break
-            out_buf.append(chunk)
-            if chunk == end:
-                break
+        try:
+            stdout = await self._proc.stdout.readuntil(end)
+        except asyncio.IncompleteReadError as error:
+            stdout = error.partial
         err_buf: list[bytes] = []
         ok = f"{sentinel}_OK\n".encode()
         e_err = f"{sentinel}_ERR\n".encode()
@@ -219,7 +218,7 @@ class SubprocessRepl:
             if chunk == ok or chunk == e_err:
                 break
         return (
-            b"".join(out_buf).decode("utf-8", errors="replace"),
+            stdout.decode("utf-8", errors="replace"),
             b"".join(err_buf).decode("utf-8", errors="replace"),
         )
 
