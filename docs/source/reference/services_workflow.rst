@@ -107,6 +107,196 @@ process deployment can place inference and logging in child processes while
 keeping a replay buffer direct. This avoids presenting a process replay
 backend whose performance and data-movement contract have not been defined.
 
+.. _ref_service_transports:
+
+Choosing a payload transport
+----------------------------
+
+Ray can be used for ownership without requiring TensorDict payloads to travel
+through Ray. With ``service_backend="ray"``, Ray creates, places, monitors, and
+stops the service actor. The separate ``transport`` argument selects how
+clients exchange payloads with that actor:
+
+* ``transport="ray"`` uses Ray calls, queues, and the Ray object store. It is
+  the flexible option for changing layouts and Python or non-tensor values.
+* ``transport="distributed"`` uses standalone PyTorch distributed
+  point-to-point groups for fixed-layout TensorDict payloads. Gloo carries CPU
+  tensors and NCCL carries CUDA tensors.
+* ``transport="auto"`` selects the placement default. For a Ray-owned service
+  it currently resolves to ``"ray"``; it does not inspect the payload or
+  silently switch transports later.
+
+Ray remains the control and placement plane when the distributed payload path
+is selected. Transport-owned process groups do not replace or destroy the
+application's default process group. The current distributed implementation
+is point-to-point request/reply. Collective data movement can be added behind
+the same selector when a component has a collective communication pattern.
+
+The supported combinations are listed below. An em dash means that the
+combination is rejected during construction rather than falling back to a
+different transport.
+
+.. list-table:: Service-backend and transport compatibility
+   :header-rows: 1
+   :widths: 23 12 13 13 13 26
+
+   * - Component
+     - ``service_backend``
+     - ``auto``
+     - ``ray``
+     - ``distributed``
+     - Other supported transports
+   * - :class:`~torchrl.data.ReplayBuffer`
+     - ``direct``
+     - ``direct``
+     - --
+     - --
+     - ``direct``
+   * - :class:`~torchrl.data.RayReplayBuffer` or a replay buffer constructed
+       with ``service_backend="ray"``
+     - ``ray``
+     - ``ray``
+     - Yes
+     - Gloo or NCCL
+     - --
+   * - :class:`~torchrl.modules.inference_server.InferenceServer`
+     - ``thread``
+     - ``thread``
+     - --
+     - --
+     - ``thread``, ``queue``, or ``direct``
+   * - :class:`~torchrl.modules.inference_server.InferenceServer`
+     - ``process``
+     - ``process``
+     - --
+     - Gloo or NCCL [1]_
+     - ``process`` or ``shared_memory``
+   * - :class:`~torchrl.modules.inference_server.InferenceServer`
+     - ``ray``
+     - ``ray``
+     - Yes
+     - Gloo or NCCL
+     - --
+
+.. [1] Process-owned distributed inference requires explicit
+   ``request_spec`` and ``response_spec`` values. Ray-owned inference can bind
+   those layouts lazily on first use.
+
+Transport characteristics
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Performance depends on payload size, request rate, topology, and batching.
+The following table describes expected trade-offs rather than promising a
+universal ordering.
+
+.. list-table:: Payload transport characteristics
+   :header-rows: 1
+   :widths: 14 18 17 15 36
+
+   * - Transport
+     - Layout
+     - Payload values
+     - Device
+     - Expected behavior
+   * - ``thread`` / ``direct``
+     - Dynamic
+     - Values accepted by the component
+     - Same process
+     - Lowest communication overhead. There is no serialization boundary;
+       batching and model execution usually dominate.
+   * - ``process``
+     - Dynamic
+     - Pickle-compatible values, including non-tensor data
+     - Multiprocessing-supported
+     - Flexible, but queueing and serialization make large or frequent
+       payloads more expensive than a preallocated tensor path.
+   * - ``shared_memory``
+     - Fixed keys, shapes, dtypes, and batch sizes
+     - Tensor leaves only
+     - CPU
+     - Preallocated slots avoid pickling tensor contents. This is generally a
+       better process-local choice for large, stable CPU TensorDict payloads.
+   * - ``ray``
+     - Dynamic
+     - Ray-serializable values, including strings and non-tensor data
+     - Ray-supported
+     - Easiest remote option and the compatibility fallback. Ray RPC, queue,
+       and object-store overhead can dominate small, frequent RL messages.
+   * - ``distributed`` with Gloo
+     - Fixed keys, shapes, dtypes, devices, and batch sizes
+     - Tensor leaves only
+     - CPU
+     - Avoids putting steady-state tensor payloads through Ray. It is usually
+       preferable for stable CPU TensorDict traffic once rendezvous and group
+       setup costs are amortized.
+   * - ``distributed`` with NCCL
+     - Fixed keys, shapes, dtypes, devices, and batch sizes
+     - Tensor leaves only
+     - CUDA
+     - Sends CUDA tensors without CPU staging. It is intended for stable,
+       sufficiently large GPU payloads; setup and per-message latency may
+       outweigh the benefit for small requests.
+
+Distributed layouts are bound to an endpoint generation. Extra TensorDict
+keys are not transmitted, while a missing declared key or a later incompatible
+shape, dtype, device, or replay sample batch size raises an error. There is no
+automatic fallback to Ray for an incompatible payload. Choose ``"ray"`` when
+the data contains strings, :class:`~tensordict.NonTensorData`, arbitrary Python
+objects, or genuinely changing tensor layouts.
+
+Ray collectors and service transports
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:class:`~torchrl.collectors.distributed.RayCollector` deliberately has no
+``transport`` argument. A transport belongs to the endpoint that receives and
+serves the data:
+
+* policy requests use the attached inference server's transport;
+* replay writes use the attached replay buffer's transport; and
+* Ray continues to schedule and control the collector actors.
+
+When ``replay_buffer`` is provided, each collector worker receives its own
+restricted replay endpoint and writes its rollout directly to replay. The
+worker returns only completion to the driver, so the rollout is not copied
+through Ray a second time. This is the recommended high-throughput topology:
+
+.. code-block:: python
+
+    from functools import partial
+
+    from torchrl.collectors.distributed import RayCollector
+    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+    from torchrl.modules.inference_server import InferenceServer
+
+    replay = TensorDictReplayBuffer(
+        storage=partial(LazyTensorStorage, 100_000),
+        batch_size=256,
+        service_backend="ray",
+        service_backend_options={"remote_config": {"num_cpus": 1}},
+        transport="distributed",
+        transport_options={"backend": "gloo"},
+    )
+    inference = InferenceServer(
+        policy_factory=make_policy,
+        service_backend="ray",
+        service_backend_options={"remote_config": {"num_cpus": 1}},
+        transport="distributed",
+        transport_options={"backend": "gloo"},
+    )
+    collector = RayCollector(
+        create_env_fn=[make_env] * 8,
+        policy=inference,
+        replay_buffer=replay,
+        frames_per_batch=1024,
+    )
+
+If no replay buffer is attached, iterating over ``RayCollector`` returns
+rollouts to the driver through Ray's object store. That collector-to-driver
+path is not transport-selectable. Use direct-to-replay collection when the
+rollouts are large and do not need to be inspected by the driver. Use the Ray
+service transport instead of the distributed transport when the policy or
+replay payload contains non-tensor or dynamic data.
+
 Preserving domain APIs
 ----------------------
 
