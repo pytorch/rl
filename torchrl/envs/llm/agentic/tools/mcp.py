@@ -5,10 +5,10 @@
 """Model Context Protocol (MCP) adapter.
 
 Connects to an MCP server over stdio and exposes each remote tool as a
-native :class:`~torchrl.envs.llm.agentic.Tool`. Unlike the legacy
-:class:`~torchrl.envs.llm.transforms.MCPToolTransform`, no background
-thread is needed -- our new dispatcher is already async, so we drive
-the MCP client coroutines directly.
+native :class:`~torchrl.envs.llm.agentic.Tool`. The MCP client coroutines
+run directly on the persistent async loop owned by
+:class:`~torchrl.envs.llm.agentic.ToolCompose`, without a separate
+MCP-specific runner.
 
 Optional dependency: install ``mcp`` (the official Python SDK) to use.
 """
@@ -17,8 +17,8 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from torchrl._utils import logger as torchrl_logger
@@ -69,10 +69,8 @@ class MCPToolset:
         ...         MCPServerConfig(command="npx",
         ...                         args=("@browsermcp/mcp@latest",))
         ...     )
-        ...     await pool.open()
-        ...     for tool in pool.tools:
-        ...         print(tool.name, tool.description)
-        ...     await pool.close()
+        ...     async with pool:
+        ...         return [(tool.name, tool.description) for tool in pool.tools]
     """
 
     def __init__(
@@ -92,42 +90,57 @@ class MCPToolset:
         self.request_timeout = request_timeout
         self._exit_stack: Any = None
         self._session: Any = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._tools: list[_MCPTool] = []
 
     async def open(self) -> None:
         if self._session is not None:
+            if asyncio.get_running_loop() is not self._loop:
+                raise RuntimeError("MCPToolset is already open on another event loop")
             return
         from contextlib import AsyncExitStack
 
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        self._exit_stack = AsyncExitStack()
+        exit_stack = AsyncExitStack()
         params = StdioServerParameters(
             command=self.config.command,
             args=list(self.config.args),
             env=dict(self.config.env) if self.config.env else None,
         )
-        read, write = await self._exit_stack.enter_async_context(
-            stdio_client(params)
-        )
-        session = await self._exit_stack.enter_async_context(
-            ClientSession(read, write)
-        )
-        await session.initialize()
-        listed = await session.list_tools()
+        try:
+            read, write = await exit_stack.enter_async_context(stdio_client(params))
+            session = await exit_stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+            listed = await session.list_tools()
+        except Exception:
+            await exit_stack.aclose()
+            raise
+        self._exit_stack = exit_stack
         self._session = session
-        self._tools = [
-            _MCPTool(
-                session=session,
-                remote_name=t.name,
-                description=t.description or "",
-                input_schema=dict(t.inputSchema or {"type": "object"}),
-                exposed_name=f"{self.name_prefix}{t.name}",
-                request_timeout=self.request_timeout,
-            )
-            for t in listed.tools
-        ]
+        self._loop = asyncio.get_running_loop()
+        discovered = {t.name: t for t in listed.tools}
+        if self._tools:
+            existing = {tool._remote_name: tool for tool in self._tools}
+            if existing.keys() != discovered.keys():
+                await self.close()
+                raise RuntimeError("MCP server tool list changed while reopening")
+            for remote_name, tool in existing.items():
+                spec = discovered[remote_name]
+                tool.description = spec.description or ""
+                tool.input_schema = dict(spec.inputSchema or {"type": "object"})
+        else:
+            self._tools = [
+                _MCPTool(
+                    toolset=self,
+                    remote_name=t.name,
+                    description=t.description or "",
+                    input_schema=dict(t.inputSchema or {"type": "object"}),
+                    exposed_name=f"{self.name_prefix}{t.name}",
+                )
+                for t in listed.tools
+            ]
         torchrl_logger.info(
             "MCPToolset connected to %s with %d tools",
             self.config.command,
@@ -142,7 +155,19 @@ class MCPToolset:
                 torchrl_logger.exception("MCPToolset close raised; continuing")
             self._exit_stack = None
             self._session = None
-            self._tools = []
+            self._loop = None
+
+    async def __aenter__(self) -> MCPToolset:
+        await self.open()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: Any,
+    ) -> None:
+        await self.close()
 
     @property
     def tools(self) -> tuple[Any, ...]:
@@ -159,19 +184,17 @@ class _MCPTool:
     def __init__(
         self,
         *,
-        session: Any,
+        toolset: MCPToolset,
         remote_name: str,
         description: str,
         input_schema: Mapping[str, Any],
         exposed_name: str,
-        request_timeout: float,
     ) -> None:
-        self._session = session
+        self._toolset = toolset
         self._remote_name = remote_name
         self.name = exposed_name
         self.description = description
         self.input_schema = dict(input_schema)
-        self._timeout = request_timeout
 
     async def setup(self) -> None:
         # Session is opened by MCPToolset; nothing per-tool.
@@ -180,20 +203,24 @@ class _MCPTool:
     async def teardown(self) -> None:
         pass
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
+        session = self._toolset._session
+        if session is None:
+            raise ToolError("MCPToolset is not open")
+        if asyncio.get_running_loop() is not self._toolset._loop:
+            raise ToolError(
+                "MCP tools must run on the event loop that opened their toolset; "
+                "use ToolCompose.add_toolset(pool)"
+            )
         try:
             response = await asyncio.wait_for(
-                self._session.call_tool(
-                    self._remote_name, dict(args)
-                ),
-                timeout=self._timeout,
+                session.call_tool(self._remote_name, dict(args)),
+                timeout=self._toolset.request_timeout,
             )
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise ToolError(
                 f"MCP call {self._remote_name!r} timed out after "
-                f"{self._timeout}s"
+                f"{self._toolset.request_timeout}s"
             ) from e
         except Exception as e:  # noqa: BLE001
             raise ToolError(f"MCP call {self._remote_name!r} failed: {e}") from e
@@ -206,9 +233,11 @@ class _MCPTool:
                 text_parts.append(text)
             else:
                 # JSON-serialise structured content fragments.
+                model_dump = getattr(item, "model_dump", None)
+                fragment = model_dump() if model_dump is not None else str(item)
                 text_parts.append(
                     json.dumps(
-                        getattr(item, "model_dump", lambda: str(item))(),
+                        fragment,
                         ensure_ascii=False,
                     )
                 )

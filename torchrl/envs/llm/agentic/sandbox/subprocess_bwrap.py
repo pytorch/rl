@@ -29,7 +29,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import ClassVar
 
-from .base import ResourceLimits, SandboxError, SandboxResult
+from .base import _path_is_within_roots, ResourceLimits, SandboxError, SandboxResult
 
 _OUTPUT_CAP = 1 << 20
 
@@ -98,14 +98,39 @@ class BubblewrapSandbox:
     def _build_argv(
         self, argv: Sequence[str], limits: ResourceLimits, cwd: str | None
     ) -> list[str]:
+        if limits.network == "allowlist":
+            raise SandboxError(
+                "BubblewrapSandbox cannot enforce network='allowlist'. Use "
+                "network='none' or provide an externally enforced network policy."
+            )
         bw: list[str] = [self._bwrap or "bwrap"]
         bw += ["--die-with-parent", "--unshare-user", "--unshare-pid", "--unshare-ipc"]
         if limits.network in ("none", "loopback"):
             bw += ["--unshare-net"]
+        # Empty read roots retain the documented backend default of a read-only
+        # host root. When roots are supplied, start from an empty filesystem and
+        # expose exactly those roots plus explicitly writable roots.
+        if limits.fs_read_roots:
+            bw += ["--tmpfs", "/"]
+            roots = (*limits.fs_read_roots, *limits.fs_write_roots)
+            parent_dirs: set[str] = {"/proc", "/dev"}
+            for root in roots:
+                root_path = Path(root)
+                if not root_path.is_absolute():
+                    raise SandboxError(
+                        f"sandbox filesystem roots must be absolute: {root!r}"
+                    )
+                if root in limits.fs_read_roots and not root_path.exists():
+                    raise SandboxError(f"filesystem read root does not exist: {root!r}")
+                parent_dirs.update(str(parent) for parent in root_path.parents)
+            for directory in sorted(parent_dirs, key=lambda value: value.count("/")):
+                if directory != "/":
+                    bw += ["--dir", directory]
+            for root in limits.fs_read_roots:
+                bw += ["--ro-bind", root, root]
+        else:
+            bw += ["--ro-bind", "/", "/"]
         bw += ["--proc", "/proc", "--dev", "/dev"]
-        # Read-only bind of host root (cheap; lets the launched binary find
-        # its own libs). Each write root is then bind-mounted RW on top.
-        bw += ["--ro-bind", "/", "/"]
         for root in limits.fs_write_roots:
             Path(root).mkdir(parents=True, exist_ok=True)
             bw += ["--bind", root, root]
@@ -189,9 +214,7 @@ class BubblewrapSandbox:
             raise SandboxError("sandbox is not open; call open() first")
         # Writes happen on the host side at a path that will be bind-mounted
         # RW into the sandbox. Verify the target lies under a write root.
-        if not any(
-            os.path.commonpath([path, r]) == r for r in self.limits.fs_write_roots
-        ):
+        if not _path_is_within_roots(path, self.limits.fs_write_roots):
             raise SandboxError(
                 f"refusing to write to {path!r}: outside fs_write_roots "
                 f"{self.limits.fs_write_roots!r}"
@@ -202,6 +225,13 @@ class BubblewrapSandbox:
     async def read_file(self, path: str, max_bytes: int | None = None) -> bytes:
         if not self._opened:
             raise SandboxError("sandbox is not open; call open() first")
+        if self.limits.fs_read_roots and not _path_is_within_roots(
+            path, self.limits.fs_read_roots
+        ):
+            raise SandboxError(
+                f"refusing to read {path!r}: outside fs_read_roots "
+                f"{self.limits.fs_read_roots!r}"
+            )
         b = Path(path).read_bytes()
         if max_bytes is not None and len(b) > max_bytes:
             return b[:max_bytes]

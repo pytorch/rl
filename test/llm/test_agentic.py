@@ -15,8 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import threading
 import time as _time
 import warnings
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
 import pytest
@@ -49,6 +51,7 @@ from torchrl.envs.llm.agentic.sandbox import (
     BubblewrapSandbox,
     default_sandbox,
     ResourceLimits,
+    SandboxError,
     SeatbeltSandbox,
     UnsafeSubprocessSandbox,
 )
@@ -56,7 +59,11 @@ from torchrl.envs.llm.agentic.sandbox.subprocess_bwrap import _has_bwrap
 from torchrl.envs.llm.agentic.sandbox.subprocess_seatbelt import _has_sandbox_exec
 from torchrl.envs.llm.agentic.tools import as_tool, HttpTool
 from torchrl.envs.llm.agentic.tools.mcp import _has_mcp, MCPServerConfig
-from torchrl.envs.llm.transforms import IncrementalTokenizer
+from torchrl.envs.llm.transforms import (
+    IncrementalTokenizer,
+    PythonInterpreter,
+    SimpleToolTransform,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -113,6 +120,12 @@ class TestAgenticParsers:
         assert re_parsed.calls[0].tool == "echo"
         assert re_parsed.calls[0].args == {"text": "hi"}
         assert re_parsed.calls[0].call_id == "abc"
+
+    def test_xml_round_trip_preserves_generated_call_id(self):
+        p = XMLToolCallParser()
+        call = p.parse('<tool name="echo">{}</tool>').calls[0]
+        re_parsed = p.parse(p.render_call(call))
+        assert re_parsed.calls[0].call_id == call.call_id
 
     def test_xml_render_result(self):
         p = XMLToolCallParser()
@@ -285,6 +298,73 @@ class TestAgenticSandbox:
         assert c2.wall_seconds == 2
         assert c2.network == "none"
 
+    def test_resource_limits_narrow_filesystem_roots(self, tmp_path):
+        root = tmp_path / "root"
+        nested = root / "nested"
+        a = ResourceLimits(
+            fs_read_roots=(str(root),),
+            fs_write_roots=(str(root),),
+        )
+        b = ResourceLimits(
+            fs_read_roots=(str(nested),),
+            fs_write_roots=(str(nested),),
+        )
+        narrowed = a.narrow(b)
+        assert narrowed.fs_read_roots == (str(nested),)
+        assert narrowed.fs_write_roots == (str(nested),)
+        # Empty write roots mean no writes, so a per-call override cannot
+        # widen them to the construction-time root.
+        assert a.narrow(ResourceLimits(fs_write_roots=())).fs_write_roots == ()
+
+    def test_hardened_read_file_respects_roots(self, tmp_path):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        inside = allowed / "inside.txt"
+        inside.write_text("inside")
+        outside = tmp_path / "outside.txt"
+        outside.write_text("outside")
+
+        async def go():
+            sandbox = BubblewrapSandbox(
+                ResourceLimits(fs_read_roots=(str(allowed),)),
+                bwrap_path="/bin/true",
+            )
+            async with sandbox:
+                assert await sandbox.read_file(str(inside)) == b"inside"
+                with pytest.raises(SandboxError, match="outside fs_read_roots"):
+                    await sandbox.read_file(str(outside))
+
+        _run(go())
+
+    def test_hardened_write_file_rejects_parent_escape(self, tmp_path):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        escaped = allowed / ".." / "escaped.txt"
+
+        async def go():
+            sandbox = BubblewrapSandbox(
+                ResourceLimits(fs_write_roots=(str(allowed),)),
+                bwrap_path="/bin/true",
+            )
+            async with sandbox:
+                with pytest.raises(SandboxError, match="outside fs_write_roots"):
+                    await sandbox.write_file(str(escaped), b"escape")
+
+        _run(go())
+        assert not escaped.exists()
+
+    def test_hardened_backends_reject_unenforced_network_allowlist(self):
+        limits = ResourceLimits(
+            network="allowlist",
+            network_allowlist=("example.com:443",),
+        )
+        with pytest.raises(SandboxError, match="cannot enforce"):
+            BubblewrapSandbox(limits, bwrap_path="/bin/true")._build_argv(
+                ["/bin/true"], limits, None
+            )
+        with pytest.raises(SandboxError, match="cannot enforce"):
+            SeatbeltSandbox(limits)._build_argv(["/bin/true"], limits, None)
+
     def test_default_sandbox_picks_platform(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -430,6 +510,20 @@ class TestAgenticRepl:
 
         _run(go())
 
+    def test_subprocess_repl_fails_closed_on_sandbox_error(self):
+        class BrokenSandbox:
+            limits = ResourceLimits()
+
+            def _build_argv(self, argv, limits, cwd):
+                raise SandboxError("invalid sandbox policy")
+
+        async def go():
+            repl = SubprocessRepl(BrokenSandbox())
+            with pytest.raises(SandboxError, match="invalid sandbox policy"):
+                await repl.open()
+
+        _run(go())
+
     @pytest.mark.skipif(not _has_jupyter_client, reason="jupyter_client not installed")
     @pytest.mark.slow
     def test_jupyter_repl_state_persists(self):
@@ -509,6 +603,23 @@ class _Boom:
         raise RuntimeError("boom")
 
 
+class _Echo:
+    name: ClassVar[str] = "echo"
+    description = "echo arguments"
+    input_schema = {"type": "object"}
+    output_schema = None
+    wants_state = False
+
+    async def setup(self):
+        pass
+
+    async def teardown(self):
+        pass
+
+    async def run(self, args, ctx):
+        return ToolResult.from_text(json.dumps(dict(args), sort_keys=True))
+
+
 def _agentic_env(tools, parser=None):
     parser = parser or XMLToolCallParser()
     base = ChatEnv(batch_size=(1,), input_mode="history")
@@ -519,6 +630,10 @@ def _push_assistant(obs, response: str):
     obs["history"].full = obs["history"].prompt.extend(
         History(role="assistant", content=response).view(1, 1), dim=-1
     )
+
+
+def _push_assistant_history(obs, message: History):
+    obs["history"].full = obs["history"].prompt.extend(message.view(1, 1), dim=-1)
 
 
 class TestToolCompose:
@@ -534,18 +649,46 @@ class TestToolCompose:
             )
 
     def test_append_transform_blocked(self):
-        compose = ToolCompose(
-            tools=[StopTool()], parser=XMLToolCallParser()
-        )
+        compose = ToolCompose(tools=[StopTool()], parser=XMLToolCallParser())
         with pytest.raises(TypeError):
             compose.append_transform(IncrementalTokenizer)
 
     def test_lookup_by_name(self):
-        compose = ToolCompose(
-            tools=[StopTool()], parser=XMLToolCallParser()
-        )
+        compose = ToolCompose(tools=[StopTool()], parser=XMLToolCallParser())
         assert "stop" in compose
         assert compose["stop"].name == "stop"
+
+    def test_toolset_uses_compose_event_loop_for_full_lifecycle(self):
+        class _ToolsetTool(_Echo):
+            def __init__(self, toolset):
+                self.toolset = toolset
+
+            async def run(self, args, ctx):
+                assert asyncio.get_running_loop() is self.toolset.loop
+                return await super().run(args, ctx)
+
+        class _Toolset:
+            def __init__(self):
+                self.loop = None
+                self.closed_on_loop = False
+                self.tools = (_ToolsetTool(self),)
+
+            async def open(self):
+                self.loop = asyncio.get_running_loop()
+
+            async def close(self):
+                self.closed_on_loop = asyncio.get_running_loop() is self.loop
+
+        toolset = _Toolset()
+        compose = ToolCompose(tools=[], parser=XMLToolCallParser())
+        compose.add_toolset(toolset)
+        env = TransformedEnv(ChatEnv(batch_size=(1,), input_mode="history"), compose)
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="echo">{"value": 1}</tool>')
+        nxt = env.step(obs)
+        assert not bool(nxt.get(("next", "agentic", "any_error")).item())
+        env.close()
+        assert toolset.closed_on_loop
 
     def test_parallel_dispatch_wall_time(self):
         env = _agentic_env([_Sleeper("a"), _Sleeper("b"), _Sleeper("c")])
@@ -560,9 +703,7 @@ class TestToolCompose:
         nxt = env.step(obs)
         elapsed = _time.monotonic() - t0
         # Three 500ms tools must run concurrently: total < 0.8s.
-        assert elapsed < 0.9, (
-            f"parallel dispatch took {elapsed:.2f}s; expected < 0.8s"
-        )
+        assert elapsed < 0.9, f"parallel dispatch took {elapsed:.2f}s; expected < 0.8s"
         assert bool(nxt.get(("next", "agentic", "any_tool_calls")).item())
         assert not bool(nxt.get(("next", "agentic", "stop_requested")).item())
 
@@ -679,9 +820,87 @@ class TestToolCompose:
         t0 = _time.monotonic()
         env.step(obs)
         elapsed = _time.monotonic() - t0
-        assert elapsed >= 0.55, (
-            f"rate-limited dispatch should serialize: got {elapsed:.2f}s"
+        assert (
+            elapsed >= 0.55
+        ), f"rate-limited dispatch should serialize: got {elapsed:.2f}s"
+
+    def test_rate_limit_spaces_concurrent_token_waiters(self):
+        async def go():
+            limiter = RateLimiter(rate_per_second=10, burst=1)
+            start = _time.monotonic()
+            admitted: list[float] = []
+
+            async def wait_for_slot():
+                async with limiter.slot():
+                    admitted.append(_time.monotonic() - start)
+
+            await asyncio.gather(*(wait_for_slot() for _ in range(4)))
+            return sorted(admitted)
+
+        admitted = _run(go())
+        assert admitted[1] >= 0.08
+        assert admitted[2] >= 0.18
+        assert admitted[3] >= 0.28
+
+    def test_openai_history_tool_calls_are_dispatched(self):
+        env = _agentic_env([_Echo()], parser=OpenAIToolCallParser())
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant_history(
+            obs,
+            History(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_a",
+                        "type": "function",
+                        "function": {
+                            "name": "echo",
+                            "arguments": '{"value": 1}',
+                        },
+                    }
+                ],
+            ),
         )
+        nxt = env.step(obs)
+        assert bool(nxt.get(("next", "agentic", "any_tool_calls")).item())
+        result = nxt[("next", "history")].prompt[0][-1]
+        assert result.role == "tool"
+        assert result.tool_call_id == "call_a"
+        assert result.content == '{"value": 1}'
+        env.close()
+
+    def test_anthropic_results_keep_structured_user_message(self):
+        env = _agentic_env([_Echo()], parser=AnthropicToolUseParser())
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant_history(
+            obs,
+            History(
+                role="assistant",
+                content=[
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_a",
+                        "name": "echo",
+                        "input": {"value": 1},
+                    },
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_b",
+                        "name": "echo",
+                        "input": {"value": 2},
+                    },
+                ],
+            ),
+        )
+        nxt = env.step(obs)
+        result = nxt[("next", "history")].prompt[0][-1]
+        assert result.role == "user"
+        assert [block["tool_use_id"] for block in result.content] == [
+            "toolu_a",
+            "toolu_b",
+        ]
+        env.close()
 
     def test_argument_validation(self):
         class _NeedsCode:
@@ -726,9 +945,7 @@ class TestToolCompose:
 class TestPythonTool:
     def test_state_persists_across_calls(self):
         async def go():
-            async with UnsafeSubprocessSandbox(
-                ResourceLimits(wall_seconds=10)
-            ) as s:
+            async with UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10)) as s:
                 tool = PythonTool(repl=SubprocessRepl(s))
                 await tool.setup()
                 ctx = ToolContext(call_id="c1")
@@ -743,9 +960,7 @@ class TestPythonTool:
 
     def test_error_marked_is_error(self):
         async def go():
-            async with UnsafeSubprocessSandbox(
-                ResourceLimits(wall_seconds=10)
-            ) as s:
+            async with UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10)) as s:
                 tool = PythonTool(repl=SubprocessRepl(s))
                 await tool.setup()
                 r = await tool.run({"code": "1/0"}, ToolContext(call_id="c"))
@@ -755,13 +970,23 @@ class TestPythonTool:
 
         _run(go())
 
+    def test_state_persists_across_toolcompose_steps(self):
+        sandbox = UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=10))
+        env = _agentic_env([PythonTool(repl=SubprocessRepl(sandbox))])
+        obs = env.reset(TensorDict({"query": "?"}, batch_size=(1,)))
+        _push_assistant(obs, '<tool name="python">{"code":"x=41"}</tool>')
+        obs = env.step(obs)["next"]
+        _push_assistant(obs, '<tool name="python">{"code":"print(x+1)"}</tool>')
+        nxt = env.step(obs)
+        assert not bool(nxt.get(("next", "agentic", "any_error")).item())
+        assert "42" in nxt[("next", "history")].prompt[0][-1].content
+        env.close()
+
 
 class TestShellTool:
     def test_runs_argv(self):
         async def go():
-            async with UnsafeSubprocessSandbox(
-                ResourceLimits(wall_seconds=5)
-            ) as s:
+            async with UnsafeSubprocessSandbox(ResourceLimits(wall_seconds=5)) as s:
                 tool = ShellTool(s)
                 await tool.setup()
                 r = await tool.run(
@@ -775,6 +1000,33 @@ class TestShellTool:
 
 
 class TestLegacyAdapter:
+    def test_python_interpreter_uses_fenced_code_syntax(self):
+        async def go():
+            tool = as_tool(
+                PythonInterpreter(),
+                name="python",
+                input_schema={"type": "object"},
+            )
+            result = await tool.run(
+                {"code": "print(4)"}, ToolContext(call_id="python-call")
+            )
+            await tool.teardown()
+            return result
+
+        result = _run(go())
+        assert "4" in result.text
+
+    def test_simple_transform_uses_legacy_named_syntax(self):
+        async def go():
+            tool = as_tool(
+                SimpleToolTransform({"add": lambda a, b: a + b}),
+                name="add",
+            )
+            return await tool.run({"a": 1, "b": 2}, ToolContext(call_id="add-call"))
+
+        result = _run(go())
+        assert "3" in result.text
+
     def test_lifts_legacy_transform(self):
         # Use a tiny duck-typed legacy class instead of pulling in the
         # full PythonInterpreter, which has its own subprocess pool.
@@ -854,3 +1106,54 @@ class TestHttpTool:
         assert tool.name == "http"
         assert callable(tool.run)
         assert "url" in tool.input_schema["properties"]
+
+    def test_blocks_redirect_to_disallowed_host(self):
+        class _TargetHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"private target")
+
+            def log_message(self, format, *args):
+                pass
+
+        target = ThreadingHTTPServer(("127.0.0.1", 0), _TargetHandler)
+
+        class _RedirectHandler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header(
+                    "Location", f"http://localhost:{target.server_port}/secret"
+                )
+                self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        redirect = ThreadingHTTPServer(("127.0.0.1", 0), _RedirectHandler)
+        threads = [
+            threading.Thread(target=server.serve_forever)
+            for server in (target, redirect)
+        ]
+        for thread in threads:
+            thread.start()
+        try:
+            result = _run(
+                HttpTool(allowed_hosts=("127.0.0.1",)).run(
+                    {"url": f"http://127.0.0.1:{redirect.server_port}/"},
+                    ToolContext(call_id="redirect"),
+                )
+            )
+            assert result.is_error
+            assert "redirect host" in result.text
+            assert "private target" not in result.text
+        finally:
+            for server in (redirect, target):
+                server.shutdown()
+                server.server_close()
+            for thread in threads:
+                thread.join()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

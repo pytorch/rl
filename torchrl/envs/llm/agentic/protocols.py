@@ -27,6 +27,7 @@ dims and compose with TorchRL's batched envs and trajectories.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any, ClassVar, Protocol, runtime_checkable
 
@@ -101,9 +102,7 @@ class ToolResult(TensorClass["nocast"]):
             if isinstance(p, TextPart):
                 out.append(p.text)
             elif isinstance(p, JsonPart):
-                import json as _json
-
-                out.append(_json.dumps(p.data, ensure_ascii=False))
+                out.append(json.dumps(p.data, ensure_ascii=False))
             elif isinstance(p, FileRefPart):
                 out.append(f"<file:{p.path}>")
             elif isinstance(p, ImagePart):

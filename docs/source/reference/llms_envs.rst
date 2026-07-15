@@ -217,7 +217,8 @@ recommended replacement, summarised here.
    * - ``MCPToolTransform``
      - :class:`MCPToolset`
      - One :class:`Tool` per remote tool, schemas auto-discovered.
-       Drops directly into ``ToolCompose``.
+       Register it with ``ToolCompose.add_toolset`` so discovery,
+       dispatch, and shutdown share one event loop.
    * - ``XMLBlockParser`` / ``JSONCallParser``
      - :class:`parsers.XMLToolCallParser` / :class:`parsers.JSONToolCallParser`
      - Same syntax; the agentic versions enforce a stable ``call_id``.

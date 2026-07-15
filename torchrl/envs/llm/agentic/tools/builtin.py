@@ -17,14 +17,7 @@ import shlex
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
-from ..protocols import (
-    ParsedCall,
-    TextPart,
-    Tool,
-    ToolContext,
-    ToolError,
-    ToolResult,
-)
+from ..protocols import TextPart, ToolContext, ToolError, ToolResult
 from ..repl.base import Repl
 from ..sandbox.base import Sandbox
 
@@ -77,14 +70,20 @@ class PythonTool:
         self.output_max_chars = output_max_chars
 
     async def setup(self) -> None:
-        await self.repl.open()
+        await self.repl.sandbox.open()
+        try:
+            await self.repl.open()
+        except Exception:
+            await self.repl.sandbox.close()
+            raise
 
     async def teardown(self) -> None:
-        await self.repl.close()
+        try:
+            await self.repl.close()
+        finally:
+            await self.repl.sandbox.close()
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         code = args.get("code", "")
         if not isinstance(code, str):
             raise ToolError("'code' must be a string")
@@ -135,9 +134,7 @@ class ShellTool:
     async def teardown(self) -> None:
         await self.sandbox.close()
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         argv = args.get("argv")
         command = args.get("command")
         if argv is None and command is None:
@@ -187,9 +184,7 @@ class FileReadTool:
     async def teardown(self) -> None:
         await self.sandbox.close()
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         path = args["path"]
         max_bytes = args.get("max_bytes")
         try:
@@ -225,9 +220,7 @@ class StopTool:
     async def teardown(self) -> None:
         pass
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         reason = str(args.get("reason", "done"))
         raise StopSignal(reason)
 

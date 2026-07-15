@@ -13,13 +13,12 @@ the parent :class:`~torchrl.envs.llm.agentic.ToolCompose`.
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Mapping
 from typing import Any, ClassVar
-from urllib import error as urllib_error
-from urllib import request as urllib_request
+from urllib import error as urllib_error, request as urllib_request
+from urllib.parse import urlparse
 
-from ..protocols import TextPart, ToolContext, ToolError, ToolResult
+from ..protocols import TextPart, ToolContext, ToolResult
 
 
 _DEFAULT_MAX_BYTES = 1 << 20  # 1 MiB
@@ -30,7 +29,7 @@ class HttpTool:
 
     Args:
         allowed_hosts: If non-empty, requests to hosts not in this set
-            raise :class:`ToolError`. Use ``("api.openai.com",)`` style.
+            return an error result. Use ``("api.openai.com",)`` style.
             Empty disables the check (use only with a stronger
             sandbox/network policy upstream).
         timeout: Per-request timeout (seconds).
@@ -43,9 +42,7 @@ class HttpTool:
     """
 
     name: ClassVar[str] = "http"
-    description: ClassVar[str] = (
-        "Make an HTTP request. Returns body, headers, status."
-    )
+    description: ClassVar[str] = "Make an HTTP request. Returns body, headers, status."
     input_schema: ClassVar[Mapping[str, Any]] = {
         "type": "object",
         "properties": {
@@ -66,6 +63,8 @@ class HttpTool:
         timeout: float = 10.0,
         max_response_bytes: int = _DEFAULT_MAX_BYTES,
     ) -> None:
+        if max_response_bytes <= 0:
+            raise ValueError("max_response_bytes must be positive")
         self.allowed_hosts = tuple(allowed_hosts)
         self.timeout = timeout
         self.max_response_bytes = max_response_bytes
@@ -76,9 +75,7 @@ class HttpTool:
     async def teardown(self) -> None:
         pass
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult:
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
         url = args["url"]
         method = (args.get("method") or "GET").upper()
         headers = dict(args.get("headers") or {})
@@ -87,20 +84,28 @@ class HttpTool:
             host = _host_of(url)
             if host not in self.allowed_hosts:
                 return ToolResult(
-                    parts=(TextPart(
-                        text=(
-                            f"host {host!r} not in allowed_hosts "
-                            f"{self.allowed_hosts!r}"
+                    parts=(
+                        TextPart(
+                            text=(
+                                f"host {host!r} not in allowed_hosts "
+                                f"{self.allowed_hosts!r}"
+                            ),
                         ),
-                    ),),
+                    ),
                     is_error=True,
                     meta={"blocked_host": host},
                 )
         data = body.encode("utf-8") if isinstance(body, str) else body
         try:
-            status, resp_body, resp_headers = await asyncio.to_thread(
-                _do_request, url, method, headers, data, self.timeout,
+            status, resp_body, resp_headers, truncated = await asyncio.to_thread(
+                _do_request,
+                url,
+                method,
+                headers,
+                data,
+                self.timeout,
                 self.max_response_bytes,
+                self.allowed_hosts,
             )
         except urllib_error.HTTPError as e:
             return ToolResult(
@@ -115,7 +120,6 @@ class HttpTool:
                 meta={"error": str(e.reason)},
             )
         text = resp_body.decode("utf-8", errors="replace")
-        truncated = len(resp_body) >= self.max_response_bytes
         if truncated:
             text += "\n... [truncated]"
         return ToolResult(
@@ -130,9 +134,23 @@ class HttpTool:
 
 
 def _host_of(url: str) -> str:
-    from urllib.parse import urlparse
-
     return urlparse(url).hostname or ""
+
+
+class _AllowedHostsRedirectHandler(urllib_request.HTTPRedirectHandler):
+    """Reject redirects whose destination is outside ``allowed_hosts``."""
+
+    def __init__(self, allowed_hosts: tuple[str, ...]) -> None:
+        self.allowed_hosts = allowed_hosts
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        host = _host_of(newurl)
+        if host not in self.allowed_hosts:
+            raise urllib_error.URLError(
+                f"redirect host {host!r} not in allowed_hosts "
+                f"{self.allowed_hosts!r}"
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def _do_request(
@@ -142,13 +160,18 @@ def _do_request(
     data: bytes | None,
     timeout: float,
     max_bytes: int,
-) -> tuple[int, bytes, Mapping[str, str]]:
-    req = urllib_request.Request(
-        url, data=data, headers=dict(headers), method=method
+    allowed_hosts: tuple[str, ...],
+) -> tuple[int, bytes, Mapping[str, str], bool]:
+    req = urllib_request.Request(url, data=data, headers=dict(headers), method=method)
+    opener = urllib_request.build_opener(
+        _AllowedHostsRedirectHandler(allowed_hosts)
+        if allowed_hosts
+        else urllib_request.HTTPRedirectHandler()
     )
-    with urllib_request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read(max_bytes)
-        return resp.status, body, dict(resp.headers.items())
+    with opener.open(req, timeout=timeout) as resp:
+        body = resp.read(max_bytes + 1)
+        truncated = len(body) > max_bytes
+        return resp.status, body[:max_bytes], dict(resp.headers.items()), truncated
 
 
 __all__ = ["HttpTool"]

@@ -60,16 +60,17 @@ What you will learn
 # :class:`~torchrl.envs.llm.agentic.StopTool`. The LLM is expected to
 # emit XML-style calls.
 
-from tensordict import TensorDict, set_list_to_stack
+from tensordict import set_list_to_stack, TensorDict
 from torchrl.data.llm import History
 from torchrl.envs import TransformedEnv
 from torchrl.envs.llm import ChatEnv
-from torchrl.envs.llm.agentic import (
-    PythonTool,
-    StopTool,
-    ToolCompose,
+from torchrl.envs.llm.agentic import PythonTool, StopTool, ToolCompose
+from torchrl.envs.llm.agentic.parsers import (
+    AnthropicToolUseParser,
+    JSONToolCallParser,
+    OpenAIToolCallParser,
+    XMLToolCallParser,
 )
-from torchrl.envs.llm.agentic.parsers import XMLToolCallParser
 from torchrl.envs.llm.agentic.repl import SubprocessRepl
 from torchrl.envs.llm.agentic.sandbox import default_sandbox
 
@@ -85,17 +86,17 @@ env = TransformedEnv(
     ),
 )
 
-obs = env.reset(
-    TensorDict({"query": "Compute 2+2 in python."}, batch_size=(1,))
-)
+obs = env.reset(TensorDict({"query": "Compute 2+2 in python."}, batch_size=(1,)))
 
 # Stand-in for an LLM response; in real use this comes from a policy.
 fake_response = '<tool name="python" tag="c1">{"code": "print(2+2)"}</tool>'
 obs["history"].full = obs["history"].prompt.extend(
-    History(role="assistant", content=fake_response).view(1, 1), dim=-1,
+    History(role="assistant", content=fake_response).view(1, 1),
+    dim=-1,
 )
 nxt = env.step(obs)
-print(nxt[("next", "history")].prompt[0][-1].content)
+tool_message = nxt[("next", "history")].prompt[0][-1].content
+tool_message
 
 #####################################################################
 # Switching parser family
@@ -104,18 +105,19 @@ print(nxt[("next", "history")].prompt[0][-1].content)
 # The same env shape works against any policy that emits structured
 # tool calls. Swap the parser to match the model's protocol:
 
-from torchrl.envs.llm.agentic.parsers import (  # noqa: E402
-    AnthropicToolUseParser,
-    JSONToolCallParser,
-    OpenAIToolCallParser,
-)
-
 # OpenAI / vLLM-with-tools:
 #   ToolCompose(tools=[...], parser=OpenAIToolCallParser())
 # Anthropic Messages API:
 #   ToolCompose(tools=[...], parser=AnthropicToolUseParser())
 # Plain JSON envelope:
 #   ToolCompose(tools=[...], parser=JSONToolCallParser())
+
+provider_parsers = (
+    OpenAIToolCallParser(),
+    AnthropicToolUseParser(),
+    JSONToolCallParser(),
+)
+provider_parsers
 
 #####################################################################
 # Parallel dispatch in action
@@ -176,25 +178,17 @@ from torchrl.envs.llm.agentic.parsers import (  # noqa: E402
 #
 # .. code-block:: python
 #
-#     import asyncio
 #     from torchrl.envs.llm.agentic import (
 #         MCPServerConfig, MCPToolset, ToolCompose,
 #     )
 #     from torchrl.envs.llm.agentic.parsers import XMLToolCallParser
 #
-#     async def make_env():
-#         pool = MCPToolset(
-#             MCPServerConfig(command="npx",
-#                             args=("@browsermcp/mcp@latest",))
-#         )
-#         await pool.open()
-#         compose = ToolCompose(
-#             tools=list(pool.tools),
-#             parser=XMLToolCallParser(),
-#         )
-#         return compose, pool
-#
-#     compose, pool = asyncio.run(make_env())
+#     pool = MCPToolset(
+#         MCPServerConfig(command="npx",
+#                         args=("@browsermcp/mcp@latest",))
+#     )
+#     compose = ToolCompose(tools=[], parser=XMLToolCallParser())
+#     compose.add_toolset(pool)
 
 #####################################################################
 # Conclusion
