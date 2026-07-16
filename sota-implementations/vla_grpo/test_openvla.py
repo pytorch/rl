@@ -22,6 +22,7 @@ import argparse
 import importlib.util
 import os
 import sys
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import numpy as np
@@ -918,6 +919,11 @@ class TestCollectorFactory:
         assert captured["kwargs"]["mp_start_method"] == "spawn"
         assert captured["kwargs"]["device"] == torch.device("cpu")
         assert captured["kwargs"]["metadata_from_workers"]
+        assert captured["create_env_fn"].keywords["group_repeats"] == 2
+        assert captured["create_env_fn"].keywords["seed"] == 5
+        assert captured["create_env_fn"].keywords["device"] is None
+        assert captured["create_env_fn"].keywords["worker_idx_offset"] == 8
+        assert captured["create_env_fn"].keywords["render_gpu_device_id"] == 3
         assert (
             captured["first_workers"][0]["language_instruction"]
             != captured["first_workers"][1]["language_instruction"]
@@ -925,6 +931,112 @@ class TestCollectorFactory:
         assert captured["first_workers"][0]["group_id"] == 4
         assert captured["first_workers"][1]["group_id"] == 4
         assert captured["first_workers"][2]["group_id"] == 5
+
+    def test_make_libero_env_uses_common_factory_with_worker_kwargs(self, monkeypatch):
+        captured = {}
+
+        class _FakeLiberoEnv:
+            def __init__(self, task_suite, *, task_id, group_id_offset, **kwargs):
+                self.task_suite = task_suite
+                self.task_id = task_id
+                self.group_id = group_id_offset
+                self.language_instruction = f"instruction-{task_id}"
+                self.kwargs = kwargs
+
+        class _FakeParallelEnv:
+            def __init__(
+                self,
+                num_envs,
+                create_env_fn,
+                *,
+                create_env_kwargs,
+                **kwargs,
+            ):
+                captured["num_envs"] = num_envs
+                captured["create_env_fn"] = create_env_fn
+                captured["create_env_kwargs"] = create_env_kwargs
+                captured["kwargs"] = kwargs
+                captured["workers"] = [
+                    create_env_fn(**worker_kwargs)
+                    for worker_kwargs in create_env_kwargs
+                ]
+
+            def set_seed(self, seed):
+                captured["seed"] = seed
+
+        monkeypatch.setattr(utils, "LiberoEnv", _FakeLiberoEnv)
+        monkeypatch.setattr(utils, "ParallelEnv", _FakeParallelEnv)
+        monkeypatch.setattr(utils, "TransformedEnv", lambda base, transform: base)
+        monkeypatch.setattr(utils, "_chunk_transform", lambda *args, **kwargs: object())
+        monkeypatch.setattr(utils, "_configure_mujoco_rendering", lambda cfg: None)
+        monkeypatch.setattr(
+            utils,
+            "_worker_render_gpu_context",
+            lambda cfg, render_gpu_device_id: nullcontext(render_gpu_device_id),
+        )
+        cfg = SimpleNamespace(
+            collector=_complete_collector_cfg(
+                group_size=2,
+                candidate_group_size=4,
+            ),
+            env=_complete_toy_env_cfg(
+                backend="libero",
+                task_ids=[8, 9],
+                task_suite="libero_spatial",
+                camera_height=256,
+                camera_width=256,
+                max_env_steps=512,
+                train_init_state_id=3,
+            ),
+            policy=SimpleNamespace(use_wrist_image=False),
+        )
+
+        env = utils.make_env(
+            cfg,
+            tokenizer=None,
+            group_repeats=2,
+            seed=17,
+            num_envs=4,
+            worker_idx_offset=4,
+            render_gpu_device_id=3,
+        )
+
+        assert isinstance(env, _FakeParallelEnv)
+        assert callable(captured["create_env_fn"])
+        assert captured["create_env_kwargs"] == [
+            {"worker_idx": 0},
+            {"worker_idx": 1},
+            {"worker_idx": 2},
+            {"worker_idx": 3},
+        ]
+        assert captured["kwargs"]["mp_start_method"] == "spawn"
+        assert captured["kwargs"]["device"] == "cpu"
+        assert captured["seed"] == 17
+        assert captured["create_env_fn"].keywords["group_repeats"] == 2
+        assert captured["create_env_fn"].keywords["worker_idx_offset"] == 4
+        assert captured["create_env_fn"].keywords["render_gpu_device_id"] == 3
+        assert [worker.task_id for worker in captured["workers"]] == [8, 8, 9, 9]
+        assert [worker.group_id for worker in captured["workers"]] == [
+            2 * utils.GROUP_ID_OFFSET,
+            2 * utils.GROUP_ID_OFFSET,
+            3 * utils.GROUP_ID_OFFSET,
+            3 * utils.GROUP_ID_OFFSET,
+        ]
+        assert [worker.language_instruction for worker in captured["workers"]] == [
+            "instruction-8",
+            "instruction-8",
+            "instruction-9",
+            "instruction-9",
+        ]
+        assert all(
+            worker.kwargs["env_kwargs"]["render_gpu_device_id"] == 3
+            for worker in captured["workers"]
+        )
+        assert all(
+            worker.kwargs["init_state_mode"] == "cycle"
+            and worker.kwargs["init_state_id"] == 3
+            for worker in captured["workers"]
+        )
 
 
 class TestEvaluatorFactory:

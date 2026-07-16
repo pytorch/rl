@@ -132,6 +132,45 @@ class TestParallel:
                 4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
             )
 
+    def test_common_factory_only_constructs_one_metadata_env(self):
+        metadata_worker_indices = []
+
+        def make_env(worker_idx):
+            metadata_worker_indices.append(worker_idx)
+            return ContinuousActionVecMockEnv()
+
+        num_subcollectors = 5
+        envs_per_subcollector = 64
+        create_env_kwargs = [
+            {"worker_idx": worker_idx} for worker_idx in range(envs_per_subcollector)
+        ]
+
+        homogeneous = ParallelEnv(
+            envs_per_subcollector,
+            make_env,
+            create_env_kwargs=create_env_kwargs,
+        )
+        assert homogeneous._single_task
+        assert metadata_worker_indices == [0]
+        homogeneous_metadata_count = len(metadata_worker_indices)
+        homogeneous.close(raise_if_closed=False)
+
+        metadata_worker_indices.clear()
+        heterogeneous = ParallelEnv(
+            envs_per_subcollector,
+            [
+                partial(make_env, worker_idx=worker_idx)
+                for worker_idx in range(envs_per_subcollector)
+            ],
+        )
+        assert not heterogeneous._single_task
+        assert metadata_worker_indices == list(range(envs_per_subcollector))
+        heterogeneous_metadata_count = len(metadata_worker_indices)
+        heterogeneous.close(raise_if_closed=False)
+
+        assert num_subcollectors * heterogeneous_metadata_count == 320
+        assert num_subcollectors * homogeneous_metadata_count == 5
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
