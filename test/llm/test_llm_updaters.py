@@ -740,6 +740,48 @@ class TestWeightSyncVLLMDoubleBuffer:
                 ray.shutdown()
 
 
+class TestDoubleBufferPrefixCacheReset:
+    """CPU-only: double-buffer weight loads must invalidate the prefix cache."""
+
+    def test_apply_weights_resets_prefix_cache_direct_path(self):
+        from types import SimpleNamespace
+
+        from tensordict import TensorDict
+        from torchrl.weight_update.llm.vllm_double_buffer import (
+            VLLMDoubleBufferWeightReceiver,
+        )
+
+        loaded, resets = [], []
+
+        class FakeEngine:
+            # no collective_rpc attribute: exercises the direct-load branch
+            llm_engine = SimpleNamespace(
+                model_executor=SimpleNamespace(
+                    driver_worker=SimpleNamespace(
+                        model_runner=SimpleNamespace(
+                            model=SimpleNamespace(
+                                load_weights=lambda w: loaded.append(list(w))
+                            )
+                        )
+                    )
+                )
+            )
+
+            def reset_prefix_cache(self):
+                resets.append(True)
+                # first attempt reports blocks still in use, second succeeds
+                return len(resets) > 1
+
+        receiver = VLLMDoubleBufferWeightReceiver.__new__(
+            VLLMDoubleBufferWeightReceiver
+        )
+        receiver._vllm_engine = FakeEngine()
+        receiver.apply_weights(TensorDict(w=torch.zeros(2)))
+
+        assert len(loaded) == 1
+        assert len(resets) == 2  # retried once after the partial clear
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
