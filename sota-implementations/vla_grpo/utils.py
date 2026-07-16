@@ -1388,9 +1388,8 @@ def load_checkpoint(path, policy: torch.nn.Module, optim, scheduler, device) -> 
 
 
 def log_metrics(logger, metrics: dict, step: int) -> None:
-    # One log_metrics call per step (not a per-key log_scalar loop): log_scalar
-    # defaults to commit=False, so looping it never advances WandB's step and
-    # every iteration collapses into a single history record. log_metrics
-    # commits the whole step at once -- the pattern every other sota script uses.
+    # One log_metrics call per step (not a per-key log_scalar loop): this keeps
+    # all metrics of an iteration in a single W&B history row -- the pattern
+    # every other sota script uses.
     if logger is not None:
         logger.log_metrics(metrics, step)
