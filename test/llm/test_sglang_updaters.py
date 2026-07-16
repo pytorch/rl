@@ -129,8 +129,8 @@ class TestSGLangFlushCacheFlag:
 
     def test_scheme_flush_default_threads_to_transport(self):
         scheme = SGLangWeightSyncScheme(server_url="http://localhost:30000", num_gpus=1)
-        assert scheme.flush_cache_on_update is True
-        assert scheme.create_transport().flush_cache_on_update is True
+        assert scheme.flush_cache_on_update is None
+        assert scheme.create_transport().flush_cache_on_update is None
 
         scheme_off = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
@@ -139,47 +139,89 @@ class TestSGLangFlushCacheFlag:
         )
         assert scheme_off.create_transport().flush_cache_on_update is False
 
-    def test_update_payload_flush_flag(self, monkeypatch):
+        scheme_abort = SGLangWeightSyncScheme(
+            server_url="http://localhost:30000",
+            num_gpus=1,
+            flush_cache_on_update=True,
+            pause_mode="abort",
+        )
+        transport = scheme_abort.create_transport()
+        assert transport.flush_cache_on_update is True
+        assert transport.pause_mode == "abort"
+
+    def test_flush_requires_abort_pause_mode(self):
+        # SGLang only flushes when idle; retract/in_place leave requests queued.
+        with pytest.raises(ValueError, match="pause_mode='abort'"):
+            SGLangWeightSyncScheme(
+                server_url="http://localhost:30000",
+                num_gpus=1,
+                flush_cache_on_update=True,
+                pause_mode="retract",
+            )
+        with pytest.raises(ValueError, match="pause_mode='abort'"):
+            self._make_transport(flush_cache_on_update=True, pause_mode="retract")
+        # The default (env-resolved) pause mode is retract: explicit True
+        # without an abort pause mode fails fast at transport creation.
+        with pytest.raises(ValueError, match="pause_mode='abort'"):
+            self._make_transport(flush_cache_on_update=True)
+
+    def test_update_payload_flush_follows_pause_mode(self, monkeypatch):
         monkeypatch.delenv(_SGLANG_FLUSH_CACHE_ENV, raising=False)
 
+        # Default pause mode (retract) cannot honor a flush: off.
         payload = self._make_transport()._build_update_payload(
             ["w"], ["bfloat16"], [[2]]
         )
-        assert payload["flush_cache"] is True
+        assert payload["flush_cache"] is False
         assert payload["abort_all_requests"] is False
         assert payload["names"] == ["w"]
 
+        # Abort pause mode guarantees an idle scheduler: flush by default.
+        payload = self._make_transport(pause_mode="abort")._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is True
+
+        # Explicit off wins even under abort.
         payload = self._make_transport(
-            flush_cache_on_update=False
+            flush_cache_on_update=False, pause_mode="abort"
         )._build_update_payload(["w"], ["bfloat16"], [[2]])
         assert payload["flush_cache"] is False
 
     def test_update_payload_env_override(self, monkeypatch):
-        # The env var overrides the configured flag in either direction.
+        # The env var overrides the configured flag but cannot force a flush
+        # the pause mode cannot honor.
         monkeypatch.setenv(_SGLANG_FLUSH_CACHE_ENV, "0")
-        payload = self._make_transport()._build_update_payload(
+        payload = self._make_transport(pause_mode="abort")._build_update_payload(
             ["w"], ["bfloat16"], [[2]]
         )
         assert payload["flush_cache"] is False
 
         monkeypatch.setenv(_SGLANG_FLUSH_CACHE_ENV, "1")
-        payload = self._make_transport(
-            flush_cache_on_update=False
-        )._build_update_payload(["w"], ["bfloat16"], [[2]])
+        payload = self._make_transport(pause_mode="abort")._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
         assert payload["flush_cache"] is True
 
-    def test_flush_retract_warning_emitted_once(self, monkeypatch):
-        monkeypatch.delenv(_SGLANG_FLUSH_CACHE_ENV, raising=False)
+        # Env-forced flush under retract is downgraded, not honored.
+        payload = self._make_transport()._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is False
+
+    def test_flush_downgrade_warning_emitted_once(self, monkeypatch):
+        monkeypatch.setenv(_SGLANG_FLUSH_CACHE_ENV, "1")
         warnings_seen = []
         monkeypatch.setattr(
             sglang_nccl.torchrl_logger,
             "warning",
             lambda msg, *args, **kwargs: warnings_seen.append(msg),
         )
-        transport = self._make_transport()
+        transport = self._make_transport()  # default retract pause mode
         transport._build_update_payload(["w"], ["bfloat16"], [[2]])
         transport._build_update_payload(["w"], ["bfloat16"], [[2]])
         assert len(warnings_seen) == 1
+        assert "Skipping the SGLang radix-cache flush" in warnings_seen[0]
 
 
 @pytest.mark.gpu

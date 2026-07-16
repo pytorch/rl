@@ -207,10 +207,20 @@ class SGLangCollectiveTransport:
         device: Device to use for communication.
         timeout: HTTP request timeout in seconds.
         flush_cache_on_update: Whether to ask the server to flush its radix
-            (prefix) cache as part of each weight update. Defaults to ``True``;
-            cached prefixes are keyed by prompt content and go stale when the
-            weights change. The ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE``
-            environment variable, when set, overrides this in either direction.
+            (prefix) cache as part of each weight update. ``None`` (default)
+            flushes exactly when the pause mode is ``"abort"`` -- the only mode
+            under which SGLang can honor the flush, since it requires an idle
+            scheduler and retracted requests stay queued. ``True`` requires the
+            ``"abort"`` pause mode and raises otherwise. The
+            ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE`` environment variable,
+            when set, overrides this in either direction (downgraded with a
+            warning when the pause mode cannot honor it).
+        pause_mode: How to pause generation for the update: ``"abort"`` cancels
+            in-flight requests (callers must tolerate transient generation
+            failures), ``"retract"`` re-queues them, ``"in_place"`` freezes
+            them. ``None`` (default) defers to the
+            ``TORCHRL_SGLANG_PAUSE_GENERATION_MODE`` environment variable and
+            falls back to ``"retract"``.
     """
 
     def __init__(
@@ -222,7 +232,8 @@ class SGLangCollectiveTransport:
         world_size: int,
         device: torch.device | str | int | None = None,
         timeout: float = 300.0,
-        flush_cache_on_update: bool = True,
+        flush_cache_on_update: bool | None = None,
+        pause_mode: Literal["abort", "retract", "in_place"] | None = None,
     ):
         self.server_url = server_url.rstrip("/")
         self.master_address = master_address
@@ -231,11 +242,20 @@ class SGLangCollectiveTransport:
         self.world_size = world_size
         self.timeout = timeout
         self.flush_cache_on_update = flush_cache_on_update
+        self.pause_mode = pause_mode
+        if flush_cache_on_update and self._effective_pause_mode() != "abort":
+            raise ValueError(
+                "flush_cache_on_update=True requires pause_mode='abort': SGLang "
+                "only flushes its radix cache when the scheduler is idle, and "
+                "the 'retract'/'in_place' pause modes leave requests queued, so "
+                "the requested flush would fail server-side after the weights "
+                "have already been swapped."
+            )
         self._comm_group = None
         self._group_name = None
         self._model_metadata = None
         self._http_executor = ThreadPoolExecutor(max_workers=1)
-        self._flush_retract_warned = False
+        self._flush_downgrade_warned = False
 
         # Handle device specification
         if device is None:
@@ -255,30 +275,36 @@ class SGLangCollectiveTransport:
     ) -> dict:
         """Build the JSON payload for ``/update_weights_from_distributed``.
 
-        The ``flush_cache`` flag defaults to :attr:`flush_cache_on_update`
-        (``True``) so the radix cache is invalidated together with the weight
-        swap; stale prefixes are keyed by prompt content and would otherwise
-        be reused after the update. ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE``
-        overrides the flag in either direction when set.
+        The ``flush_cache`` flag is resolved from :attr:`flush_cache_on_update`
+        and the pause mode: SGLang only flushes its radix cache when the
+        scheduler is idle, which only the ``"abort"`` pause mode guarantees, so
+        the flag is sent exactly when the effective pause mode is ``"abort"``.
+        ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE`` overrides the request in
+        either direction when set; a request the pause mode cannot honor is
+        downgraded with a warning rather than crashing the server-side update.
         """
-        flush_cache = _truthy_env(
-            _SGLANG_FLUSH_CACHE_ENV, default=self.flush_cache_on_update
+        mode = self._effective_pause_mode()
+        default = (
+            self.flush_cache_on_update
+            if self.flush_cache_on_update is not None
+            else mode == "abort"
         )
-        if (
-            flush_cache
-            and not self._flush_retract_warned
-            and _pause_generation_mode() == "retract"
-        ):
-            # SGLang skips the flush when retracted requests still sit in the
-            # waiting queue; those requests keep their (old-weights) prefixes
-            # until they complete.
+        requested = _truthy_env(_SGLANG_FLUSH_CACHE_ENV, default=default)
+        flush_cache = requested and mode == "abort"
+        if requested and not flush_cache and not self._flush_downgrade_warned:
+            # Retracted/frozen requests keep the scheduler non-idle: SGLang
+            # would fail the flush server-side after the weights already
+            # landed. Skip it and surface the correctness gap instead.
             torchrl_logger.warning(
-                "flush_cache is requested during SGLang weight sync while the "
-                "pause mode is 'retract'; the server may skip the flush if "
-                "retracted requests are still queued, in which case stale "
-                "prefix-cache entries persist until those requests complete."
+                "Skipping the SGLang radix-cache flush during weight sync: the "
+                f"pause mode is '{mode}', which leaves requests queued, and "
+                "SGLang only flushes when idle. Stale prefix-cache entries "
+                "persist across this update. Set "
+                f"{_SGLANG_PAUSE_GENERATION_MODE_ENV}=abort (or "
+                "pause_mode='abort') to flush on every sync, or disable the "
+                "radix cache."
             )
-            self._flush_retract_warned = True
+            self._flush_downgrade_warned = True
         return {
             "names": names,
             "dtypes": dtypes,
@@ -290,20 +316,26 @@ class SGLangCollectiveTransport:
             "abort_all_requests": False,
         }
 
+    def _effective_pause_mode(self) -> Literal["abort", "retract", "in_place"]:
+        """Pause mode for weight updates: explicit kwarg, else env/default."""
+        if self.pause_mode is not None:
+            return self.pause_mode
+        return _pause_generation_mode()
+
     def _pause_generation_for_update(self, model_id: str) -> None:
         """Pause SGLang generation before a live weight update.
 
-        The pause mode can be selected through
-        ``TORCHRL_SGLANG_PAUSE_GENERATION_MODE``. ``retract`` pauses scheduling
-        and moves active requests back to the waiting queue; ``abort`` cancels
-        in-flight requests before the update and requires callers to tolerate
-        transient generation failures.
+        The pause mode comes from the ``pause_mode`` constructor argument or,
+        when unset, ``TORCHRL_SGLANG_PAUSE_GENERATION_MODE``. ``retract`` pauses
+        scheduling and moves active requests back to the waiting queue;
+        ``abort`` cancels in-flight requests before the update and requires
+        callers to tolerate transient generation failures.
 
         The pause endpoint can return before a just-dispatched scheduler step
         has drained. Poll load metrics until no request is still running before
         starting the collective weight update.
         """
-        mode = _pause_generation_mode()
+        mode = self._effective_pause_mode()
         try:
             response = requests.post(
                 f"{self.server_url}/pause_generation",
@@ -640,10 +672,22 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
         strategy: Weight extraction strategy ("tensordict" or "state_dict").
         device: Device index for the trainer. Defaults to 0.
         flush_cache_on_update: Whether to flush the server's radix (prefix)
-            cache as part of each weight update. Defaults to ``True``; cached
-            prefixes are keyed by prompt content and go stale when the weights
-            change. The ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE`` environment
-            variable, when set, overrides this in either direction.
+            cache as part of each weight update. Cached prefixes are keyed by
+            prompt content and go stale when the weights change, but SGLang can
+            only flush when the scheduler is idle, which only the ``"abort"``
+            pause mode guarantees. ``None`` (default) flushes exactly when the
+            pause mode is ``"abort"``; ``True`` requires ``pause_mode="abort"``
+            and raises otherwise. The
+            ``TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE`` environment variable,
+            when set, overrides this in either direction (downgraded with a
+            warning when the pause mode cannot honor it).
+        pause_mode: How generation is paused around weight updates:
+            ``"abort"`` cancels in-flight requests (callers must tolerate
+            transient generation failures) and allows the radix-cache flush;
+            ``"retract"`` re-queues in-flight requests; ``"in_place"`` freezes
+            them. ``None`` (default) defers to
+            ``TORCHRL_SGLANG_PAUSE_GENERATION_MODE`` and falls back to
+            ``"retract"``.
 
     Example:
         >>> scheme = SGLangWeightSyncScheme(
@@ -665,7 +709,8 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
         num_gpus: int = 1,
         strategy: Literal["tensordict", "state_dict"] = "tensordict",
         device: torch.device | str | int = 0,
-        flush_cache_on_update: bool = True,
+        flush_cache_on_update: bool | None = None,
+        pause_mode: Literal["abort", "retract", "in_place"] | None = None,
     ):
         self.server_url = server_url.rstrip("/")
         self.master_address = master_address or get_local_ip_address()
@@ -674,6 +719,13 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
         self.strategy_name = strategy
         self.device = device
         self.flush_cache_on_update = flush_cache_on_update
+        self.pause_mode = pause_mode
+        if flush_cache_on_update and pause_mode is not None and pause_mode != "abort":
+            raise ValueError(
+                "flush_cache_on_update=True requires pause_mode='abort': SGLang "
+                "only flushes its radix cache when the scheduler is idle, and "
+                f"the '{pause_mode}' pause mode leaves requests queued."
+            )
 
     @property
     def world_size(self) -> int:
@@ -690,6 +742,7 @@ class SGLangWeightSyncScheme(WeightSyncScheme):
             world_size=self.world_size,
             device=self.device,
             flush_cache_on_update=self.flush_cache_on_update,
+            pause_mode=self.pause_mode,
         )
 
     def create_sender(self) -> SGLangWeightSender:
