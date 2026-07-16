@@ -19,7 +19,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from torch import nn
 
-from torchrl.collectors.distributed import RayCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import GymEnv
 from torchrl.modules import QValueActor
@@ -68,14 +68,18 @@ def main() -> None:
         service_backend_options={"remote_config": {"num_cpus": 1}},
         transport="auto",
     )
-    collector = RayCollector(
-        create_env_fn=[make_env],
+    collector = Collector(
+        create_env_fn=make_env,
+        backend="ray",
+        num_collectors=1,
         policy=inference,
         replay_buffer=replay,
-        collector_class="single",
+        backend_options={
+            "collector_class": "single",
+            "remote_configs": {"num_cpus": 1, "num_gpus": 0},
+        },
         frames_per_batch=32,
         total_frames=128,
-        remote_configs={"num_cpus": 1, "num_gpus": 0},
         sync=True,
     )
 

@@ -23,7 +23,6 @@ def main(cfg: DictConfig):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import Collector
-    from torchrl.collectors.distributed import RayCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -90,16 +89,19 @@ def main(cfg: DictConfig):  # noqa: F821
         else 0,
         "memory": cfg.remote_worker_resources.memory,
     }
-    collector = RayCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
-        * num_workers,
+    collector = Collector(
+        create_env_fn=make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend),
+        backend="ray",
+        num_collectors=num_workers,
         policy=actor,
-        collector_class=Collector,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         max_frames_per_traj=-1,
-        ray_init_config=ray_init_config,
-        remote_configs=remote_config,
+        backend_options={
+            "collector_class": Collector,
+            "ray_init_config": ray_init_config,
+            "remote_configs": remote_config,
+        },
         sync=False,
         update_after_each_batch=True,
     )

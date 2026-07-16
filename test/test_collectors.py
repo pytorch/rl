@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import gc
+import inspect
 import os
 import subprocess
 import sys
@@ -40,6 +41,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
+from torchrl import service_backend
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -676,6 +678,195 @@ class TestRandomPolicyLazyInit:
 
 
 class TestCollectorGeneric:
+    def test_public_signature(self):
+        signature = inspect.signature(Collector)
+        assert "self" not in signature.parameters
+        assert signature.parameters["backend"].default is None
+        assert signature.parameters["backend_options"].default is None
+        assert signature.parameters["num_collectors"].default is None
+        assert signature.parameters["sync"].default is None
+
+    @pytest.mark.parametrize(
+        ("backend", "target_path"),
+        [
+            ("process", "torchrl.collectors._multi_base.MultiCollector"),
+            ("multiprocessing", "torchrl.collectors._multi_base.MultiCollector"),
+            ("ray", "torchrl.collectors.distributed.ray.RayCollector"),
+            ("rpc", "torchrl.collectors.distributed.rpc.RPCCollector"),
+            (
+                "distributed",
+                "torchrl.collectors.distributed.generic.DistributedCollector",
+            ),
+            (
+                "submitit",
+                "torchrl.collectors.distributed.generic.DistributedCollector",
+            ),
+        ],
+    )
+    def test_backend_dispatch(self, backend, target_path):
+        sentinel = object()
+        with patch(target_path) as target:
+            target.return_value = sentinel
+            result = Collector(
+                ContinuousActionVecMockEnv,
+                backend=backend,
+                backend_options={"test_backend_option": 1},
+                num_collectors=2,
+                frames_per_batch=20,
+                total_frames=20,
+            )
+
+        assert result is sentinel
+        call_args, call_kwargs = target.call_args
+        assert call_args[0] == [
+            ContinuousActionVecMockEnv,
+            ContinuousActionVecMockEnv,
+        ]
+        assert call_kwargs["sync"] is False
+        assert call_kwargs["test_backend_option"] == 1
+        if backend == "ray":
+            assert call_kwargs["num_collectors"] == 2
+        if backend == "submitit":
+            assert call_kwargs["launcher"] == "submitit"
+
+    def test_context_backend_dispatch(self):
+        sentinel = object()
+        with patch("torchrl.collectors.distributed.rpc.RPCCollector") as target:
+            target.return_value = sentinel
+            with service_backend("rpc"):
+                result = Collector(
+                    ContinuousActionVecMockEnv,
+                    num_collectors=2,
+                    frames_per_batch=20,
+                    total_frames=20,
+                )
+        assert result is sentinel
+        assert target.call_args.kwargs["sync"] is False
+
+    def test_sequence_inference_and_options_are_not_mutated(self):
+        options = {"remote_configs": {"num_cpus": 1}}
+        with patch("torchrl.collectors.distributed.ray.RayCollector") as target:
+            Collector(
+                [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+                backend="ray",
+                backend_options=options,
+                frames_per_batch=20,
+            )
+        assert target.call_args.kwargs["num_collectors"] == 2
+        assert options == {"remote_configs": {"num_cpus": 1}}
+
+        with patch(
+            "torchrl.collectors.distributed.generic.DistributedCollector"
+        ) as target:
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="distributed",
+                backend_options={"backend": "gloo", "launcher": "mp"},
+                frames_per_batch=20,
+            )
+        assert target.call_args.kwargs["backend"] == "gloo"
+        assert target.call_args.kwargs["launcher"] == "mp"
+
+        direct = Collector(
+            [ContinuousActionVecMockEnv],
+            backend="direct",
+            num_collectors=1,
+            frames_per_batch=20,
+        )
+        try:
+            assert type(direct) is Collector
+        finally:
+            direct.shutdown()
+
+    def test_backend_dispatch_validation(self):
+        with pytest.raises(ValueError, match="does not match"):
+            Collector(
+                [ContinuousActionVecMockEnv],
+                backend="process",
+                num_collectors=2,
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="duplicate"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="ray",
+                backend_options={"remote_configs": {}},
+                remote_configs={},
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="reserved"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="process",
+                backend_options={"sync": True},
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="at most one"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="direct",
+                num_collectors=2,
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="exactly one"):
+            Collector(
+                [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+                backend="direct",
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="positive integer"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="process",
+                num_collectors=0,
+                frames_per_batch=20,
+            )
+        with pytest.raises(TypeError, match="positive integer"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="process",
+                num_collectors=True,
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="duplicate"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                None,
+                backend="process",
+                backend_options={"policy": None},
+                frames_per_batch=20,
+            )
+        with service_backend("thread"):
+            with pytest.raises(ValueError, match="does not support"):
+                Collector(
+                    ContinuousActionVecMockEnv,
+                    frames_per_batch=20,
+                )
+        with pytest.raises(ValueError, match="requires launcher='submitit'"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="submitit",
+                backend_options={"launcher": "mp"},
+                frames_per_batch=20,
+            )
+
+    def test_process_backend_smoke_and_context_isolation(self):
+        with service_backend("process"):
+            collector = Collector(
+                ContinuousActionVecMockEnv,
+                num_collectors=2,
+                sync=True,
+                frames_per_batch=20,
+                total_frames=20,
+            )
+            try:
+                assert isinstance(collector, MultiSyncCollector)
+                assert not isinstance(collector, Collector)
+                batch = next(iter(collector))
+                assert batch.numel() == 20
+            finally:
+                collector.shutdown()
+
     def test_collector_without_traj_ids(self):
         env = CountingEnv(max_steps=3)
         collector = Collector(

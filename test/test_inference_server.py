@@ -25,6 +25,7 @@ from tensordict.nn.probabilistic import (
     InteractionType,
     set_interaction_type,
 )
+from torchrl import service_backend, transport_backend
 from torchrl._comm import (
     CommandChannel,
     Mailbox,
@@ -275,6 +276,23 @@ class TestInferenceTransportABC:
 
 
 class TestInferenceServerCore:
+    def test_contextual_thread_service_and_transport(self):
+        with service_backend("thread"), transport_backend("direct"):
+            server = InferenceServer(_make_policy(), num_clients=1)
+        try:
+            assert server.service_backend == "thread"
+            assert server.transport_kind == "direct"
+        finally:
+            server.shutdown()
+
+    def test_explicit_auto_transport_overrides_context(self):
+        with transport_backend("distributed"):
+            server = InferenceServer(_make_policy(), transport="auto")
+        try:
+            assert server.transport_kind == "thread"
+        finally:
+            server.shutdown()
+
     def test_canonical_thread_constructor(self):
         with InferenceServer(_make_policy(), transport="auto") as server:
             assert server.service_backend == "thread"
@@ -1548,16 +1566,16 @@ class TestRayTransport:
 
     def test_canonical_ray_owned_inference(self):
         ray = _ray_lib()
-        server = InferenceServer(
-            policy_factory=lambda: TensorDictModule(
-                nn.Linear(4, 2),
-                in_keys=["observation"],
-                out_keys=["action"],
-            ),
-            service_backend="ray",
-            service_backend_options={"remote_config": {"num_cpus": 0}},
-            transport="auto",
-        )
+        with service_backend("ray"):
+            server = InferenceServer(
+                policy_factory=lambda: TensorDictModule(
+                    nn.Linear(4, 2),
+                    in_keys=["observation"],
+                    out_keys=["action"],
+                ),
+                service_backend_options={"remote_config": {"num_cpus": 0}},
+                transport="auto",
+            )
         try:
             assert server.service_backend == "ray"
             assert server.transport_kind == "ray"

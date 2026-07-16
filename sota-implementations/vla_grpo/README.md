@@ -235,9 +235,10 @@ lightweight logger client. Evaluation video is one synchronized grid recorded
 from the same ``env.eval_num_envs`` parallel rollouts used for reward and
 success metrics; it does not launch an extra rollout or select a single task.
 
-The collector path is fixed: a TorchRL `MultiCollector` launches rollout
-workers, each worker owns a sync `ParallelEnv(envs_per_collector)`, and all
-workers plus the evaluator share one process policy server.
+The collector path is fixed: TorchRL's `Collector` uses its process backend to
+launch rollout workers, each worker owns a sync
+`ParallelEnv(envs_per_collector)`, and all workers plus the evaluator share one
+process policy server.
 
 ```bash
 python sota-implementations/vla_grpo/vla-grpo.py --config-name vla_grpo_libero
@@ -290,8 +291,8 @@ A sequence-level ratio remains available as a config switch for ablations, but
 for a 56-token action chunk it saturates the clip range much more easily than
 per-token ratios.
 
-LIBERO simulation runs through `collector.num_collectors` MultiCollector
-workers. Each worker hosts a synchronous
+LIBERO simulation runs through `collector.num_collectors` process-backed
+collector workers. Each worker hosts a synchronous
 `ParallelEnv(collector.envs_per_collector)`. Policy inference runs on the
 shared process server and each worker owns a disjoint `group_id` block so
 advantages never mix across unrelated groups.

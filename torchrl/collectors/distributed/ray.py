@@ -81,6 +81,11 @@ def print_remote_collector_info(self):
 class RayCollector(BaseCollector):
     """Distributed data collector with `Ray <https://docs.ray.io/>`_ backend.
 
+    .. note::
+        Prefer ``Collector(backend="ray", ...)`` for construction in new code.
+        Pass Ray-specific arguments through ``backend_options``. This class
+        remains the concrete Ray implementation API.
+
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
     data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
     collector is an iterable that yields TensorDicts until a target number of collected

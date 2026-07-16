@@ -302,6 +302,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     """
 
+    _accepts_transport_backend = True
+
     @classmethod
     def _ServiceClass(
         cls,

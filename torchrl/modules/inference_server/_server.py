@@ -27,6 +27,7 @@ from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl._comm import CommandChannel, Mailbox, watch_process_liveness
+from torchrl._comm.backends import _resolve_service_backend, _resolve_transport_backend
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
     _NO_INTERACTION_TYPE_CODE,
@@ -81,8 +82,15 @@ class _InferenceServerMeta(type):
         )
         service_backend = kwargs.pop("service_backend", None)
         if service_backend is None:
-            service_backend = configured_backend
-        elif server_config is not None and configured_backend not in (
+            service_backend = _resolve_service_backend(
+                configured_backend if server_config is not None else None,
+                default="thread",
+            )
+        else:
+            service_backend = _resolve_service_backend(
+                service_backend, default="thread"
+            )
+        if server_config is not None and configured_backend not in (
             "thread",
             service_backend,
         ):
@@ -95,6 +103,8 @@ class _InferenceServerMeta(type):
             )
 
         service_options = dict(kwargs.pop("service_backend_options", None) or {})
+        if transport is None:
+            transport = _resolve_transport_backend(None, default="auto")
         transport_options = kwargs.pop("transport_options", None)
         request_spec = kwargs.pop("request_spec", None)
         response_spec = kwargs.pop("response_spec", None)

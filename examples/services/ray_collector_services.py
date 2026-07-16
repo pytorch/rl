@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Collect with Ray-owned replay and inference services.
+"""Collect with scoped Ray ownership and distributed tensor transports.
 
 The driver only constructs TorchRL objects. Replay storage, policy inference,
-and environment collection run in dedicated Ray actors; TorchRL creates and
-distributes the restricted transport clients internally.
+and environment collection run in dedicated Ray actors. TensorDict payloads
+use Gloo while TorchRL creates and distributes the restricted clients.
 
 Run from the repository root with ``python examples/services/ray_collector_services.py``.
 """
@@ -18,8 +18,9 @@ from functools import partial
 from tensordict.nn import TensorDictModule
 from torch import nn
 
+from torchrl import service_backend, transport_backend
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors.distributed import RayCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import GymEnv
 from torchrl.modules.inference_server import InferenceServer
@@ -45,36 +46,38 @@ def main() -> None:
         "include_dashboard": False,
         "log_to_driver": False,
     }
-    replay = TensorDictReplayBuffer(
-        storage=partial(LazyTensorStorage, 1_000),
-        batch_size=4,
-        service_backend="ray",
-        service_backend_options={
-            "ray_init_config": ray_init_config,
-            "remote_config": {"num_cpus": 1},
-        },
-        transport="auto",
-    )
-    inference = InferenceServer(
-        policy_factory=make_policy,
-        service_backend="ray",
-        service_backend_options={
-            "remote_config": {"num_cpus": 1},
-        },
-        transport="auto",
-    )
-    collector = None
+    replay = inference = collector = None
     try:
-        collector = RayCollector(
-            create_env_fn=[make_env],
-            policy=inference,
-            replay_buffer=replay,
-            collector_class="single",
-            frames_per_batch=8,
-            total_frames=16,
-            remote_configs={"num_cpus": 1, "num_gpus": 0},
-            sync=True,
-        )
+        with service_backend("ray"), transport_backend("distributed"):
+            replay = TensorDictReplayBuffer(
+                storage=partial(LazyTensorStorage, 1_000),
+                batch_size=4,
+                service_backend_options={
+                    "ray_init_config": ray_init_config,
+                    "remote_config": {"num_cpus": 1},
+                },
+                transport_options={"backend": "gloo"},
+            )
+            inference = InferenceServer(
+                policy_factory=make_policy,
+                service_backend_options={
+                    "remote_config": {"num_cpus": 1},
+                },
+                transport_options={"backend": "gloo"},
+            )
+            collector = Collector(
+                create_env_fn=make_env,
+                num_collectors=1,
+                policy=inference,
+                replay_buffer=replay,
+                backend_options={
+                    "collector_class": "single",
+                    "remote_configs": {"num_cpus": 1, "num_gpus": 0},
+                },
+                frames_per_batch=8,
+                total_frames=16,
+                sync=True,
+            )
         for _ in collector:
             pass
 
@@ -87,8 +90,10 @@ def main() -> None:
     finally:
         if collector is not None:
             collector.shutdown()
-        inference.shutdown()
-        replay.shutdown()
+        if inference is not None:
+            inference.shutdown()
+        if replay is not None:
+            replay.shutdown()
 
 
 if __name__ == "__main__":

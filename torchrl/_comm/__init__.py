@@ -6,8 +6,11 @@ from __future__ import annotations
 
 from torchrl._comm.backends import (
     normalize_service_backend,
+    service_backend,
     ServiceBackend,
     ServiceBackendAlias,
+    transport_backend,
+    TransportBackend,
 )
 from torchrl._comm.command import CommandChannel, CommandClient, CommandRequest
 from torchrl._comm.mailbox import (
@@ -42,6 +45,9 @@ __all__ = [
     "ServiceBackendAlias",
     "SharedBlock",
     "TCPStoreRendezvous",
+    "TransportBackend",
     "normalize_service_backend",
+    "service_backend",
+    "transport_backend",
     "watch_process_liveness",
 ]

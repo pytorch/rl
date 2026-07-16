@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import contextvars
 import functools
 import inspect
 import logging
@@ -31,7 +32,7 @@ from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 from torch.autograd.profiler import record_function
 
-from torchrl._comm.backends import normalize_service_backend
+from torchrl._comm.backends import _resolve_service_backend, _resolve_transport_backend
 
 try:
     from torch.compiler import is_compiling
@@ -1532,6 +1533,11 @@ class cuda_memory_profile(_DecoratorContextManager):
             )
 
 
+_SERVICE_BACKEND_DISPATCHING = contextvars.ContextVar(
+    "torchrl_service_backend_dispatching", default=None
+)
+
+
 class _RayServiceMetaClass(type):
     """Metaclass that selects direct or service-backed implementations.
 
@@ -1592,10 +1598,22 @@ class _RayServiceMetaClass(type):
             )
             service_backend = "ray"
 
-        if service_backend is None:
+        if service_backend is None and (
+            _SERVICE_BACKEND_DISPATCHING.get() == os.getpid()
+            or getattr(cls, "_service_backend_resolved", False)
+        ):
+            # A service factory may construct a wrapper that uses this same
+            # metaclass (for example RayReplayBuffer). The backend has already
+            # been resolved by the outer construction and must not dispatch a
+            # second time from the still-active context.
             service_backend = "direct"
-        service_backend = normalize_service_backend(service_backend)
+        service_backend = _resolve_service_backend(service_backend, default="direct")
         options = dict(service_backend_options or {})
+
+        if getattr(cls, "_accepts_transport_backend", False):
+            transport = kwargs.get("transport")
+            if transport is None:
+                kwargs["transport"] = _resolve_transport_backend(None, default="auto")
 
         if service_backend == "direct":
             if options:
@@ -1605,12 +1623,16 @@ class _RayServiceMetaClass(type):
             return super().__call__(*args, **kwargs)
 
         if hasattr(cls, "_ServiceClass"):
-            return cls._ServiceClass(
-                service_backend,
-                *args,
-                service_backend_options=options,
-                **kwargs,
-            )
+            token = _SERVICE_BACKEND_DISPATCHING.set(os.getpid())
+            try:
+                return cls._ServiceClass(
+                    service_backend,
+                    *args,
+                    service_backend_options=options,
+                    **kwargs,
+                )
+            finally:
+                _SERVICE_BACKEND_DISPATCHING.reset(token)
         if service_backend == "ray" and hasattr(cls, "_RayServiceClass"):
             if options and "ray_actor_options" not in kwargs:
                 kwargs["ray_actor_options"] = options.get("actor_options", options)
