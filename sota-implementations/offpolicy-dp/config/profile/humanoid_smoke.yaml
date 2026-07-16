@@ -1,0 +1,49 @@
+# @package _global_
+
+algorithm:
+  environment_name: humanoid
+
+environment:
+  backend: mujoco-torch
+  total_num_envs: 8_192
+  num_collectors: 2
+  compile_step: true
+  compile_mode: default
+  max_episode_steps: 1_000
+
+collection:
+  total_frames: 262_144
+  init_random_frames: 65_536
+  frames_per_env: 1
+
+replay:
+  capacity: 524_288
+  batch_size: 1_024
+  num_cpus: 1
+  transport: distributed
+
+learner:
+  world_size: 2
+  num_cpus_per_rank: 1
+  num_gpus_per_rank: 1
+  backend: nccl
+  optim_steps_per_batch: 10
+  poll_interval: 0.05
+  setup_timeout: 600.0
+  command_timeout: 1_200.0
+
+logging:
+  interval_frames: 32_768
+  # Distributed replay binds the per-rank schema to 1024 / 2.
+  sample_size: 512
+
+evaluation:
+  interval_frames: 65_536
+  num_envs: 8
+  num_trajectories: 8
+  max_steps: 250
+  video_interval_frames: 65_536
+  video_num_envs: 1
+  video_num_trajectories: 1
+  video_max_steps: 250
+  video_max_frames: 125

@@ -1,0 +1,11 @@
+name: td3
+environment_kind: mujoco
+environment_name: hopper
+learning_rate: 0.0003
+gamma: 0.99
+hidden_sizes: [256, 256]
+target_update_polyak: 0.995
+policy_noise: 0.2
+noise_clip: 0.5
+exploration_std: 0.1
+policy_update_delay: 2

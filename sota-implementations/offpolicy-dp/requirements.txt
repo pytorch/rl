@@ -1,0 +1,7 @@
+hydra-core>=1.3
+gymnasium>=1.0
+moviepy>=2.0
+mujoco-torch @ git+https://github.com/vmoens/mujoco-torch.git@main
+pygame>=2.6
+ray>=2.40
+wandb>=0.19

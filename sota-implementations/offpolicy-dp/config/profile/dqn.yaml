@@ -1,0 +1,41 @@
+# @package _global_
+
+environment:
+  backend: gym
+  total_num_envs: 2
+  num_collectors: 2
+  compile_step: false
+  compile_mode: null
+  max_episode_steps: 500
+
+collection:
+  total_frames: 100_000
+  init_random_frames: 10_000
+  frames_per_env: 1_024
+
+replay:
+  capacity: 100_000
+  batch_size: 512
+  num_cpus: 1
+  transport: auto
+
+learner:
+  world_size: 2
+  num_cpus_per_rank: 1
+  num_gpus_per_rank: 1
+  backend: nccl
+  optim_steps_per_batch: 1
+  poll_interval: 0.05
+  setup_timeout: 300.0
+  command_timeout: 600.0
+
+logging:
+  interval_frames: 10_000
+
+evaluation:
+  device: cpu
+  num_envs: 1
+  num_trajectories: 1
+  interval_frames: 25_000
+  max_steps: 500
+  video_max_frames: 250

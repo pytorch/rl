@@ -1,0 +1,58 @@
+defaults:
+  - _self_
+  - algorithm: sac
+  - profile: scale
+
+seed: 42
+
+logging:
+  project: torchrl-dp-offpolicy-validation
+  group: dp-stack-main
+  mode: online
+  interval_frames: 100_000
+  sample_size: 8192
+  log_env_packages: true
+
+evaluation:
+  enabled: true
+  # Rendering stays in a single environment on one already-allocated device.
+  backend: mujoco-torch
+  device: cuda:7
+  compile_step: false
+  interval_frames: 2_000_000
+  num_envs: 16
+  num_trajectories: 16
+  max_steps: 100
+  shutdown_timeout: 600.0
+  video: true
+  # Keep scalar evaluation benchmark-correct. Video uses a single diagnostic
+  # rollout that continues after Hopper becomes unhealthy so it shows motion.
+  video_interval_frames: 2_000_000
+  video_num_envs: 1
+  video_num_trajectories: 1
+  video_max_steps: 100
+  render_width: 128
+  render_height: 128
+  video_skip: 2
+  video_fps: 15
+  video_max_frames: 50
+
+artifacts_dir: /root/artifacts/offpolicy-dp
+
+replay:
+  # These feed-forward off-policy algorithms store individual transitions.
+  # A sequence-aware workload must opt into and validate grouped storage itself.
+  storage_mode: transitions
+  transport_backend: gloo
+  transport_timeout: 1200.0
+
+ray:
+  include_dashboard: false
+  log_to_driver: true
+  ignore_reinit_error: true
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: /root/artifacts/offpolicy-dp/hydra/${algorithm.name}-${now:%Y%m%d-%H%M%S}
