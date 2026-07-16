@@ -18,6 +18,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from functools import partial
+from unittest.mock import call, MagicMock
 
 import pytest
 
@@ -101,6 +102,38 @@ class MismatchedCountingPolicy(CountingPolicy):
     def __init__(self):
         super().__init__()
         self.unexpected = nn.Parameter(torch.ones(()))
+
+
+def test_private_ray_trainer_execution_closes_ranks_concurrently(monkeypatch):
+    calls = MagicMock()
+    actors = [MagicMock(), MagicMock()]
+    close_refs = [object(), object()]
+    ray_runtime = MagicMock()
+    for rank, (actor, close_ref) in enumerate(zip(actors, close_refs)):
+        actor.close.remote.return_value = close_ref
+        calls.attach_mock(actor.close.remote, f"close_rank_{rank}")
+    calls.attach_mock(ray_runtime.get, "get")
+    calls.attach_mock(ray_runtime.kill, "kill")
+    backend = object.__new__(_RayTrainerExecution)
+    backend._actors = actors
+    backend._placement_group = None
+    backend._runtime_lease = None
+    monkeypatch.setattr(
+        "torchrl.trainers._ray_execution.ray",
+        ray_runtime,
+        raising=False,
+    )
+
+    backend.shutdown(timeout=7.0)
+
+    assert calls.mock_calls == [
+        call.close_rank_0(),
+        call.close_rank_1(),
+        call.get(close_refs, timeout=7.0),
+        call.kill(actors[1], no_restart=True),
+        call.kill(actors[0], no_restart=True),
+    ]
+    assert backend._actors == []
 
 
 class ScalarRayLoss(LossModule):
