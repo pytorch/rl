@@ -64,7 +64,7 @@ from torchrl.trainers._distributed import (
 )
 from torchrl.trainers._ray_execution import _RayTrainerExecution
 from torchrl.trainers.algorithms import DDPGTrainer, DQNTrainer, SACTrainer, TD3Trainer
-from torchrl.trainers.trainers import OptimizationStepper, Trainer
+from torchrl.trainers.trainers import OptimizationStepper
 
 _has_ray = importlib.util.find_spec("ray") is not None
 if _has_ray:
@@ -1425,7 +1425,7 @@ class TestRayCollector(DistributedCollectorBase):
             replay.shutdown()
 
     @pytest.mark.parametrize("flatten", [False, True])
-    def test_async_trainer_requires_transition_replay(self, flatten):
+    def test_async_trainer_tracks_frames_independently_of_replay_shape(self, flatten):
         num_envs = 2
         frames_per_batch = 8
         total_frames = 16
@@ -1449,51 +1449,47 @@ class TestRayCollector(DistributedCollectorBase):
             sync=True,
         )
         loss = ScalarRayLoss()
-        trainer_kwargs = {
-            "collector": collector,
-            "total_frames": total_frames,
-            "frame_skip": 1,
-            "optim_steps_per_batch": 1,
-            "loss_module": loss,
-            "optimizer": torch.optim.SGD(loss.parameters(), lr=0.1),
-            "replay_buffer": replay,
-            "async_collection": True,
-            "progress_bar": False,
-        }
-        if flatten:
-            trainer = Trainer(**trainer_kwargs)
-        else:
-            with pytest.warns(UserWarning, match="experimental"):
-                trainer = DQNTrainer(
-                    **trainer_kwargs,
-                    batch_size=2,
-                    target_net_updater=CountingTargetUpdater(loss),
-                    learner_backend="ray",
-                    learner_backend_options={
-                        "world_size": 2,
-                        "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
-                        "backend": "gloo",
-                        "setup_timeout": 60.0,
-                        "command_timeout": 60.0,
-                    },
-                    enable_logging=False,
-                )
+        with pytest.warns(UserWarning, match="experimental"):
+            trainer = DQNTrainer(
+                collector=collector,
+                total_frames=total_frames,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss,
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                replay_buffer=replay,
+                async_collection=True,
+                progress_bar=False,
+                batch_size=2,
+                target_net_updater=CountingTargetUpdater(loss),
+                learner_backend="ray",
+                learner_backend_options={
+                    "world_size": 2,
+                    "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                    "backend": "gloo",
+                    "setup_timeout": 60.0,
+                    "command_timeout": 60.0,
+                },
+                enable_logging=False,
+            )
         try:
-            if not flatten:
-                with pytest.raises(RuntimeError, match="individual transitions"):
-                    trainer.train()
-                assert replay[0].shape == (frames_per_batch // num_envs,)
-                assert replay.write_count < collector.collected_frames
-                return
-
-            collector.update_policy_weights_(policy)
-            assert all(batch is None for batch in collector)
+            trainer.train()
+            assert trainer.collected_frames == total_frames
             assert collector.collected_frames == total_frames
-            assert replay.write_count == total_frames
-            assert replay.sample().shape == (2,)
-            trainer._validate_transition_replay()
-            sentinel = object()
-            assert next(trainer._async_iterator(), sentinel) is sentinel
+            assert trainer._optim_count > 0
+            assert trainer._published_model_version == trainer._optim_count
+            if flatten:
+                assert replay.write_count == total_frames
+                assert replay.sample().shape == (2,)
+            else:
+                assert replay.write_count == total_frames // (
+                    frames_per_batch // num_envs
+                )
+                assert replay[0].shape == (frames_per_batch // num_envs,)
+                assert replay.sample().shape == (
+                    2,
+                    frames_per_batch // num_envs,
+                )
         finally:
             collector.shutdown()
             replay.shutdown()

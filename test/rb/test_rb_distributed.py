@@ -375,7 +375,6 @@ class TestRayRB:
             reader = replay.client()
             assert writer.extend(extend_data).shape == (8,)
             assert writer.write_count == 8
-            assert reader[0]["value"].item() == 0
             assert reader.sample().shape == (4,)
         finally:
             replay.shutdown()

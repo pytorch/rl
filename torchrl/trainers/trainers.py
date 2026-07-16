@@ -1360,11 +1360,10 @@ class Trainer:
 
         if self.async_collection:
             self.collector.start()
-            while self._replay_write_count() == 0:
+            while self._collector_frame_count() == 0:
                 time.sleep(0.1)
-            self._validate_transition_replay()
 
-            # Create async iterator that monitors write_count progress
+            # Create async iterator that monitors collection progress.
             iterator = self._async_iterator()
         else:
             iterator = self.collector
@@ -1382,10 +1381,10 @@ class Trainer:
                 )
                 self.collected_frames += current_frames
             else:
-                # In async mode, batch is None and we track frames via write_count
+                # In async mode, batch is None and the collector tracks frames.
                 batch = None
                 cf = self.collected_frames
-                self.collected_frames = self._replay_write_count()
+                self.collected_frames = self._collector_frame_count()
                 current_frames = self.collected_frames - cf
 
             # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
@@ -1434,14 +1433,13 @@ class Trainer:
             self._setup_hook()
             setup_complete = True
 
-            previous_write_count = self._replay_write_count()
+            previous_collector_frames = self._collector_frame_count()
             if self.async_collection:
                 self.collector.start()
                 iterator = itertools.repeat(None)
             else:
                 iterator = iter(self.collector)
 
-            transition_replay_validated = False
             for batch in iterator:
                 previous_frames = self.collected_frames
                 if batch is not None:
@@ -1462,14 +1460,12 @@ class Trainer:
                     self.collected_frames += current_frames * self.frame_skip
                     self._pre_steps_log_hook(batch)
                 else:
-                    write_count = self._replay_write_count()
-                    current_frames = max(0, write_count - previous_write_count)
-                    previous_write_count = write_count
+                    collector_frames = self._collector_frame_count()
+                    current_frames = max(
+                        0, collector_frames - previous_collector_frames
+                    )
+                    previous_collector_frames = collector_frames
                     self.collected_frames += current_frames * self.frame_skip
-
-                if current_frames > 0 and not transition_replay_validated:
-                    self._validate_transition_replay()
-                    transition_replay_validated = True
 
                 if (
                     self.collected_frames
@@ -1587,32 +1583,24 @@ class Trainer:
             write_count = write_count()
         return int(write_count)
 
-    def _validate_transition_replay(self) -> None:
-        replay_buffer = self.replay_buffer
-        if replay_buffer is None or not len(replay_buffer):
-            return
-        replay_item = replay_buffer[0]
-        if isinstance(replay_item, TensorDictBase) and replay_item.ndim:
-            raise RuntimeError(
-                "Trainer expected direct replay to contain individual transitions, "
-                f"but one replay item has batch size {replay_item.batch_size}. "
-                "Flatten collector rollouts before insertion, for example with "
-                "collector_kwargs={'postproc': flatten_batch}, where flatten_batch "
-                "returns data.reshape(-1). Use a custom training loop when grouped "
-                "sequence replay is intentional."
-            )
+    def _collector_frame_count(self) -> int:
+        """Return collected transitions independently of replay item layout."""
+        collected_frames = getattr(self.collector, "collected_frames", None)
+        if collected_frames is None:
+            return self._replay_write_count()
+        return int(collected_frames)
 
     def _async_iterator(self):
-        """Create an iterator for async collection that monitors replay buffer write_count.
+        """Create an iterator that monitors asynchronous collector progress.
 
         This iterator yields None batches and terminates when total_frames is reached
-        based on the replay buffer's write_count rather than using a fixed range.
-        This ensures the training loop properly consumes the entire collector output.
+        based on the collector's frame count rather than using a fixed range. Replay
+        ``write_count`` is not a frame counter when one stored item is a sequence.
         """
         while True:
-            current_write_count = self._replay_write_count()
+            current_frames = self._collector_frame_count()
             # Check if we've reached the target frames
-            if current_write_count >= self.total_frames:
+            if current_frames >= self.total_frames:
                 break
             else:
                 yield None

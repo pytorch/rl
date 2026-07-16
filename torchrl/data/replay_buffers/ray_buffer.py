@@ -259,9 +259,6 @@ class _LazyDistributedReplayClient:
     def __len__(self) -> int:
         return int(self._stats()["size"].item())
 
-    def __getitem__(self, index):
-        return ray.get(self._actor.__getitem__.remote(index))
-
     def __getattr__(self, name: str):
         if name in {"start", "shutdown", "close", "client", "clients"}:
             raise AttributeError(
