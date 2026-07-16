@@ -1,17 +1,102 @@
 {
-  "generated_at": "2026-07-15T06:55:50.195462+00:00",
+  "generated_at": "2026-07-16T07:01:36.021432+00:00",
   "analysis_period": {
-    "start": "2026-07-09",
-    "end": "2026-07-14",
+    "start": "2026-07-13",
+    "end": "2026-07-15",
     "runs_analyzed": 45
   },
   "summary": {
-    "total_tests": 30871,
-    "flaky_count": 0,
-    "new_flaky_count": 0,
+    "total_tests": 30918,
+    "flaky_count": 4,
+    "new_flaky_count": 4,
     "resolved_count": 0
   },
-  "flaky_tests": [],
+  "flaky_tests": [
+    {
+      "nodeid": "test/test_inference_server.py::TestRayTransport::test_ray_owned_inference_with_nccl_transport",
+      "executions": 30,
+      "failures": 6,
+      "failure_rate": 0.2,
+      "flaky_score": 0.4,
+      "passed": 24,
+      "failed": 6,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 2.324,
+      "recent_failures": [
+        "2026-07-15T12:39:59Z",
+        "2026-07-15T14:19:22Z",
+        "2026-07-15T15:55:23Z",
+        "2026-07-15T16:02:16Z",
+        "2026-07-15T20:16:35Z"
+      ],
+      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/rb/test_rb_distributed.py::TestRayRB::test_ray_replay_with_gloo_transport",
+      "executions": 30,
+      "failures": 6,
+      "failure_rate": 0.2,
+      "flaky_score": 0.4,
+      "passed": 24,
+      "failed": 6,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 2.361,
+      "recent_failures": [
+        "2026-07-15T12:39:59Z",
+        "2026-07-15T14:19:22Z",
+        "2026-07-15T15:55:23Z",
+        "2026-07-15T16:02:16Z",
+        "2026-07-15T20:16:35Z"
+      ],
+      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_inference_server.py::TestRayTransport::test_ray_owned_inference_with_gloo_transport",
+      "executions": 66,
+      "failures": 6,
+      "failure_rate": 0.0909,
+      "flaky_score": 0.1818,
+      "passed": 48,
+      "failed": 6,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.582,
+      "recent_failures": [
+        "2026-07-15T12:39:59Z",
+        "2026-07-15T14:19:22Z",
+        "2026-07-15T15:55:23Z",
+        "2026-07-15T16:02:16Z",
+        "2026-07-15T20:16:35Z"
+      ],
+      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_inference_server.py::TestProcessInferenceServer::test_process_server_with_distributed_gloo_transport",
+      "executions": 66,
+      "failures": 6,
+      "failure_rate": 0.0909,
+      "flaky_score": 0.1818,
+      "passed": 60,
+      "failed": 6,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 1.873,
+      "recent_failures": [
+        "2026-07-15T12:39:59Z",
+        "2026-07-15T14:19:22Z",
+        "2026-07-15T15:55:23Z",
+        "2026-07-15T16:02:16Z",
+        "2026-07-15T20:16:35Z"
+      ],
+      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "is_new": true
+    }
+  ],
   "thresholds": {
     "min_failure_rate": 0.05,
     "max_failure_rate": 0.95,
