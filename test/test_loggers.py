@@ -392,7 +392,6 @@ class TestWandbLogger:
                 value=scalar_value,
                 name=scalar_name,
                 step=steps[i] if steps else None,
-                commit=True,
             )
 
         assert len(logged) == 3
@@ -402,6 +401,25 @@ class TestWandbLogger:
             expected_step = i if not steps else steps[i]
             assert payload == {"foo": values[i].item(), "step": expected_step}
             assert kwargs == {"commit": True}
+
+    def test_log_scalar_commit_false_batches(self, wandb_tmp_logger, monkeypatch):
+        logged = []
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment,
+            "log",
+            lambda payload, **kwargs: logged.append((payload, kwargs)),
+        )
+        monkeypatch.setattr(
+            wandb_tmp_logger.experiment, "define_metric", lambda *args, **kwargs: None
+        )
+
+        wandb_tmp_logger.log_scalar("train/loss", 1.0, step=7, commit=False)
+        wandb_tmp_logger.log_scalar("train/reward", 2.0, step=7)
+
+        assert logged == [
+            ({"train/loss": 1.0, "train/step": 7}, {"commit": False}),
+            ({"train/reward": 2.0, "train/step": 7}, {"commit": True}),
+        ]
 
     @pytest.mark.skipif(not _has_moviepy, reason="moviepy not installed")
     def test_log_video(self, wandb_logger):
