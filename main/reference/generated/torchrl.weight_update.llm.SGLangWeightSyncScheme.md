@@ -1,6 +1,6 @@
 # SGLangWeightSyncScheme
 
-*class*torchrl.weight_update.llm.SGLangWeightSyncScheme(*server_url: str*, *master_address: str | None = None*, *master_port: int | None = None*, *num_gpus: int = 1*, *strategy: Literal['tensordict', 'state_dict'] = 'tensordict'*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int = 0*)[[source]](../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangWeightSyncScheme)
+*class*torchrl.weight_update.llm.SGLangWeightSyncScheme(*server_url: str*, *master_address: str | None = None*, *master_port: int | None = None*, *num_gpus: int = 1*, *strategy: Literal['tensordict', 'state_dict'] = 'tensordict'*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int = 0*, *flush_cache_on_update: bool | None = None*, *pause_mode: Literal['abort', 'retract', 'in_place'] | None = None*)[[source]](../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangWeightSyncScheme)
 
 Weight synchronization scheme for SGLang servers.
 
@@ -15,6 +15,23 @@ Parameters:
 - **num_gpus** - Number of GPUs used by the SGLang server (tp_size * dp_size).
 - **strategy** - Weight extraction strategy ("tensordict" or "state_dict").
 - **device** - Device index for the trainer. Defaults to 0.
+- **flush_cache_on_update** - Whether to flush the server's radix (prefix)
+cache as part of each weight update. Cached prefixes are keyed by
+prompt content and go stale when the weights change, but SGLang can
+only flush when the scheduler is idle, which only the `"abort"`
+pause mode guarantees. `None` (default) flushes exactly when the
+pause mode is `"abort"`; `True` requires `pause_mode="abort"`
+and raises otherwise. The
+`TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE` environment variable,
+when set, overrides this in either direction (downgraded with a
+warning when the pause mode cannot honor it).
+- **pause_mode** - How generation is paused around weight updates:
+`"abort"` cancels in-flight requests (callers must tolerate
+transient generation failures) and allows the radix-cache flush;
+`"retract"` re-queues in-flight requests; `"in_place"` freezes
+them. `None` (default) defers to
+`TORCHRL_SGLANG_PAUSE_GENERATION_MODE` and falls back to
+`"retract"`.
 
 Example
 

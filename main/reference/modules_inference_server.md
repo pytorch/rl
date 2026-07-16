@@ -25,7 +25,9 @@ payloads. A process-owned server requires explicit `request_spec` and
 bind those layouts on first use. Ray-owned inference can instead use
 `transport="ray"` for dynamic or non-tensor payloads. See
 [Choosing a payload transport](services_workflow.html#ref-service-transports) for supported owner/transport combinations,
-restrictions, and expected performance.
+restrictions, and expected performance, and
+[Distributed transport implementation notes](services_workflow.html#ref-distributed-transport-layouts) for the layout-discovery and buffer
+lifecycle.
 
 | [`ThreadingTransport`](generated/torchrl.modules.inference_server.ThreadingTransport.html#torchrl.modules.inference_server.ThreadingTransport)() | In-process transport for actors that are threads. |
 | --- | --- |

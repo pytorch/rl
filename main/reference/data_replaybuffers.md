@@ -12,7 +12,9 @@ picklable handle intended for collector workers. Only the owner can shut down
 the actor. A Ray-owned replay buffer accepts either the flexible Ray payload
 transport or a fixed-layout Gloo/NCCL tensor transport. See
 [Choosing a payload transport](services_workflow.html#ref-service-transports) for the compatibility table, payload
-restrictions, and expected performance trade-offs.
+restrictions, and expected performance trade-offs, and
+[Distributed transport implementation notes](services_workflow.html#ref-distributed-transport-layouts) for the per-operation layout
+discovery and buffer lifecycle.
 
 ```
 from functools import partial

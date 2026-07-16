@@ -376,3 +376,99 @@ The [service examples](https://github.com/pytorch/rl/tree/main/examples/services
 same TensorDict training loop with direct, process, and Ray placement. Their
 README contains dependencies, commands, and the mapping from each profile to
 its concrete owners.
+
+## Distributed transport implementation notes
+
+The distributed transport does not negotiate arbitrary Python values on every
+request. Instead, each request/reply channel is constructed from representative
+TensorDicts that define a static wire layout. The layout includes the sorted
+nested keys and each tensor leaf's shape, dtype, and device. Gloo layouts must
+contain CPU tensors and NCCL layouts must contain CUDA tensors. Non-tensor
+leaves are rejected.
+
+### How layouts are established
+
+Layout establishment depends on the service owner:
+
+| Owner | Source of the layout | Bootstrap behavior |
+| --- | --- | --- |
+| Process-owned inference | Explicit `request_spec` and `response_spec` arguments | Both layouts must be available before the subprocess starts. There is no Ray control channel through which to inspect a first request. |
+| Ray-owned inference | Explicit arguments, or the first request when they are omitted | For lazy discovery, the first request reaches the inference actor through Ray. The actor applies the configured collation, device, interaction-type, policy, output-device, and policy-version rules to a cloned request. The resulting request and response establish the distributed channel, after which the original request is submitted through that channel. |
+| Ray-owned replay | Explicit operation specs, or the first call to each operation | Replay has independent layouts for `extend`, `sample`, and priority updates. The first call is executed by the replay actor through Ray, its actual result is returned to the caller, and its payload and result establish that operation's channel. The control layout used by `len()` and `write_count` is known in advance. |
+
+Lazy inference discovery performs a probe policy forward to determine the
+response layout, followed by the user-visible forward through the newly
+created distributed channel. A policy whose forward mutates state should use
+explicit `request_spec` and `response_spec` values to avoid probe side
+effects. Replay bootstrap operations are not repeated: the operation executed
+through Ray is the caller's first operation.
+
+### Request size versus server batch size
+
+Inference has two distinct batching dimensions. The *request size* is the
+batch shape inside one TensorDict submitted by one client. The *server batch
+size* is the number of queued requests selected for one policy forward. The
+distributed transport fixes the per-request layout, but it does not fix the
+number of requests combined by the server.
+
+For example, suppose the discovered request contains an observation with
+shape `[4]` and no TensorDict batch dimensions. The transport always moves
+requests with that layout. The server may nevertheless drain anywhere from
+one to `max_batch_size` such requests, stack them into an observation tensor
+with shape `[num_requests, 4]`, run the policy, and unbind the leading
+request dimension so that each client receives one response through its own
+fixed response buffer. Queue timing therefore continues to determine the
+effective policy-forward batch size.
+
+If a caller instead submits a TensorDict with batch size `[N]`, then `N`
+is part of the distributed request and response layouts. Later calls through
+that endpoint must use the same `N`. Applications with genuinely changing
+per-request batch shapes should pad or split requests to a fixed layout, or
+use the Ray transport. Dynamic transports remove the static wire-layout
+restriction, although the configured `collate_fn` and policy must still be
+able to combine the submitted requests. `max_batch_size` counts queued
+requests, not the number of samples contained inside them.
+
+Replay binds its sample layout to the batch size of the first sample. Extend
+and sample layouts may instead be supplied with
+`transport_options["extend_spec"]`, `transport_options["sample_spec"]`,
+respectively. An explicit sample layout also seeds the priority-update layout;
+`transport_options["priority_spec"]` can override it when supplied alongside
+`sample_spec`. Explicit inference layouts use the top-level `request_spec`
+and `response_spec` arguments.
+
+### Buffers and the steady-state path
+
+The representative TensorDicts are normalized to contiguous tensors and kept
+as layout templates. Each client obtains an independent endpoint. When that
+endpoint connects for the first time, the client and owner create their own
+request and response staging buffers from the templates, along with separate
+point-to-point process groups for each direction. Small request identifiers,
+statuses, and exception notifications use Gloo control groups. Tensor leaves
+use the selected Gloo or NCCL payload groups in deterministic key order.
+
+For each subsequent request, TorchRL selects the declared keys with strict
+missing-key checking, copies them into the existing send buffer, and sends its
+tensor leaves. The receiver fills its existing receive buffer. The current
+implementation then clones a received request before queueing it and clones a
+received response before handing it to a waiting caller, because the staging
+buffers are reused immediately. The transport therefore avoids per-request
+payload serialization and wire-buffer allocation, but it is not completely
+allocation-free.
+
+### Layout lifetime and validation
+
+A discovered layout belongs to one endpoint generation and never changes in
+place. Extra TensorDict keys are not transmitted. Missing declared keys, or
+incompatible shapes, dtypes, devices, and replay sample batch sizes, raise an
+error rather than renegotiating or falling back to Ray. Restarting an owner
+creates a new generation with new endpoints, rendezvous state, process groups,
+and layouts.
+
+These mechanisms are private implementation details rather than importable
+service APIs. The main implementation boundaries are
+`torchrl._comm.distributed` for static request/reply communication,
+`torchrl._comm.replay_service` for replay operation channels, and
+`torchrl.modules.inference_server._server` for inference ownership and lazy
+Ray bootstrap. They may be refactored without changing the public
+`service_backend` and `transport` selectors.

@@ -223,6 +223,12 @@
 - [Discovery is optional](services_workflow.html#discovery-is-optional)
 - [Design compromises](services_workflow.html#design-compromises)
 - [Runnable examples](services_workflow.html#runnable-examples)
+- [Distributed transport implementation notes](services_workflow.html#distributed-transport-implementation-notes)
+
+- [How layouts are established](services_workflow.html#how-layouts-are-established)
+- [Request size versus server batch size](services_workflow.html#request-size-versus-server-batch-size)
+- [Buffers and the steady-state path](services_workflow.html#buffers-and-the-steady-state-path)
+- [Layout lifetime and validation](services_workflow.html#layout-lifetime-and-validation)
 - [torchrl.trainers package](trainers.html)
 
 - [Key Features](trainers.html#key-features)

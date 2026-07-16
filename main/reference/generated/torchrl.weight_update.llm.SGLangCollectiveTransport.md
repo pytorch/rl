@@ -1,6 +1,6 @@
 # SGLangCollectiveTransport
 
-*class*torchrl.weight_update.llm.SGLangCollectiveTransport(*server_url: str*, *master_address: str*, *master_port: int*, *rank: int*, *world_size: int*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *timeout: float = 300.0*)[[source]](../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangCollectiveTransport)
+*class*torchrl.weight_update.llm.SGLangCollectiveTransport(*server_url: str*, *master_address: str*, *master_port: int*, *rank: int*, *world_size: int*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *timeout: float = 300.0*, *flush_cache_on_update: bool | None = None*, *pause_mode: Literal['abort', 'retract', 'in_place'] | None = None*)[[source]](../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangCollectiveTransport)
 
 Transport for SGLang using NCCL collective communication.
 
@@ -16,6 +16,21 @@ Parameters:
 - **world_size** - Total number of processes.
 - **device** - Device to use for communication.
 - **timeout** - HTTP request timeout in seconds.
+- **flush_cache_on_update** - Whether to ask the server to flush its radix
+(prefix) cache as part of each weight update. `None` (default)
+flushes exactly when the pause mode is `"abort"` - the only mode
+under which SGLang can honor the flush, since it requires an idle
+scheduler and retracted requests stay queued. `True` requires the
+`"abort"` pause mode and raises otherwise. The
+`TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE` environment variable,
+when set, overrides this in either direction (downgraded with a
+warning when the pause mode cannot honor it).
+- **pause_mode** - How to pause generation for the update: `"abort"` cancels
+in-flight requests (callers must tolerate transient generation
+failures), `"retract"` re-queues them, `"in_place"` freezes
+them. `None` (default) defers to the
+`TORCHRL_SGLANG_PAUSE_GENERATION_MODE` environment variable and
+falls back to `"retract"`.
 
 check_connection() → bool[[source]](../../_modules/torchrl/weight_update/llm/sglang_nccl.html#SGLangCollectiveTransport.check_connection)
 

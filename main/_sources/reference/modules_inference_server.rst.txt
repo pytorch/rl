@@ -35,7 +35,9 @@ payloads. A process-owned server requires explicit ``request_spec`` and
 bind those layouts on first use. Ray-owned inference can instead use
 ``transport="ray"`` for dynamic or non-tensor payloads. See
 :ref:`ref_service_transports` for supported owner/transport combinations,
-restrictions, and expected performance.
+restrictions, and expected performance, and
+:ref:`ref_distributed_transport_layouts` for the layout-discovery and buffer
+lifecycle.
 
 .. autosummary::
     :toctree: generated/

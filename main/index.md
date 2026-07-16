@@ -199,6 +199,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Discovery is optional](reference/services_workflow.html#discovery-is-optional)
 - [Design compromises](reference/services_workflow.html#design-compromises)
 - [Runnable examples](reference/services_workflow.html#runnable-examples)
+- [Distributed transport implementation notes](reference/services_workflow.html#distributed-transport-implementation-notes)
 - [torchrl.trainers package](reference/trainers.html)
 
 - [Key Features](reference/trainers.html#key-features)

@@ -131,7 +131,7 @@ print(reset_with_action["action"])
 ```
 
 ```
-tensor([-1.1972])
+tensor([1.5735])
 ```
 
 We now need to pass this action to the environment.

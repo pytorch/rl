@@ -1,6 +1,6 @@
 # AsyncVLLM
 
-*class*torchrl.modules.llm.AsyncVLLM(*engine_args: AsyncEngineArgs*, *num_replicas: int = 1*, *actor_class=None*, *enable_prefix_caching: bool = False*)[[source]](../../_modules/torchrl/modules/llm/backends/vllm/vllm_async.html#AsyncVLLM)
+*class*torchrl.modules.llm.AsyncVLLM(*engine_args: AsyncEngineArgs*, *num_replicas: int = 1*, *actor_class=None*, *enable_prefix_caching: bool | None = None*)[[source]](../../_modules/torchrl/modules/llm/backends/vllm/vllm_async.html#AsyncVLLM)
 
 A service that manages multiple async vLLM engine actors for distributed inference.
 
@@ -19,13 +19,18 @@ Parameters:
 - **actor_class** (*optional*) - Custom Ray actor class. Defaults to the internal actor implementation.
 - **enable_prefix_caching** (*bool**,**optional*) -
 
-Whether to enable prefix caching. Defaults to False.
+Whether to enable prefix caching.
+`None` (default) respects `engine_args.enable_prefix_caching` when it
+is set, and falls back to `False` otherwise.
 
-Warning
+Note
 
-enable_prefix_caching is set to False by default, which is recommended if prompt log probs are needed.
-Set it to True if prompt log probs are not needed.
-See [this issue](https://github.com/vllm-project/vllm/issues/8268) for more details.
+Prefix caching used to be discouraged with online weight updates
+because cached KV prefixes are keyed by prompt content, not by the
+weights that produced them. Caches are now reset automatically after
+each weight update (see `reset_prefix_cache()`), and truncated
+prompt log-probs from cached prefixes are zero-padded by the vLLM
+wrapper, so enabling it for online RL is supported.
 
 Example
 
@@ -84,7 +89,8 @@ monitors readiness, and provides centralized access to all replicas.
 
 **Performance Considerations**
 
-- Prefix caching is enabled by default for better performance with repeated prompts
+- Prefix caching is disabled by default (conservative); when enabled, caches are
+reset automatically after each weight update
 - Tensor parallelism is supported for large models that don't fit on single GPUs
 - Multiple replicas allow concurrent processing of different requests
 - Native vLLM batching is used within each replica for optimal throughput
@@ -325,6 +331,15 @@ The launched service.
 Return type:
 
 AsyncVLLMEngineService
+
+reset_prefix_cache() → None[[source]](../../_modules/torchrl/modules/llm/backends/vllm/vllm_async.html#AsyncVLLM.reset_prefix_cache)
+
+Reset the KV prefix cache on all replicas.
+
+Called automatically after each weight update: cached prefixes are
+keyed by prompt content, not by the weights that produced them, so
+they are stale once new weights are loaded. This is a no-op when
+prefix caching is disabled.
 
 shutdown()[[source]](../../_modules/torchrl/modules/llm/backends/vllm/vllm_async.html#AsyncVLLM.shutdown)
 

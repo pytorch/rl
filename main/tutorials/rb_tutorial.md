@@ -137,7 +137,7 @@ print(buffer_list.sample(3))
 ```
 
 ```
-['a', 'b', 0]
+['b', 0, 0]
 ```
 
 Because it is the one with the lowest amount of assumption, the
@@ -206,13 +206,13 @@ print("samples", sample["a"], sample["b", "c"])
 ```
 samples tensor([[ 4, 5, 6, 7],
  [ 4, 5, 6, 7],
- [ 4, 5, 6, 7],
  [ 8, 9, 10, 11],
- [ 4, 5, 6, 7]]) tensor([[ 5, 6, 7, 8, 9],
- [ 5, 6, 7, 8, 9],
+ [ 4, 5, 6, 7],
+ [ 8, 9, 10, 11]]) tensor([[ 5, 6, 7, 8, 9],
  [ 5, 6, 7, 8, 9],
  [10, 11, 12, 13, 14],
- [ 5, 6, 7, 8, 9]])
+ [ 5, 6, 7, 8, 9],
+ [10, 11, 12, 13, 14]])
 ```
 
 A [`LazyMemmapStorage`](../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage) is created in the same manner.
@@ -239,16 +239,16 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpzo9os4wh/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpzo9os4wh/b/c.memmap
-samples: a= tensor([[ 8, 9, 10, 11],
- [ 4, 5, 6, 7],
+the 'a' tensor is stored in /tmp/tmp4gsm35pg/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmp4gsm35pg/b/c.memmap
+samples: a= tensor([[ 4, 5, 6, 7],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
+ [ 0, 1, 2, 3],
  [ 0, 1, 2, 3]])
-('b', 'c'): tensor([[10, 11, 12, 13, 14],
- [ 5, 6, 7, 8, 9],
+('b', 'c'): tensor([[ 5, 6, 7, 8, 9],
  [10, 11, 12, 13, 14],
+ [ 0, 1, 2, 3, 4],
  [ 0, 1, 2, 3, 4],
  [ 0, 1, 2, 3, 4]])
 ```
@@ -309,7 +309,7 @@ print(sample["index"])
 ```
 
 ```
-tensor([0, 0, 0, 2, 2, 2, 0, 1, 1, 0, 0, 0])
+tensor([0, 0, 2, 2, 2, 0, 1, 1, 0, 0, 0, 1])
 ```
 
 ### Integration with tensorclass
@@ -1132,10 +1132,10 @@ gc.collect()
 ```
 
 ```
-episode are grouped tensor([4, 4, 1, 1, 4, 4, 3, 3], dtype=torch.int32)
-steps are successive tensor([1, 2, 1, 2, 0, 1, 0, 1])
+episode are grouped tensor([1, 1, 4, 4, 3, 3, 4, 4], dtype=torch.int32)
+steps are successive tensor([1, 2, 0, 1, 0, 1, 0, 1])
 
-1330
+4192
 ```
 
 ### Storing trajectories from a collector
@@ -1219,7 +1219,7 @@ which are based on our Replay Buffer API;
 such as [`TensorDictMaxValueWriter`](../reference/generated/torchrl.data.replay_buffers.TensorDictMaxValueWriter.html#torchrl.data.replay_buffers.TensorDictMaxValueWriter).
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.840 seconds)
+**Total running time of the script:** (0 minutes 0.835 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
