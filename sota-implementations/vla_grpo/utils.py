@@ -32,14 +32,20 @@ from functools import partial
 
 import torch
 
-from tensordict import NonTensorData, TensorDict, TensorDictBase
+from tensordict import NonTensorData, NonTensorStack, TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.collectors import Evaluator, MultiCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.vla import (
+    ACTION_CHUNK_KEY,
     ACTION_TOKENS_KEY,
     ActionTokenizerBase,
+    IMAGE_KEY,
+    INSTRUCTION_KEY,
+    STATE_KEY,
     UniformActionTokenizer,
+    VocabTailActionTokenizer,
 )
 from torchrl.envs import (
     ActionTokenizerTransform,
@@ -145,9 +151,37 @@ def _cfg_get(section, key: str, default=None):
     return getattr(section, key, default)
 
 
+def video_eval_episodes(cfg) -> int:
+    """Number of trajectories to run in the bounded video evaluator."""
+    value = _cfg_get(cfg.logger, "video_episodes", 1)
+    if value is None:
+        value = 1
+    value = float(value)
+    if 0.0 < value < 1.0:
+        return max(1, int(round(float(cfg.logger.eval_episodes) * value)))
+    return max(0, int(value))
+
+
 def candidate_group_size(cfg) -> int:
     """Number of rollout candidates collected for each GRPO group."""
     return int(cfg.collector.candidate_group_size or cfg.collector.group_size)
+
+
+def collector_group_workers(cfg) -> int:
+    """Number of independently advancing logical GRPO group workers."""
+    groups_per_iter = int(cfg.collector.groups_per_iter)
+    num_collectors = _cfg_get(cfg.collector, "num_collectors", None)
+    envs_per_collector = _cfg_get(cfg.collector, "envs_per_collector", None)
+    if num_collectors is None or envs_per_collector is None:
+        # Small factory tests and standalone replay users need not describe a
+        # collector topology. Falling back to the update target preserves the
+        # historical capacity calculation for those callers.
+        return groups_per_iter
+    total_envs = int(num_collectors) * int(envs_per_collector)
+    if not _cfg_get(cfg.env, "parallel_group_repeats", False):
+        return total_envs
+    group_size = int(cfg.collector.group_size)
+    return (total_envs + group_size - 1) // group_size
 
 
 def auto_device(device_spec) -> torch.device:
@@ -310,7 +344,7 @@ def make_policy(
     # "sequence" sums the chunk's log-probs into a single ratio per decision.
     log_probs_mode = "token" if cfg.loss.ratio_level == "token" else "sequence"
     if cfg.policy.backend == "tiny":
-        return TinyVLA(
+        policy = TinyVLA(
             action_dim=cfg.env.action_dim,
             chunk_size=cfg.env.chunk_size,
             action_head="tokens",
@@ -320,6 +354,27 @@ def make_policy(
             return_vla_action_container=False,
             device=device,
         )
+        # TinyVLA contains lazy layers. Materialize them before the policy is
+        # cloned into the inference process so the first weight sync copies
+        # real parameters instead of independently initialized placeholders.
+        init_td = TensorDict(
+            {
+                "observation": {
+                    "image": torch.zeros(
+                        1, *cfg.env.image_shape, dtype=torch.uint8, device=device
+                    ),
+                    "state": torch.zeros(
+                        1, cfg.env.state_dim, dtype=torch.float32, device=device
+                    ),
+                },
+                "language_instruction": NonTensorStack("initialize policy"),
+            },
+            batch_size=[1],
+            device=device,
+        )
+        with torch.no_grad():
+            policy(init_td)
+        return policy
     if cfg.policy.backend == "openvla":
         OpenVLAOFTWrapper = _openvla_wrapper_cls(cfg.policy.mode)
 
@@ -368,19 +423,80 @@ def make_policy(
     raise ValueError(f"Unknown policy backend {cfg.policy.backend!r}.")
 
 
-def make_action_tokenizer(cfg, policy: VLAWrapperBase) -> ActionTokenizerBase | None:
+def make_inference_policy(
+    cfg,
+    device: torch.device,
+    *,
+    policy_micro_batch_size: int | None = None,
+) -> VLAWrapperBase:
+    """Build the rollout policy in inference mode.
+
+    The learner returned by :func:`make_policy` must remain in training mode,
+    whereas the independently constructed inference-server copy must disable
+    dropout and other training-only state before serving rollout and
+    evaluation requests.
+    """
+    policy = make_policy(
+        cfg,
+        device,
+        policy_micro_batch_size=policy_micro_batch_size,
+    )
+    policy.eval()
+    return policy
+
+
+def _load_openvla_dataset_statistics(spec: str) -> dict:
+    """Load action statistics without instantiating an OpenVLA model."""
+    if not _has_openvla:
+        raise ImportError("The openvla backend requires the local openvla module.")
+    from openvla import _load_dataset_statistics
+
+    return _load_dataset_statistics(spec)
+
+
+def make_action_tokenizer(cfg) -> ActionTokenizerBase | None:
+    """Build the environment-side action codec independently of a policy."""
     if cfg.policy.backend == "openvla":
         if cfg.policy.mode == "l1":
             return None
-        # the codec lives in the checkpoint (vocab-tail mapping + norm_stats)
-        if policy.action_tokenizer is None:
-            raise RuntimeError(
-                "The OpenVLA policy did not expose an action tokenizer. Check "
-                "that the checkpoint carries dataset action statistics and "
-                "that policy.unnorm_key selects one of them."
-            )
-        return policy.action_tokenizer
+        # The token-to-action mapping only needs the normalization statistics;
+        # do not load a 7B learner model merely to construct the CPU env codec.
+        statistics_source = cfg.policy.dataset_statistics or cfg.policy.checkpoint
+        norm_stats = _load_openvla_dataset_statistics(statistics_source)
+        return VocabTailActionTokenizer.from_norm_stats(
+            norm_stats,
+            cfg.policy.unnorm_key,
+            num_bins=int(cfg.tokenizer.vocab_size),
+        )
     return UniformActionTokenizer(cfg.tokenizer.vocab_size, low=-1.0, high=1.0)
+
+
+def policy_io_keys(cfg) -> tuple[list[NestedKey], list[NestedKey]]:
+    """Return the VLA TensorDict contract without constructing the model."""
+    if cfg.policy.backend == "tiny":
+        return (
+            [IMAGE_KEY, STATE_KEY, INSTRUCTION_KEY],
+            [ACTION_TOKENS_KEY, LOG_PROBS_KEY],
+        )
+    if cfg.policy.backend != "openvla":
+        raise ValueError(f"Unknown policy backend {cfg.policy.backend!r}.")
+
+    in_keys: list[NestedKey] = [IMAGE_KEY]
+    if cfg.policy.mode == "l1" and cfg.policy.use_proprio:
+        in_keys.append(STATE_KEY)
+    in_keys.append(INSTRUCTION_KEY)
+    if cfg.policy.use_wrist_image:
+        in_keys.append(("observation", "wrist_image"))
+
+    if cfg.policy.mode == "tokens":
+        out_keys: list[NestedKey] = [ACTION_TOKENS_KEY, LOG_PROBS_KEY]
+    elif cfg.policy.mode == "l1":
+        out_keys = [ACTION_CHUNK_KEY]
+    else:
+        raise ValueError(
+            f"policy.mode must be 'tokens' or 'l1', got {cfg.policy.mode!r}."
+        )
+    return in_keys, out_keys
 
 
 def _chunk_transform(
@@ -623,26 +739,29 @@ def make_env(
             eval_mode=eval_mode,
             override=override,
         )
+        env_factory = partial(
+            _make_libero_worker,
+            cfg,
+            group_repeats=group_repeats,
+            eval_mode=eval_mode,
+            from_pixels=from_pixels,
+            worker_idx_offset=worker_idx_offset,
+            render_gpu_device_id=render_gpu_device_id,
+        )
         base = ParallelEnv(
             num_envs,
-            [
-                partial(
-                    _make_libero_worker,
-                    cfg,
-                    worker_idx,
-                    group_repeats=group_repeats,
-                    eval_mode=eval_mode,
-                    from_pixels=from_pixels,
-                    worker_idx_offset=worker_idx_offset,
-                    render_gpu_device_id=render_gpu_device_id,
-                )
-                for worker_idx in range(num_envs)
+            env_factory,
+            create_env_kwargs=[
+                {"worker_idx": worker_idx} for worker_idx in range(num_envs)
             ],
             mp_start_method="spawn",
             # MuJoCo runs on CPU; pin the env device so the collector/rollout
             # cast the GPU policy's action back to CPU before stepping (else a
             # cuda action reaches the CPU transforms -> mixed-device error)
             device="cpu",
+            metadata_from_workers=bool(
+                _cfg_get(cfg.env, "metadata_from_workers", False)
+            ),
         )
         if seed is not None:
             base.set_seed(seed)
@@ -669,39 +788,50 @@ def _make_collector_env(
     worker_idx_offset: int,
     render_gpu_device_id: int | None,
 ) -> ParallelEnv:
+    env_factory = partial(
+        _make_env_worker,
+        cfg,
+        tokenizer,
+        group_repeats=group_repeats,
+        seed=seed,
+        device=device if cfg.env.backend == "toy" else None,
+        worker_idx_offset=worker_idx_offset,
+        render_gpu_device_id=render_gpu_device_id,
+    )
     return ParallelEnv(
         num_envs,
-        [
-            partial(
-                _make_env_worker,
-                cfg,
-                tokenizer,
-                worker_idx,
-                group_repeats=group_repeats,
-                seed=seed,
-                device=device if cfg.env.backend == "toy" else None,
-                worker_idx_offset=worker_idx_offset,
-                render_gpu_device_id=render_gpu_device_id,
-            )
-            for worker_idx in range(num_envs)
+        env_factory,
+        create_env_kwargs=[
+            {"worker_idx": worker_idx} for worker_idx in range(num_envs)
         ],
         mp_start_method="spawn",
         device=device,
+        metadata_from_workers=bool(_cfg_get(cfg.env, "metadata_from_workers", False)),
     )
 
 
 def make_replay_buffer(
     cfg, device: torch.device
 ) -> tuple[TensorDictReplayBuffer, MCAdvantage]:
-    # The buffer holds one iteration's decisions; the write path computes the
-    # group-relative advantage (and drops degenerate groups) on whole
-    # trajectories, the read path samples decisions without replacement. The
-    # advantage transform is returned too so the training loop can flush its
-    # incomplete-group queues at iteration boundaries.
+    # Storage holds one update's accepted decisions; the transform may carry
+    # incomplete groups across updates. The write path computes group-relative
+    # advantage (and drops degenerate groups) on whole trajectories, while the
+    # read path samples accepted decisions without replacement. The advantage
+    # transform is returned too so the training loop can read and reset its
+    # per-update counters without clearing incomplete groups.
     capacity_group_waves = max(int(cfg.buffer.capacity_group_waves), 1)
     candidate_size = candidate_group_size(cfg)
+    groups_per_iter = int(cfg.collector.groups_per_iter)
+    if groups_per_iter < 1:
+        raise ValueError(
+            "collector.groups_per_iter must be positive, got " f"{groups_per_iter}."
+        )
+    # groups_per_iter is an update trigger, not a collector-wave shape. Size
+    # storage for either a full target batch or a full logical worker wave so
+    # small update targets remain safe under asynchronous overcollection.
+    capacity_groups = max(groups_per_iter, collector_group_workers(cfg))
     capacity = (
-        cfg.collector.groups_per_iter
+        capacity_groups
         * candidate_size
         * cfg.env.max_outer_steps
         * capacity_group_waves
@@ -719,13 +849,17 @@ def make_replay_buffer(
             device=device,
             shared_init=shared_init,
         ),
-        batch_size=cfg.loss.mini_batch_size,
+        # The update samples one complete policy batch, then forms
+        # trajectory-aware optimizer batches itself. ``mini_batch_size`` only
+        # limits the number of decisions sent through the VLA at once.
+        batch_size=None,
         consume_after_n_samples=cfg.buffer.consume_after_n_samples,
         shared=shared_init,
     )
     advantage = MCAdvantage(
         grpo_size=cfg.collector.group_size,
         prompt_key="group_id",
+        rewards_key=("next", "reward"),
         trajectory_return=cfg.advantage.trajectory_return,
         keep_return_bounds=keep_return_bounds,
         candidate_group_size=candidate_size,
@@ -754,7 +888,13 @@ def make_loss_module(cfg, policy: VLAWrapperBase) -> ClipPPOLoss:
         actor_network=policy,
         critic_network=None,
         clip_epsilon=clip_epsilon,
-        entropy_bonus=False,
+        entropy_bonus=True,
+        entropy_coeff=0.0,
+        # SimpleVLA averages decisions within a trajectory, then averages
+        # trajectories. Keep the token loss unreduced so the update can
+        # reproduce that weighting even when trajectories have different
+        # lengths.
+        reduction="none",
     )
     loss_module.set_keys(
         action=ACTION_TOKENS_KEY,
@@ -853,9 +993,9 @@ def _server_config_from_collector(cfg) -> InferenceServerConfig:
 
 def make_collector(
     cfg,
-    policy: VLAWrapperBase,
     device: torch.device,
     *,
+    policy_factory: Callable[[], VLAWrapperBase],
     tokenizer: ActionTokenizerBase | None,
     replay_buffer: TensorDictReplayBuffer,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
@@ -864,8 +1004,10 @@ def make_collector(
 
     The stack is always a ``MultiCollector`` whose workers own batched
     ``ParallelEnv`` instances and call a shared process policy server through
-    ``PolicyClientModule``. The collector writes complete trajectories directly
-    into the replay buffer.
+    ``PolicyClientModule``. Only the inference-server child invokes
+    ``policy_factory``; the collector builder never receives or constructs the
+    learner policy. The collector writes complete trajectories directly into
+    the replay buffer.
     """
     num_collectors = int(cfg.collector.num_collectors)
     envs_per_collector = int(cfg.collector.envs_per_collector)
@@ -887,51 +1029,46 @@ def make_collector(
                 f"({envs_per_collector=} and {group_size=})."
             )
 
-    group_workers = (
-        total_envs // group_size if cfg.env.parallel_group_repeats else total_envs
-    )
     if cfg.env.backend == "libero":
         _validate_libero_env_count(
             cfg,
             total_envs,
             group_repeats=_training_group_repeats(cfg),
         )
-    groups_per_iter = int(cfg.collector.groups_per_iter)
-    if groups_per_iter < group_workers:
-        raise ValueError(
-            "collector.groups_per_iter must be at least the number of "
-            "shared policy-server group workers "
-            f"({groups_per_iter=} < {group_workers=})."
-        )
-    if groups_per_iter % group_workers:
-        warnings.warn(
-            "collector.groups_per_iter is not a multiple of the shared "
-            "policy-server group-worker count. Some same-policy partial "
-            "groups can be dropped at the update boundary."
-        )
-
     env_device = torch.device("cpu")
     ctx = mp.get_context("spawn")
+    torchrl_logger.info(
+        "Collector setup: creating shared transport for %d collectors.",
+        num_collectors,
+    )
     transport = MPTransport(ctx=ctx, use_manager=True)
     eval_client = transport.client()
     rollout_clients = [transport.client() for _ in range(num_collectors)]
-    policy_micro_batch_size = _cfg_get(cfg.collector, "policy_micro_batch_size", None)
+    torchrl_logger.info(
+        "Collector setup: starting inference-server child on %s; the child "
+        "will instantiate the rollout policy.",
+        device,
+    )
     server = ProcessInferenceServer(
-        policy_factory=partial(
-            make_policy,
-            cfg,
-            device,
-            policy_micro_batch_size=policy_micro_batch_size,
-        ),
+        policy_factory=policy_factory,
         transport=transport,
         server_config=_server_config_from_collector(cfg),
-        policy_device=device,
+        # OpenVLA wrappers own their input placement: raw uint8 images must stay
+        # on CPU through the reference preprocessing path, then the processed
+        # model inputs are moved to the model device.  Let the policy factory
+        # construct the model on ``device`` but do not have the generic
+        # inference server pre-move the whole request TensorDict to CUDA.
+        policy_device=None if cfg.policy.backend == "openvla" else device,
         output_device=env_device,
         mp_context=ctx,
     ).start()
+    torchrl_logger.info(
+        "Collector setup: inference server is ready at policy version %d.",
+        server.policy_version,
+    )
 
-    policy_in_keys = policy.in_keys
-    policy_out_keys = [*policy.out_keys, "policy_version"]
+    policy_in_keys, policy_out_keys = policy_io_keys(cfg)
+    policy_out_keys = [*policy_out_keys, "policy_version"]
     env_factories = [
         partial(
             _make_collector_env,
@@ -961,6 +1098,12 @@ def make_collector(
         in_keys=policy_in_keys,
         out_keys=policy_out_keys,
     )
+    torchrl_logger.info(
+        "Collector setup: constructing MultiCollector with %d subprocesses "
+        "and %d environment workers each.",
+        num_collectors,
+        envs_per_collector,
+    )
     collector = MultiCollector(
         env_factories,
         policy=None,
@@ -982,6 +1125,7 @@ def make_collector(
         num_sub_threads=int(cfg.collector.env_sub_threads),
         post_collect_hook=post_collect_hook,
     )
+    torchrl_logger.info("Collector setup: MultiCollector is ready.")
     return collector, server, eval_policy
 
 
@@ -990,6 +1134,7 @@ def _make_eval_env(
     tokenizer: ActionTokenizerBase | None,
     logger,
     device: torch.device,
+    num_envs: int | None = None,
 ) -> TransformedEnv:
     env = make_env(
         cfg,
@@ -998,6 +1143,7 @@ def _make_eval_env(
         device=device if cfg.env.backend == "toy" else None,
         eval_mode=True,
         from_pixels=logger is not None,
+        num_envs=num_envs,
     )
     if logger is not None:
         env.append_transform(
@@ -1040,9 +1186,13 @@ def make_evaluator(
     policy,
     logger,
     device: torch.device,
+    *,
+    record_video: bool = False,
+    num_trajectories: int | None = None,
+    num_envs: int | None = None,
 ) -> Evaluator:
     """Build the TorchRL evaluator used by the VLA GRPO recipe."""
-    record_video = logger is not None
+    record_video = bool(record_video) and logger is not None
     if (
         record_video
         and cfg.logger.eval_backend == "process"
@@ -1060,12 +1210,15 @@ def make_evaluator(
         tokenizer,
         video_logger,
         device,
+        num_envs,
     )
+    if num_trajectories is None:
+        num_trajectories = int(cfg.logger.eval_episodes)
     return Evaluator(
         env_factory,
         policy=None,
         policy_factory=partial(_policy_module_factory, policy),
-        num_trajectories=cfg.logger.eval_episodes,
+        num_trajectories=num_trajectories,
         max_steps=0,
         frames_per_batch=cfg.env.max_outer_steps,
         collector_kwargs={"traj_format": "cat"},
@@ -1078,6 +1231,34 @@ def make_evaluator(
         dump_video=record_video,
         busy_policy=cfg.logger.eval_busy_policy,
         backend=cfg.logger.eval_backend,
+    )
+
+
+def make_video_evaluator(
+    cfg,
+    tokenizer: ActionTokenizerBase | None,
+    policy,
+    logger,
+    device: torch.device,
+) -> Evaluator | None:
+    """Build the bounded visual evaluator, or ``None`` when video is disabled."""
+    if not bool(_cfg_get(cfg.logger, "record_video", True)) or logger is None:
+        return None
+    num_trajectories = video_eval_episodes(cfg)
+    if num_trajectories < 1:
+        return None
+    num_envs = _cfg_get(cfg.logger, "video_num_envs", 1)
+    if num_envs is not None:
+        num_envs = int(num_envs)
+    return make_evaluator(
+        cfg,
+        tokenizer,
+        policy,
+        logger,
+        device,
+        record_video=True,
+        num_trajectories=num_trajectories,
+        num_envs=num_envs,
     )
 
 
@@ -1101,26 +1282,55 @@ def _sync_replay_sampler_writes(replay_buffer: TensorDictReplayBuffer) -> None:
 
 def wait_for_replay(
     replay_buffer: TensorDictReplayBuffer,
+    advantage: MCAdvantage,
+    collector: MultiCollector,
     *,
+    min_replay_groups: int,
     min_replay_decisions: int,
     poll_interval_s: float,
     log_interval_s: float,
     iteration: int,
+    max_completed_trajectories: int | None = None,
 ) -> dict[str, float | int]:
-    """Wait until the replay buffer has enough sampleable decisions."""
+    """Wait for complete useful GRPO groups, plus an optional decision floor."""
     polls = 0
     next_log_s = 0.0
     with timeit("replay_wait") as wait_timer:
         _sync_replay_sampler_writes(replay_buffer)
-        while len(replay_buffer) < min_replay_decisions:
+        group_metrics = advantage_metrics(advantage, collector)
+        while True:
+            ready = _replay_ready(
+                sampleable_decisions=len(replay_buffer),
+                kept_groups=int(group_metrics["buffer/kept_groups"]),
+                min_replay_groups=min_replay_groups,
+                min_replay_decisions=min_replay_decisions,
+            )
+            trajectory_budget_reached = (
+                max_completed_trajectories is not None
+                and int(group_metrics["collector/completed_trajectories"])
+                >= max_completed_trajectories
+            )
+            if ready or trajectory_budget_reached:
+                break
             time.sleep(poll_interval_s)
             polls += 1
             _sync_replay_sampler_writes(replay_buffer)
+            group_metrics = advantage_metrics(advantage, collector)
             elapsed = wait_timer.elapsed()
             if elapsed >= next_log_s:
                 torchrl_logger.info(
-                    "waiting for replay iteration %d decisions %d/%d " "elapsed_s %.1f",
+                    "waiting for replay iteration %d kept_groups %d/%d "
+                    "complete_groups %d skipped_groups %d queued_trajectories %d "
+                    "completed_trajectories %d successes %d decisions %d/%d "
+                    "elapsed_s %.1f",
                     iteration,
+                    int(group_metrics["buffer/kept_groups"]),
+                    min_replay_groups,
+                    int(group_metrics["buffer/complete_groups"]),
+                    int(group_metrics["buffer/skipped_groups"]),
+                    int(group_metrics["buffer/queued_trajectories"]),
+                    int(group_metrics["collector/completed_trajectories"]),
+                    int(group_metrics["collector/successful_trajectories"]),
                     len(replay_buffer),
                     min_replay_decisions,
                     elapsed,
@@ -1131,18 +1341,182 @@ def wait_for_replay(
         "buffer/wait_polls": polls,
         "buffer/wait_s": elapsed,
         "buffer/decisions_before_update": len(replay_buffer),
+        "buffer/kept_groups_before_update": int(group_metrics["buffer/kept_groups"]),
+        "buffer/trajectory_budget_reached": int(trajectory_budget_reached),
+        "collector/completed_trajectories_before_update": int(
+            group_metrics["collector/completed_trajectories"]
+        ),
     }
 
 
-def replay_ready_target(cfg) -> int:
-    """Number of sampleable decisions required before an update starts."""
-    if cfg.collector.min_replay_decisions:
-        return int(cfg.collector.min_replay_decisions)
+def _replay_ready(
+    *,
+    sampleable_decisions: int,
+    kept_groups: int,
+    min_replay_groups: int,
+    min_replay_decisions: int,
+) -> bool:
+    """Return whether a complete, useful rollout batch is ready to train."""
     return (
-        int(cfg.collector.groups_per_iter)
-        * candidate_group_size(cfg)
-        * int(cfg.env.max_outer_steps)
+        kept_groups >= min_replay_groups
+        and sampleable_decisions > 0
+        and sampleable_decisions >= min_replay_decisions
     )
+
+
+def replay_ready_targets(cfg) -> tuple[int, int]:
+    """Useful-group and optional decision thresholds for an optimizer update."""
+    min_replay_decisions = _cfg_get(cfg.collector, "min_replay_decisions", None)
+    return (
+        int(cfg.collector.groups_per_iter),
+        0 if min_replay_decisions is None else int(min_replay_decisions),
+    )
+
+
+def _decision_loss(loss: torch.Tensor, batch_size: int) -> torch.Tensor:
+    """Average token-level PPO losses into one scalar per decision."""
+    if loss.numel() % batch_size:
+        raise RuntimeError(
+            "The unreduced PPO loss cannot be partitioned by decision: "
+            f"got shape {tuple(loss.shape)} for batch size {batch_size}."
+        )
+    return loss.reshape(batch_size, -1).mean(-1)
+
+
+def _decision_scalar_tensor(
+    value: torch.Tensor,
+    *,
+    num_decisions: int,
+    name: str,
+) -> torch.Tensor:
+    """Collapse a possibly broadcast metadata leaf to one value per decision."""
+    if value.shape[0] != num_decisions:
+        raise RuntimeError(
+            f"Expected one {name} row per decision, got shape "
+            f"{tuple(value.shape)} for {num_decisions} decisions."
+        )
+    rows = value.reshape(num_decisions, -1)
+    if not rows.shape[1]:
+        raise RuntimeError(f"{name} has an empty per-decision shape.")
+    scalar = rows[:, 0]
+    if rows.shape[1] > 1 and not torch.equal(
+        rows, scalar.unsqueeze(-1).expand_as(rows)
+    ):
+        raise RuntimeError(f"Each decision must carry exactly one {name} value.")
+    return scalar
+
+
+def _policy_version_span_metrics(
+    versions: torch.Tensor,
+    ids: torch.Tensor | None,
+    *,
+    prefix: str,
+) -> dict[str, float | int]:
+    """Measure behavior-policy mixing within trajectories or GRPO groups."""
+    if ids is None or not isinstance(ids, torch.Tensor):
+        return {}
+    ids = (
+        _decision_scalar_tensor(
+            ids,
+            num_decisions=versions.numel(),
+            name=f"{prefix} id",
+        )
+        .detach()
+        .cpu()
+    )
+    versions = versions.detach().cpu()
+    spans = torch.stack(
+        [
+            versions[ids == unit_id].max() - versions[ids == unit_id].min()
+            for unit_id in ids.unique()
+        ]
+    )
+    return {
+        f"train/mixed_policy_{prefix}_fraction": float((spans > 0).float().mean()),
+        f"train/{prefix}_policy_version_span_max": int(spans.max()),
+    }
+
+
+def policy_staleness_metrics(
+    data: TensorDictBase,
+    current_policy_version: int,
+) -> dict[str, float | int]:
+    """Summarize behavior-policy age without filtering replay data."""
+    version = data.get("policy_version", None)
+    if version is None:
+        raise KeyError(
+            "VLA-GRPO staleness accounting requires the inference server's "
+            "'policy_version' annotation."
+        )
+    if not isinstance(version, torch.Tensor):
+        raise TypeError(
+            "Expected tensor policy-version metadata, got " f"{type(version).__name__}."
+        )
+    versions = _decision_scalar_tensor(
+        version,
+        num_decisions=data.shape[0],
+        name="policy version",
+    ).to(dtype=torch.long)
+    current_policy_version = int(current_policy_version)
+    staleness = current_policy_version - versions
+    if bool((staleness < 0).any()):
+        raise RuntimeError(
+            "Replay contains a behavior-policy version newer than the trainer: "
+            f"trainer={current_policy_version}, newest={int(versions.max())}."
+        )
+    staleness_float = staleness.float()
+    metrics: dict[str, float | int] = {
+        "train/current_policy_version": current_policy_version,
+        "train/behavior_policy_version_min": int(versions.min()),
+        "train/behavior_policy_version_max": int(versions.max()),
+        "train/policy_staleness_min": int(staleness.min()),
+        "train/policy_staleness_mean": float(staleness_float.mean()),
+        "train/policy_staleness_p95": float(torch.quantile(staleness_float, 0.95)),
+        "train/policy_staleness_max": int(staleness.max()),
+        "train/stale_decision_fraction": float((staleness > 0).float().mean()),
+    }
+    metrics.update(
+        _policy_version_span_metrics(
+            versions,
+            data.get(("collector", "traj_ids"), None),
+            prefix="trajectory",
+        )
+    )
+    metrics.update(
+        _policy_version_span_metrics(
+            versions,
+            data.get("group_id", None),
+            prefix="group",
+        )
+    )
+    return metrics
+
+
+def _check_pre_update_policy_match(metrics: dict[str, float], cfg) -> None:
+    """Fail early when rollout and training policies disagree before PPO."""
+    min_ess = _cfg_get(cfg.train, "pre_update_min_ess", None)
+    max_clip_fraction = _cfg_get(cfg.train, "pre_update_max_clip_fraction", None)
+    if min_ess is not None and metrics["train/pre_update_ESS"] < float(min_ess):
+        raise RuntimeError(
+            "The rollout and training policies disagree before the first "
+            "optimizer step: pre-update ESS is "
+            f"{metrics['train/pre_update_ESS']:.6f}, below {float(min_ess):.6f}; "
+            f"clip_fraction={metrics['train/pre_update_clip_fraction']:.6f}, "
+            f"mean_ratio={metrics.get('train/pre_update_mean_ratio', float('nan')):.6f}, "
+            f"max_ratio={metrics.get('train/pre_update_max_ratio', float('nan')):.6f}."
+        )
+    if max_clip_fraction is not None and metrics[
+        "train/pre_update_clip_fraction"
+    ] > float(max_clip_fraction):
+        raise RuntimeError(
+            "The rollout and training policies disagree before the first "
+            "optimizer step: pre-update clip fraction is "
+            f"{metrics['train/pre_update_clip_fraction']:.6f}, above "
+            f"{float(max_clip_fraction):.6f}; "
+            f"ESS={metrics['train/pre_update_ESS']:.6f}, "
+            f"mean_ratio={metrics.get('train/pre_update_mean_ratio', float('nan')):.6f}, "
+            f"max_ratio={metrics.get('train/pre_update_max_ratio', float('nan')):.6f}."
+        )
 
 
 def update(
@@ -1155,79 +1529,186 @@ def update(
     *,
     logger=None,
     iteration: int,
+    current_policy_version: int | None = None,
 ) -> dict[str, float | int]:
-    """Run one PPO update over currently sampleable replay-buffer decisions."""
+    """Run a trajectory-weighted PPO update over one rollout-policy batch."""
     num_decisions = len(replay_buffer)
-    target_samples = max(
-        num_decisions * int(cfg.buffer.consume_after_n_samples),
-        num_decisions,
-    )
-    accumulate = max(int(cfg.loss.accumulate_batches), 1)
-    losses = []
-    clip_fractions = []
-    ess = []
+    if not num_decisions:
+        raise RuntimeError("Cannot update from an empty replay buffer.")
+    epochs = max(int(cfg.buffer.consume_after_n_samples), 1)
+    forward_batch_size = max(int(cfg.loss.mini_batch_size), 1)
+    trajectories_per_step = max(int(cfg.loss.trajectories_per_optimizer_step), 1)
+    loss_sum = torch.zeros((), device=device)
+    diagnostic_sums = {
+        "clip_fraction": torch.zeros((), device=device),
+        "ESS": torch.zeros((), device=device),
+        "kl_approx": torch.zeros((), device=device),
+        "mean_ratio": torch.zeros((), device=device),
+        "entropy": torch.zeros((), device=device),
+        "loss_entropy": torch.zeros((), device=device),
+    }
+    diagnostic_decisions = 0
     grad_norms = []
     optim_steps = 0
     trained_decisions = 0
+    trained_trajectories = 0
     micro_batches = 0
+    pre_update_metrics: dict[str, float] | None = None
+    staleness_metrics: dict[str, float | int] = {}
 
     def optimizer_step() -> None:
         nonlocal optim_steps
-        grad_norms.append(
-            torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), cfg.optim.max_grad_norm
-            )
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            loss_module.parameters(), cfg.optim.max_grad_norm
         )
+        if not torch.isfinite(grad_norm):
+            raise FloatingPointError(
+                f"Non-finite gradient norm before optimizer step: {grad_norm}."
+            )
+        grad_norms.append(grad_norm.detach())
         optim.step()
         optim.zero_grad(set_to_none=True)
         scheduler.step()
         optim_steps += 1
 
+    optim.zero_grad(set_to_none=True)
     with timeit("train") as train_timer:
-        while trained_decisions < target_samples and len(replay_buffer):
-            batch = replay_buffer.sample()
-            batch = batch.to(device)
-            trained_decisions += batch.shape[0]
-            loss_vals = loss_module(batch)
-            loss = loss_vals["loss_objective"] / accumulate
-            loss.backward()
-            micro_batches += 1
-            losses.append(loss_vals["loss_objective"].detach())
-            clip_fractions.append(loss_vals["clip_fraction"].detach())
-            # Token-level ESS retains action feature dimensions. Reduce each
-            # minibatch before aggregation so partial batches do not make the
-            # diagnostic shapes heterogeneous.
-            ess.append(loss_vals["ESS"].detach().mean())
-            if micro_batches % accumulate == 0:
+        for _ in range(epochs):
+            data = replay_buffer.sample(batch_size=num_decisions)
+            if current_policy_version is not None and not staleness_metrics:
+                staleness_metrics = policy_staleness_metrics(
+                    data, current_policy_version
+                )
+            traj_ids = data.get(("collector", "traj_ids"), None)
+            if traj_ids is None:
+                raise KeyError(
+                    "Trajectory-aware VLA PPO requires "
+                    "('collector', 'traj_ids') in replay data."
+                )
+            traj_ids = traj_ids.reshape(-1).cpu()
+            if traj_ids.numel() != data.shape[0]:
+                raise RuntimeError(
+                    "Expected one trajectory id per replay decision, got "
+                    f"{traj_ids.numel()} ids for {data.shape[0]} decisions."
+                )
+            _, decision_to_traj = traj_ids.unique(sorted=False, return_inverse=True)
+            num_trajectories = int(decision_to_traj.max().item()) + 1
+            trajectory_lengths = torch.bincount(
+                decision_to_traj, minlength=num_trajectories
+            )
+            trajectory_order = torch.randperm(num_trajectories)
+
+            for traj_start in range(0, num_trajectories, trajectories_per_step):
+                step_trajectories = trajectory_order[
+                    traj_start : traj_start + trajectories_per_step
+                ]
+                step_trajectory_count = int(step_trajectories.numel())
+                decision_indices = (
+                    torch.isin(decision_to_traj, step_trajectories)
+                    .nonzero(as_tuple=False)
+                    .squeeze(-1)
+                )
+                step_diagnostic_sums = {
+                    key: torch.zeros((), device=device) for key in diagnostic_sums
+                }
+                step_max_ratio = torch.zeros((), device=device)
+                step_decisions = 0
+                step_loss = torch.zeros((), device=device)
+
+                for decision_start in range(
+                    0, decision_indices.numel(), forward_batch_size
+                ):
+                    indices = decision_indices[
+                        decision_start : decision_start + forward_batch_size
+                    ]
+                    batch_size = int(indices.numel())
+                    batch = data[indices].to(device)
+                    loss_vals = loss_module(batch)
+                    per_decision_loss = _decision_loss(
+                        loss_vals["loss_objective"], batch_size
+                    )
+                    batch_traj = decision_to_traj[indices]
+                    weights = (
+                        trajectory_lengths[batch_traj]
+                        .to(device=device, dtype=per_decision_loss.dtype)
+                        .reciprocal_()
+                    )
+                    weights.div_(step_trajectory_count)
+                    weighted_loss = (per_decision_loss * weights).sum()
+                    if not torch.isfinite(weighted_loss):
+                        raise FloatingPointError(
+                            "Non-finite trajectory-weighted PPO loss."
+                        )
+                    weighted_loss.backward()
+
+                    step_loss += weighted_loss.detach()
+                    trained_decisions += batch_size
+                    micro_batches += 1
+                    step_decisions += batch_size
+                    for key in step_diagnostic_sums:
+                        value = loss_vals[key].detach().mean()
+                        step_diagnostic_sums[key] += value * batch_size
+                        diagnostic_sums[key] += value * batch_size
+                    step_max_ratio = torch.maximum(
+                        step_max_ratio, loss_vals["max_ratio"].detach().max()
+                    )
+                    diagnostic_decisions += batch_size
+
+                if pre_update_metrics is None:
+                    pre_update_metrics = {
+                        "train/pre_update_clip_fraction": float(
+                            step_diagnostic_sums["clip_fraction"] / step_decisions
+                        ),
+                        "train/pre_update_ESS": float(
+                            step_diagnostic_sums["ESS"] / step_decisions
+                        ),
+                        "train/pre_update_kl_approx": float(
+                            step_diagnostic_sums["kl_approx"] / step_decisions
+                        ),
+                        "train/pre_update_mean_ratio": float(
+                            step_diagnostic_sums["mean_ratio"] / step_decisions
+                        ),
+                        "train/pre_update_max_ratio": float(step_max_ratio),
+                    }
+                    _check_pre_update_policy_match(pre_update_metrics, cfg)
+
+                loss_sum += step_loss * step_trajectory_count
+                trained_trajectories += step_trajectory_count
                 optimizer_step()
-        tail_micro_batches = micro_batches % accumulate
-        if tail_micro_batches:
-            # Each micro-batch loss was divided by the full `accumulate`, but
-            # the tail optimizer step accumulated fewer micro-batches. Rescale
-            # the accumulated gradients so the tail step averages over the
-            # micro-batches that actually contributed to it.
-            for param in loss_module.parameters():
-                if param.grad is not None:
-                    param.grad.mul_(accumulate / tail_micro_batches)
-            optimizer_step()
 
     train_time = max(train_timer.elapsed(), 1e-9)
     metrics: dict[str, float | int] = {
         "train/decisions": trained_decisions,
+        "train/trajectories": trained_trajectories,
         "train/micro_batches": micro_batches,
         "train/optim_steps": optim_steps,
+        "train/decisions_per_optim_step": trained_decisions / optim_steps,
+        "train/trajectories_per_optim_step": trained_trajectories / optim_steps,
         "throughput/train_decisions_per_s": trained_decisions / train_time,
         "throughput/optim_steps_per_s": optim_steps / train_time,
     }
-    if losses:
-        metrics.update(
-            {
-                "train/loss_objective": torch.stack(losses).mean().item(),
-                "train/clip_fraction": torch.stack(clip_fractions).mean().item(),
-                "train/ESS": torch.stack(ess).mean().item(),
-                "train/grad_norm": torch.stack(grad_norms).mean().item(),
-            }
-        )
+    metrics.update(
+        {
+            "train/loss_objective": float(loss_sum / trained_trajectories),
+            "train/clip_fraction": float(
+                diagnostic_sums["clip_fraction"] / diagnostic_decisions
+            ),
+            "train/ESS": float(diagnostic_sums["ESS"] / diagnostic_decisions),
+            "train/kl_approx": float(
+                diagnostic_sums["kl_approx"] / diagnostic_decisions
+            ),
+            "train/mean_ratio": float(
+                diagnostic_sums["mean_ratio"] / diagnostic_decisions
+            ),
+            "train/entropy": float(diagnostic_sums["entropy"] / diagnostic_decisions),
+            "train/loss_entropy": float(
+                diagnostic_sums["loss_entropy"] / diagnostic_decisions
+            ),
+            "train/grad_norm": float(torch.stack(grad_norms).mean()),
+        }
+    )
+    metrics.update(pre_update_metrics or {})
+    metrics.update(staleness_metrics)
     log_metrics(logger, metrics, iteration)
     return metrics
 
@@ -1243,21 +1724,25 @@ def _advantage_stats(
     return [advantage.get_stats()]
 
 
-def reset_advantage_state(
+def reset_advantage_stats(
     advantage: MCAdvantage, collector: MultiCollector | None = None
 ) -> None:
-    """Clear incomplete groups and reset counters at a policy boundary."""
-    advantage.clear_queues()
+    """Reset per-update counters without discarding incomplete groups."""
     advantage.reset_stats()
     if collector is not None and not advantage.is_shared:
-        collector.map_fn(f"{_WORKER_ADVANTAGE_PATH}.clear_queues")
         collector.map_fn(f"{_WORKER_ADVANTAGE_PATH}.reset_stats")
 
 
 def reset_collection_state(advantage: MCAdvantage, collector: MultiCollector) -> None:
-    """Drop partial trajectories before advancing the behavior policy."""
-    reset_advantage_state(advantage, collector)
-    collector.map_fn("reset")
+    """Advance metric accounting while preserving all collector work.
+
+    Completed trajectories waiting for the rest of their GRPO group remain in
+    ``MCAdvantage`` and environments continue any in-flight trajectory after
+    the inference server publishes new weights. Every decision is stamped with
+    its actual behavior-policy version, so the resulting lag can be measured
+    when the completed group is trained.
+    """
+    reset_advantage_stats(advantage, collector)
 
 
 def advantage_metrics(
@@ -1359,10 +1844,14 @@ def log_iteration_summary(
 
 
 def checkpoint_tensordict(
-    policy: torch.nn.Module, optim, scheduler, iteration: int
+    policy: torch.nn.Module,
+    optim,
+    scheduler,
+    iteration: int,
+    total_episodes: int | None = None,
 ) -> TensorDict:
     """TensorDict checkpoint payload for the VLA recipe."""
-    return TensorDict(
+    checkpoint = TensorDict(
         {
             "policy": policy_weights(policy),
             "iteration": torch.tensor(iteration, dtype=torch.long),
@@ -1372,19 +1861,41 @@ def checkpoint_tensordict(
         },
         batch_size=[],
     )
+    if total_episodes is not None:
+        checkpoint["total_episodes"] = torch.tensor(total_episodes, dtype=torch.long)
+    return checkpoint
 
 
-def save_checkpoint(path, policy: torch.nn.Module, optim, scheduler, iteration: int):
-    checkpoint_tensordict(policy, optim, scheduler, iteration).save(path)
+def save_checkpoint(
+    path,
+    policy: torch.nn.Module,
+    optim,
+    scheduler,
+    iteration: int,
+    total_episodes: int | None = None,
+):
+    checkpoint_tensordict(
+        policy,
+        optim,
+        scheduler,
+        iteration,
+        total_episodes=total_episodes,
+    ).save(path)
 
 
-def load_checkpoint(path, policy: torch.nn.Module, optim, scheduler, device) -> int:
+def load_checkpoint(
+    path, policy: torch.nn.Module, optim, scheduler, device
+) -> tuple[int, int | None]:
     checkpoint = TensorDict.load(path)
     apply_policy_weights(policy, checkpoint["policy"], device)
     optim.load_state_dict(checkpoint["optim"])
     scheduler.load_state_dict(checkpoint["scheduler"])
     torch.set_rng_state(checkpoint["torch_rng_state"])
-    return int(checkpoint["iteration"].item()) + 1
+    total_episodes = checkpoint.get("total_episodes", None)
+    return (
+        int(checkpoint["iteration"].item()) + 1,
+        None if total_episodes is None else int(total_episodes.item()),
+    )
 
 
 def log_metrics(logger, metrics: dict, step: int) -> None:

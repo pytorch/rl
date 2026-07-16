@@ -834,10 +834,14 @@ class MultiAction(Transform):
                 a = a[global_idx]
             td = td.replace(a)
             td = parent.step(td)
+            # Keep the latest executed reward at the root. If a chunk ends
+            # early, the final outer step is skipped and EnvBase copies root
+            # leaves into ``next``; without this, stack_rewards=False would
+            # drop a terminal reward emitted before the final action slot.
+            reward_td = td["next"].select(*self.parent.reward_keys)
 
             # Save rewards and done states
             if self.stack_rewards:
-                reward_td = td["next"].select(*self.parent.reward_keys)
                 if global_idx is not None:
                     reward_td_expand = reward_td.new_zeros(
                         global_idx.shape + reward_td.shape[global_idx.ndim :]
@@ -855,8 +859,7 @@ class MultiAction(Transform):
                 obs.append(obs_td)
 
             td = parent.step_mdp(td)
-            if self.stack_rewards:
-                td.update(reward_td)
+            td.update(reward_td)
 
             any_done = parent.any_done(td)
             if any_done:

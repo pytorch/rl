@@ -381,6 +381,8 @@ class OpenVLAInputTransform(Transform):
     def _pixel_values_from_images(self, images: torch.Tensor) -> torch.Tensor | None:
         if self._image_preprocessor is None:
             return None
+        if images.device.type != "cpu":
+            images = images.cpu()
         return self._image_preprocessor(images)
 
     def _preprocess(self, images, wrist_images, instructions):

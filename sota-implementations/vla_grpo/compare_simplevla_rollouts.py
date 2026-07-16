@@ -299,7 +299,7 @@ def _policy_and_tokenizer(args: argparse.Namespace):
     cfg = _load_cfg(args, int(args.task_ids[0]))
     policy = vla_utils.make_policy(cfg, device)
     policy.eval()
-    tokenizer = vla_utils.make_action_tokenizer(cfg, policy)
+    tokenizer = vla_utils.make_action_tokenizer(cfg)
     return cfg, policy, tokenizer
 
 
@@ -802,7 +802,7 @@ def main() -> None:
     parser.add_argument("--task-ids", type=_parse_int_list, default=[0])
     parser.add_argument("--trial-ids", type=_parse_int_list, default=[0])
     parser.add_argument(
-        "--checkpoint", default="Haozhan72/Openvla-oft-SFT-libero-spatial-traj1"
+        "--checkpoint", default="Haozhan72/Openvla-oft-SFT-libero-spatial-trajall"
     )
     parser.add_argument(
         "--dataset-statistics",

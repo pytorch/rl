@@ -1467,6 +1467,7 @@ class MCAdvantage(Transform):
         if self.trajectory_return is not None:
             reward = tensordict.get(self.rewards_key, None)
         if reward is not None:
+            reward = reward.to(torch.get_default_dtype())
             trajectory_return = float(reward.sum())
             self.trajectory_return_sum += trajectory_return
             self.trajectory_return_max = max(
@@ -1520,6 +1521,7 @@ class MCAdvantage(Transform):
             return tds
 
     def _trajectory_returns(self, rewards: list[torch.Tensor]) -> torch.Tensor:
+        rewards = [reward.to(torch.get_default_dtype()) for reward in rewards]
         if self.trajectory_return == "sum":
             return torch.stack([reward.sum() for reward in rewards])
         if self.trajectory_return == "max":

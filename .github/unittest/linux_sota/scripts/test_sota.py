@@ -9,13 +9,22 @@ from pathlib import Path
 import pytest
 from tensordict.nn import composite_lp_aggregate
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
 # Check that we're using the new behavior
 assert (
     not composite_lp_aggregate()
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
+REPO_ROOT = Path(__file__).resolve().parents[4]
+RECIPE_PATHS = sorted((REPO_ROOT / "sota-implementations").glob("*/recipe.toml"))
+
 commands = {
     "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
+  --config-name vla_grpo_toy \
   collector.groups_per_iter=2 \
   collector.group_size=2 \
   collector.total_iters=3 \
@@ -391,6 +400,37 @@ def run_command(command):
     return_code = process.wait()
     if return_code != 0:
         raise subprocess.CalledProcessError(return_code, command)
+
+
+def _load_recipe(path):
+    with path.open("rb") as file:
+        return tomllib.load(file)
+
+
+def test_recipe_ids_are_unique():
+    recipe_ids = [_load_recipe(path)["id"] for path in RECIPE_PATHS]
+    assert len(recipe_ids) == len(set(recipe_ids))
+
+
+@pytest.mark.parametrize("recipe_path", RECIPE_PATHS, ids=lambda path: path.parent.name)
+def test_recipe_manifest(recipe_path):
+    recipe = _load_recipe(recipe_path)
+    assert recipe["schema_version"] == 1
+    assert recipe["id"]
+    assert recipe["description"]
+    assert recipe["entrypoint"]
+    assert recipe["healthcheck"]["command"]
+
+    with (REPO_ROOT / "pyproject.toml").open("rb") as file:
+        optional_dependencies = set(
+            tomllib.load(file)["project"]["optional-dependencies"]
+        )
+    assert set(recipe.get("python", {}).get("extras", ())) <= optional_dependencies
+
+    for command in (recipe["entrypoint"], recipe["healthcheck"]["command"]):
+        for argument in command:
+            if argument.endswith(".py"):
+                assert (REPO_ROOT / argument).is_file()
 
 
 @pytest.mark.parametrize("algo", list(commands))

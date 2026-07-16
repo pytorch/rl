@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable
+from contextlib import suppress
 from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Lock, RLock
 
@@ -260,9 +261,13 @@ def get_env_metadata(
         if kwargs is None:
             kwargs = {}
         env = env_or_creator(**kwargs)
-        if env_validator is not None:
-            env_validator(env)
-        return EnvMetaData.metadata_from_env(env)
+        try:
+            if env_validator is not None:
+                env_validator(env)
+            return EnvMetaData.metadata_from_env(env)
+        finally:
+            with suppress(Exception):
+                env.close()
     elif isinstance(env_or_creator, EnvCreator):
         if not (
             kwargs == env_or_creator.create_env_kwargs

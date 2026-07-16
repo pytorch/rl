@@ -98,6 +98,20 @@ class TestAdvantageMetrics:
                 return [None]
 
         collector = FakeCollector()
+        partial_group = TensorDict(
+            {
+                "group_id": torch.full((2,), 7),
+                "next": {
+                    "reward": torch.zeros(2, 1),
+                    "done": torch.tensor([[False], [True]]),
+                },
+            },
+            batch_size=[2],
+        )
+        assert advantage.inv(partial_group) is None
+        assert advantage.queued_groups == 1
+        assert advantage.queued_trajectories == 1
+
         metrics = utils.advantage_metrics(advantage, collector)
         assert metrics["buffer/complete_groups"] == 2
         assert metrics["buffer/kept_groups"] == 1
@@ -106,11 +120,216 @@ class TestAdvantageMetrics:
         assert metrics["collector/successful_trajectories"] == 1
 
         utils.reset_collection_state(advantage, collector)
-        assert collector.calls[-3:] == [
-            "replay_buffer._transform[0].clear_queues",
-            "replay_buffer._transform[0].reset_stats",
-            "reset",
-        ]
+        assert collector.calls[-1:] == ["replay_buffer._transform[0].reset_stats"]
+        assert advantage.queued_groups == 1
+        assert advantage.queued_trajectories == 1
+        assert advantage.completed_trajectories == 0
+
+    def test_replay_readiness_requires_complete_kept_groups(self):
+        assert not utils._replay_ready(
+            sampleable_decisions=1_000,
+            kept_groups=63,
+            min_replay_groups=64,
+            min_replay_decisions=0,
+        )
+        assert not utils._replay_ready(
+            sampleable_decisions=100,
+            kept_groups=64,
+            min_replay_groups=64,
+            min_replay_decisions=128,
+        )
+        assert utils._replay_ready(
+            sampleable_decisions=128,
+            kept_groups=64,
+            min_replay_groups=64,
+            min_replay_decisions=128,
+        )
+
+    def test_replay_ready_targets_do_not_estimate_trajectory_lengths(self):
+        cfg = SimpleNamespace(
+            collector=SimpleNamespace(
+                groups_per_iter=64,
+                min_replay_decisions=None,
+            )
+        )
+        assert utils.replay_ready_targets(cfg) == (64, 0)
+
+
+class _SinglePassReplay:
+    def __init__(self, data):
+        self.data = data
+        self.remaining = data.shape[0]
+
+    def __len__(self):
+        return self.remaining
+
+    def sample(self, batch_size=None):
+        assert batch_size == self.data.shape[0]
+        assert self.remaining
+        self.remaining = 0
+        return self.data.clone()
+
+
+class _UnreducedLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(()))
+
+    def forward(self, data):
+        batch = data.shape[0]
+        loss = data["base_loss"].reshape(batch, 1) + self.weight * 0
+        return TensorDict(
+            {
+                "loss_objective": loss,
+                "clip_fraction": torch.zeros(()),
+                "ESS": torch.ones(()),
+                "kl_approx": torch.zeros(()),
+                "max_ratio": torch.ones(()),
+                "mean_ratio": torch.ones(()),
+                "entropy": torch.full((), 0.5),
+                "loss_entropy": torch.zeros(()),
+            },
+            batch_size=[],
+        )
+
+
+class TestTrajectoryAwareUpdate:
+    def test_inference_policy_disables_training_only_state(self, monkeypatch):
+        policy = nn.Sequential(nn.Linear(2, 2), nn.Dropout(p=0.5))
+        policy.train()
+
+        monkeypatch.setattr(utils, "make_policy", lambda *args, **kwargs: policy)
+
+        result = utils.make_inference_policy(object(), torch.device("cpu"))
+
+        assert result is policy
+        assert not result.training
+        assert not result[1].training
+
+    def test_tiny_policy_is_materialized_before_server_sync(self):
+        cfg = SimpleNamespace(
+            env=SimpleNamespace(
+                action_dim=2,
+                chunk_size=4,
+                image_shape=[3, 16, 16],
+                state_dim=4,
+            ),
+            tokenizer=SimpleNamespace(vocab_size=64),
+            policy=SimpleNamespace(backend="tiny", hidden_dim=32),
+            loss=SimpleNamespace(ratio_level="sequence"),
+        )
+        policy = utils.make_policy(cfg, torch.device("cpu"))
+        in_keys, out_keys = utils.policy_io_keys(cfg)
+        assert in_keys == policy.in_keys
+        assert out_keys == policy.out_keys
+        assert not any(
+            isinstance(param, torch.nn.parameter.UninitializedParameter)
+            for param in policy.parameters()
+        )
+
+    def test_optimizer_batches_count_trajectories_not_decisions(self):
+        # The three trajectories have lengths 1, 3 and 2. Their mean losses
+        # are 1, 2 and 4, so equal trajectory weighting yields 7 / 3 rather
+        # than the decision-weighted value 15 / 6.
+        replay = _SinglePassReplay(
+            TensorDict(
+                {
+                    "collector": {
+                        "traj_ids": torch.tensor([[10], [20], [20], [20], [30], [30]])
+                    },
+                    "group_id": torch.tensor([100, 100, 100, 100, 200, 200]),
+                    "policy_version": torch.tensor([3, 2, 2, 3, 1, 1]),
+                    "base_loss": torch.tensor([1.0, 2.0, 2.0, 2.0, 4.0, 4.0]),
+                },
+                batch_size=[6],
+            )
+        )
+        loss = _UnreducedLoss()
+        optim = torch.optim.SGD(loss.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lambda _: 1.0)
+        cfg = SimpleNamespace(
+            buffer=SimpleNamespace(consume_after_n_samples=1),
+            loss=SimpleNamespace(
+                mini_batch_size=2,
+                trajectories_per_optimizer_step=2,
+            ),
+            optim=SimpleNamespace(max_grad_norm=1.0),
+            train=SimpleNamespace(
+                pre_update_min_ess=0.95,
+                pre_update_max_clip_fraction=0.05,
+            ),
+        )
+
+        metrics = utils.update(
+            replay,
+            loss,
+            optim,
+            scheduler,
+            cfg,
+            torch.device("cpu"),
+            iteration=1,
+            current_policy_version=3,
+        )
+
+        assert metrics["train/decisions"] == 6
+        assert metrics["train/trajectories"] == 3
+        assert metrics["train/optim_steps"] == 2
+        assert metrics["train/trajectories_per_optim_step"] == 1.5
+        assert metrics["train/loss_objective"] == pytest.approx(7 / 3)
+        assert metrics["train/entropy"] == 0.5
+        assert metrics["train/loss_entropy"] == 0.0
+        assert metrics["train/pre_update_ESS"] == 1.0
+        assert metrics["train/pre_update_clip_fraction"] == 0.0
+        assert metrics["train/policy_staleness_mean"] == 1.0
+        assert metrics["train/policy_staleness_max"] == 2
+        assert metrics["train/stale_decision_fraction"] == pytest.approx(4 / 6)
+        assert metrics["train/mixed_policy_trajectory_fraction"] == pytest.approx(1 / 3)
+        assert metrics["train/trajectory_policy_version_span_max"] == 1
+        assert metrics["train/mixed_policy_group_fraction"] == 0.5
+        assert metrics["train/group_policy_version_span_max"] == 1
+
+    def test_checkpoint_tracks_completed_trajectory_budget(self):
+        policy = nn.Linear(2, 2)
+        optim = torch.optim.SGD(policy.parameters(), lr=0.1)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lambda _: 1.0)
+        checkpoint = utils.checkpoint_tensordict(
+            policy,
+            optim,
+            scheduler,
+            iteration=3,
+            total_episodes=42,
+        )
+        assert checkpoint["iteration"].item() == 3
+        assert checkpoint["total_episodes"].item() == 42
+
+    @pytest.mark.parametrize(
+        ("metrics", "match"),
+        [
+            (
+                {
+                    "train/pre_update_ESS": 0.8,
+                    "train/pre_update_clip_fraction": 0.0,
+                },
+                "ESS",
+            ),
+            (
+                {
+                    "train/pre_update_ESS": 1.0,
+                    "train/pre_update_clip_fraction": 0.2,
+                },
+                "clip fraction",
+            ),
+        ],
+    )
+    def test_pre_update_policy_mismatch_fails_fast(self, metrics, match):
+        cfg = SimpleNamespace(
+            train=SimpleNamespace(
+                pre_update_min_ess=0.95,
+                pre_update_max_clip_fraction=0.05,
+            )
+        )
+        with pytest.raises(RuntimeError, match=match):
+            utils._check_pre_update_policy_match(metrics, cfg)
 
 
 @pytest.mark.gpu
@@ -464,6 +683,7 @@ def _complete_toy_env_cfg(**env_overrides):
         "render_gpu_ids": [2, 3],
         "eval_render_gpu_ids": None,
         "render_gpu_device_zero_fallback": True,
+        "metadata_from_workers": False,
         "env_kwargs": None,
     }
     env.update(env_overrides)
@@ -476,6 +696,9 @@ def _complete_logger_cfg(**logger_overrides):
         "eval_backend": "thread",
         "eval_busy_policy": "skip",
         "service_backend": "direct",
+        "record_video": False,
+        "video_episodes": 1,
+        "video_num_envs": 1,
         "video_fps": 4,
     }
     logger.update(logger_overrides)
@@ -495,6 +718,7 @@ class TestCollectorFactory:
             def __init__(self, **kwargs):
                 captured["server_kwargs"] = kwargs
                 self.transport = kwargs["transport"]
+                self.policy_version = 0
 
             def start(self):
                 captured["server_started"] = True
@@ -510,10 +734,15 @@ class TestCollectorFactory:
                 self.clients.append(client)
                 return client
 
-        policy = _fake_token_policy()
         cfg = SimpleNamespace(
-            collector=_complete_collector_cfg(policy_micro_batch_size=1),
+            # Four logical group workers may feed a three-group update target;
+            # incomplete work carries across the policy boundary.
+            collector=_complete_collector_cfg(
+                policy_micro_batch_size=1,
+                groups_per_iter=3,
+            ),
             env=_complete_toy_env_cfg(),
+            policy=SimpleNamespace(backend="tiny"),
         )
         replay_buffer = object()
 
@@ -523,8 +752,8 @@ class TestCollectorFactory:
 
         collector, server, eval_policy = utils.make_collector(
             cfg,
-            policy,
             torch.device("cpu"),
+            policy_factory=_fake_token_policy,
             tokenizer=utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
             replay_buffer=replay_buffer,
         )
@@ -535,12 +764,7 @@ class TestCollectorFactory:
         assert captured["transport_kwargs"]["use_manager"]
         assert captured["server_started"]
         assert captured["server_kwargs"]["server_config"].max_batch_size == 1
-        assert (
-            captured["server_kwargs"]["policy_factory"].keywords[
-                "policy_micro_batch_size"
-            ]
-            == 1
-        )
+        assert captured["server_kwargs"]["policy_factory"] is _fake_token_policy
         env_factories = captured["multi_args"][0]
         assert [
             factory.keywords["render_gpu_device_id"] for factory in env_factories
@@ -562,7 +786,6 @@ class TestCollectorFactory:
     def test_make_collector_rejects_cross_subcollector_parallel_groups_without_shared_rb(
         self,
     ):
-        policy = _fake_token_policy()
         cfg = SimpleNamespace(
             collector=_complete_collector_cfg(
                 num_collectors=4,
@@ -571,13 +794,14 @@ class TestCollectorFactory:
                 groups_per_iter=10,
             ),
             env=_complete_toy_env_cfg(parallel_group_repeats=True),
+            policy=SimpleNamespace(backend="tiny"),
         )
 
         with pytest.raises(ValueError, match="collector.envs_per_collector"):
             utils.make_collector(
                 cfg,
-                policy,
                 torch.device("cpu"),
+                policy_factory=_fake_token_policy,
                 tokenizer=utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
                 replay_buffer=SimpleNamespace(shared=False),
             )
@@ -595,6 +819,7 @@ class TestCollectorFactory:
         class _FakeServer:
             def __init__(self, **kwargs):
                 self.transport = kwargs["transport"]
+                self.policy_version = 0
 
             def start(self):
                 return self
@@ -606,7 +831,6 @@ class TestCollectorFactory:
             def client(self):
                 return object()
 
-        policy = _fake_token_policy()
         cfg = SimpleNamespace(
             collector=_complete_collector_cfg(
                 num_collectors=4,
@@ -615,6 +839,7 @@ class TestCollectorFactory:
                 groups_per_iter=10,
             ),
             env=_complete_toy_env_cfg(parallel_group_repeats=True),
+            policy=SimpleNamespace(backend="tiny"),
         )
         replay_buffer = SimpleNamespace(shared=True)
 
@@ -624,14 +849,82 @@ class TestCollectorFactory:
 
         collector, _, _ = utils.make_collector(
             cfg,
-            policy,
             torch.device("cpu"),
+            policy_factory=_fake_token_policy,
             tokenizer=utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
             replay_buffer=replay_buffer,
         )
 
         assert isinstance(collector, _FakeMultiCollector)
         assert len(captured["multi_args"][0]) == 4
+
+    def test_make_collector_env_uses_common_factory_with_worker_kwargs(
+        self, monkeypatch
+    ):
+        captured = {}
+
+        def _fake_make_env_worker(cfg, tokenizer, worker_idx, **kwargs):
+            worker_idx_with_offset = worker_idx + kwargs["worker_idx_offset"]
+            return {
+                "group_id": worker_idx_with_offset // kwargs["group_repeats"],
+                "language_instruction": f"instruction-{worker_idx_with_offset}",
+            }
+
+        class _FakeParallelEnv:
+            def __init__(
+                self,
+                num_envs,
+                create_env_fn,
+                *,
+                create_env_kwargs,
+                **kwargs,
+            ):
+                captured["num_envs"] = num_envs
+                captured["create_env_fn"] = create_env_fn
+                captured["create_env_kwargs"] = create_env_kwargs
+                captured["kwargs"] = kwargs
+                captured["first_workers"] = [
+                    create_env_fn(**create_env_kwargs[index]) for index in range(3)
+                ]
+
+        monkeypatch.setattr(utils, "_make_env_worker", _fake_make_env_worker)
+        monkeypatch.setattr(utils, "ParallelEnv", _FakeParallelEnv)
+        cfg = SimpleNamespace(
+            collector=_complete_collector_cfg(group_size=2),
+            env=_complete_toy_env_cfg(backend="libero", metadata_from_workers=True),
+            policy=SimpleNamespace(backend="openvla"),
+        )
+
+        env = utils._make_collector_env(
+            cfg,
+            tokenizer=None,
+            num_envs=4,
+            group_repeats=2,
+            seed=5,
+            device=torch.device("cpu"),
+            worker_idx_offset=8,
+            render_gpu_device_id=3,
+        )
+
+        assert isinstance(env, _FakeParallelEnv)
+        assert captured["num_envs"] == 4
+        assert callable(captured["create_env_fn"])
+        assert captured["create_env_kwargs"] == [
+            {"worker_idx": 0},
+            {"worker_idx": 1},
+            {"worker_idx": 2},
+            {"worker_idx": 3},
+        ]
+        assert captured["kwargs"]["mp_start_method"] == "spawn"
+        assert captured["kwargs"]["device"] == torch.device("cpu")
+        assert captured["kwargs"]["metadata_from_workers"]
+        assert (
+            captured["first_workers"][0]["language_instruction"]
+            != captured["first_workers"][1]["language_instruction"]
+        )
+        assert captured["first_workers"][0]["group_id"] == 4
+        assert captured["first_workers"][1]["group_id"] == 4
+        assert captured["first_workers"][2]["group_id"] == 5
 
 
 class TestEvaluatorFactory:
@@ -672,7 +965,7 @@ class TestEvaluatorFactory:
         assert transform.tag == "eval/video"
         assert transform.video_kwargs == {"fps": 8}
 
-    def test_make_evaluator_process_backend_uses_factories(self, monkeypatch):
+    def test_make_video_evaluator_process_backend_uses_factories(self, monkeypatch):
         captured = {}
         logger_client = object()
 
@@ -694,9 +987,14 @@ class TestEvaluatorFactory:
         policy = _fake_token_policy()
         cfg = SimpleNamespace(
             env=_complete_toy_env_cfg(),
-            logger=_complete_logger_cfg(eval_backend="process"),
+            logger=_complete_logger_cfg(
+                eval_backend="process",
+                record_video=True,
+                video_episodes=2,
+                video_num_envs=1,
+            ),
         )
-        evaluator = utils.make_evaluator(
+        evaluator = utils.make_video_evaluator(
             cfg,
             utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
             policy,
@@ -707,11 +1005,44 @@ class TestEvaluatorFactory:
         assert isinstance(evaluator, _FakeEvaluator)
         assert callable(captured["env"])
         assert captured["env"].args[2] is logger_client
+        assert captured["env"].args[4] == 1
         assert captured["policy"] is None
         assert captured["policy_factory"]() is policy
         assert captured["kwargs"]["dump_video"]
+        assert captured["kwargs"]["num_trajectories"] == 2
         assert captured["kwargs"]["backend"] == "process"
         assert captured["kwargs"]["max_steps"] == 0
+
+    def test_make_evaluator_skips_video_by_default(self, monkeypatch):
+        captured = {}
+
+        class _FakeLogger:
+            service_backend = "direct"
+
+            def client(self):
+                raise AssertionError("video logger should not be requested")
+
+        class _FakeEvaluator:
+            def __init__(self, env, policy=None, policy_factory=None, **kwargs):
+                captured["env"] = env
+                captured["kwargs"] = kwargs
+
+        monkeypatch.setattr(utils, "Evaluator", _FakeEvaluator)
+
+        cfg = SimpleNamespace(
+            env=_complete_toy_env_cfg(),
+            logger=_complete_logger_cfg(record_video=False),
+        )
+        utils.make_evaluator(
+            cfg,
+            utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
+            _fake_token_policy(),
+            logger=_FakeLogger(),
+            device=torch.device("cpu"),
+        )
+
+        assert captured["env"].args[2] is None
+        assert not captured["kwargs"]["dump_video"]
 
 
 class TestReplayBufferFactory:
@@ -738,11 +1069,46 @@ class TestReplayBufferFactory:
             ),
         )
 
-        replay_buffer, _ = utils.make_replay_buffer(cfg, torch.device("cpu"))
+        replay_buffer, advantage = utils.make_replay_buffer(cfg, torch.device("cpu"))
 
         assert replay_buffer._storage.max_size == 2 * 3 * 5 * 4
         assert replay_buffer._storage.shared_init
         assert replay_buffer.shared
+        assert advantage.rewards_key == ("next", "reward")
+
+    def test_replay_capacity_covers_worker_wave_larger_than_update_target(self):
+        cfg = SimpleNamespace(
+            collector=SimpleNamespace(
+                groups_per_iter=2,
+                group_size=2,
+                candidate_group_size=None,
+                num_collectors=2,
+                envs_per_collector=4,
+            ),
+            env=SimpleNamespace(
+                max_outer_steps=5,
+                parallel_group_repeats=True,
+            ),
+            advantage=SimpleNamespace(
+                trajectory_return="sum",
+                keep_return_bounds=None,
+                candidate_selection="balanced",
+                candidate_selection_min_size=None,
+                candidate_selection_max_combinations=100000,
+            ),
+            loss=SimpleNamespace(mini_batch_size=2),
+            buffer=SimpleNamespace(
+                shared_init=False,
+                capacity_group_waves=2,
+                consume_after_n_samples=1,
+            ),
+        )
+
+        replay_buffer, _ = utils.make_replay_buffer(cfg, torch.device("cpu"))
+
+        # Eight envs advance four groups concurrently, so capacity follows the
+        # worker wave rather than the smaller two-group optimizer trigger.
+        assert replay_buffer._storage.max_size == 4 * 2 * 5 * 2
 
     def test_make_replay_buffer_scales_capacity_with_candidate_group_size(self):
         cfg = SimpleNamespace(
@@ -781,10 +1147,42 @@ class TestTokenizerAndTransforms:
             policy=SimpleNamespace(backend="openvla", mode="l1"),
             tokenizer=SimpleNamespace(vocab_size=16),
         )
-        assert (
-            utils.make_action_tokenizer(cfg, SimpleNamespace(action_tokenizer=None))
-            is None
+        assert utils.make_action_tokenizer(cfg) is None
+
+    def test_make_openvla_action_tokenizer_without_policy(self, monkeypatch):
+        cfg = SimpleNamespace(
+            policy=SimpleNamespace(
+                backend="openvla",
+                mode="tokens",
+                checkpoint="unused-checkpoint",
+                dataset_statistics="stats-repository",
+                unnorm_key="libero_spatial_no_noops",
+            ),
+            tokenizer=SimpleNamespace(vocab_size=256),
         )
+        norm_stats = {
+            "libero_spatial_no_noops": {
+                "action": {
+                    "q01": [-1.0, -2.0],
+                    "q99": [1.0, 2.0],
+                    "mask": [True, False],
+                }
+            }
+        }
+        sources = []
+
+        def load_statistics(source):
+            sources.append(source)
+            return norm_stats
+
+        monkeypatch.setattr(utils, "_load_openvla_dataset_statistics", load_statistics)
+
+        tokenizer = utils.make_action_tokenizer(cfg)
+
+        assert sources == ["stats-repository"]
+        assert isinstance(tokenizer, utils.VocabTailActionTokenizer)
+        assert tokenizer.num_bins == 256
+        assert tokenizer.norm_low.tolist() == [-1.0, -2.0]
 
     def test_chunk_transform_without_tokenizer_consumes_vla_chunk(self):
         cfg = SimpleNamespace(env=SimpleNamespace(max_outer_steps=1))
