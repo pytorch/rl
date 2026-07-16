@@ -117,7 +117,8 @@ and navigate to the previous ones whenever you want to learn more!
 
 - [torchrl.collectors package](reference/collectors.html)
 
-- [MultiCollector API](reference/collectors.html#multicollector-api)
+- [Backend selection](reference/collectors.html#backend-selection)
+- [Process collection](reference/collectors.html#process-collection)
 - [Key Features](reference/collectors.html#key-features)
 - [Collection hooks](reference/collectors.html#collection-hooks)
 - [Quick Example](reference/collectors.html#quick-example)
@@ -188,6 +189,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [See Also](reference/services.html#see-also)
 - [Designing Training Applications with Services](reference/services_workflow.html)
 
+- [Scoped backend defaults](reference/services_workflow.html#scoped-backend-defaults)
 - [Owners and clients](reference/services_workflow.html#owners-and-clients)
 - [Placement does not define communication](reference/services_workflow.html#placement-does-not-define-communication)
 - [Choosing a payload transport](reference/services_workflow.html#choosing-a-payload-transport)

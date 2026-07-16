@@ -1,8 +1,19 @@
 # Collector
 
-*class*torchrl.collectors.Collector(*create_env_fn: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | [EnvCreator](torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator) | Sequence[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, *policy: None | [TensorDictModule](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) | Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] = None*, ***, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *storing_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *policy_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *env_device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*, *create_env_kwargs: dict[str, Any] | None = None*, *max_frames_per_traj: int | None = None*, *init_random_frames: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *split_trajs: bool | None = None*, *track_traj_ids: bool = True*, *exploration_type: [InteractionType](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType) = InteractionType.RANDOM*, *return_same_td: bool = False*, *reset_when_done: bool = True*, *interruptor=None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: bool | dict[str, Any] | None = None*, *cudagraph_policy: bool | dict[str, Any] | None = None*, *no_cuda_sync: bool = False*, *weight_updater: [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase) | Callable[[], [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)] | None = None*, *weight_sync_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *weight_recv_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *traj_format: Literal['padded', 'cat'] | None = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Callable[[], None] | None = None*, *post_collect_hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None = None*, *compact_obs: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/collectors/_single.html#Collector)
+*class*torchrl.collectors.Collector(*create_env_fn: [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase) | [EnvCreator](torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator) | Sequence[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, *policy: None | TensorDictModule | Callable[[TensorDictBase], TensorDictBase] = None*, ***, *policy_factory: Callable[[], Callable] | None = None*, *backend: Literal['direct', 'process', 'ray', 'rpc', 'distributed', 'submitit'] | None = None*, *backend_options: dict[str, Any] | None = None*, *num_collectors: int | None = None*, *sync: bool | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *device: DEVICE_TYPING | None = None*, *storing_device: DEVICE_TYPING | None = None*, *policy_device: DEVICE_TYPING | None = None*, *env_device: DEVICE_TYPING | None = None*, *create_env_kwargs: dict[str, Any] | None = None*, *max_frames_per_traj: int | None = None*, *init_random_frames: int | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[TensorDictBase], TensorDictBase] | None = None*, *split_trajs: bool | None = None*, *track_traj_ids: bool = True*, *exploration_type: ExplorationType = InteractionType.RANDOM*, *return_same_td: bool = False*, *reset_when_done: bool = True*, *interruptor=None*, *set_truncated: bool = False*, *use_buffers: bool | None = None*, *replay_buffer: [ReplayBuffer](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer) | None = None*, *extend_buffer: bool = True*, *trust_policy: bool | None = None*, *compile_policy: bool | dict[str, Any] | None = None*, *cudagraph_policy: bool | dict[str, Any] | None = None*, *no_cuda_sync: bool = False*, *weight_updater: [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase) | Callable[[], [WeightUpdaterBase](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)] | None = None*, *weight_sync_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *weight_recv_schemes: dict[str, [WeightSyncScheme](torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme)] | None = None*, *track_policy_version: bool = False*, *worker_idx: int | None = None*, *trajs_per_batch: int | None = None*, *trajs_per_write: int | None = None*, *traj_format: Literal['padded', 'cat'] | None = None*, *auto_register_policy_transforms: bool | None = None*, *pre_collect_hook: Callable[[], None] | None = None*, *post_collect_hook: Callable[[TensorDictBase], None] | None = None*, *compact_obs: bool = False*, ***kwargs*)[[source]](../../_modules/torchrl/collectors/_single.html#Collector)
 
-Generic data collector for RL problems. Requires an environment constructor and a policy.
+Main construction entry point for TorchRL data collectors.
+
+`Collector(...)` performs direct collection by default. `num_collectors`
+selects local process collection, while `backend` selects direct, process,
+Ray, RPC, or distributed execution. Dispatch occurs only when constructing
+this exact class; the returned object retains its concrete implementation
+type. Existing concrete collector classes remain available for subclassing
+and implementation-specific APIs. Use [`BaseCollector`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) rather than
+`Collector` as the target of an `isinstance` check that must accept
+every dispatched collector.
+
+A collector requires an environment constructor and a policy.
 
 Parameters:
 
@@ -36,6 +47,22 @@ pickled directly), the `policy_factory` should be used instead.
 
 Keyword Arguments:
 
+- **backend** (*str**,**optional*) - execution backend selected by this generic
+constructor. One of `"direct"`, `"process"`, `"ray"`,
+`"rpc"`, `"distributed"`, or `"submitit"`. When omitted,
+an enclosing [`torchrl.service_backend()`](../services_workflow.html#torchrl.service_backend) provides the default;
+otherwise passing `num_collectors` selects `"process"` and the
+direct collection remains the final default.
+- **backend_options** (*dict**,**optional*) - backend-specific constructor options.
+Keys are merged into the selected concrete collector arguments;
+duplicates with top-level arguments are rejected.
+- **num_collectors** (*int**,**optional*) - number of collector workers. A single
+environment constructor is repeated this many times. A sequence of
+constructors is validated against this value. Passing this argument
+without a backend selects the process backend.
+- **sync** (*bool**,**optional*) - whether a non-direct collector waits for every
+worker before yielding. Defaults to `False` for non-direct
+backends. Invalid for the direct backend.
 - **policy_factory** (*Callable**[**[**]**,**Callable**]**,**optional*) -
 
 a callable that returns

@@ -2445,25 +2445,71 @@ document.write(`
                   
   <section id="distributed-collectors">
 <h1>Distributed Collectors<a class="headerlink" href="#distributed-collectors" title="Link to this heading">#</a></h1>
-<p>TorchRL provides a set of distributed data collectors. These tools support
-multiple backends (<code class="docutils literal notranslate"><span class="pre">'gloo'</span></code>, <code class="docutils literal notranslate"><span class="pre">'nccl'</span></code>, <code class="docutils literal notranslate"><span class="pre">'mpi'</span></code> with the <a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector" title="torchrl.collectors.distributed.DistributedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedCollector</span></code></a>
-or PyTorch RPC with <a class="reference internal" href="generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector" title="torchrl.collectors.distributed.RPCCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RPCCollector</span></code></a>) and launchers (<code class="docutils literal notranslate"><span class="pre">'ray'</span></code>,
-<code class="docutils literal notranslate"><span class="pre">submitit</span></code> or <code class="docutils literal notranslate"><span class="pre">torch.multiprocessing</span></code>).
-They can be efficiently used in synchronous or asynchronous mode, on a single
-node or across multiple nodes.</p>
-<p><code class="docutils literal notranslate"><span class="pre">RayCollector</span></code> uses Ray to place and control its worker actors, but an
+<p>Construct distributed collectors through
+<a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.collectors.Collector</span></code></a>, the same entry point used for direct and
+local process collection. Its <code class="docutils literal notranslate"><span class="pre">backend</span></code> selector covers Ray, PyTorch RPC,
+and process-group-based collection; <code class="docutils literal notranslate"><span class="pre">backend_options</span></code> carries the concrete
+backend’s launcher, resources, and communication settings:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">Collector</span>
+
+<span class="n">ray_collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+    <span class="n">make_env</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+    <span class="n">num_collectors</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+    <span class="n">backend_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;remote_configs&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;num_cpus&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}},</span>
+<span class="p">)</span>
+<span class="n">rpc_collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+    <span class="n">make_env</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;rpc&quot;</span><span class="p">,</span>
+    <span class="n">num_collectors</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+    <span class="n">backend_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;launcher&quot;</span><span class="p">:</span> <span class="s2">&quot;submitit&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+<span class="n">distributed_collector</span> <span class="o">=</span> <span class="n">Collector</span><span class="p">(</span>
+    <span class="n">make_env</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+    <span class="n">num_collectors</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+    <span class="n">backend_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;launcher&quot;</span><span class="p">:</span> <span class="s2">&quot;mp&quot;</span><span class="p">,</span> <span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;gloo&quot;</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The concrete implementations support Gloo, NCCL, MPI, or UCC with
+<a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector" title="torchrl.collectors.distributed.DistributedCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedCollector</span></code></a>, PyTorch RPC with <a class="reference internal" href="generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector" title="torchrl.collectors.distributed.RPCCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RPCCollector</span></code></a>, and
+Ray actor placement with <a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code></a>. They can run synchronously
+or asynchronously on a single node or across multiple nodes. Name the
+concrete classes directly only when subclassing or working with an
+implementation-specific API.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Collector(backend=&quot;ray&quot;)</span></code> uses Ray to place and control its worker actors,
+but an
 attached inference server or replay buffer selects its own payload transport.
 With a replay buffer attached, workers write rollouts directly through the
 replay endpoint instead of returning them to the driver. Without one, yielded
 rollouts use Ray’s object store. See <a class="reference internal" href="services_workflow.html#ref-service-transports"><span class="std std-ref">Choosing a payload transport</span></a> for the
 backend/transport compatibility table and the recommended direct-to-replay
 topology.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For large, fixed-layout TensorDict rollouts, the preferred Ray topology is a
+replay buffer owned by Ray (<code class="docutils literal notranslate"><span class="pre">service_backend=&quot;ray&quot;</span></code>) with a distributed
+payload transport (Gloo for CPU or NCCL for CUDA). The replay service acts as
+the shared dataset between collector actors and learners. Ray collectors
+reject regular in-process replay buffers because each actor would otherwise
+receive an independent serialized copy rather than write into the original
+driver object.</p>
+</div>
 <p><em>Resources</em>: Find examples for these collectors in the
 <a class="reference external" href="https://github.com/pytorch/rl/examples/distributed/collectors">dedicated folder</a>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><em>Choosing the sub-collector</em>: All distributed collectors support the various single machine collectors.
-One may wonder why using a <a class="reference internal" href="generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a> or a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>
+<p><em>Choosing the sub-collector</em>: Distributed collector implementations support
+the various single-machine collector classes through <code class="docutils literal notranslate"><span class="pre">backend_options</span></code>.
+One may wonder why using a process-backed <a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.collectors.Collector</span></code></a>
+or a <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>
 instead. In general, multiprocessed collectors have a lower IO footprint than
 parallel environments which need to communicate at each step. Yet, the model specs
 play a role in the opposite direction, since using parallel environments will
@@ -2522,8 +2568,10 @@ See <a class="reference internal" href="collectors_replay.html#collectors-replay
 <section id="removed-legacy-names">
 <h2>Removed legacy names<a class="headerlink" href="#removed-legacy-names" title="Link to this heading">#</a></h2>
 <p>The deprecated distributed collector aliases were removed in v0.13. Use
-<code class="docutils literal notranslate"><span class="pre">DistributedCollector</span></code>, <code class="docutils literal notranslate"><span class="pre">RPCCollector</span></code>, and <code class="docutils literal notranslate"><span class="pre">DistributedSyncCollector</span></code>
-directly.</p>
+<a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.collectors.Collector</span></code></a> for construction. The canonical concrete
+names <code class="docutils literal notranslate"><span class="pre">DistributedCollector</span></code>, <code class="docutils literal notranslate"><span class="pre">RPCCollector</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">DistributedSyncCollector</span></code> remain available for implementation-specific
+code.</p>
 </section>
 </section>
 
@@ -2897,7 +2945,7 @@ directly.</p>
        "headline": "Distributed Collectors",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/collectors_distributed.html",
-       "articleBody": "Distributed Collectors# TorchRL provides a set of distributed data collectors. These tools support multiple backends (\u0027gloo\u0027, \u0027nccl\u0027, \u0027mpi\u0027 with the DistributedCollector or PyTorch RPC with RPCCollector) and launchers (\u0027ray\u0027, submitit or torch.multiprocessing). They can be efficiently used in synchronous or asynchronous mode, on a single node or across multiple nodes. RayCollector uses Ray to place and control its worker actors, but an attached inference server or replay buffer selects its own payload transport. With a replay buffer attached, workers write rollouts directly through the replay endpoint instead of returning them to the driver. Without one, yielded rollouts use Ray\u2019s object store. See Choosing a payload transport for the backend/transport compatibility table and the recommended direct-to-replay topology. Resources: Find examples for these collectors in the dedicated folder. Note Choosing the sub-collector: All distributed collectors support the various single machine collectors. One may wonder why using a MultiSyncCollector or a ParallelEnv instead. In general, multiprocessed collectors have a lower IO footprint than parallel environments which need to communicate at each step. Yet, the model specs play a role in the opposite direction, since using parallel environments will result in a faster execution of the policy (and/or transforms) since these operations will be vectorized. Note Choosing the device of a collector (or a parallel environment): Sharing data among processes is achieved via shared-memory buffers with parallel environment and multiprocessed environments executed on CPU. Depending on the capabilities of the machine being used, this may be prohibitively slow compared to sharing data on GPU which is natively supported by cuda drivers. In practice, this means that using the device=\"cpu\" keyword argument when building a parallel environment or collector can result in a slower collection than using device=\"cuda\" when available. Note Given the library\u2019s many optional dependencies (eg, Gym, Gymnasium, and many others) warnings can quickly become quite annoying in multiprocessed / distributed settings. By default, TorchRL filters out these warnings in sub-processes. If one still wishes to see these warnings, they can be displayed by setting torchrl.filter_warnings_subprocess=False. Tip All distributed collectors support trajs_per_batch combined with replay_buffer. When set, each remote worker assembles complete trajectories and writes them to the shared buffer as flat 1-D sequences, which is directly compatible with SliceSampler. See Complete trajectory collection with trajs_per_batch for examples and best practices. DistributedCollector(create_env_fn, policy, ...) A distributed data collector with torch.distributed backend. RPCCollector(create_env_fn, policy, ...) An RPC-based distributed data collector. DistributedSyncCollector(create_env_fn, ...) A distributed synchronous data collector with torch.distributed backend. submitit_delayed_launcher(num_jobs[, ...]) Delayed launcher for submitit. RayCollector(create_env_fn, policy, ...[, ...]) Distributed data collector with Ray backend. RayEvalWorker(init_fn, env_maker, ...[, ...]) Asynchronous evaluation worker backed by a Ray actor. Removed legacy names# The deprecated distributed collector aliases were removed in v0.13. Use DistributedCollector, RPCCollector, and DistributedSyncCollector directly.",
+       "articleBody": "Distributed Collectors# Construct distributed collectors through torchrl.collectors.Collector, the same entry point used for direct and local process collection. Its backend selector covers Ray, PyTorch RPC, and process-group-based collection; backend_options carries the concrete backend\u2019s launcher, resources, and communication settings: from torchrl.collectors import Collector ray_collector = Collector( make_env, policy, backend=\"ray\", num_collectors=8, frames_per_batch=1024, backend_options={\"remote_configs\": {\"num_cpus\": 1}}, ) rpc_collector = Collector( make_env, policy, backend=\"rpc\", num_collectors=8, frames_per_batch=1024, backend_options={\"launcher\": \"submitit\"}, ) distributed_collector = Collector( make_env, policy, backend=\"distributed\", num_collectors=8, frames_per_batch=1024, backend_options={\"launcher\": \"mp\", \"backend\": \"gloo\"}, ) The concrete implementations support Gloo, NCCL, MPI, or UCC with DistributedCollector, PyTorch RPC with RPCCollector, and Ray actor placement with RayCollector. They can run synchronously or asynchronously on a single node or across multiple nodes. Name the concrete classes directly only when subclassing or working with an implementation-specific API. Collector(backend=\"ray\") uses Ray to place and control its worker actors, but an attached inference server or replay buffer selects its own payload transport. With a replay buffer attached, workers write rollouts directly through the replay endpoint instead of returning them to the driver. Without one, yielded rollouts use Ray\u2019s object store. See Choosing a payload transport for the backend/transport compatibility table and the recommended direct-to-replay topology. Note For large, fixed-layout TensorDict rollouts, the preferred Ray topology is a replay buffer owned by Ray (service_backend=\"ray\") with a distributed payload transport (Gloo for CPU or NCCL for CUDA). The replay service acts as the shared dataset between collector actors and learners. Ray collectors reject regular in-process replay buffers because each actor would otherwise receive an independent serialized copy rather than write into the original driver object. Resources: Find examples for these collectors in the dedicated folder. Note Choosing the sub-collector: Distributed collector implementations support the various single-machine collector classes through backend_options. One may wonder why using a process-backed torchrl.collectors.Collector or a ParallelEnv instead. In general, multiprocessed collectors have a lower IO footprint than parallel environments which need to communicate at each step. Yet, the model specs play a role in the opposite direction, since using parallel environments will result in a faster execution of the policy (and/or transforms) since these operations will be vectorized. Note Choosing the device of a collector (or a parallel environment): Sharing data among processes is achieved via shared-memory buffers with parallel environment and multiprocessed environments executed on CPU. Depending on the capabilities of the machine being used, this may be prohibitively slow compared to sharing data on GPU which is natively supported by cuda drivers. In practice, this means that using the device=\"cpu\" keyword argument when building a parallel environment or collector can result in a slower collection than using device=\"cuda\" when available. Note Given the library\u2019s many optional dependencies (eg, Gym, Gymnasium, and many others) warnings can quickly become quite annoying in multiprocessed / distributed settings. By default, TorchRL filters out these warnings in sub-processes. If one still wishes to see these warnings, they can be displayed by setting torchrl.filter_warnings_subprocess=False. Tip All distributed collectors support trajs_per_batch combined with replay_buffer. When set, each remote worker assembles complete trajectories and writes them to the shared buffer as flat 1-D sequences, which is directly compatible with SliceSampler. See Complete trajectory collection with trajs_per_batch for examples and best practices. DistributedCollector(create_env_fn, policy, ...) A distributed data collector with torch.distributed backend. RPCCollector(create_env_fn, policy, ...) An RPC-based distributed data collector. DistributedSyncCollector(create_env_fn, ...) A distributed synchronous data collector with torch.distributed backend. submitit_delayed_launcher(num_jobs[, ...]) Delayed launcher for submitit. RayCollector(create_env_fn, policy, ...[, ...]) Distributed data collector with Ray backend. RayEvalWorker(init_fn, env_maker, ...[, ...]) Asynchronous evaluation worker backed by a Ray actor. Removed legacy names# The deprecated distributed collector aliases were removed in v0.13. Use torchrl.collectors.Collector for construction. The canonical concrete names DistributedCollector, RPCCollector, and DistributedSyncCollector remain available for implementation-specific code.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

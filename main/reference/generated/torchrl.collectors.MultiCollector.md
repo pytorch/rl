@@ -4,6 +4,12 @@
 
 Runs a given number of DataCollectors on separate processes.
 
+Note
+
+Use [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector) with `num_collectors` and
+`sync` to construct local process collectors in new code. This class
+remains the concrete process-collector API.
+
 Parameters:
 
 - **create_env_fn** (*List**[**Callabled**]*) - list of Callables, each returning an

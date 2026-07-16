@@ -1048,25 +1048,27 @@ components as in single-agent learning. Isn't this fantastic?**
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 623-638
+.. GENERATED FROM PYTHON SOURCE LINES 623-640
 
 Data collector
 --------------
 
-TorchRL provides a set of data collector classes. Briefly, these
-classes execute three operations: reset an environment, compute an action
+TorchRL provides :class:`~torchrl.collectors.Collector` as the main data
+collector construction API. It executes three operations: reset an
+environment, compute an action
 using the policy and the latest observation, execute a step in the environment, and repeat
 the last two steps until the environment signals a stop (or reaches a done
 state).
 
-We will use the simplest possible data collector, which has the same output as an environment rollout,
-with the only difference that it will auto reset done states until the desired frames are collected.
+We use its direct default, which has the same output as an environment
+rollout except that it auto-resets done states until the desired frames are
+collected. The same constructor can select process or distributed execution.
 
 We need to feed it our exploration policies. Furthermore, to run the policies from all groups as if they were one,
 we put them in a sequence. They will not interfere with each other as each group writes and reads keys in different places.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 638-650
+.. GENERATED FROM PYTHON SOURCE LINES 640-652
 
 .. code-block:: Python
 
@@ -1089,7 +1091,7 @@ we put them in a sequence. They will not interfere with each other as each group
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 651-663
+.. GENERATED FROM PYTHON SOURCE LINES 653-665
 
 Replay buffer
 -------------
@@ -1104,7 +1106,7 @@ To store your buffer on the GPU, you can use :class:`~torchrl.data.replay_buffer
 This will result in faster sampling but is subject to the memory constraints of the selected device.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 663-682
+.. GENERATED FROM PYTHON SOURCE LINES 665-684
 
 .. code-block:: Python
 
@@ -1134,7 +1136,7 @@ This will result in faster sampling but is subject to the memory constraints of 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 683-693
+.. GENERATED FROM PYTHON SOURCE LINES 685-695
 
 Loss function
 -------------
@@ -1147,7 +1149,7 @@ goes with it.
 It is also possible to have different policies for each group.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 693-727
+.. GENERATED FROM PYTHON SOURCE LINES 695-729
 
 .. code-block:: Python
 
@@ -1192,7 +1194,7 @@ It is also possible to have different policies for each group.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 728-735
+.. GENERATED FROM PYTHON SOURCE LINES 730-737
 
 Training utils
 --------------
@@ -1202,7 +1204,7 @@ They are very simple and do not contain any important logic.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 735-763
+.. GENERATED FROM PYTHON SOURCE LINES 737-765
 
 .. code-block:: Python
 
@@ -1241,7 +1243,7 @@ They are very simple and do not contain any important logic.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 764-782
+.. GENERATED FROM PYTHON SOURCE LINES 766-784
 
 Training loop
 -------------
@@ -1262,7 +1264,7 @@ The steps include:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 782-860
+.. GENERATED FROM PYTHON SOURCE LINES 784-862
 
 .. code-block:: Python
 
@@ -1352,11 +1354,11 @@ The steps include:
 
  .. code-block:: none
 
-    episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0:   0%|          | 0/10 [00:00<?, ?it/s]    episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0:  10%|█         | 1/10 [00:02<00:25,  2.84s/it]    episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0:  20%|██        | 2/10 [00:05<00:23,  2.91s/it]    episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0:  30%|███       | 3/10 [00:08<00:20,  2.97s/it]    episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0:  40%|████      | 4/10 [00:11<00:17,  2.99s/it]    episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0:  50%|█████     | 5/10 [00:14<00:15,  3.00s/it]    episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0:  60%|██████    | 6/10 [00:17<00:12,  3.03s/it]    episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0:  70%|███████   | 7/10 [00:20<00:08,  2.75s/it]    episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0:  80%|████████  | 8/10 [00:22<00:05,  2.57s/it]    episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0:  90%|█████████ | 9/10 [00:24<00:02,  2.46s/it]      episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:26<00:00,  2.41s/it]
+    episode_reward_mean_adversary = 0, episode_reward_mean_agent = 0:   0%|          | 0/10 [00:00<?, ?it/s]    episode_reward_mean_adversary = 3.0, episode_reward_mean_agent = -3.0:  10%|█         | 1/10 [00:03<00:27,  3.10s/it]    episode_reward_mean_adversary = 4.0, episode_reward_mean_agent = -4.0:  20%|██        | 2/10 [00:06<00:25,  3.15s/it]    episode_reward_mean_adversary = 1.0, episode_reward_mean_agent = -1.0:  30%|███       | 3/10 [00:09<00:22,  3.17s/it]    episode_reward_mean_adversary = 110.0, episode_reward_mean_agent = -110.0:  40%|████      | 4/10 [00:12<00:19,  3.19s/it]    episode_reward_mean_adversary = 209.0, episode_reward_mean_agent = -209.0:  50%|█████     | 5/10 [00:15<00:16,  3.21s/it]    episode_reward_mean_adversary = 224.0, episode_reward_mean_agent = -224.0:  60%|██████    | 6/10 [00:19<00:12,  3.22s/it]    episode_reward_mean_adversary = 1035.0, episode_reward_mean_agent = -1035.0:  70%|███████   | 7/10 [00:21<00:08,  2.94s/it]    episode_reward_mean_adversary = 1147.0, episode_reward_mean_agent = -1147.0:  80%|████████  | 8/10 [00:23<00:05,  2.76s/it]    episode_reward_mean_adversary = 722.0, episode_reward_mean_agent = -722.0:  90%|█████████ | 9/10 [00:26<00:02,  2.65s/it]      episode_reward_mean_adversary = 867.0, episode_reward_mean_agent = -867.0: 100%|██████████| 10/10 [00:28<00:00,  2.59s/it]
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 861-871
+.. GENERATED FROM PYTHON SOURCE LINES 863-873
 
 Results
 -------
@@ -1369,7 +1371,7 @@ When running this script locally, you may need to close the opened window to
 proceed with the rest of the screen.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 871-885
+.. GENERATED FROM PYTHON SOURCE LINES 873-887
 
 .. code-block:: Python
 
@@ -1399,7 +1401,7 @@ proceed with the rest of the screen.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 886-898
+.. GENERATED FROM PYTHON SOURCE LINES 888-900
 
 Render
 ------
@@ -1414,7 +1416,7 @@ wrapped environment and save the stack of frames to a `mp4` file which location 
 logger `video_logger`. Note that this code may require some external dependencies such as torchvision.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 898-927
+.. GENERATED FROM PYTHON SOURCE LINES 900-929
 
 .. code-block:: Python
 
@@ -1454,7 +1456,7 @@ logger `video_logger`. Note that this code may require some external dependencie
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 928-956
+.. GENERATED FROM PYTHON SOURCE LINES 930-958
 
 Conclusion and next steps
 -------------------------
@@ -1488,7 +1490,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 27.136 seconds)
+   **Total running time of the script:** (0 minutes 29.090 seconds)
 
 
 .. _sphx_glr_download_tutorials_multiagent_competitive_ddpg.py:

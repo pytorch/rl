@@ -4,6 +4,11 @@
 
 Runs a given number of DataCollectors on separate processes asynchronously.
 
+Note
+
+Prefer `Collector(num_collectors=N, sync=False)` for construction in
+new code. This class is the concrete asynchronous result.
+
 [![../../_images/aafig-002943bd3a58e86dbadcb6d5c15917d50a26f6ad.svg](../../_images/aafig-002943bd3a58e86dbadcb6d5c15917d50a26f6ad.svg)](../../_images/aafig-002943bd3a58e86dbadcb6d5c15917d50a26f6ad.svg)
 
 Environment types can be identical or different.
@@ -81,6 +86,12 @@ TensorDict(
 ```
 
 Runs a given number of DataCollectors on separate processes.
+
+Note
+
+Use [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector) with `num_collectors` and
+`sync` to construct local process collectors in new code. This class
+remains the concrete process-collector API.
 
 Parameters:
 

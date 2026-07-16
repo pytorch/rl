@@ -719,14 +719,16 @@ Running value: TensorDict(
 
 ## Data collector
 
-TorchRL provides a set of data collector classes. Briefly, these
-classes execute three operations: reset an environment, compute an action
+TorchRL provides [`Collector`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) as the main data
+collector construction API. It executes three operations: reset an
+environment, compute an action
 using the policy and the latest observation, execute a step in the environment, and repeat
 the last two steps until the environment signals a stop (or reaches a done
 state).
 
-We will use the simplest possible data collector, which has the same output as an environment rollout,
-with the only difference that it will auto reset done states until the desired frames are collected.
+We use its direct default, which has the same output as an environment
+rollout except that it auto-resets done states until the desired frames are
+collected. The same constructor can select process or distributed execution.
 
 ```
 collector = Collector(
@@ -888,11 +890,11 @@ for tensordict_data in collector:
 
 ```
 episode_reward_mean = 0: 0%| | 0/5 [00:00<?, ?it/s]
-episode_reward_mean = -0.697718620300293: 20%|██ | 1/5 [00:05<00:22, 5.60s/it]
-episode_reward_mean = 0.18951517343521118: 40%|████ | 2/5 [00:11<00:16, 5.59s/it]
-episode_reward_mean = 0.8734568953514099: 60%|██████ | 3/5 [00:16<00:11, 5.58s/it]
-episode_reward_mean = 1.5832797288894653: 80%|████████ | 4/5 [00:22<00:05, 5.58s/it]
-episode_reward_mean = 1.7863705158233643: 100%|██████████| 5/5 [00:27<00:00, 5.57s/it]
+episode_reward_mean = -1.0313032865524292: 20%|██ | 1/5 [00:05<00:21, 5.48s/it]
+episode_reward_mean = 0.4582327902317047: 40%|████ | 2/5 [00:10<00:16, 5.46s/it]
+episode_reward_mean = 1.0097925662994385: 60%|██████ | 3/5 [00:16<00:10, 5.45s/it]
+episode_reward_mean = 1.4268900156021118: 80%|████████ | 4/5 [00:21<00:05, 5.48s/it]
+episode_reward_mean = 1.6884421110153198: 100%|██████████| 5/5 [00:27<00:00, 5.47s/it]
 ```
 
 ## Results
@@ -994,7 +996,7 @@ Here are a few videos of some possible scenarios you can try in VMAS.
 
 Scenarios available in [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator)
 
-**Total running time of the script:** (0 minutes 28.066 seconds)
+**Total running time of the script:** (0 minutes 27.550 seconds)
 
 [`Download Jupyter notebook: multiagent_ppo.ipynb`](../_downloads/a977047786179278d12b52546e1c0da8/multiagent_ppo.ipynb)
 

@@ -31,7 +31,7 @@ We will cover six crucial components of TorchRL:
 - [transforms](../reference/envs_transforms.html#transforms)
 - [models](../reference/modules.html#ref-modules)
 - [loss modules](../reference/objectives.html#ref-objectives)
-- [data collectors](../reference/collectors_basics.html#ref-collectors)
+- [data collectors](../reference/collectors.html#ref-collectors)
 - [replay buffers](../reference/data_replaybuffers.html#ref-buffers)
 
 If you are running this in Google Colab, make sure you install the following dependencies:
@@ -600,8 +600,9 @@ ValueOperator(
 
 ## Data collector
 
-TorchRL provides a set of [DataCollector classes](../reference/collectors_basics.html#ref-collectors).
-Briefly, these classes execute three operations: reset an environment,
+TorchRL provides the [`Collector`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) construction API
+for the execution strategies in ref_collectors. Briefly, collectors
+execute three operations: reset an environment,
 compute an action given the latest observation, execute a step in the environment,
 and repeat the last two steps until the environment signals a stop (or reaches
 a done state).
@@ -612,14 +613,12 @@ when to reset the environment (through the `max_frames_per_traj` argument),
 on which `device` the policy should be executed, etc. They are also
 designed to work efficiently with batched and multiprocessed environments.
 
-The simplest data collector is the [`Collector`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector):
-it is an iterator that you can use to get batches of data of a given length, and
-that will stop once a total number of frames (`total_frames`) have been
-collected.
-Other data collectors ([`MultiSyncCollector`](../reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) and
-[`MultiAsyncCollector`](../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector)) will execute
-the same operations in synchronous and asynchronous manner over a
-set of multiprocessed workers.
+[`Collector`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) is the main construction entry point.
+It is an iterator that yields batches of a given length and stops once a
+total number of frames (`total_frames`) has been collected. The default
+runs directly in the training process; `num_collectors` and `sync` select
+synchronous or asynchronous local worker processes, while `backend` selects
+Ray, RPC, or distributed execution.
 
 As for the policy and environment before, the data collector will return
 [`TensorDict`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) instances with a total number of elements that will
@@ -798,26 +797,26 @@ for i, tensordict_data in enumerate(collector):
 
 ```
 0%| | 0/10000 [00:00<?, ?it/s]
- 10%|█ | 1000/10000 [00:02<00:25, 359.16it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.0979 (init= 9.0979), step count (max): 14, lr policy: 0.0003: 10%|█ | 1000/10000 [00:02<00:25, 359.16it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.0979 (init= 9.0979), step count (max): 14, lr policy: 0.0003: 20%|██ | 2000/10000 [00:05<00:22, 356.46it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1292 (init= 9.0979), step count (max): 17, lr policy: 0.0003: 20%|██ | 2000/10000 [00:05<00:22, 356.46it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1292 (init= 9.0979), step count (max): 17, lr policy: 0.0003: 30%|███ | 3000/10000 [00:08<00:19, 357.44it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1494 (init= 9.0979), step count (max): 13, lr policy: 0.0003: 30%|███ | 3000/10000 [00:08<00:19, 357.44it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1494 (init= 9.0979), step count (max): 13, lr policy: 0.0003: 40%|████ | 4000/10000 [00:11<00:16, 358.73it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1632 (init= 9.0979), step count (max): 17, lr policy: 0.0002: 40%|████ | 4000/10000 [00:11<00:16, 358.73it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1632 (init= 9.0979), step count (max): 17, lr policy: 0.0002: 50%|█████ | 5000/10000 [00:13<00:13, 362.62it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1969 (init= 9.0979), step count (max): 24, lr policy: 0.0002: 50%|█████ | 5000/10000 [00:13<00:13, 362.62it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.1969 (init= 9.0979), step count (max): 24, lr policy: 0.0002: 60%|██████ | 6000/10000 [00:16<00:11, 362.41it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2262 (init= 9.0979), step count (max): 25, lr policy: 0.0001: 60%|██████ | 6000/10000 [00:16<00:11, 362.41it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2262 (init= 9.0979), step count (max): 25, lr policy: 0.0001: 70%|███████ | 7000/10000 [00:19<00:08, 362.96it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2306 (init= 9.0979), step count (max): 32, lr policy: 0.0001: 70%|███████ | 7000/10000 [00:19<00:08, 362.96it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2306 (init= 9.0979), step count (max): 32, lr policy: 0.0001: 80%|████████ | 8000/10000 [00:22<00:05, 363.09it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2428 (init= 9.0979), step count (max): 37, lr policy: 0.0001: 80%|████████ | 8000/10000 [00:22<00:05, 363.09it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2428 (init= 9.0979), step count (max): 37, lr policy: 0.0001: 90%|█████████ | 9000/10000 [00:24<00:02, 365.32it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2384 (init= 9.0979), step count (max): 42, lr policy: 0.0000: 90%|█████████ | 9000/10000 [00:24<00:02, 365.32it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2384 (init= 9.0979), step count (max): 42, lr policy: 0.0000: 100%|██████████| 10000/10000 [00:27<00:00, 368.44it/s]
-eval cumulative reward: 110.8981 (init: 110.8981), eval step-count: 11, average reward= 9.2529 (init= 9.0979), step count (max): 49, lr policy: 0.0000: 100%|██████████| 10000/10000 [00:27<00:00, 368.44it/s]
+ 10%|█ | 1000/10000 [00:02<00:25, 350.06it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.0969 (init= 9.0969), step count (max): 11, lr policy: 0.0003: 10%|█ | 1000/10000 [00:02<00:25, 350.06it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.0969 (init= 9.0969), step count (max): 11, lr policy: 0.0003: 20%|██ | 2000/10000 [00:05<00:22, 351.76it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.1470 (init= 9.0969), step count (max): 18, lr policy: 0.0003: 20%|██ | 2000/10000 [00:05<00:22, 351.76it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.1470 (init= 9.0969), step count (max): 18, lr policy: 0.0003: 30%|███ | 3000/10000 [00:08<00:19, 356.42it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.1722 (init= 9.0969), step count (max): 18, lr policy: 0.0003: 30%|███ | 3000/10000 [00:08<00:19, 356.42it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.1722 (init= 9.0969), step count (max): 18, lr policy: 0.0003: 40%|████ | 4000/10000 [00:11<00:16, 359.26it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.1969 (init= 9.0969), step count (max): 29, lr policy: 0.0002: 40%|████ | 4000/10000 [00:11<00:16, 359.26it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.1969 (init= 9.0969), step count (max): 29, lr policy: 0.0002: 50%|█████ | 5000/10000 [00:13<00:13, 362.32it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2223 (init= 9.0969), step count (max): 28, lr policy: 0.0002: 50%|█████ | 5000/10000 [00:13<00:13, 362.32it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2223 (init= 9.0969), step count (max): 28, lr policy: 0.0002: 60%|██████ | 6000/10000 [00:16<00:10, 363.87it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2336 (init= 9.0969), step count (max): 26, lr policy: 0.0001: 60%|██████ | 6000/10000 [00:16<00:10, 363.87it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2336 (init= 9.0969), step count (max): 26, lr policy: 0.0001: 70%|███████ | 7000/10000 [00:19<00:08, 365.86it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2380 (init= 9.0969), step count (max): 35, lr policy: 0.0001: 70%|███████ | 7000/10000 [00:19<00:08, 365.86it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2380 (init= 9.0969), step count (max): 35, lr policy: 0.0001: 80%|████████ | 8000/10000 [00:22<00:05, 355.14it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2453 (init= 9.0969), step count (max): 29, lr policy: 0.0001: 80%|████████ | 8000/10000 [00:22<00:05, 355.14it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2453 (init= 9.0969), step count (max): 29, lr policy: 0.0001: 90%|█████████ | 9000/10000 [00:25<00:02, 357.40it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2435 (init= 9.0969), step count (max): 47, lr policy: 0.0000: 90%|█████████ | 9000/10000 [00:25<00:02, 357.40it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2435 (init= 9.0969), step count (max): 47, lr policy: 0.0000: 100%|██████████| 10000/10000 [00:27<00:00, 359.22it/s]
+eval cumulative reward: 110.4576 (init: 110.4576), eval step-count: 11, average reward= 9.2603 (init= 9.0969), step count (max): 50, lr policy: 0.0000: 100%|██████████| 10000/10000 [00:27<00:00, 359.22it/s]
 ```
 
 ## Results
@@ -863,7 +862,7 @@ the environment after asking for rendering to get a visual rendering of the
 inverted pendulum in action. Check `torchrl.record` to
 know more.
 
-**Total running time of the script:** (0 minutes 28.645 seconds)
+**Total running time of the script:** (0 minutes 29.109 seconds)
 
 [`Download Jupyter notebook: coding_ppo.ipynb`](../_downloads/e2a5193e019585d9cfa26d3eebfd8be3/coding_ppo.ipynb)
 

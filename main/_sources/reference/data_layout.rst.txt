@@ -19,7 +19,7 @@ Two main patterns coexist in TorchRL:
   advantage estimator, normalizer) must mask-out the padded entries. This
   is the layout produced by
   :func:`~torchrl.collectors.utils.split_trajectories`,
-  :class:`~torchrl.collectors.MultiCollector` with ``split_trajs=True``,
+  ``Collector(num_collectors=N, split_trajs=True)``,
   and :class:`~torchrl.data.replay_buffers.SliceSampler` with
   ``pad_output=True``. It is **discouraged for new code** — see
   :ref:`data-layout-padded-discouraged` below.
@@ -212,7 +212,8 @@ preserve when extending. The natural mapping is:
   :class:`~torchrl.data.replay_buffers.SliceSampler` infer one trajectory per row without
   scanning ``done`` keys.
 * ``ndim=3`` and beyond — when both an outer worker dim and an env dim
-  exist, e.g. ``MultiSyncCollector([ParallelEnv(2, …)] * 4, …)``.
+  exist, e.g. ``Collector(lambda: ParallelEnv(2, ...),
+  num_collectors=4, sync=True, ...)``.
 
 It looks attractive: the buffer stores its data in the same shape the
 collector produces, no reshape needed.
@@ -222,8 +223,8 @@ storage.** With ``ndim >= 2`` every ``extend`` call commits one row's
 worth of frames along the time axis, and that row is implicitly assumed to
 be a contiguous run of frames from a single env. When several worker
 processes write into the same storage concurrently — e.g.
-:class:`~torchrl.collectors.MultiCollector` ``(sync=False)``,
-:class:`~torchrl.collectors.distributed.RayCollector`, an external pool of
+``Collector(num_collectors=N, sync=False)``, ``Collector(backend="ray")``,
+an external pool of
 producers, or any cluster setup where a learner aggregates batches from
 many actors — the inter-worker write order is uncontrolled. Without
 boundary markers, a given row of the ``[N, T]`` storage can stitch
@@ -253,7 +254,7 @@ Two existing knobs mitigate this without giving up ``ndim >= 2``:
 
   .. code-block:: python
 
-      from torchrl.collectors import MultiCollector
+      from torchrl.collectors import Collector
       from torchrl.data import (
           LazyTensorStorage, ReplayBufferEnsemble, TensorDictReplayBuffer,
       )
@@ -270,8 +271,10 @@ Two existing knobs mitigate this without giving up ``ndim >= 2``:
       rb = ReplayBufferEnsemble(
           *buffers, sample_from_all=True, batch_size=256,
       )
-      collector = MultiCollector(
-          [make_env] * num_workers, policy,
+      collector = Collector(
+          make_env, policy,
+          num_collectors=num_workers,
+          sync=False,
           replay_buffer=rb,                              # see note below
           frames_per_batch=200, total_frames=-1,
       )
@@ -292,14 +295,14 @@ Concretely, ``ndim >= 2`` is straightforward for:
 
 * Single-process :class:`~torchrl.collectors.Collector` with a batched
   env (one process writes; the env dim is stable).
-* Synchronous :class:`~torchrl.collectors.MultiCollector` ``(sync=True)``
+* Synchronous ``Collector(num_collectors=N, sync=True)``
   with ``cat_results="stack"``, which delivers one ``[num_workers, T]``
   batch at a time *atomically*.
 
 It needs the ``set_truncated`` or ensemble mitigation above for:
 
-* :class:`~torchrl.collectors.MultiCollector` ``(sync=False)``.
-* :class:`~torchrl.collectors.distributed.RayCollector`,
+* ``Collector(num_collectors=N, sync=False)``.
+* ``Collector(backend="ray")``,
   :class:`~torchrl.collectors.distributed.DistributedSyncCollector`,
   RPC-based collectors.
 * Any setup where multiple producers ``extend`` the same shared storage
@@ -321,7 +324,7 @@ This is what passing the buffer directly to the collector and setting
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, SliceSampler, TensorDictReplayBuffer
 
     rb = TensorDictReplayBuffer(
@@ -329,9 +332,10 @@ This is what passing the buffer directly to the collector and setting
         sampler=SliceSampler(slice_len=32),         # auto-detects ("collector", "traj_ids")
         batch_size=256,
     )
-    collector = MultiCollector(
-        [make_env] * 4,
+    collector = Collector(
+        make_env,
         policy,
+        num_collectors=4,
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,

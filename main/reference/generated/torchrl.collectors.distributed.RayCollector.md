@@ -4,6 +4,12 @@
 
 Distributed data collector with [Ray](https://docs.ray.io/) backend.
 
+Note
+
+Prefer `Collector(backend="ray", ...)` for construction in new code.
+Pass Ray-specific arguments through `backend_options`. This class
+remains the concrete Ray implementation API.
+
 This Python class serves as a ray-based solution to instantiate and coordinate multiple
 data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
 collector is an iterable that yields TensorDicts until a target number of collected
@@ -198,7 +204,12 @@ Defaults to -1 (no forced update).
 - **replay_buffer** ([*ReplayBuffer*](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer)*,**optional*) - if provided, the collector will
 populate it instead of yielding TensorDicts. The replay buffer must
 use `service_backend="ray"`; the collector creates restricted
-worker clients internally. Defaults to `None`.
+worker clients internally. A regular in-process replay buffer is
+rejected because serializing it into Ray actors would create remote
+copies rather than populate the driver-owned buffer. For large,
+fixed-layout TensorDict payloads, `transport="distributed"` is
+the recommended data path (Gloo for CPU tensors and NCCL for CUDA
+tensors). Defaults to `None`.
 - **weight_updater** ([*WeightUpdaterBase*](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)*or**constructor**,**optional*) - (Deprecated) An instance of [`WeightUpdaterBase`](torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase)
 or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
 If not provided, a [`RayWeightUpdater`](torchrl.collectors.RayWeightUpdater.html#torchrl.collectors.RayWeightUpdater) will be used by default, leveraging

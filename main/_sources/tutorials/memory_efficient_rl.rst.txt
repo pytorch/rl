@@ -90,7 +90,7 @@ Memory-Efficient RL Training
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f2efc85c2d0>
+    <torch._C.Generator object at 0x7f6f67838350>
 
 
 
@@ -240,8 +240,8 @@ transitions, …), the trade-off flips. The
 under ``("next", ...)`` *before* stacking per-step data.
 ``("next", "reward")``, ``("next", "done")`` and
 ``("next", "truncated")`` are preserved — they cannot be reconstructed
-from the root keys. The flag works for ``MultiSyncCollector`` and
-``MultiAsyncCollector`` too.
+from the root keys. The flag also works when ``Collector`` selects a process
+or distributed backend.
 
 .. GENERATED FROM PYTHON SOURCE LINES 188-208
 
@@ -387,8 +387,8 @@ trajectory id changes (or where the trajectory ended):
 
  .. code-block:: none
 
-    rows with NaN next-obs:                 [19, 39]
-    rows flagged as trajectory boundaries:  [19, 39]
+    rows with NaN next-obs:                 [39]
+    rows flagged as trajectory boundaries:  [39]
 
 
 
@@ -1079,7 +1079,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.352 seconds)
+   **Total running time of the script:** (0 minutes 0.364 seconds)
 
 
 .. _sphx_glr_download_tutorials_memory_efficient_rl.py:

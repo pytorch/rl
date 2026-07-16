@@ -6,6 +6,13 @@ A distributed data collector with torch.distributed backend.
 
 Supports sync and async data collection.
 
+Note
+
+Prefer `Collector(backend="distributed", ...)` or
+`Collector(backend="submitit", ...)` for construction in new code.
+Pass launcher and process-group settings through `backend_options`.
+This class remains the concrete distributed implementation API.
+
 Parameters:
 
 - **create_env_fn** (*Callable**or**List**[**Callabled**]*) - list of Callables, each returning an

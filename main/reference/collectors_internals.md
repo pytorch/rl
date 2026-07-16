@@ -1,14 +1,16 @@
 # Collector Internals
 
-This page describes how [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) steps through an
-environment. It is meant for
+This page describes the direct implementation returned by
+[`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) and how it steps through an environment.
+It is meant for
 contributors and for users debugging unexpected rollout behaviour: device
 casts, per-step bookkeeping, and trajectory tracking are implementation details
 that are not visible from the public API.
 
-The multi-process collectors ([`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) and
-[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector)) delegate their per-worker rollouts to
-[`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector), so the per-worker flow on this page applies to
+When the main constructor selects the process backend with
+`Collector(num_collectors=N)`, the concrete [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) and
+[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector) implementations delegate their per-worker
+rollouts to [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector), so the per-worker flow on this page applies to
 them too.
 
 ## Per-timestep flow
@@ -207,10 +209,10 @@ consumer. Receives the [`TensorDictBase`](https://docs.pytorch.org/tensordict/st
 yielded. Return value is ignored. Use it to log metrics derived from the
 batch.
 
-Hooks are worker-local: in [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) /
-[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector) they run inside each worker process, not on the
-training worker. Exceptions raised by a hook propagate up and stop collection;
-they are not swallowed.
+Hooks are worker-local: when `Collector(num_collectors=N)` selects
+[`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) or [`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector), they run inside
+each worker process, not on the training worker. Exceptions raised by a hook
+propagate up and stop collection; they are not swallowed.
 
 For batch *transformations* (rather than instrumentation), use `postproc` on
 the collector constructor instead.
@@ -230,7 +232,7 @@ the collector constructor instead.
 
 ## See also
 
-- [Collector Basics](collectors_basics.html#ref-collectors) for the high-level API
+- ref_collectors for the high-level API
 - [Profiling collectors and envs](profiling.html#ref-profiling) for `TORCHRL_PROFILING=1` instrumentation that emits
 named ranges on the carrier / policy / env transitions described above
 - [Data layout: contiguous trajectories](data_layout.html) for the shape and key conventions the carrier follows

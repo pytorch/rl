@@ -4,25 +4,122 @@ Data collectors are the bridge between your environments and training loop, mana
 experience data using your policy. They handle environment resets, policy execution, and data aggregation,
 making it easy to collect high-quality training data efficiently.
 
-TorchRL provides several collector implementations optimized for different scenarios:
+Use [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) to construct collectors in new code. It is the stable
+front door for local, multi-process, and distributed collection; changing the
+execution topology does not require changing the imported class. TorchRL also
+exposes the concrete implementations for type checks, subclassing, and
+implementation-specific integrations:
 
-- [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector): Single-process collection on the training worker
+- [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector): Main construction API, with direct collection as its
+default
 - [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector): Async environments + auto-batching inference server (see [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector))
 - [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector): Parallel collection across multiple workers (see below)
 - [`Evaluator`](generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator): Sync or async evaluation during training (see [evaluation](collectors_eval.html#collectors-eval))
 - **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see [`DistributedCollector`](generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector) / [`RPCCollector`](generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector))
 
-## MultiCollector API
+## Backend selection
 
-The [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector) class provides a unified interface for multi-process data collection.
-Use the `sync` parameter to choose between synchronous and asynchronous collection:
+[`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) constructs the appropriate concrete collector without
+changing the training code that consumes it. The default is direct collection
+in the training process. Passing `num_collectors` selects a process
+collector, while `backend` selects a backend explicitly:
 
 ```
-from torchrl.collectors import MultiCollector
+from torchrl.collectors import Collector
+
+process_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
+ policy=my_policy,
+ frames_per_batch=200,
+ total_frames=10_000,
+ sync=True,
+)
+
+ray_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
+ backend="ray",
+ backend_options={
+ "remote_configs": {"num_cpus": 1, "num_gpus": 0},
+ },
+ policy=my_policy,
+ frames_per_batch=200,
+ total_frames=10_000,
+)
+```
+
+The available selectors are `"direct"`, `"process"`, `"ray"`,
+`"rpc"`, `"distributed"`, and `"submitit"`. `"submitit"` is a
+shortcut for a distributed collector with `launcher="submitit"`. For every
+non-direct backend, omitted `sync` defaults to `False`.
+
+Important
+
+Process and distributed selection is asynchronous when `sync` is omitted.
+On-policy algorithms should normally pass `sync=True` explicitly so every
+worker contributes to each synchronized batch.
+
+Selection precedence is explicit `backend`, then an enclosing
+[`torchrl.service_backend()`](services_workflow.html#torchrl.service_backend), then `num_collectors` implying
+`"process"`, and finally `"direct"`. An explicit `backend="direct"`
+accepts at most one collector.
+
+| User-facing selection | Concrete result | Typical use |
+| --- | --- | --- |
+| `Collector(...)` or `backend="direct"` | [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) | One collector in the training process |
+| `num_collectors=N` or `backend="process"` | [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector) | Multiple local worker processes |
+| `backend="ray"` | [`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector) | Ray-managed actors |
+| `backend="rpc"` | [`RPCCollector`](generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector) | PyTorch RPC workers |
+| `backend="distributed"` | [`DistributedCollector`](generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector) | Explicit distributed launcher and process-group configuration |
+| `backend="submitit"` | [`DistributedCollector`](generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector) | Submitit launcher shortcut |
+
+`backend_options` forwards backend-specific options without mutating the
+input mapping. This is where launcher options, Ray resources, and the inner
+Gloo or NCCL `backend` are configured. Selector arguments cannot be repeated
+inside `backend_options`.
+
+A callable environment factory is replicated to `num_collectors` workers.
+When a sequence is provided, its length determines the number of collectors;
+an explicitly supplied positive count must match. Empty sequences,
+non-positive counts, and mismatches are rejected before construction. The
+returned object keeps its concrete type, so a process selection returns
+[`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector) rather than an instance of the direct
+[`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector). Use [`BaseCollector`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector) for an `isinstance` check that
+must accept every collector returned by the unified constructor.
+
+Selection can also be scoped with [`torchrl.service_backend()`](services_workflow.html#torchrl.service_backend); see
+[Designing Training Applications with Services](services_workflow.html#ref-services-workflow) for composing collector placement with replay and
+inference transports.
+
+Note
+
+**High-throughput Ray data path.** For large, fixed-layout TensorDict
+payloads, prefer a Ray-owned replay buffer configured with
+`service_backend="ray"` and `transport="distributed"`. Collector actors
+then write directly to the shared replay service over Gloo (CPU) or NCCL
+(CUDA), and the learner samples it as the training dataset without routing
+each rollout through the driver. A regular in-process replay buffer is
+rejected by the Ray collector: copying it into distant actors would create
+independent buffers, not populate the original object. If no replay buffer
+is attached, yielded batches return to the driver through Ray's object
+store. Use `transport="ray"` instead when payloads contain dynamic shapes,
+non-tensor values, or arbitrary Python objects. See
+[Choosing a payload transport](services_workflow.html#ref-service-transports) for the full compatibility table.
+
+## Process collection
+
+Pass `num_collectors` to the main [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) entry point for local
+multi-process collection. Use `sync` to choose synchronous or asynchronous
+delivery:
+
+```
+from torchrl.collectors import Collector
 
 # Synchronous collection: all workers complete before delivering batch
-collector = MultiCollector(
- create_env_fn=[make_env] * 4, # 4 parallel workers
+collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
  policy=my_policy,
  frames_per_batch=200,
  total_frames=10000,
@@ -30,8 +127,9 @@ collector = MultiCollector(
 )
 
 # Asynchronous collection: first-come-first-serve delivery
-collector = MultiCollector(
- create_env_fn=[make_env] * 4,
+collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
  policy=my_policy,
  frames_per_batch=200,
  total_frames=10000,
@@ -70,8 +168,9 @@ Hooks are intended for instrumentation and worker-local side effects, such as
 stepping a profiler or recording rollout metrics. Use `postproc` when the
 collected data itself should be transformed before training.
 
-For [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector), [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector), and
-[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector), hooks run in each worker process. The helper
+When [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) selects the process backend, hooks run in each worker
+process. The concrete return types are [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) and
+[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector). The helper
 methods [`map_fn()`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.map_fn) and
 [`get_distant_attr()`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.get_distant_attr) broadcast to each
 worker for multi-process collectors and to each actor for
@@ -111,9 +210,10 @@ collector.shutdown()
 
 ## Removed legacy names
 
-The deprecated collector aliases were removed in v0.13. Use the canonical
-collector classes directly: `Collector`, `MultiCollector`,
-`MultiSyncCollector`, `MultiAsyncCollector`, and `BaseCollector`.
+The deprecated collector aliases were removed in v0.13. Use `Collector` as
+the construction entry point. `MultiCollector`, `MultiSyncCollector`,
+`MultiAsyncCollector`, and `BaseCollector` remain available when code must
+name a concrete implementation.
 
 ## Documentation Sections
 
@@ -127,7 +227,7 @@ collector classes directly: `Collector`, `MultiCollector`,
 - [Single node data collectors](collectors_single.html#single-node-data-collectors)
 - [Trajectory batching](collectors_single.html#trajectory-batching)
 - [Using AsyncBatchedCollector](collectors_single.html#using-asyncbatchedcollector)
-- [Using MultiCollector](collectors_single.html#using-multicollector)
+- [Scaling `Collector` across local processes](collectors_single.html#scaling-collector-across-local-processes)
 - [Running the Collector Asynchronously](collectors_single.html#running-the-collector-asynchronously)
 - [Collector Internals](collectors_internals.html)
 

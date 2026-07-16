@@ -183,8 +183,8 @@ print(
 # under ``("next", ...)`` *before* stacking per-step data.
 # ``("next", "reward")``, ``("next", "done")`` and
 # ``("next", "truncated")`` are preserved — they cannot be reconstructed
-# from the root keys. The flag works for ``MultiSyncCollector`` and
-# ``MultiAsyncCollector`` too.
+# from the root keys. The flag also works when ``Collector`` selects a process
+# or distributed backend.
 
 compact_collector = Collector(
     create_env_fn=env_maker,

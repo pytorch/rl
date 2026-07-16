@@ -38,9 +38,10 @@ these two classes.
 
 ## Data collectors
 
-The primary data collector discussed here is the
-[`Collector`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector), which is the focus of this
-documentation. At a fundamental level, a collector is a straightforward
+[`Collector`](../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) is the main construction entry point
+for TorchRL data collection. It can build a direct, local multi-process, Ray,
+RPC, or distributed collector without changing the class imported by the
+training code. At a fundamental level, a collector is a straightforward
 class responsible for executing your policy within the environment,
 resetting the environment when necessary, and providing batches of a
 predefined size. Unlike the [`rollout()`](../reference/generated/torchrl.envs.EnvBase.html#id2) method
@@ -135,48 +136,101 @@ tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
  9, 9, 9, 9, 9, 9, 9, 9])
 ```
 
-Data collectors are very useful when it comes to coding state-of-the-art
-algorithms, as performance is usually measured by the capability of a
-specific technique to solve a problem in a given number of interactions with
-the environment (the `total_frames` argument in the collector).
-For this reason, most training loops in our examples look like this:
+Changing the execution topology
 
+The default above collects directly in the training process. Scale the same
+entry point to local worker processes with `num_collectors`. `sync=True`
+waits for every worker and is a natural fit for on-policy algorithms;
+`sync=False` delivers the first available worker batch and is usually used
+for off-policy training:
+
+```
+def make_env():
+ return GymEnv("CartPole-v1")
+
+process_collector = Collector(
+ make_env,
+ policy,
+ num_collectors=4,
+ sync=False,
+ frames_per_batch=200,
+ total_frames=-1,
+)
+```
+
+Distributed placement uses the same constructor. Backend-specific resources
+and launcher settings belong in `backend_options`:
+
+```
+ray_collector = Collector(
+ make_env,
+ policy,
+ backend="ray",
+ num_collectors=4,
+ backend_options={
+ "remote_configs": {"num_cpus": 1, "num_gpus": 0}
+ },
+ frames_per_batch=200,
+ total_frames=-1,
+)
+```
+
+The resulting object retains its concrete implementation type, but the
+iteration, replay-buffer, lifecycle, and weight-update APIs stay the same.
+See ref_collectors for RPC, distributed, submitit, and scoped backend
+selection.
+
+> specific technique to solve a problem in a given number of interactions with
+> the environment (the `total_frames` argument in the collector).
+> For this reason, most training loops in our examples look like this:
+> 
+> 
+> 
+> 
+> > ```
+> > >>> for data in collector:
+> > ... # your algorithm here
+> > ```
+> 
+> 
+> 
+> 
+> Now that we have explored how to collect data, we would like to know how to
+> store it. In RL, the typical setting is that the data is collected, stored
+> temporarily and cleared after a little while given some heuristic:
+> first-in first-out or other. A typical pseudo-code would look like this:
+> 
+> 
+> 
+> 
 > ```
 > >>> for data in collector:
-> ... # your algorithm here
+> ... storage.store(data)
+> ... for i in range(n_optim):
+> ... sample = storage.sample()
+> ... loss_val = loss_fn(sample)
+> ... loss_val.backward()
+> ... optim.step() # etc
 > ```
-
-## Replay Buffers
-
-Now that we have explored how to collect data, we would like to know how to
-store it. In RL, the typical setting is that the data is collected, stored
-temporarily and cleared after a little while given some heuristic:
-first-in first-out or other. A typical pseudo-code would look like this:
-
-```
->>> for data in collector:
-... storage.store(data)
-... for i in range(n_optim):
-... sample = storage.sample()
-... loss_val = loss_fn(sample)
-... loss_val.backward()
-... optim.step() # etc
-```
-
-The parent class that stores the data in TorchRL
-is referred to as [`ReplayBuffer`](../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer). TorchRL's replay
-buffers are composable: you can edit the storage type, their sampling
-technique, the writing heuristic or the transforms applied to them. We will
-leave the fancy stuff for a dedicated in-depth tutorial. The generic replay
-buffer only needs to know what storage it has to use. In general, we
-recommend a [`TensorStorage`](../reference/generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) subclass, which will work
-fine in most cases. We'll be using
-[`LazyMemmapStorage`](../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage)
-in this tutorial, which enjoys two nice properties: first, being "lazy",
-you don't need to explicitly tell it what your data looks like in advance.
-Second, it uses [`MemoryMappedTensor`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) as a backend to save
-your data on disk in an efficient way. The only thing you need to know is
-how big you want your buffer to be.
+> 
+> 
+> 
+> 
+> 
+> The parent class that stores the data in TorchRL
+> is referred to as [`ReplayBuffer`](../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer). TorchRL's replay
+> buffers are composable: you can edit the storage type, their sampling
+> technique, the writing heuristic or the transforms applied to them. We will
+> leave the fancy stuff for a dedicated in-depth tutorial. The generic replay
+> buffer only needs to know what storage it has to use. In general, we
+> recommend a [`TensorStorage`](../reference/generated/torchrl.data.replay_buffers.TensorStorage.html#torchrl.data.replay_buffers.TensorStorage) subclass, which will work
+> fine in most cases. We'll be using
+> [`LazyMemmapStorage`](../reference/generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage)
+> in this tutorial, which enjoys two nice properties: first, being "lazy",
+> you don't need to explicitly tell it what your data looks like in advance.
+> Second, it uses [`MemoryMappedTensor`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) as a backend to save
+> your data on disk in an efficient way. The only thing you need to know is
+> how big you want your buffer to be.
 
 ```
 from torchrl.data.replay_buffers import LazyMemmapStorage, ReplayBuffer
@@ -249,12 +303,10 @@ collector!
 
 ## Next steps
 
-- You can have look at other multiprocessed
-collectors such as [`MultiSyncCollector`](../reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) or
-[`MultiAsyncCollector`](../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector).
-- TorchRL also offers distributed collectors if you have multiple nodes to
-use for inference. Check them out in the
-[API reference](../reference/collectors_basics.html#ref-collectors).
+- Scale collection with `Collector(num_collectors=N, sync=...)` or select
+Ray, RPC, and distributed execution through `Collector(backend=...)`.
+See the [API reference](../reference/collectors.html#ref-collectors) for the full selection and
+configuration rules.
 - Check the dedicated [Replay Buffer tutorial](rb_tutorial.html#rb-tuto) to know
 more about the options you have when building a buffer, or the
 [API reference](../reference/data.html#ref-data) which covers all the features in
@@ -272,7 +324,7 @@ with multi-process collectors. The underlying contract -- how episode
 boundaries are recovered from the stored data -- is documented in
 [Trajectory boundaries](../reference/data_layout.html#ref-traj-boundaries).
 
-**Total running time of the script:** (0 minutes 0.080 seconds)
+**Total running time of the script:** (0 minutes 0.086 seconds)
 
 [`Download Jupyter notebook: getting-started-3.ipynb`](../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb)
 

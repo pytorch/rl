@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>torchrl.collectors._multi_async &#8212; torchrl main documentation</title>
+    <title>torchrl._comm.backends &#8212; torchrl main documentation</title>
   
   
   
@@ -46,7 +46,7 @@
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/collectors/_multi_async';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/_comm/backends';</script>
     <script src="../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
@@ -59,7 +59,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="torchrl.collectors._multi_async - Documentation for torchrl, part of the PyTorch ecosystem.">
+<meta name="llm:description" content="torchrl._comm.backends - Documentation for torchrl, part of the PyTorch ecosystem.">
 
 
 
@@ -1395,7 +1395,7 @@ document.write(`
     
     <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page">torchrl.coll...</li>
+    <li class="breadcrumb-item active" aria-current="page">torchrl._com...</li>
   </ul>
 </nav>
 </div>
@@ -1443,7 +1443,7 @@ document.write(`
     </div>
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="torchrl.collectors._multi_async">
+      <meta itemprop="name" content="torchrl._comm.backends">
       <meta itemprop="position" content="2">
     </div>
   </div>
@@ -1451,7 +1451,7 @@ document.write(`
   
   
   <div class="pytorch-call-to-action-links">
-    <div id="tutorial-type">_modules/torchrl/collectors/_multi_async</div>
+    <div id="tutorial-type">_modules/torchrl/_comm/backends</div>
     <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
       <div id="google-colab-link">
         <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
@@ -1482,349 +1482,257 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for torchrl.collectors._multi_async</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+  <h1>Source code for torchrl._comm.backends</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">OrderedDict</span>
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
-<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
-<span class="kn">from</span> <span class="nn">queue</span> <span class="kn">import</span> <span class="n">Empty</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">contextvars</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterator</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">cast</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">TypeAlias</span>
 
-<span class="kn">import</span> <span class="nn">torch</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModuleBase</span>
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_check_for_faulty_process</span><span class="p">,</span>
-    <span class="n">_maybe_record_function_decorator</span><span class="p">,</span>
-    <span class="n">accept_remote_rref_udf_invocation</span><span class="p">,</span>
-    <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
+<span class="n">ServiceBackend</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
+    <span class="s2">&quot;direct&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;process&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rpc&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;monarch&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+<span class="n">ServiceBackendAlias</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;threading&quot;</span><span class="p">,</span> <span class="s2">&quot;multiprocessing&quot;</span><span class="p">]</span>
+<span class="n">TransportBackend</span><span class="p">:</span> <span class="n">TypeAlias</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
+    <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;direct&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;queue&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;process&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;shared_memory&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;monarch&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">_SERVICE_BACKEND_ALIASES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;threading&quot;</span><span class="p">:</span> <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;multiprocessing&quot;</span><span class="p">:</span> <span class="s2">&quot;process&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_SERVICE_BACKENDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;direct&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;process&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;rpc&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;submitit&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;monarch&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors._constants</span> <span class="kn">import</span> <span class="n">_MAX_IDLE_COUNT</span><span class="p">,</span> <span class="n">_TIMEOUT</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors._multi_base</span> <span class="kn">import</span> <span class="n">MultiCollector</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors.utils</span> <span class="kn">import</span> <span class="n">split_trajectories</span>
+<span class="n">_TRANSPORT_BACKENDS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;direct&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;queue&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;process&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;shared_memory&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ray&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;monarch&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;distributed&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+
+<span class="n">_SERVICE_BACKEND_CONTEXT</span><span class="p">:</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ServiceBackend</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+<span class="n">_SERVICE_BACKEND_CONTEXT</span> <span class="o">=</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">(</span>
+    <span class="s2">&quot;torchrl_service_backend&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
+<span class="n">_TRANSPORT_BACKEND_CONTEXT</span><span class="p">:</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">TransportBackend</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+<span class="n">_TRANSPORT_BACKEND_CONTEXT</span> <span class="o">=</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">(</span>
+    <span class="s2">&quot;torchrl_transport_backend&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
 
 
-<div class="viewcode-block" id="MultiAsyncCollector">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector">[docs]</a>
-<span class="nd">@accept_remote_rref_udf_invocation</span>
-<span class="k">class</span> <span class="nc">MultiAsyncCollector</span><span class="p">(</span><span class="n">MultiCollector</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs a given number of DataCollectors on separate processes asynchronously.</span>
+<span class="k">def</span> <span class="nf">normalize_service_backend</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="n">ServiceBackend</span> <span class="o">|</span> <span class="n">ServiceBackendAlias</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceBackend</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the canonical spelling of a TorchRL service backend.</span>
 
-<span class="sd">    .. note::</span>
-<span class="sd">        Prefer ``Collector(num_collectors=N, sync=False)`` for construction in</span>
-<span class="sd">        new code. This class is the concrete asynchronous result.</span>
+<span class="sd">    The long ``threading`` and ``multiprocessing`` spellings remain permanent</span>
+<span class="sd">    aliases because they are part of the stable ``AsyncBatchedCollector`` API.</span>
+<span class="sd">    New APIs expose the shorter canonical atoms.</span>
 
-<span class="sd">    .. aafig::</span>
+<span class="sd">    Args:</span>
+<span class="sd">        backend: Backend name to normalize.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The canonical backend name.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the backend is unknown.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">canonical</span> <span class="o">=</span> <span class="n">_SERVICE_BACKEND_ALIASES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">backend</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">canonical</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SERVICE_BACKENDS</span><span class="p">:</span>
+        <span class="n">choices</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_SERVICE_BACKENDS</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">_SERVICE_BACKEND_ALIASES</span><span class="p">))</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unsupported service backend </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2">. Expected one of </span><span class="si">{</span><span class="n">choices</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">ServiceBackend</span><span class="p">,</span> <span class="n">canonical</span><span class="p">)</span>
 
 
-<span class="sd">            +----------------------------------------------------------------------+</span>
-<span class="sd">            |           &quot;MultiConcurrentCollector&quot;                |                |</span>
-<span class="sd">            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |</span>
-<span class="sd">            |  &quot;Collector 1&quot;  |  &quot;Collector 2&quot;  |  &quot;Collector 3&quot;  |     &quot;Main&quot;     |</span>
-<span class="sd">            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
-<span class="sd">            | &quot;env1&quot; | &quot;env2&quot; | &quot;env3&quot; | &quot;env4&quot; | &quot;env5&quot; | &quot;env6&quot; |                |</span>
-<span class="sd">            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
-<span class="sd">            |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |                |</span>
-<span class="sd">            |        |        |        |        |        |        |                |</span>
-<span class="sd">            |       &quot;actor&quot;   |        |        |       &quot;actor&quot;   |                |</span>
-<span class="sd">            |                 |        |        |                 |                |</span>
-<span class="sd">            | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                 |                |</span>
-<span class="sd">            |        |        |                 |                 |                |</span>
-<span class="sd">            |        |        |                 | &quot;step&quot; | &quot;step&quot; |                |</span>
-<span class="sd">            |        |        |                 |        |        |                |</span>
-<span class="sd">            |       &quot;actor    | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                |</span>
-<span class="sd">            |                 |        |        |                 |                |</span>
-<span class="sd">            | &quot;yield batch 1&quot; |       &quot;actor&quot;   |                 |&quot;collect, train&quot;|</span>
-<span class="sd">            |                 |                 |                 |                |</span>
-<span class="sd">            | &quot;step&quot; | &quot;step&quot; |                 | &quot;yield batch 2&quot; |&quot;collect, train&quot;|</span>
-<span class="sd">            |        |        |                 |                 |                |</span>
-<span class="sd">            |        |        | &quot;yield batch 3&quot; |                 |&quot;collect, train&quot;|</span>
-<span class="sd">            |        |        |                 |                 |                |</span>
-<span class="sd">            +----------------------------------------------------------------------+</span>
+<span class="k">def</span> <span class="nf">_normalize_transport_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">:</span> <span class="n">TransportBackend</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransportBackend</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the canonical spelling of a TorchRL payload transport.</span>
 
-<span class="sd">    Environment types can be identical or different.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        backend: Transport selector to validate.</span>
 
-<span class="sd">    The collection keeps on occurring on all processes even between the time</span>
-<span class="sd">    the batch of rollouts is collected and the next call to the iterator.</span>
-<span class="sd">    This class can be safely used with offline RL sota-implementations.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        The validated transport selector.</span>
 
-<span class="sd">    .. note:: Python requires multiprocessed code to be instantiated within a main guard:</span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the transport is unknown.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_TRANSPORT_BACKENDS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unsupported transport backend </span><span class="si">{</span><span class="n">backend</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Expected one of </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">_TRANSPORT_BACKENDS</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">TransportBackend</span><span class="p">,</span> <span class="n">backend</span><span class="p">)</span>
 
-<span class="sd">            &gt;&gt;&gt; from torchrl.collectors import MultiAsyncCollector</span>
-<span class="sd">            &gt;&gt;&gt; if __name__ == &quot;__main__&quot;:</span>
-<span class="sd">            ...     # Create your collector here</span>
 
-<span class="sd">        See https://docs.python.org/3/library/multiprocessing.html for more info.</span>
+<span class="k">def</span> <span class="nf">_context_value</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">pid</span><span class="p">,</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">if</span> <span class="n">pid</span> <span class="o">!=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">():</span>
+        <span class="c1"># ``ContextVar`` state is copied by ``fork``. Backend construction</span>
+        <span class="c1"># defaults belong to the process that entered the context and must not</span>
+        <span class="c1"># recursively select another owner inside a worker process.</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">backend</span>
+
+
+<span class="k">def</span> <span class="nf">_get_service_backend</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">ServiceBackend</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">ServiceBackend</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">_context_value</span><span class="p">(</span><span class="n">_SERVICE_BACKEND_CONTEXT</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">_get_transport_backend</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">TransportBackend</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">TransportBackend</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">_context_value</span><span class="p">(</span><span class="n">_TRANSPORT_BACKEND_CONTEXT</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">_contextual_backend_error</span><span class="p">(</span>
+    <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">service</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">transport</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Annotate a validation error with the scoped default that selected it.&quot;&quot;&quot;</span>
+    <span class="n">contexts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">service</span><span class="p">:</span>
+        <span class="n">contexts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;torchrl.service_backend&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">transport</span><span class="p">:</span>
+        <span class="n">contexts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;torchrl.transport_backend&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">contexts</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">message</span>
+    <span class="n">context_names</span> <span class="o">=</span> <span class="s2">&quot; and &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">contexts</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2"> (selected by an enclosing </span><span class="si">{</span><span class="n">context_names</span><span class="si">}</span><span class="s2"> context.)&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_resolve_service_backend</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="n">ServiceBackend</span> <span class="o">|</span> <span class="n">ServiceBackendAlias</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">ServiceBackend</span> <span class="o">|</span> <span class="n">ServiceBackendAlias</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ServiceBackend</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">normalize_service_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">contextual_backend</span> <span class="o">=</span> <span class="n">_get_service_backend</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">contextual_backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">contextual_backend</span>
+    <span class="k">return</span> <span class="n">normalize_service_backend</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_resolve_transport_backend</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="n">TransportBackend</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">TransportBackend</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransportBackend</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_normalize_transport_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">contextual_backend</span> <span class="o">=</span> <span class="n">_get_transport_backend</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">contextual_backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">contextual_backend</span>
+    <span class="k">return</span> <span class="n">_normalize_transport_backend</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="service_backend">
+<a class="viewcode-back" href="../../../reference/services_workflow.html#torchrl.service_backend">[docs]</a>
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span> <span class="nf">service_backend</span><span class="p">(</span>
+    <span class="n">backend</span><span class="p">:</span> <span class="n">ServiceBackend</span> <span class="o">|</span> <span class="n">ServiceBackendAlias</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the default service backend within the current context.</span>
+
+<span class="sd">    Explicit constructor arguments take precedence over this scoped default.</span>
+<span class="sd">    The context is local to the current execution context and process, restores</span>
+<span class="sd">    the previous value on exit, and is not inherited by forked workers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        backend: Service backend used by compatible objects constructed in the</span>
+<span class="sd">            context.</span>
 
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.gym import GymEnv</span>
-<span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule</span>
-<span class="sd">        &gt;&gt;&gt; from torch import nn</span>
-<span class="sd">        &gt;&gt;&gt; from torchrl.collectors import MultiAsyncCollector</span>
-<span class="sd">        &gt;&gt;&gt; if __name__ == &quot;__main__&quot;:</span>
-<span class="sd">        ...     env_maker = lambda: GymEnv(&quot;Pendulum-v1&quot;, device=&quot;cpu&quot;)</span>
-<span class="sd">        ...     policy = TensorDictModule(nn.Linear(3, 1), in_keys=[&quot;observation&quot;], out_keys=[&quot;action&quot;])</span>
-<span class="sd">        ...     collector = MultiAsyncCollector(</span>
-<span class="sd">        ...         create_env_fn=[env_maker, env_maker],</span>
-<span class="sd">        ...         policy=policy,</span>
-<span class="sd">        ...         total_frames=2000,</span>
-<span class="sd">        ...         max_frames_per_traj=50,</span>
-<span class="sd">        ...         frames_per_batch=200,</span>
-<span class="sd">        ...         init_random_frames=-1,</span>
-<span class="sd">        ...         reset_at_each_iter=False,</span>
-<span class="sd">        ...         device=&quot;cpu&quot;,</span>
-<span class="sd">        ...         storing_device=&quot;cpu&quot;,</span>
-<span class="sd">        ...         cat_results=&quot;stack&quot;,</span>
-<span class="sd">        ...     )</span>
-<span class="sd">        ...     for i, data in enumerate(collector):</span>
-<span class="sd">        ...         if i == 2:</span>
-<span class="sd">        ...             print(data)</span>
-<span class="sd">        ...             break</span>
-<span class="sd">        ...     collector.shutdown()</span>
-<span class="sd">        ...     del collector</span>
-<span class="sd">        TensorDict(</span>
-<span class="sd">            fields={</span>
-<span class="sd">                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="sd">                collector: TensorDict(</span>
-<span class="sd">                    fields={</span>
-<span class="sd">                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},</span>
-<span class="sd">                    batch_size=torch.Size([200]),</span>
-<span class="sd">                    device=cpu,</span>
-<span class="sd">                    is_shared=False),</span>
-<span class="sd">                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="sd">                next: TensorDict(</span>
-<span class="sd">                    fields={</span>
-<span class="sd">                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="sd">                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="sd">                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="sd">                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="sd">                    batch_size=torch.Size([200]),</span>
-<span class="sd">                    device=cpu,</span>
-<span class="sd">                    is_shared=False),</span>
-<span class="sd">                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="sd">                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="sd">                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},</span>
-<span class="sd">            batch_size=torch.Size([200]),</span>
-<span class="sd">            device=cpu,</span>
-<span class="sd">            is_shared=False)</span>
-
+<span class="sd">        &gt;&gt;&gt; from torchrl import service_backend</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer</span>
+<span class="sd">        &gt;&gt;&gt; with service_backend(&quot;direct&quot;):</span>
+<span class="sd">        ...     replay = ReplayBuffer()</span>
+<span class="sd">        &gt;&gt;&gt; replay.service_backend</span>
+<span class="sd">        &#39;direct&#39;</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">MultiCollector</span><span class="o">.</span><span class="vm">__doc__</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">postproc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">postproc</span>
-            <span class="k">for</span> <span class="n">_device</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">_device</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">postproc</span><span class="p">,</span> <span class="s2">&quot;to&quot;</span><span class="p">):</span>
-                        <span class="n">postproc</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">postproc</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">[</span><span class="n">_device</span><span class="p">]</span> <span class="o">=</span> <span class="n">postproc</span>
-
-    <span class="c1"># for RPC</span>
-    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
-
-    <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiAsyncCollector.shutdown">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.shutdown">[docs]</a>
-    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">close_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">raise_on_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;out_tensordicts&quot;</span><span class="p">):</span>
-            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">close_env</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Cannot shutdown </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> collector without environment being closed.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">raise_on_error</span><span class="o">=</span><span class="n">raise_on_error</span><span class="p">)</span></div>
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">normalize_service_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">token</span> <span class="o">=</span> <span class="n">_SERVICE_BACKEND_CONTEXT</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">(),</span> <span class="n">backend</span><span class="p">))</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">_SERVICE_BACKEND_CONTEXT</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">token</span><span class="p">)</span></div>
 
 
-    <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiAsyncCollector.set_seed">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.set_seed">[docs]</a>
-    <span class="k">def</span> <span class="nf">set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">static_seed</span><span class="p">)</span></div>
 
+<div class="viewcode-block" id="transport_backend">
+<a class="viewcode-back" href="../../../reference/services_workflow.html#torchrl.transport_backend">[docs]</a>
+<span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+<span class="k">def</span> <span class="nf">transport_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">:</span> <span class="n">TransportBackend</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the default payload transport within the current context.</span>
 
-    <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiAsyncCollector.state_dict">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.state_dict">[docs]</a>
-    <span class="k">def</span> <span class="nf">state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrderedDict</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span></div>
+<span class="sd">    Explicit ``transport`` constructor arguments take precedence. Components</span>
+<span class="sd">    still validate whether the selected transport is compatible with their</span>
+<span class="sd">    service backend.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        backend: Transport used by compatible objects constructed in the</span>
+<span class="sd">            context.</span>
 
-    <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiAsyncCollector.load_state_dict">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.load_state_dict">[docs]</a>
-    <span class="k">def</span> <span class="nf">load_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span></div>
-
-
-    <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiAsyncCollector.update_policy_weights_">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.update_policy_weights_">[docs]</a>
-    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;MultiAsyncCollector.update_policy_weights_&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">worker_ids</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="s2">&quot;policy_weights&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;`policy_weights` is deprecated. Use `policy_or_weights` instead.&quot;</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">policy_or_weights</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy_weights&quot;</span><span class="p">)</span>
-
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">(</span>
-            <span class="n">policy_or_weights</span><span class="o">=</span><span class="n">policy_or_weights</span><span class="p">,</span> <span class="n">worker_ids</span><span class="o">=</span><span class="n">worker_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span></div>
-
-
-    <span class="k">def</span> <span class="nf">frames_per_batch_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">requested_frames_per_batch</span>
-
-    <span class="k">def</span> <span class="nf">_get_from_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
-        <span class="n">new_data</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-        <span class="n">use_buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">idx</span> <span class="o">=</span> <span class="n">new_data</span>
-        <span class="k">elif</span> <span class="n">j</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">use_buffers</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">data</span><span class="p">,</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">new_data</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
-                <span class="k">if</span> <span class="n">use_buffers</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">j</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">use_buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">use_buffers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">use_buffers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="kc">True</span>
-                    <span class="n">idx</span> <span class="o">=</span> <span class="n">new_data</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">idx</span> <span class="o">=</span> <span class="n">new_data</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">j</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">use_buffers</span><span class="p">):</span>
-            <span class="c1"># we clone the data to make sure that we&#39;ll be working with a fixed copy</span>
-            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">idx</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">out</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_queue_len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="k">return</span> <span class="mi">1</span>
-
-    <span class="k">def</span> <span class="nf">iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">TensorDictBase</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_at_each_batch</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">update_policy_weights_</span><span class="p">()</span>
-
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">))</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;continue&quot;</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">True</span>
-
-        <span class="n">workers_frames</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">)]</span>
-        <span class="n">_iter_start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">idx</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_from_queue</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_TIMEOUT</span><span class="p">)</span>
-                    <span class="k">break</span>
-                <span class="k">except</span> <span class="p">(</span><span class="ne">TimeoutError</span><span class="p">,</span> <span class="n">Empty</span><span class="p">):</span>
-                    <span class="n">counter</span> <span class="o">+=</span> <span class="n">_TIMEOUT</span>
-                    <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
-                    <span class="c1"># Debug logging for queue timeout</span>
-                    <span class="k">if</span> <span class="n">counter</span> <span class="o">%</span> <span class="p">(</span><span class="mi">10</span> <span class="o">*</span> <span class="n">_TIMEOUT</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Log every 10 timeouts</span>
-                        <span class="n">_elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">_iter_start_time</span>
-                        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;MultiAsyncCollector.iterator: Queue timeout, counter=</span><span class="si">{</span><span class="n">counter</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;iter=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_iter</span><span class="si">}</span><span class="s2">, frames=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames</span><span class="si">}</span><span class="s2">, elapsed=</span><span class="si">{</span><span class="n">_elapsed</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s&quot;</span>
-                        <span class="p">)</span>
-                <span class="k">if</span> <span class="n">counter</span> <span class="o">&gt;</span> <span class="p">(</span><span class="n">_TIMEOUT</span> <span class="o">*</span> <span class="n">_MAX_IDLE_COUNT</span><span class="p">):</span>
-                    <span class="n">_elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">_iter_start_time</span>
-                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;MultiAsyncCollector.iterator: CRITICAL - Max idle exceeded, &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;counter=</span><span class="si">{</span><span class="n">counter</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, iter=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_iter</span><span class="si">}</span><span class="s2">, frames=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_frames</span><span class="si">}</span><span class="s2">, elapsed=</span><span class="si">{</span><span class="n">_elapsed</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s&quot;</span>
-                    <span class="p">)</span>
-                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Failed to gather all collector output within </span><span class="si">{</span><span class="n">_TIMEOUT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">_MAX_IDLE_COUNT</span><span class="si">}</span><span class="s2"> seconds. &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Increase the MAX_IDLE_COUNT environment variable to bypass this error.&quot;</span>
-                    <span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">worker_frames</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span><span class="p">:</span>
-                    <span class="n">out</span> <span class="o">=</span> <span class="n">split_trajectories</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">worker_frames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_per_batch_worker</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">+=</span> <span class="n">worker_frames</span>
-            <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">workers_frames</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="n">worker_frames</span>
-            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">:</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_postproc_per_device</span><span class="p">[</span><span class="n">out</span><span class="o">.</span><span class="n">device</span><span class="p">](</span><span class="n">out</span><span class="p">)</span>
-
-            <span class="c1"># the function blocks here until the next item is asked, hence we send the message to the</span>
-            <span class="c1"># worker to keep on working in the meantime before the yield statement</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
-                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue_random&quot;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;continue&quot;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="n">msg</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_private_keys</span><span class="p">:</span>
-                <span class="n">excluded_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)]</span>
-                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="n">excluded_keys</span><span class="p">)</span>
-            <span class="k">yield</span> <span class="n">out</span>
-
-        <span class="c1"># We don&#39;t want to shutdown yet, the user may want to call state_dict before</span>
-        <span class="c1"># self._shutdown_main()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">running</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="k">def</span> <span class="nf">_shutdown_main</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;out_tensordicts&quot;</span><span class="p">):</span>
-            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">out_tensordicts</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_shutdown_main</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-<div class="viewcode-block" id="MultiAsyncCollector.reset">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.reset">[docs]</a>
-    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_idx</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">reset_idx</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span><span class="o">.</span><span class="n">full</span><span class="p">():</span>
-            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">_TIMEOUT</span><span class="p">)</span>  <span class="c1"># wait until queue is empty</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue_out</span><span class="o">.</span><span class="n">full</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;self.queue_out is full&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">running</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">):</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_use_random_frames</span><span class="p">():</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="s2">&quot;continue_random&quot;</span><span class="p">))</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="n">idx</span><span class="p">,</span> <span class="s2">&quot;continue&quot;</span><span class="p">))</span></div>
-
-
-    <span class="c1"># for RPC</span>
-    <span class="k">def</span> <span class="nf">_receive_weights_scheme</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_receive_weights_scheme</span><span class="p">(</span><span class="n">model_version</span><span class="o">=</span><span class="n">model_version</span><span class="p">)</span>
-
-    <span class="c1"># for RPC</span>
-<div class="viewcode-block" id="MultiAsyncCollector.receive_weights">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.receive_weights">[docs]</a>
-    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">(</span><span class="n">policy_or_weights</span><span class="p">)</span></div>
-</div>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl import service_backend, transport_backend</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer</span>
+<span class="sd">        &gt;&gt;&gt; with service_backend(&quot;direct&quot;), transport_backend(&quot;direct&quot;):</span>
+<span class="sd">        ...     replay = ReplayBuffer()</span>
+<span class="sd">        &gt;&gt;&gt; replay.service_backend</span>
+<span class="sd">        &#39;direct&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">_normalize_transport_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">)</span>
+    <span class="n">token</span> <span class="o">=</span> <span class="n">_TRANSPORT_BACKEND_CONTEXT</span><span class="o">.</span><span class="n">set</span><span class="p">((</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">(),</span> <span class="n">backend</span><span class="p">))</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">yield</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">_TRANSPORT_BACKEND_CONTEXT</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">token</span><span class="p">)</span></div>
 
 </pre></div>
 
@@ -2084,11 +1992,11 @@ document.write(`
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "torchrl.collectors._multi_async",
-       "headline": "torchrl.collectors._multi_async",
+       "name": "torchrl._comm.backends",
+       "headline": "torchrl._comm.backends",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
-       "url": "/_modules/torchrl/collectors/_multi_async.html",
-       "articleBody": "Source code for torchrl.collectors._multi_async from __future__ import annotations import time import warnings from collections import defaultdict, OrderedDict from collections.abc import Iterator, Sequence from copy import deepcopy from queue import Empty import torch from tensordict import TensorDictBase from tensordict.nn import TensorDictModuleBase from torchrl._utils import ( _check_for_faulty_process, _maybe_record_function_decorator, accept_remote_rref_udf_invocation, logger as torchrl_logger, ) from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT from torchrl.collectors._multi_base import MultiCollector from torchrl.collectors.utils import split_trajectories [docs] @accept_remote_rref_udf_invocation class MultiAsyncCollector(MultiCollector): \"\"\"Runs a given number of DataCollectors on separate processes asynchronously. .. note:: Prefer ``Collector(num_collectors=N, sync=False)`` for construction in new code. This class is the concrete asynchronous result. .. aafig:: +----------------------------------------------------------------------+ | \"MultiConcurrentCollector\" | | |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| | | \"Collector 1\" | \"Collector 2\" | \"Collector 3\" | \"Main\" | |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~| | \"env1\" | \"env2\" | \"env3\" | \"env4\" | \"env5\" | \"env6\" | | |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~| |\"reset\" |\"reset\" |\"reset\" |\"reset\" |\"reset\" |\"reset\" | | | | | | | | | | | \"actor\" | | | \"actor\" | | | | | | | | | \"step\" | \"step\" | \"actor\" | | | | | | | | | | | | | \"step\" | \"step\" | | | | | | | | | | \"actor | \"step\" | \"step\" | \"actor\" | | | | | | | | | \"yield batch 1\" | \"actor\" | |\"collect, train\"| | | | | | | \"step\" | \"step\" | | \"yield batch 2\" |\"collect, train\"| | | | | | | | | | \"yield batch 3\" | |\"collect, train\"| | | | | | | +----------------------------------------------------------------------+ Environment types can be identical or different. The collection keeps on occurring on all processes even between the time the batch of rollouts is collected and the next call to the iterator. This class can be safely used with offline RL sota-implementations. .. note:: Python requires multiprocessed code to be instantiated within a main guard: \u003e\u003e\u003e from torchrl.collectors import MultiAsyncCollector \u003e\u003e\u003e if __name__ == \"__main__\": ... # Create your collector here See https://docs.python.org/3/library/multiprocessing.html for more info. Examples: \u003e\u003e\u003e from torchrl.envs.libs.gym import GymEnv \u003e\u003e\u003e from tensordict.nn import TensorDictModule \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.collectors import MultiAsyncCollector \u003e\u003e\u003e if __name__ == \"__main__\": ... env_maker = lambda: GymEnv(\"Pendulum-v1\", device=\"cpu\") ... policy = TensorDictModule(nn.Linear(3, 1), in_keys=[\"observation\"], out_keys=[\"action\"]) ... collector = MultiAsyncCollector( ... create_env_fn=[env_maker, env_maker], ... policy=policy, ... total_frames=2000, ... max_frames_per_traj=50, ... frames_per_batch=200, ... init_random_frames=-1, ... reset_at_each_iter=False, ... device=\"cpu\", ... storing_device=\"cpu\", ... cat_results=\"stack\", ... ) ... for i, data in enumerate(collector): ... if i == 2: ... print(data) ... break ... collector.shutdown() ... del collector TensorDict( fields={ action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False), collector: TensorDict( fields={ traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)}, batch_size=torch.Size([200]), device=cpu, is_shared=False), done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False), observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False), reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False), step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False), truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([200]), device=cpu, is_shared=False), observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False), step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False), truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([200]), device=cpu, is_shared=False) \"\"\" __doc__ += MultiCollector.__doc__ def __init__(self, *args, **kwargs): super().__init__(*args, **kwargs) self.out_tensordicts = defaultdict(lambda: None) self.running = False self._postproc_per_device = {} if self.postproc is not None and self.replay_buffer is None: postproc = self.postproc for _device in self.storing_device: if _device not in self._postproc_per_device: if hasattr(postproc, \"to\"): postproc = deepcopy(postproc).to(_device) self._postproc_per_device[_device] = postproc # for RPC def next(self): return super().next() # for RPC [docs] def shutdown( self, timeout: float | None = None, close_env: bool = True, raise_on_error: bool = True, ) -\u003e None: if hasattr(self, \"out_tensordicts\"): del self.out_tensordicts if not close_env: raise RuntimeError( f\"Cannot shutdown {type(self).__name__} collector without environment being closed.\" ) return super().shutdown(timeout=timeout, raise_on_error=raise_on_error) # for RPC [docs] def set_seed(self, seed: int, static_seed: bool = False) -\u003e int: return super().set_seed(seed, static_seed) # for RPC [docs] def state_dict(self) -\u003e OrderedDict: return super().state_dict() # for RPC [docs] def load_state_dict(self, state_dict: OrderedDict) -\u003e None: return super().load_state_dict(state_dict) # for RPC [docs] @_maybe_record_function_decorator(\"MultiAsyncCollector.update_policy_weights_\") def update_policy_weights_( self, policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None, *, worker_ids: int | list[int] | torch.device | list[torch.device] | None = None, **kwargs, ) -\u003e None: if \"policy_weights\" in kwargs: warnings.warn( \"`policy_weights` is deprecated. Use `policy_or_weights` instead.\", DeprecationWarning, ) policy_or_weights = kwargs.pop(\"policy_weights\") super().update_policy_weights_( policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs ) def frames_per_batch_worker(self, *, worker_idx: int | None = None) -\u003e int: return self.requested_frames_per_batch def _get_from_queue(self, timeout=None) -\u003e tuple[int, int, TensorDictBase]: new_data, j = self.queue_out.get(timeout=timeout) use_buffers = self._use_buffers if self.replay_buffer is not None: idx = new_data elif j == 0 or not use_buffers: try: data, idx = new_data self.out_tensordicts[idx] = data if use_buffers is None and j \u003e 0: use_buffers = self._use_buffers = False except TypeError: if use_buffers is None: use_buffers = self._use_buffers = True idx = new_data else: raise else: idx = new_data out = self.out_tensordicts[idx] if self.replay_buffer is None and (j == 0 or use_buffers): # we clone the data to make sure that we\u0027ll be working with a fixed copy out = out.clone() return idx, j, out @property def _queue_len(self) -\u003e int: return 1 def iterator(self) -\u003e Iterator[TensorDictBase]: if self.update_at_each_batch: self.update_policy_weights_() for i in range(self.num_workers): if self._should_use_random_frames(): self.pipes[i].send((None, \"continue_random\")) else: self.pipes[i].send((None, \"continue\")) self.running = True workers_frames = [0 for _ in range(self.num_workers)] _iter_start_time = time.time() while self._frames \u003c self.total_frames: self._iter += 1 counter = 0 while True: try: idx, j, out = self._get_from_queue(timeout=_TIMEOUT) break except (TimeoutError, Empty): counter += _TIMEOUT _check_for_faulty_process(self.procs) # Debug logging for queue timeout if counter % (10 * _TIMEOUT) == 0: # Log every 10 timeouts _elapsed = time.time() - _iter_start_time torchrl_logger.debug( f\"MultiAsyncCollector.iterator: Queue timeout, counter={counter:.1f}s, \" f\"iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s\" ) if counter \u003e (_TIMEOUT * _MAX_IDLE_COUNT): _elapsed = time.time() - _iter_start_time torchrl_logger.debug( f\"MultiAsyncCollector.iterator: CRITICAL - Max idle exceeded, \" f\"counter={counter:.1f}s, iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s\" ) raise RuntimeError( f\"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. \" f\"Increase the MAX_IDLE_COUNT environment variable to bypass this error.\" ) if self.replay_buffer is None: worker_frames = out.numel() if self.split_trajs: out = split_trajectories(out, prefix=\"collector\") else: worker_frames = self.frames_per_batch_worker() self._frames += worker_frames workers_frames[idx] = workers_frames[idx] + worker_frames if out is not None and self._postproc_per_device: out = self._postproc_per_device[out.device](out) # the function blocks here until the next item is asked, hence we send the message to the # worker to keep on working in the meantime before the yield statement if self._should_use_random_frames(): msg = \"continue_random\" else: msg = \"continue\" self.pipes[idx].send((idx, msg)) if out is not None and self._exclude_private_keys: excluded_keys = [key for key in out.keys() if key.startswith(\"_\")] out = out.exclude(*excluded_keys) yield out # We don\u0027t want to shutdown yet, the user may want to call state_dict before # self._shutdown_main() self.running = False def _shutdown_main(self, *args, **kwargs) -\u003e None: if hasattr(self, \"out_tensordicts\"): del self.out_tensordicts return super()._shutdown_main(*args, **kwargs) [docs] def reset(self, reset_idx: Sequence[bool] | None = None) -\u003e None: super().reset(reset_idx) if self.queue_out.full(): time.sleep(_TIMEOUT) # wait until queue is empty if self.queue_out.full(): raise Exception(\"self.queue_out is full\") if self.running: for idx in range(self.num_workers): if self._should_use_random_frames(): self.pipes[idx].send((idx, \"continue_random\")) else: self.pipes[idx].send((idx, \"continue\")) # for RPC def _receive_weights_scheme(self, model_version: int | None = None): return super()._receive_weights_scheme(model_version=model_version) # for RPC [docs] def receive_weights(self, policy_or_weights: TensorDictBase | None = None): return super().receive_weights(policy_or_weights)",
+       "url": "/_modules/torchrl/_comm/backends.html",
+       "articleBody": "Source code for torchrl._comm.backends # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import contextlib import contextvars import os from collections.abc import Iterator from typing import cast, Literal, TypeAlias ServiceBackend: TypeAlias = Literal[ \"direct\", \"thread\", \"process\", \"ray\", \"rpc\", \"submitit\", \"monarch\", \"distributed\", ] ServiceBackendAlias: TypeAlias = Literal[\"threading\", \"multiprocessing\"] TransportBackend: TypeAlias = Literal[ \"auto\", \"direct\", \"thread\", \"queue\", \"process\", \"shared_memory\", \"ray\", \"monarch\", \"distributed\", ] _SERVICE_BACKEND_ALIASES = { \"threading\": \"thread\", \"multiprocessing\": \"process\", } _SERVICE_BACKENDS = frozenset( { \"direct\", \"thread\", \"process\", \"ray\", \"rpc\", \"submitit\", \"monarch\", \"distributed\", } ) _TRANSPORT_BACKENDS = frozenset( { \"auto\", \"direct\", \"thread\", \"queue\", \"process\", \"shared_memory\", \"ray\", \"monarch\", \"distributed\", } ) _SERVICE_BACKEND_CONTEXT: contextvars.ContextVar[tuple[int, ServiceBackend] | None] _SERVICE_BACKEND_CONTEXT = contextvars.ContextVar( \"torchrl_service_backend\", default=None ) _TRANSPORT_BACKEND_CONTEXT: contextvars.ContextVar[tuple[int, TransportBackend] | None] _TRANSPORT_BACKEND_CONTEXT = contextvars.ContextVar( \"torchrl_transport_backend\", default=None ) def normalize_service_backend( backend: ServiceBackend | ServiceBackendAlias | str, ) -\u003e ServiceBackend: \"\"\"Return the canonical spelling of a TorchRL service backend. The long ``threading`` and ``multiprocessing`` spellings remain permanent aliases because they are part of the stable ``AsyncBatchedCollector`` API. New APIs expose the shorter canonical atoms. Args: backend: Backend name to normalize. Returns: The canonical backend name. Raises: ValueError: If the backend is unknown. \"\"\" canonical = _SERVICE_BACKEND_ALIASES.get(backend, backend) if canonical not in _SERVICE_BACKENDS: choices = sorted(_SERVICE_BACKENDS | set(_SERVICE_BACKEND_ALIASES)) raise ValueError( f\"Unsupported service backend {backend!r}. Expected one of {choices}.\" ) return cast(ServiceBackend, canonical) def _normalize_transport_backend(backend: TransportBackend | str) -\u003e TransportBackend: \"\"\"Return the canonical spelling of a TorchRL payload transport. Args: backend: Transport selector to validate. Returns: The validated transport selector. Raises: ValueError: If the transport is unknown. \"\"\" if backend not in _TRANSPORT_BACKENDS: raise ValueError( f\"Unsupported transport backend {backend!r}. \" f\"Expected one of {sorted(_TRANSPORT_BACKENDS)}.\" ) return cast(TransportBackend, backend) def _context_value( context: contextvars.ContextVar[tuple[int, str] | None] ) -\u003e str | None: value = context.get() if value is None: return None pid, backend = value if pid != os.getpid(): # ``ContextVar`` state is copied by ``fork``. Backend construction # defaults belong to the process that entered the context and must not # recursively select another owner inside a worker process. return None return backend def _get_service_backend() -\u003e ServiceBackend | None: return cast(ServiceBackend | None, _context_value(_SERVICE_BACKEND_CONTEXT)) def _get_transport_backend() -\u003e TransportBackend | None: return cast(TransportBackend | None, _context_value(_TRANSPORT_BACKEND_CONTEXT)) def _contextual_backend_error( message: str, *, service: bool = False, transport: bool = False, ) -\u003e str: \"\"\"Annotate a validation error with the scoped default that selected it.\"\"\" contexts = [] if service: contexts.append(\"torchrl.service_backend\") if transport: contexts.append(\"torchrl.transport_backend\") if not contexts: return message context_names = \" and \".join(contexts) return f\"{message} (selected by an enclosing {context_names} context.)\" def _resolve_service_backend( backend: ServiceBackend | ServiceBackendAlias | str | None, *, default: ServiceBackend | ServiceBackendAlias | str, ) -\u003e ServiceBackend: if backend is not None: return normalize_service_backend(backend) contextual_backend = _get_service_backend() if contextual_backend is not None: return contextual_backend return normalize_service_backend(default) def _resolve_transport_backend( backend: TransportBackend | str | None, *, default: TransportBackend | str, ) -\u003e TransportBackend: if backend is not None: return _normalize_transport_backend(backend) contextual_backend = _get_transport_backend() if contextual_backend is not None: return contextual_backend return _normalize_transport_backend(default) [docs] @contextlib.contextmanager def service_backend( backend: ServiceBackend | ServiceBackendAlias | str, ) -\u003e Iterator[None]: \"\"\"Set the default service backend within the current context. Explicit constructor arguments take precedence over this scoped default. The context is local to the current execution context and process, restores the previous value on exit, and is not inherited by forked workers. Args: backend: Service backend used by compatible objects constructed in the context. Examples: \u003e\u003e\u003e from torchrl import service_backend \u003e\u003e\u003e from torchrl.data import ReplayBuffer \u003e\u003e\u003e with service_backend(\"direct\"): ... replay = ReplayBuffer() \u003e\u003e\u003e replay.service_backend \u0027direct\u0027 \"\"\" backend = normalize_service_backend(backend) token = _SERVICE_BACKEND_CONTEXT.set((os.getpid(), backend)) try: yield finally: _SERVICE_BACKEND_CONTEXT.reset(token) [docs] @contextlib.contextmanager def transport_backend(backend: TransportBackend | str) -\u003e Iterator[None]: \"\"\"Set the default payload transport within the current context. Explicit ``transport`` constructor arguments take precedence. Components still validate whether the selected transport is compatible with their service backend. Args: backend: Transport used by compatible objects constructed in the context. Examples: \u003e\u003e\u003e from torchrl import service_backend, transport_backend \u003e\u003e\u003e from torchrl.data import ReplayBuffer \u003e\u003e\u003e with service_backend(\"direct\"), transport_backend(\"direct\"): ... replay = ReplayBuffer() \u003e\u003e\u003e replay.service_backend \u0027direct\u0027 \"\"\" backend = _normalize_transport_backend(backend) token = _TRANSPORT_BACKEND_CONTEXT.set((os.getpid(), backend)) try: yield finally: _TRANSPORT_BACKEND_CONTEXT.reset(token)",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
@@ -2097,7 +2005,7 @@ document.write(`
        "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
        "mainEntityOfPage": {
          "@type": "WebPage",
-         "@id": "/_modules/torchrl/collectors/_multi_async.html"
+         "@id": "/_modules/torchrl/_comm/backends.html"
        },
        "datePublished": "2023-01-01T00:00:00Z",
        "dateModified": "2023-01-01T00:00:00Z"

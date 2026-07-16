@@ -6,6 +6,12 @@ An RPC-based distributed data collector.
 
 Supports sync and async data collection.
 
+Note
+
+Prefer `Collector(backend="rpc", ...)` for construction in new code.
+Pass RPC launcher and communication settings through
+`backend_options`. This class remains the concrete RPC API.
+
 Parameters:
 
 - **create_env_fn** (*Callable**or**List**[**Callabled**]*) - list of Callables, each returning an

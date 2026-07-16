@@ -34,9 +34,11 @@ full lifecycle.
 
 Collector
 
-The single-process data collector, exposed as
-[`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector). It alternates policy calls and
-environment steps to produce rollout tensordicts.
+The main collector construction API,
+[`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector). By default it alternates policy
+calls and environment steps in the training process. `backend` and
+`num_collectors` select local process, Ray, RPC, or distributed
+implementations without changing the entry point.
 
 compact_obs
 
@@ -84,9 +86,8 @@ EnvCreator
 
 A small callable wrapper, [`EnvCreator`](generated/torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator), used to build
 environments lazily or in worker processes. It is useful when constructors
-need to be serialized for [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector),
-[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector), or distributed
-collectors.
+need to be serialized for `Collector(num_collectors=N)` or another
+distributed `Collector` backend.
 
 functional (loss)
 

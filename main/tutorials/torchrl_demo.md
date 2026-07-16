@@ -469,15 +469,15 @@ collector.shutdown()
 ```
 
 ```
-Collected batch: torch.Size([200]), reward: -8.41
-Collected batch: torch.Size([200]), reward: -9.30
-Collected batch: torch.Size([200]), reward: -8.33
-Collected batch: torch.Size([200]), reward: -8.66
-Collected batch: torch.Size([200]), reward: -8.56
+Collected batch: torch.Size([200]), reward: -6.95
+Collected batch: torch.Size([200]), reward: -5.96
+Collected batch: torch.Size([200]), reward: -7.79
+Collected batch: torch.Size([200]), reward: -6.53
+Collected batch: torch.Size([200]), reward: -6.77
 ```
 
-For async collection (useful when training takes longer than collecting),
-see [`MultiAsyncCollector`](../reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector).
+For asynchronous collection (useful when training takes longer than
+collecting), use `Collector(num_collectors=N, sync=False)`.
 
 ## Replay Buffers
 
@@ -524,7 +524,7 @@ print("Prioritized sample indices:", info["index"][:5], "...") # First 5 indices
 ```
 
 ```
-Prioritized sample indices: tensor([65, 59, 20, 45, 84]) ...
+Prioritized sample indices: tensor([ 3, 92, 15, 96, 84]) ...
 ```
 
 ## Loss Functions
@@ -579,7 +579,7 @@ print("Loss:", loss_td["loss"])
 ```
 
 ```
-Loss: tensor(0.7207, grad_fn=<MeanBackward0>)
+Loss: tensor(1.4968, grad_fn=<MeanBackward0>)
 ```
 
 The loss function handles target network updates, Bellman backup
@@ -645,10 +645,10 @@ env.close()
 ```
 
 ```
-Step 0: loss=0.993
-Step 5: loss=0.650
-Step 10: loss=0.435
-Step 15: loss=0.268
+Step 0: loss=0.992
+Step 5: loss=0.648
+Step 10: loss=0.404
+Step 15: loss=0.264
 ```
 
 This is a minimal example - a production DQN would include target network
@@ -688,7 +688,7 @@ folder contains production-ready implementations of:
 - [GitHub](https://github.com/pytorch/rl)
 - [Contributing Guide](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md)
 
-**Total running time of the script:** (0 minutes 5.219 seconds)
+**Total running time of the script:** (0 minutes 5.056 seconds)
 
 [`Download Jupyter notebook: torchrl_demo.ipynb`](../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb)
 

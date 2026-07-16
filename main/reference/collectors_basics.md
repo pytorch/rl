@@ -13,18 +13,20 @@ state, and/or after a predefined number of steps.
 Because data collection is a potentially compute heavy process, it is crucial to
 configure the execution hyperparameters appropriately.
 The first parameter to take into consideration is whether the data collection should
-occur serially with the optimization step or in parallel. The [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector)
-class will execute the data collection on the training worker. The [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector)
-(or `MultiCollector(sync=True)`) will split the workload across a number of workers and aggregate the results that
-will be delivered to the training worker. Finally, the [`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector)
-(or `MultiCollector(sync=False)`) will execute the data collection on several workers and deliver the first batch of results
-that it can gather. This execution will occur continuously and concomitantly with
+occur serially with the optimization step or in parallel. Construct all of these
+topologies through [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector). `Collector(...)` executes collection on
+the training worker. `Collector(num_collectors=N, sync=True)` splits the
+workload across local processes and aggregates their results (its concrete return
+type is [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector)). `Collector(num_collectors=N, sync=False)`
+delivers the first worker result it can gather (its concrete return type is
+[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector)). This asynchronous execution occurs continuously and concomitantly with
 the training of the networks: this implies that the weights of the policy that
 is used for the data collection may slightly lag the configuration of the policy
 on the training worker. Therefore, although this class may be the fastest to collect
 data, it comes at the price of being suitable only in settings where it is acceptable
 to gather data asynchronously (e.g. off-policy RL or curriculum RL).
-For remotely executed rollouts ([`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector) with `sync=True` or `sync=False`)
+For worker-executed rollouts (`Collector(num_collectors=N)` with either
+`sync=True` or `sync=False`)
 it is necessary to synchronise the weights of the remote policy with the weights
 from the training worker using either the `collector.update_policy_weights_()` or
 by setting `update_at_each_batch=True` in the constructor.
@@ -89,7 +91,7 @@ run within, the data will come with different batch-size depending on how
 the specificities of the collector. The following table summarizes what is to
 be expected when collecting data:
 
-| | Collector | MultiCollector(sync=True) (n=B) | MultiCollector(sync=False) |
+| | Collector (direct) | Collector(num_collectors=B, sync=True) | Collector(..., sync=False) |
 | --- | --- | --- | --- |
 | cat_results | NA | "stack" | 0 |
 | Single env | [T] | [B, T] | [B*(T//B) |
@@ -101,7 +103,8 @@ collector.
 
 Warning
 
-[`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) (i.e., `MultiCollector(sync=True)`) should not be
+`Collector(num_collectors=N, sync=True)` (a
+[`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector)) should not be
 used with `cat_results=0`, as the data will be stacked along the batch
 dimension with batched environment, or the time dimension for single environments,
 which can introduce some confusion when swapping one with the other.
@@ -110,9 +113,11 @@ with the environments as it will keep each dimension separate, and provide
 better interchangeability between configurations, collector classes and other
 components.
 
-Whereas [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) (i.e., `MultiCollector(sync=True)`)
-has a dimension corresponding to the number of sub-collectors being run (`B`),
-[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector) (i.e., `MultiCollector(sync=False)`) doesn't. This
+Whereas `Collector(num_collectors=B, sync=True)` has a dimension corresponding
+to the number of sub-collectors being run (`B`), the asynchronous
+`Collector(num_collectors=B, sync=False)` form does not. The concrete
+implementations are [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) and
+[`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector), respectively. This
 is easily understood when considering that [`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector)
 delivers batches of data on a first-come, first-serve basis, whereas
 [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) gathers data from

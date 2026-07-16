@@ -517,7 +517,7 @@ result = ray.get(my_service.process.remote("Hello"))
 | [`get_services`](generated/torchrl.services.get_services.html#torchrl.services.get_services)([backend]) | Get a distributed service registry. |
 | --- | --- |
 | [`Service`](generated/torchrl.services.Service.html#torchrl.services.Service)(*args, **kwargs) | Owner-side contract for a long-lived TorchRL service. |
-| [`ServiceBackend`](generated/torchrl.services.ServiceBackend.html#torchrl.services.ServiceBackend) | alias of `Literal`['direct', 'thread', 'process', 'ray', 'monarch', 'distributed'] |
+| [`ServiceBackend`](generated/torchrl.services.ServiceBackend.html#torchrl.services.ServiceBackend) | alias of `Literal`['direct', 'thread', 'process', 'ray', 'rpc', 'submitit', 'monarch', 'distributed'] |
 | [`ServiceBase`](generated/torchrl.services.ServiceBase.html#torchrl.services.ServiceBase)() | Base class for distributed service registries. |
 | [`RayService`](generated/torchrl.services.RayService.html#torchrl.services.RayService)([ray_init_config, namespace]) | Ray-based distributed service registry. |
 
@@ -587,7 +587,7 @@ For complete examples, see:
 ## See Also
 
 - [LLM Interface](llms.html) - LLM API documentation
-- [Collector Basics](collectors_basics.html#ref-collectors) - Collector documentation
+- ref_collectors - Collector documentation
 - [Ray Documentation](https://docs.ray.io/) - Ray distributed framework documentation
 
 Note

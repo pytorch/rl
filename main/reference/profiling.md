@@ -69,10 +69,12 @@ import os
 os.environ["TORCHRL_PROFILING"] = "1" # arms named ranges in every process
 
 import torchrl # noqa: F401 -- import after the env var is set
-from torchrl.collectors import MultiSyncCollector
+from torchrl.collectors import Collector
 
-collector = MultiSyncCollector(
- create_env_fn=[make_env] * 4,
+collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
+ sync=True,
  policy=policy,
  frames_per_batch=200,
  total_frames=20_000,
@@ -88,8 +90,8 @@ for data in collector:
 collector.shutdown()
 ```
 
-The same call works for a single-process [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector)
-and for [`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector). Per-worker
+The same call works for `Collector(backend="direct")` and
+`Collector(backend="ray")`. Per-worker
 `_ProfilerHook` instances are constructed with each worker's index, so
 `{worker_idx}` resolves correctly in `save_path`.
 
@@ -162,7 +164,7 @@ The decorator's import-time gate runs in **every process** that imports
 - **Multi-process collectors / ParallelEnv subprocesses** -- `os.environ` is
 inherited by spawned children, so setting `TORCHRL_PROFILING=1` in the
 parent before launching is sufficient.
-- **Ray actors** -- TorchRL's [`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector)
+- **Ray actors** -- TorchRL's `Collector(backend="ray")`
 and `as_remote(...)` automatically inject `TORCHRL_PROFILING` into each
 actor's `runtime_env.env_vars` when it is set on the driver, so remote
 workers are armed identically to the driver.

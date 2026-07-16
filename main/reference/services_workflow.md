@@ -19,6 +19,128 @@ answer:
 TorchRL services answer these questions with a common ownership model while
 preserving the domain API of each component.
 
+## Scoped backend defaults
+
+Backend contexts provide nestable defaults for objects constructed within a
+scope. They are task- and thread-local, restore the previous value after an
+exception, and are not inherited as construction defaults by forked collector
+workers.
+
+torchrl.service_backend(*backend: Literal['direct', 'thread', 'process', 'ray', 'rpc', 'submitit', 'monarch', 'distributed'] | Literal['threading', 'multiprocessing'] | str*) → Iterator[None][[source]](../_modules/torchrl/_comm/backends.html#service_backend)
+
+Set the default service backend within the current context.
+
+Explicit constructor arguments take precedence over this scoped default.
+The context is local to the current execution context and process, restores
+the previous value on exit, and is not inherited by forked workers.
+
+Parameters:
+
+**backend** - Service backend used by compatible objects constructed in the
+context.
+
+Examples
+
+```
+>>> from torchrl import service_backend
+>>> from torchrl.data import ReplayBuffer
+>>> with service_backend("direct"):
+... replay = ReplayBuffer()
+>>> replay.service_backend
+'direct'
+```
+
+torchrl.transport_backend(*backend: Literal['auto', 'direct', 'thread', 'queue', 'process', 'shared_memory', 'ray', 'monarch', 'distributed'] | str*) → Iterator[None][[source]](../_modules/torchrl/_comm/backends.html#transport_backend)
+
+Set the default payload transport within the current context.
+
+Explicit `transport` constructor arguments take precedence. Components
+still validate whether the selected transport is compatible with their
+service backend.
+
+Parameters:
+
+**backend** - Transport used by compatible objects constructed in the
+context.
+
+Examples
+
+```
+>>> from torchrl import service_backend, transport_backend
+>>> from torchrl.data import ReplayBuffer
+>>> with service_backend("direct"), transport_backend("direct"):
+... replay = ReplayBuffer()
+>>> replay.service_backend
+'direct'
+```
+
+```
+from functools import partial
+
+from torchrl import service_backend, transport_backend
+from torchrl.collectors import Collector
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.modules.inference_server import InferenceServer
+
+with service_backend("ray"), transport_backend("distributed"):
+ replay = TensorDictReplayBuffer(
+ storage=partial(LazyTensorStorage, 100_000),
+ batch_size=256,
+ service_backend_options={"remote_config": {"num_cpus": 1}},
+ transport_options={"backend": "gloo"},
+ )
+ inference = InferenceServer(
+ policy_factory=make_policy,
+ service_backend_options={"remote_config": {"num_cpus": 1}},
+ transport_options={"backend": "gloo"},
+ )
+ collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=8,
+ policy=inference,
+ replay_buffer=replay,
+ backend_options={
+ "remote_configs": {"num_cpus": 1, "num_gpus": 0}
+ },
+ frames_per_batch=1024,
+ )
+```
+
+The contexts select names only. Resource and protocol configuration remains in
+`service_backend_options`, `transport_options`, or collector
+`backend_options`. Distributed transport uses Gloo by default; set
+`transport_options={"backend": "nccl"}` for CUDA tensors. An explicit
+constructor value, including `"auto"`, takes precedence over a contextual
+default. Unsupported component and backend combinations raise during
+construction, before workers or owners are launched.
+
+Collector placement may instead be selected explicitly. These forms leave the
+corresponding concrete collector classes available for existing code:
+
+```
+process_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
+ backend="process",
+ frames_per_batch=1024,
+ sync=True,
+)
+ray_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
+ backend="ray",
+ backend_options={"remote_configs": {"num_cpus": 1}},
+ frames_per_batch=1024,
+)
+distributed_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
+ backend="distributed",
+ backend_options={"backend": "gloo", "launcher": "mp"},
+ frames_per_batch=1024,
+)
+```
+
 ## Owners and clients
 
 A [`Service`](generated/torchrl.services.Service.html#torchrl.services.Service) is the owner of a long-lived resource. The owner controls
@@ -56,9 +178,11 @@ its actor. Pickling a client does not reconstruct those resources.
 ## Placement does not define communication
 
 `service_backend` selects where ownership lives. TorchRL uses the canonical
-backend vocabulary `direct`, `thread`, `process`, `ray`, `monarch`,
-and `distributed`, but each service supports only the placements that fit
-its implementation.
+backend vocabulary `direct`, `thread`, `process`, `ray`, `rpc`,
+`submitit`, `monarch`, and `distributed`, but each service supports only
+the placements that fit its implementation. `rpc` and `submitit` are
+collector construction choices; selecting either for a component that does
+not implement it fails that component's validation.
 
 Placement is intentionally separate from the operation protocol. The domains
 have incompatible communication requirements:
@@ -146,9 +270,10 @@ objects, or genuinely changing tensor layouts.
 
 ### Ray collectors and service transports
 
-[`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector) deliberately has no
-`transport` argument. A transport belongs to the endpoint that receives and
-serves the data:
+`Collector(backend="ray")` returns a
+[`RayCollector`](generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector), which deliberately has
+no `transport` argument. A transport belongs to the endpoint that receives
+and serves the data:
 
 - policy requests use the attached inference server's transport;
 - replay writes use the attached replay buffer's transport; and
@@ -162,7 +287,7 @@ through Ray a second time. This is the recommended high-throughput topology:
 ```
 from functools import partial
 
-from torchrl.collectors.distributed import RayCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.modules.inference_server import InferenceServer
 
@@ -181,15 +306,17 @@ inference = InferenceServer(
  transport="distributed",
  transport_options={"backend": "gloo"},
 )
-collector = RayCollector(
- create_env_fn=[make_env] * 8,
+collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=8,
+ backend="ray",
  policy=inference,
  replay_buffer=replay,
  frames_per_batch=1024,
 )
 ```
 
-If no replay buffer is attached, iterating over `RayCollector` returns
+If no replay buffer is attached, iterating over a Ray-backed `Collector` returns
 rollouts to the driver through Ray's object store. That collector-to-driver
 path is not transport-selectable. Use direct-to-replay collection when the
 rollouts are large and do not need to be inspected by the driver. Use the Ray

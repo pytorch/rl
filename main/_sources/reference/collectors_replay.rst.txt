@@ -50,25 +50,27 @@ will work:
     >>> collector = Collector(env, policy, frames_per_batch=N, total_frames=-1)
     >>> for data in collector:
     ...     memory.extend(data)
-    >>> # MultiSyncCollector + regular env: behaves like a ParallelEnv if cat_results="stack"
+    >>> # Synchronous process collection behaves like ParallelEnv if cat_results="stack"
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=2),
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
     ... )
-    >>> collector = MultiSyncCollector([make_env] * 4,
-    ...     policy,
+    >>> collector = Collector(make_env, policy,
+    ...     num_collectors=4,
+    ...     sync=True,
     ...     frames_per_batch=N,
     ...     total_frames=-1,
     ...     cat_results="stack")
     >>> for data in collector:
     ...     memory.extend(data)
-    >>> # MultiSyncCollector + parallel env: the ndim must be adapted accordingly
+    >>> # Process collection + parallel env: adapt ndim for both batch dimensions
     >>> memory = ReplayBuffer(
     ...     storage=LazyTensorStorage(N, ndim=3),
     ...     sampler=SliceSampler(num_slices=4, trajectory_key=("collector", "traj_ids"))
     ... )
-    >>> collector = MultiSyncCollector([ParallelEnv(2, make_env)] * 4,
-    ...     policy,
+    >>> collector = Collector(lambda: ParallelEnv(2, make_env), policy,
+    ...     num_collectors=4,
+    ...     sync=True,
     ...     frames_per_batch=N,
     ...     total_frames=-1,
     ...     cat_results="stack")
@@ -90,9 +92,9 @@ will work:
 Complete trajectory collection with ``trajs_per_batch``
 -------------------------------------------------------
 
-When using a multi-process collector
-(:class:`~torchrl.collectors.MultiSyncCollector` or
-:class:`~torchrl.collectors.MultiAsyncCollector`) with fixed-frame batches
+When using ``Collector(num_collectors=N)`` with fixed-frame batches (the
+concrete result is :class:`~torchrl.collectors.MultiSyncCollector` or
+:class:`~torchrl.collectors.MultiAsyncCollector`)
 and a :class:`~torchrl.data.replay_buffers.SliceSampler`, adjacent frames in the buffer can
 come from **different workers and different episodes** without an intervening
 ``done`` signal.  The sampler has no way to detect these invisible boundaries,
@@ -167,7 +169,7 @@ lengths vary a lot or frames are large (images, token sequences):
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiCollector
+    from torchrl.collectors import Collector
     from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler
 
     rb = ReplayBuffer(
@@ -175,9 +177,10 @@ lengths vary a lot or frames are large (images, token sequences):
         sampler=SliceSampler(slice_len=32, end_key=("next", "done")),
         batch_size=256,
     )
-    collector = MultiCollector(
-        [make_env] * 4,
+    collector = Collector(
+        make_env,
         policy,
+        num_collectors=4,
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=500_000,
@@ -196,9 +199,10 @@ concurrently, use :meth:`~torchrl.collectors.BaseCollector.start`:
 
 .. code-block:: python
 
-    collector = MultiCollector(
-        [make_env] * 4,
+    collector = Collector(
+        make_env,
         policy,
+        num_collectors=4,
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,
@@ -217,13 +221,14 @@ This pattern fully decouples data collection from training and is the
 recommended way to maximise inference throughput on multi-core machines or
 GPU-accelerated environments.
 
-**Single-process collectors** also support ``trajs_per_batch`` with the same
+**Direct collectors** also support ``trajs_per_batch`` with the same
 replay-buffer semantics:
 
 .. code-block:: python
 
     collector = Collector(
         env, policy,
+        backend="direct",
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,

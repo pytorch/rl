@@ -47,7 +47,7 @@ Get started with data collection and storage
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-57
+.. GENERATED FROM PYTHON SOURCE LINES 22-58
 
 There is no learning without data. In supervised learning, users are
 accustomed to using :class:`~torch.utils.data.DataLoader` and the like
@@ -70,9 +70,10 @@ Data collectors
 .. _gs_storage_collector:
 
 
-The primary data collector discussed here is the
-:class:`~torchrl.collectors.Collector`, which is the focus of this
-documentation. At a fundamental level, a collector is a straightforward
+:class:`~torchrl.collectors.Collector` is the main construction entry point
+for TorchRL data collection. It can build a direct, local multi-process, Ray,
+RPC, or distributed collector without changing the class imported by the
+training code. At a fundamental level, a collector is a straightforward
 class responsible for executing your policy within the environment,
 resetting the environment when necessary, and providing batches of a
 predefined size. Unlike the :meth:`~torchrl.envs.EnvBase.rollout` method
@@ -85,7 +86,7 @@ batches you want to collect (``frames_per_batch``), the length (possibly
 infinite) of the iterator, the policy and the environment. For simplicity,
 we will use a dummy, random policy in this example.
 
-.. GENERATED FROM PYTHON SOURCE LINES 58-73
+.. GENERATED FROM PYTHON SOURCE LINES 59-74
 
 .. code-block:: Python
 
@@ -111,7 +112,7 @@ we will use a dummy, random policy in this example.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 74-82
+.. GENERATED FROM PYTHON SOURCE LINES 75-83
 
 We now expect that our collector will deliver batches of size ``200`` no
 matter what happens during collection. In other words, we may have multiple
@@ -122,7 +123,7 @@ ending collector.
 Let's iterate over the collector to get a sense
 of what this data looks like:
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-87
+.. GENERATED FROM PYTHON SOURCE LINES 83-88
 
 .. code-block:: Python
 
@@ -169,7 +170,7 @@ of what this data looks like:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 88-93
+.. GENERATED FROM PYTHON SOURCE LINES 89-94
 
 As you can see, our data is augmented with some collector-specific metadata
 grouped in a ``"collector"`` sub-tensordict that we did not see during
@@ -177,7 +178,7 @@ grouped in a ``"collector"`` sub-tensordict that we did not see during
 the trajectory ids. In the following list, each item marks the trajectory
 number the corresponding transition belongs to:
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-96
+.. GENERATED FROM PYTHON SOURCE LINES 94-97
 
 .. code-block:: Python
 
@@ -205,56 +206,102 @@ number the corresponding transition belongs to:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-143
+.. GENERATED FROM PYTHON SOURCE LINES 98-190
 
-Data collectors are very useful when it comes to coding state-of-the-art
-algorithms, as performance is usually measured by the capability of a
-specific technique to solve a problem in a given number of interactions with
-the environment (the ``total_frames`` argument in the collector).
-For this reason, most training loops in our examples look like this:
+Changing the execution topology
+ --------------------------------
 
-  .. code-block:: python
+ The default above collects directly in the training process. Scale the same
+ entry point to local worker processes with ``num_collectors``. ``sync=True``
+ waits for every worker and is a natural fit for on-policy algorithms;
+ ``sync=False`` delivers the first available worker batch and is usually used
+ for off-policy training:
 
-    >>> for data in collector:
-    ...     # your algorithm here
+ .. code-block:: python
+
+     def make_env():
+         return GymEnv("CartPole-v1")
+
+     process_collector = Collector(
+         make_env,
+         policy,
+         num_collectors=4,
+         sync=False,
+         frames_per_batch=200,
+         total_frames=-1,
+     )
+
+ Distributed placement uses the same constructor. Backend-specific resources
+ and launcher settings belong in ``backend_options``:
+
+ .. code-block:: python
+
+     ray_collector = Collector(
+         make_env,
+         policy,
+         backend="ray",
+         num_collectors=4,
+         backend_options={
+             "remote_configs": {"num_cpus": 1, "num_gpus": 0}
+         },
+         frames_per_batch=200,
+         total_frames=-1,
+     )
+
+ The resulting object retains its concrete implementation type, but the
+ iteration, replay-buffer, lifecycle, and weight-update APIs stay the same.
+ See :ref:`ref_collectors` for RPC, distributed, submitit, and scoped backend
+ selection.
+
+################################
+ Data collectors are very useful when it comes to coding state-of-the-art
+ algorithms, as performance is usually measured by the capability of a
+ specific technique to solve a problem in a given number of interactions with
+ the environment (the ``total_frames`` argument in the collector).
+ For this reason, most training loops in our examples look like this:
+
+   .. code-block:: python
+
+     >>> for data in collector:
+     ...     # your algorithm here
 
 
-Replay Buffers
---------------
+ Replay Buffers
+ --------------
 
-.. _gs_storage_rb:
+ .. _gs_storage_rb:
 
-Now that we have explored how to collect data, we would like to know how to
-store it. In RL, the typical setting is that the data is collected, stored
-temporarily and cleared after a little while given some heuristic:
-first-in first-out or other. A typical pseudo-code would look like this:
+ Now that we have explored how to collect data, we would like to know how to
+ store it. In RL, the typical setting is that the data is collected, stored
+ temporarily and cleared after a little while given some heuristic:
+ first-in first-out or other. A typical pseudo-code would look like this:
 
-.. code-block:: python
+ .. code-block:: python
 
-  >>> for data in collector:
-  ...     storage.store(data)
-  ...     for i in range(n_optim):
-  ...         sample = storage.sample()
-  ...         loss_val = loss_fn(sample)
-  ...         loss_val.backward()
-  ...         optim.step() # etc
+   >>> for data in collector:
+   ...     storage.store(data)
+   ...     for i in range(n_optim):
+   ...         sample = storage.sample()
+   ...         loss_val = loss_fn(sample)
+   ...         loss_val.backward()
+   ...         optim.step() # etc
 
-The parent class that stores the data in TorchRL
-is referred to as :class:`~torchrl.data.ReplayBuffer`. TorchRL's replay
-buffers are composable: you can edit the storage type, their sampling
-technique, the writing heuristic or the transforms applied to them. We will
-leave the fancy stuff for a dedicated in-depth tutorial. The generic replay
-buffer only needs to know what storage it has to use. In general, we
-recommend a :class:`~torchrl.data.replay_buffers.TensorStorage` subclass, which will work
-fine in most cases. We'll be using
-:class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
-in this tutorial, which enjoys two nice properties: first, being "lazy",
-you don't  need to explicitly tell it what your data looks like in advance.
-Second, it uses :class:`~tensordict.MemoryMappedTensor` as a backend to save
-your data on disk in an efficient way. The only thing you need to know is
-how big you want your buffer to be.
+ The parent class that stores the data in TorchRL
+ is referred to as :class:`~torchrl.data.ReplayBuffer`. TorchRL's replay
+ buffers are composable: you can edit the storage type, their sampling
+ technique, the writing heuristic or the transforms applied to them. We will
+ leave the fancy stuff for a dedicated in-depth tutorial. The generic replay
+ buffer only needs to know what storage it has to use. In general, we
+ recommend a :class:`~torchrl.data.replay_buffers.TensorStorage` subclass, which will work
+ fine in most cases. We'll be using
+ :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
+ in this tutorial, which enjoys two nice properties: first, being "lazy",
+ you don't  need to explicitly tell it what your data looks like in advance.
+ Second, it uses :class:`~tensordict.MemoryMappedTensor` as a backend to save
+ your data on disk in an efficient way. The only thing you need to know is
+ how big you want your buffer to be.
 
-.. GENERATED FROM PYTHON SOURCE LINES 143-152
+.. GENERATED FROM PYTHON SOURCE LINES 190-199
 
 .. code-block:: Python
 
@@ -274,14 +321,14 @@ how big you want your buffer to be.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 153-157
+.. GENERATED FROM PYTHON SOURCE LINES 200-204
 
 Populating the buffer can be done via the
 :meth:`~torchrl.data.ReplayBuffer.add` (single element) or
 :meth:`~torchrl.data.ReplayBuffer.extend` (multiple elements) methods. Using
 the data we just collected, we initialize and populate the buffer in one go:
 
-.. GENERATED FROM PYTHON SOURCE LINES 157-160
+.. GENERATED FROM PYTHON SOURCE LINES 204-207
 
 .. code-block:: Python
 
@@ -295,12 +342,12 @@ the data we just collected, we initialize and populate the buffer in one go:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-163
+.. GENERATED FROM PYTHON SOURCE LINES 208-210
 
 We can check that the buffer now has the same number of elements as what
 we got from the collector:
 
-.. GENERATED FROM PYTHON SOURCE LINES 163-166
+.. GENERATED FROM PYTHON SOURCE LINES 210-213
 
 .. code-block:: Python
 
@@ -314,7 +361,7 @@ we got from the collector:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-172
+.. GENERATED FROM PYTHON SOURCE LINES 214-219
 
 The only thing left to know is how to gather data from the buffer.
 Naturally, this relies on the :meth:`~torchrl.data.ReplayBuffer.sample`
@@ -322,7 +369,7 @@ method. Because we did not specify that sampling had to be done without
 repetitions, it is not guaranteed that the samples gathered from our buffer
 will be unique:
 
-.. GENERATED FROM PYTHON SOURCE LINES 172-176
+.. GENERATED FROM PYTHON SOURCE LINES 219-223
 
 .. code-block:: Python
 
@@ -368,7 +415,7 @@ will be unique:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-206
+.. GENERATED FROM PYTHON SOURCE LINES 224-251
 
 Again, our sample looks exactly the same as the data we gathered from the
 collector!
@@ -376,12 +423,10 @@ collector!
 Next steps
 ----------
 
-- You can have look at other multiprocessed
-  collectors such as :class:`~torchrl.collectors.MultiSyncCollector` or
-  :class:`~torchrl.collectors.MultiAsyncCollector`.
-- TorchRL also offers distributed collectors if you have multiple nodes to
-  use for inference. Check them out in the
-  :ref:`API reference <ref_collectors>`.
+- Scale collection with ``Collector(num_collectors=N, sync=...)`` or select
+  Ray, RPC, and distributed execution through ``Collector(backend=...)``.
+  See the :ref:`API reference <ref_collectors>` for the full selection and
+  configuration rules.
 - Check the dedicated :ref:`Replay Buffer tutorial <rb_tuto>` to know
   more about the options you have when building a buffer, or the
   :ref:`API reference <ref_data>` which covers all the features in
@@ -403,7 +448,7 @@ Next steps
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.080 seconds)
+   **Total running time of the script:** (0 minutes 0.086 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-3.py:

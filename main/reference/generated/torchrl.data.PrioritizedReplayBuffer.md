@@ -101,6 +101,12 @@ This is useful when the replay buffer needs to be pickled and sent to remote wor
 particularly when using transforms with modules that require gradients.
 If not specified, defaults to `True` when `transform_factory` is provided,
 and `False` otherwise.
+- **transport** (*str**,**optional*) - physical transport used by a remote replay
+owner. `"auto"` selects the backend default. Defaults to
+`"auto"`.
+- **transport_options** (*dict**,**optional*) - options for the selected transport.
+For `transport="distributed"`, `backend` selects `"gloo"`
+or `"nccl"`. TensorDict layouts are bound lazily on first use.
 
 Note
 

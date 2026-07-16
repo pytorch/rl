@@ -1,12 +1,14 @@
 # Single Node Collectors
 
-TorchRL provides several collector classes for single-node data collection, each with different execution strategies.
+Use [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) as the construction entry point for direct and local
+multi-process collection. The concrete classes below remain public for
+advanced use and document the implementation returned by each selection.
 
 ## Single node data collectors
 
 | [`BaseCollector`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector)(*[, pre_collect_hook, ...]) | Base class for data collectors. |
 | --- | --- |
-| [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector)(create_env_fn[, policy, ...]) | Generic data collector for RL problems. |
+| [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector)(create_env_fn[, policy, ...]) | Main construction entry point for TorchRL data collectors. |
 | [`AsyncCollector`](generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector)(*args[, sync]) | Runs a single DataCollector on a separate process. |
 | [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector)(create_env_fn, *[, ...]) | Asynchronous collector with env slots and a policy server. |
 | [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector)(*args[, sync]) | Runs a given number of DataCollectors on separate processes. |
@@ -70,9 +72,10 @@ episodes. See [Complete trajectory collection with trajs_per_batch](collectors_r
 
 Note
 
-The deprecated collector aliases were removed in v0.13. Use the canonical
-classes directly: `BaseCollector`, `Collector`, `AsyncCollector`,
-`MultiCollector`, `MultiSyncCollector`, and `MultiAsyncCollector`.
+The deprecated collector aliases were removed in v0.13. Construct new
+collectors with `Collector`. `BaseCollector`, `AsyncCollector`,
+`MultiCollector`, `MultiSyncCollector`, and `MultiAsyncCollector`
+remain available as concrete implementation APIs.
 
 ## Using AsyncBatchedCollector
 
@@ -108,7 +111,7 @@ for data in collector:
 collector.shutdown()
 ```
 
-**Key advantages over** [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector):
+**Key advantages over direct collection through** [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector):
 
 - The inference server automatically **batches policy forward passes** from
 all environments, maximising GPU utilisation.
@@ -116,21 +119,24 @@ all environments, maximising GPU utilisation.
 idle time.
 - Supports `yield_completed_trajectories=True` for episode-level yields.
 
-## Using MultiCollector
+## Scaling `Collector` across local processes
 
-The [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector) class is the recommended way to run parallel data collection.
-It uses a `sync` parameter to dispatch to either [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) or [`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector):
+Pass `num_collectors` to [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector) to run parallel local collection.
+The `sync` parameter selects synchronous or asynchronous delivery and the
+constructor returns [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector) or [`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector),
+respectively:
 
 ```
-from torchrl.collectors import MultiCollector
+from torchrl.collectors import Collector
 from torchrl.envs import GymEnv
 
 def make_env():
  return GymEnv("CartPole-v1")
 
 # Synchronous multi-worker collection (recommended for on-policy algorithms)
-sync_collector = MultiCollector(
- create_env_fn=[make_env] * 4, # 4 parallel workers
+sync_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
  policy=my_policy,
  frames_per_batch=1000,
  total_frames=100000,
@@ -138,8 +144,9 @@ sync_collector = MultiCollector(
 )
 
 # Asynchronous multi-worker collection (recommended for off-policy algorithms)
-async_collector = MultiCollector(
- create_env_fn=[make_env] * 4,
+async_collector = Collector(
+ create_env_fn=make_env,
+ num_collectors=4,
  policy=my_policy,
  frames_per_batch=1000,
  total_frames=100000,
@@ -180,7 +187,8 @@ If you want to run a data collector in the background, simply run [`start()`](ge
 ... # rest of the training loop
 ```
 
-Single-process collectors ([`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector)) will run the process using multithreading,
+Direct collectors (`Collector(backend="direct")`) run background collection
+using multithreading,
 so be mindful of Python's GIL and related multithreading restrictions.
 
 Multiprocessed collectors will on the other hand let the child processes handle the filling of the buffer on their own,
@@ -202,9 +210,10 @@ rb = ReplayBuffer(
  batch_size=256,
  shared=True,
 )
-collector = MultiCollector(
- [make_env] * 4,
+collector = Collector(
+ make_env,
  policy,
+ num_collectors=4,
  replay_buffer=rb,
  frames_per_batch=200,
  total_frames=-1,
