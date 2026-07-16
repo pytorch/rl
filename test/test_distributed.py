@@ -64,7 +64,7 @@ from torchrl.trainers._distributed import (
 )
 from torchrl.trainers._ray_execution import _RayTrainerExecution
 from torchrl.trainers.algorithms import DDPGTrainer, DQNTrainer, SACTrainer, TD3Trainer
-from torchrl.trainers.trainers import OptimizationStepper
+from torchrl.trainers.trainers import OptimizationStepper, Trainer
 
 _has_ray = importlib.util.find_spec("ray") is not None
 if _has_ray:
@@ -94,6 +94,12 @@ class CountingPolicy(TensorDictModuleBase):
 
     def forward(self, tensordict):
         tensordict.set("action", self.weight.expand(tensordict.shape).clone())
+        return tensordict
+
+
+class BatchedCountingPolicy(CountingPolicy):
+    def forward(self, tensordict):
+        tensordict.set("action", self.weight.expand(*tensordict.shape, 1).clone())
         return tensordict
 
 
@@ -135,6 +141,10 @@ class CountingTargetUpdater(TargetNetUpdater):
 
     def load_state_dict(self, state_dict):
         self.calls = state_dict["calls"]
+
+
+def flatten_batch(tensordict):
+    return tensordict.reshape(-1)
 
 
 class MultiOptimizerRayLoss(LossModule):
@@ -1412,6 +1422,114 @@ class TestRayCollector(DistributedCollectorBase):
             if collector is not None:
                 collector.shutdown()
             inference.shutdown()
+            replay.shutdown()
+
+    @pytest.mark.parametrize("flatten", [False, True])
+    def test_async_trainer_requires_transition_replay(self, flatten):
+        num_envs = 2
+        frames_per_batch = 8
+        total_frames = 16
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=2,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        policy = BatchedCountingPolicy()
+        collector = RayCollector(
+            create_env_fn=[partial(CountingEnv, batch_size=[num_envs])],
+            policy=policy,
+            replay_buffer=replay,
+            collector_class=Collector,
+            collector_kwargs={"postproc": flatten_batch} if flatten else None,
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        trainer_kwargs = {
+            "collector": collector,
+            "total_frames": total_frames,
+            "frame_skip": 1,
+            "optim_steps_per_batch": 1,
+            "loss_module": loss,
+            "optimizer": torch.optim.SGD(loss.parameters(), lr=0.1),
+            "replay_buffer": replay,
+            "async_collection": True,
+            "progress_bar": False,
+        }
+        if flatten:
+            trainer = Trainer(**trainer_kwargs)
+        else:
+            with pytest.warns(UserWarning, match="experimental"):
+                trainer = DQNTrainer(
+                    **trainer_kwargs,
+                    batch_size=2,
+                    target_net_updater=CountingTargetUpdater(loss),
+                    learner_backend="ray",
+                    learner_backend_options={
+                        "world_size": 2,
+                        "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                        "backend": "gloo",
+                        "setup_timeout": 60.0,
+                        "command_timeout": 60.0,
+                    },
+                    enable_logging=False,
+                )
+        try:
+            if not flatten:
+                with pytest.raises(RuntimeError, match="individual transitions"):
+                    trainer.train()
+                assert replay[0].shape == (frames_per_batch // num_envs,)
+                assert replay.write_count < collector.collected_frames
+                return
+
+            collector.update_policy_weights_(policy)
+            assert all(batch is None for batch in collector)
+            assert collector.collected_frames == total_frames
+            assert replay.write_count == total_frames
+            assert replay.sample().shape == (2,)
+            trainer._validate_transition_replay()
+            sentinel = object()
+            assert next(trainer._async_iterator(), sentinel) is sentinel
+        finally:
+            collector.shutdown()
+            replay.shutdown()
+
+    def test_async_ray_collector_does_not_write_unreserved_batches(self):
+        num_envs = 2
+        frames_per_batch = 4
+        total_frames = 16
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=2,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        policy = BatchedCountingPolicy()
+        env_fn = partial(CountingEnv, batch_size=[num_envs])
+        collector = RayCollector(
+            create_env_fn=[env_fn, env_fn],
+            policy=policy,
+            replay_buffer=replay,
+            collector_class=Collector,
+            collector_kwargs={"postproc": flatten_batch},
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=False,
+        )
+        try:
+            collector.update_policy_weights_(policy)
+            assert all(batch is None for batch in collector)
+            assert collector.collected_frames == total_frames
+            assert replay.write_count == total_frames
+            assert replay.sample().shape == (2,)
+        finally:
+            collector.shutdown()
             replay.shutdown()
 
     def test_ray_collector_pause_drains_and_resumes(self):

@@ -1360,8 +1360,9 @@ class Trainer:
 
         if self.async_collection:
             self.collector.start()
-            while self.collector.getattr_rb("write_count") == 0:
+            while self._replay_write_count() == 0:
                 time.sleep(0.1)
+            self._validate_transition_replay()
 
             # Create async iterator that monitors write_count progress
             iterator = self._async_iterator()
@@ -1384,7 +1385,7 @@ class Trainer:
                 # In async mode, batch is None and we track frames via write_count
                 batch = None
                 cf = self.collected_frames
-                self.collected_frames = self.collector.getattr_rb("write_count")
+                self.collected_frames = self._replay_write_count()
                 current_frames = self.collected_frames - cf
 
             # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
@@ -1440,6 +1441,7 @@ class Trainer:
             else:
                 iterator = iter(self.collector)
 
+            transition_replay_validated = False
             for batch in iterator:
                 previous_frames = self.collected_frames
                 if batch is not None:
@@ -1464,6 +1466,10 @@ class Trainer:
                     current_frames = max(0, write_count - previous_write_count)
                     previous_write_count = write_count
                     self.collected_frames += current_frames * self.frame_skip
+
+                if current_frames > 0 and not transition_replay_validated:
+                    self._validate_transition_replay()
+                    transition_replay_validated = True
 
                 if (
                     self.collected_frames
@@ -1573,10 +1579,28 @@ class Trainer:
         self._published_model_version = -1
 
     def _replay_write_count(self) -> int:
-        write_count = self.replay_buffer.write_count
+        replay_buffer = self.replay_buffer
+        if replay_buffer is None:
+            return int(self.collector.getattr_rb("write_count"))
+        write_count = replay_buffer.write_count
         if callable(write_count):
             write_count = write_count()
         return int(write_count)
+
+    def _validate_transition_replay(self) -> None:
+        replay_buffer = self.replay_buffer
+        if replay_buffer is None or not len(replay_buffer):
+            return
+        replay_item = replay_buffer[0]
+        if isinstance(replay_item, TensorDictBase) and replay_item.ndim:
+            raise RuntimeError(
+                "Trainer expected direct replay to contain individual transitions, "
+                f"but one replay item has batch size {replay_item.batch_size}. "
+                "Flatten collector rollouts before insertion, for example with "
+                "collector_kwargs={'postproc': flatten_batch}, where flatten_batch "
+                "returns data.reshape(-1). Use a custom training loop when grouped "
+                "sequence replay is intentional."
+            )
 
     def _async_iterator(self):
         """Create an iterator for async collection that monitors replay buffer write_count.
@@ -1586,7 +1610,7 @@ class Trainer:
         This ensures the training loop properly consumes the entire collector output.
         """
         while True:
-            current_write_count = self.collector.getattr_rb("write_count")
+            current_write_count = self._replay_write_count()
             # Check if we've reached the target frames
             if current_write_count >= self.total_frames:
                 break
