@@ -37,7 +37,6 @@ from torchrl._comm.backends import (
     _get_service_backend,
     _get_transport_backend,
     _resolve_service_backend,
-    _resolve_transport_backend,
 )
 
 try:
@@ -1620,11 +1619,17 @@ class _RayServiceMetaClass(type):
         options = dict(service_backend_options or {})
 
         transport_backend_from_context = False
-        if getattr(cls, "_accepts_transport_backend", False):
-            transport = kwargs.get("transport")
-            if transport is None:
-                transport_backend_from_context = _get_transport_backend() is not None
-                kwargs["transport"] = _resolve_transport_backend(None, default="auto")
+        if (
+            getattr(cls, "_accepts_transport_backend", False)
+            and kwargs.get("transport") is None
+        ):
+            # Only inject the scoped default: not every subclass accepts a
+            # ``transport`` keyword, and absent any context the constructor
+            # default is equivalent.
+            contextual_transport = _get_transport_backend()
+            if contextual_transport is not None:
+                transport_backend_from_context = True
+                kwargs["transport"] = contextual_transport
 
         def construct(factory):
             try:
