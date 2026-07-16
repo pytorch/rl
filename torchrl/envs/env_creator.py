@@ -260,9 +260,12 @@ def get_env_metadata(
         if kwargs is None:
             kwargs = {}
         env = env_or_creator(**kwargs)
-        if env_validator is not None:
-            env_validator(env)
-        return EnvMetaData.metadata_from_env(env)
+        try:
+            if env_validator is not None:
+                env_validator(env)
+            return EnvMetaData.metadata_from_env(env)
+        finally:
+            env.close()
     elif isinstance(env_or_creator, EnvCreator):
         if not (
             kwargs == env_or_creator.create_env_kwargs

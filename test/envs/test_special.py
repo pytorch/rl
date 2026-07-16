@@ -61,6 +61,25 @@ from torchrl.testing.mocking_classes import (
 )
 
 
+def test_callable_metadata_env_closes_when_extraction_fails(monkeypatch):
+    env = ContinuousActionVecMockEnv()
+    closed = False
+
+    def fake_tensordict():
+        raise RuntimeError("metadata extraction failed")
+
+    def close():
+        nonlocal closed
+        closed = True
+
+    monkeypatch.setattr(env, "fake_tensordict", fake_tensordict)
+    monkeypatch.setattr(env, "close", close)
+
+    with pytest.raises(RuntimeError, match="metadata extraction failed"):
+        get_env_metadata(lambda: env)
+    assert closed
+
+
 @pytest.mark.parametrize(
     "envclass",
     [
