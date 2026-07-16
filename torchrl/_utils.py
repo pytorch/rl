@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import contextvars
 import functools
 import inspect
 import logging
@@ -31,7 +32,12 @@ from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 from torch.autograd.profiler import record_function
 
-from torchrl._comm.backends import normalize_service_backend
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    _get_transport_backend,
+    _resolve_service_backend,
+)
 
 try:
     from torch.compiler import is_compiling
@@ -1532,6 +1538,11 @@ class cuda_memory_profile(_DecoratorContextManager):
             )
 
 
+_SERVICE_BACKEND_DISPATCHING = contextvars.ContextVar(
+    "torchrl_service_backend_dispatching", default=None
+)
+
+
 class _RayServiceMetaClass(type):
     """Metaclass that selects direct or service-backed implementations.
 
@@ -1592,31 +1603,85 @@ class _RayServiceMetaClass(type):
             )
             service_backend = "ray"
 
-        if service_backend is None:
+        if service_backend is None and (
+            _SERVICE_BACKEND_DISPATCHING.get() == os.getpid()
+            or getattr(cls, "_service_backend_resolved", False)
+        ):
+            # A service factory may construct a wrapper that uses this same
+            # metaclass (for example RayReplayBuffer). The backend has already
+            # been resolved by the outer construction and must not dispatch a
+            # second time from the still-active context.
             service_backend = "direct"
-        service_backend = normalize_service_backend(service_backend)
+        service_backend_from_context = (
+            service_backend is None and _get_service_backend() is not None
+        )
+        service_backend = _resolve_service_backend(service_backend, default="direct")
         options = dict(service_backend_options or {})
+
+        transport_backend_from_context = False
+        if (
+            getattr(cls, "_accepts_transport_backend", False)
+            and kwargs.get("transport") is None
+        ):
+            # Only inject the scoped default: not every subclass accepts a
+            # ``transport`` keyword, and absent any context the constructor
+            # default is equivalent.
+            contextual_transport = _get_transport_backend()
+            if contextual_transport is not None:
+                transport_backend_from_context = True
+                kwargs["transport"] = contextual_transport
+
+        def construct(factory):
+            try:
+                return factory()
+            except ValueError as err:
+                message = str(err)
+                service_error = (
+                    service_backend_from_context and "service_backend" in message
+                )
+                transport_error = (
+                    transport_backend_from_context and "transport" in message
+                )
+                if not service_error and not transport_error:
+                    raise
+                raise ValueError(
+                    _contextual_backend_error(
+                        message,
+                        service=service_error,
+                        transport=transport_error,
+                    )
+                ) from err
 
         if service_backend == "direct":
             if options:
                 raise ValueError(
                     "service_backend_options are only valid for non-direct services."
                 )
-            return super().__call__(*args, **kwargs)
+            direct_constructor = super().__call__
+            return construct(lambda: direct_constructor(*args, **kwargs))
 
         if hasattr(cls, "_ServiceClass"):
-            return cls._ServiceClass(
-                service_backend,
-                *args,
-                service_backend_options=options,
-                **kwargs,
-            )
+            token = _SERVICE_BACKEND_DISPATCHING.set(os.getpid())
+            try:
+                return construct(
+                    lambda: cls._ServiceClass(
+                        service_backend,
+                        *args,
+                        service_backend_options=options,
+                        **kwargs,
+                    )
+                )
+            finally:
+                _SERVICE_BACKEND_DISPATCHING.reset(token)
         if service_backend == "ray" and hasattr(cls, "_RayServiceClass"):
             if options and "ray_actor_options" not in kwargs:
                 kwargs["ray_actor_options"] = options.get("actor_options", options)
-            return cls._RayServiceClass(*args, **kwargs)
+            return construct(lambda: cls._RayServiceClass(*args, **kwargs))
         raise ValueError(
-            f"{cls.__name__} does not support service_backend={service_backend!r}."
+            _contextual_backend_error(
+                f"{cls.__name__} does not support service_backend={service_backend!r}.",
+                service=service_backend_from_context,
+            )
         )
 
 

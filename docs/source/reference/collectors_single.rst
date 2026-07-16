@@ -3,7 +3,9 @@
 Single Node Collectors
 ======================
 
-TorchRL provides several collector classes for single-node data collection, each with different execution strategies.
+Use :class:`Collector` as the construction entry point for direct and local
+multi-process collection. The concrete classes below remain public for
+advanced use and document the implementation returned by each selection.
 
 Single node data collectors
 ---------------------------
@@ -81,9 +83,10 @@ For regular fixed-frame collection from a batched environment, pass
 recommended 1-D storage with ``N * T`` transitions.
 
 .. note::
-    The deprecated collector aliases were removed in v0.13. Use the canonical
-    classes directly: ``BaseCollector``, ``Collector``, ``AsyncCollector``,
-    ``MultiCollector``, ``MultiSyncCollector``, and ``MultiAsyncCollector``.
+    The deprecated collector aliases were removed in v0.13. Construct new
+    collectors with ``Collector``. ``BaseCollector``, ``AsyncCollector``,
+    ``MultiCollector``, ``MultiSyncCollector``, and ``MultiAsyncCollector``
+    remain available as concrete implementation APIs.
 
 Using AsyncBatchedCollector
 ---------------------------
@@ -120,7 +123,7 @@ and a **policy** -- all internal wiring is handled automatically:
 
     collector.shutdown()
 
-**Key advantages over** :class:`Collector`:
+**Key advantages over direct collection through** :class:`Collector`:
 
 - The inference server automatically **batches policy forward passes** from
   all environments, maximising GPU utilisation.
@@ -128,23 +131,26 @@ and a **policy** -- all internal wiring is handled automatically:
   idle time.
 - Supports ``yield_completed_trajectories=True`` for episode-level yields.
 
-Using MultiCollector
---------------------
+Scaling ``Collector`` across local processes
+--------------------------------------------
 
-The :class:`MultiCollector` class is the recommended way to run parallel data collection.
-It uses a ``sync`` parameter to dispatch to either :class:`MultiSyncCollector` or :class:`MultiAsyncCollector`:
+Pass ``num_collectors`` to :class:`Collector` to run parallel local collection.
+The ``sync`` parameter selects synchronous or asynchronous delivery and the
+constructor returns :class:`MultiSyncCollector` or :class:`MultiAsyncCollector`,
+respectively:
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiCollector
+    from torchrl.collectors import Collector
     from torchrl.envs import GymEnv
 
     def make_env():
         return GymEnv("CartPole-v1")
 
     # Synchronous multi-worker collection (recommended for on-policy algorithms)
-    sync_collector = MultiCollector(
-        create_env_fn=[make_env] * 4,  # 4 parallel workers
+    sync_collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=4,
         policy=my_policy,
         frames_per_batch=1000,
         total_frames=100000,
@@ -152,8 +158,9 @@ It uses a ``sync`` parameter to dispatch to either :class:`MultiSyncCollector` o
     )
 
     # Asynchronous multi-worker collection (recommended for off-policy algorithms)
-    async_collector = MultiCollector(
-        create_env_fn=[make_env] * 4,
+    async_collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=4,
         policy=my_policy,
         frames_per_batch=1000,
         total_frames=100000,
@@ -197,7 +204,8 @@ If you want to run a data collector in the background, simply run :meth:`~torchr
     ...     data = rb.sample()  # Sampling from the replay buffer
     ...     # rest of the training loop
 
-Single-process collectors (:class:`~torchrl.collectors.Collector`) will run the process using multithreading,
+Direct collectors (``Collector(backend="direct")``) run background collection
+using multithreading,
 so be mindful of Python's GIL and related multithreading restrictions.
 
 Multiprocessed collectors will on the other hand let the child processes handle the filling of the buffer on their own,
@@ -220,9 +228,10 @@ Data collectors that have been started with `start()` should be shut down using
             batch_size=256,
             shared=True,
         )
-        collector = MultiCollector(
-            [make_env] * 4,
+        collector = Collector(
+            make_env,
             policy,
+            num_collectors=4,
             replay_buffer=rb,
             frames_per_batch=200,
             total_frames=-1,

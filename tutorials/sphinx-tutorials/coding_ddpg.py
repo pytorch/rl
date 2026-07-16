@@ -807,13 +807,11 @@ if device == torch.device("cpu"):
 # collection and on the resources allocated to the data collection (for example
 # GPU, number of workers, and so on).
 #
-# Here we will use
-# :class:`~torchrl.collectors.Collector`, a simple, single-process
-# data collector. TorchRL offers other collectors, such as
-# :class:`~torchrl.collectors.MultiAsyncCollector`, which executed the
-# rollouts in an asynchronous manner (for example, data will be collected while
-# the policy is being optimized, thereby decoupling the training and
-# data collection).
+# Here we use :class:`~torchrl.collectors.Collector`, TorchRL's main collector
+# construction API, with its direct single-process default. The same entry
+# point can execute rollouts asynchronously with
+# ``Collector(num_collectors=N, sync=False)`` so data is collected while the
+# policy is optimized, decoupling training and data collection.
 #
 # The parameters to specify are:
 #

@@ -11,7 +11,7 @@ to construction; the training loop consumes domain-compatible clients.
 | `multi_service_single_process.py` | Direct logger and replay buffer with threaded inference |
 | `multi_service_multiprocess.py` | Process logger and inference server with a direct replay buffer |
 | `multi_service_ray.py` | Ray logger, replay-buffer, and inference owners |
-| `ray_collector_services.py` | Ray-owned replay and inference composed with `RayCollector` |
+| `ray_collector_services.py` | Scoped Ray ownership and Gloo transport composed through `Collector` |
 | `multi_service_utils.py` | Shared service construction and training loop |
 | `distributed_services.py` | Basic service-registry usage |
 

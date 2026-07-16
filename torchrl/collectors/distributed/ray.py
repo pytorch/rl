@@ -81,6 +81,11 @@ def print_remote_collector_info(self):
 class RayCollector(BaseCollector):
     """Distributed data collector with `Ray <https://docs.ray.io/>`_ backend.
 
+    .. note::
+        Prefer ``Collector(backend="ray", ...)`` for construction in new code.
+        Pass Ray-specific arguments through ``backend_options``. This class
+        remains the concrete Ray implementation API.
+
     This Python class serves as a ray-based solution to instantiate and coordinate multiple
     data collectors in a distributed cluster. Like TorchRL non-distributed collectors, this
     collector is an iterable that yields TensorDicts until a target number of collected
@@ -266,7 +271,12 @@ class RayCollector(BaseCollector):
         replay_buffer (ReplayBuffer, optional): if provided, the collector will
             populate it instead of yielding TensorDicts. The replay buffer must
             use ``service_backend="ray"``; the collector creates restricted
-            worker clients internally. Defaults to ``None``.
+            worker clients internally. A regular in-process replay buffer is
+            rejected because serializing it into Ray actors would create remote
+            copies rather than populate the driver-owned buffer. For large,
+            fixed-layout TensorDict payloads, ``transport="distributed"`` is
+            the recommended data path (Gloo for CPU tensors and NCCL for CUDA
+            tensors). Defaults to ``None``.
         flatten_data (bool, optional): if ``True``, flatten each remote
             collector rollout before extending the replay buffer. A rollout
             with shape ``[N, T]`` is written as ``[N * T]`` transitions to the
@@ -421,7 +431,10 @@ class RayCollector(BaseCollector):
                 raise TypeError(
                     "RayCollector requires a replay buffer with "
                     "service_backend='ray' and a client() method. Construct it "
-                    "with ReplayBuffer(..., service_backend='ray')."
+                    "with ReplayBuffer(..., service_backend='ray'). A regular "
+                    "in-process replay buffer cannot be shared with distant Ray "
+                    "actors. For large fixed-layout TensorDict payloads, consider "
+                    "transport='distributed'."
                 )
         if flatten_data:
             if replay_buffer is None:

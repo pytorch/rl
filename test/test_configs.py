@@ -1101,6 +1101,28 @@ class TestModuleConfigs:
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestCollectorsConfig:
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_generic_collector_backend_fields(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import CollectorConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg = CollectorConfig(
+            create_env_fn=GymEnvConfig(env_name="Pendulum-v1"),
+            backend="process",
+            num_collectors=1,
+            sync=True,
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        collector = instantiate(cfg)
+        try:
+            assert isinstance(collector, MultiSyncCollector)
+            assert next(iter(collector)).numel() == 10
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")

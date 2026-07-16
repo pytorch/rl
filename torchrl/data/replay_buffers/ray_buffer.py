@@ -293,6 +293,8 @@ class RayReplayBuffer(ReplayBuffer):
 
     """
 
+    _service_backend_resolved = True
+
     def __init__(
         self,
         *args,

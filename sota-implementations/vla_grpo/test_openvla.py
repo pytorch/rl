@@ -483,7 +483,7 @@ def _complete_logger_cfg(**logger_overrides):
 
 
 class TestCollectorFactory:
-    def test_make_collector_uses_multicollector_policy_server(self, monkeypatch):
+    def test_make_collector_uses_process_backend_policy_server(self, monkeypatch):
         captured = {}
 
         class _FakeMultiCollector:
@@ -517,7 +517,7 @@ class TestCollectorFactory:
         )
         replay_buffer = object()
 
-        monkeypatch.setattr(utils, "MultiCollector", _FakeMultiCollector)
+        monkeypatch.setattr(utils, "Collector", _FakeMultiCollector)
         monkeypatch.setattr(utils, "ProcessInferenceServer", _FakeServer)
         monkeypatch.setattr(utils, "MPTransport", _FakeTransport)
 
@@ -618,7 +618,7 @@ class TestCollectorFactory:
         )
         replay_buffer = SimpleNamespace(shared=True)
 
-        monkeypatch.setattr(utils, "MultiCollector", _FakeMultiCollector)
+        monkeypatch.setattr(utils, "Collector", _FakeMultiCollector)
         monkeypatch.setattr(utils, "ProcessInferenceServer", _FakeServer)
         monkeypatch.setattr(utils, "MPTransport", _FakeTransport)
 

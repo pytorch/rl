@@ -18,6 +18,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from functools import partial
+from unittest.mock import call, MagicMock
 
 import pytest
 
@@ -27,6 +28,7 @@ from tensordict import NestedKey, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import multiprocessing as mp, nn
+from torchrl import service_backend
 from torchrl._utils import logger as torchrl_logger
 from torchrl.checkpoint import Checkpoint
 
@@ -257,6 +259,38 @@ def test_private_ddp_matches_global_batch_and_preserves_default_group():
     torch.testing.assert_close(torch.tensor(weights[1]), expected)
     assert not dist.is_initialized()
     del master_store
+
+
+def test_private_ray_trainer_execution_closes_ranks_concurrently(monkeypatch):
+    calls = MagicMock()
+    actors = [MagicMock(), MagicMock()]
+    close_refs = [object(), object()]
+    ray_runtime = MagicMock()
+    for rank, (actor, close_ref) in enumerate(zip(actors, close_refs)):
+        actor.close.remote.return_value = close_ref
+        calls.attach_mock(actor.close.remote, f"close_rank_{rank}")
+    calls.attach_mock(ray_runtime.wait, "wait")
+    calls.attach_mock(ray_runtime.kill, "kill")
+    backend = object.__new__(_RayTrainerExecution)
+    backend._actors = actors
+    backend._placement_group = None
+    backend._runtime_lease = None
+    monkeypatch.setattr(
+        "torchrl.trainers._ray_execution.ray",
+        ray_runtime,
+        raising=False,
+    )
+
+    backend.shutdown(timeout=7.0)
+
+    assert calls.mock_calls == [
+        call.close_rank_0(),
+        call.close_rank_1(),
+        call.wait(close_refs, num_returns=2, timeout=7.0),
+        call.kill(actors[1], no_restart=True),
+        call.kill(actors[0], no_restart=True),
+    ]
+    assert backend._actors == []
 
 
 class DistributedCollectorBase:
@@ -1384,39 +1418,43 @@ class TestRayCollector(DistributedCollectorBase):
             replay.shutdown()
 
     def test_ray_owned_inference_and_replay(self):
-        replay = TensorDictReplayBuffer(
-            storage=partial(LazyTensorStorage, 100),
-            batch_size=4,
-            service_backend="ray",
-            service_backend_options={"remote_config": {"num_cpus": 0}},
-            transport="auto",
-        )
-        inference = InferenceServer(
-            policy_factory=CountingPolicy,
-            service_backend="ray",
-            service_backend_options={"remote_config": {"num_cpus": 0}},
-            transport="auto",
-        )
-        collector = None
+        replay = inference = collector = None
         try:
-            collector = RayCollector(
-                create_env_fn=[CountingEnv],
-                policy=inference,
-                replay_buffer=replay,
-                collector_class=Collector,
-                frames_per_batch=8,
-                total_frames=16,
-                remote_configs={"num_cpus": 1, "num_gpus": 0},
-                sync=True,
-            )
+            with service_backend("ray"):
+                replay = TensorDictReplayBuffer(
+                    storage=partial(LazyTensorStorage, 100),
+                    batch_size=4,
+                    service_backend_options={"remote_config": {"num_cpus": 0}},
+                    transport="auto",
+                )
+                inference = InferenceServer(
+                    policy_factory=CountingPolicy,
+                    service_backend_options={"remote_config": {"num_cpus": 0}},
+                    transport="auto",
+                )
+                collector = Collector(
+                    create_env_fn=CountingEnv,
+                    num_collectors=1,
+                    policy=inference,
+                    replay_buffer=replay,
+                    backend_options={
+                        "collector_class": Collector,
+                        "remote_configs": {"num_cpus": 1, "num_gpus": 0},
+                    },
+                    frames_per_batch=8,
+                    total_frames=16,
+                    sync=True,
+                )
             assert all(batch is None for batch in collector)
             assert len(replay) == 16
             assert replay.sample().shape == (4,)
         finally:
             if collector is not None:
                 collector.shutdown()
-            inference.shutdown()
-            replay.shutdown()
+            if inference is not None:
+                inference.shutdown()
+            if replay is not None:
+                replay.shutdown()
 
     def test_ray_replay_flatten_data_batched_env(self):
         replay = TensorDictReplayBuffer(

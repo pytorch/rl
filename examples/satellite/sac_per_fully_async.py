@@ -24,7 +24,7 @@ from pathlib import Path
 import torch
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import Evaluator, MultiCollector
+from torchrl.collectors import Collector, Evaluator
 from torchrl.data import (
     LazyTensorStorage,
     TensorDictPrioritizedReplayBuffer,
@@ -412,8 +412,9 @@ def main(argv: list[str] | None = None) -> int:
         seed=cfg.seed,
     )
     frames_per_batch = cfg.num_envs * cfg.frames_per_env
-    collector = MultiCollector(
-        create_env_fn=[train_env_factory],
+    collector = Collector(
+        create_env_fn=train_env_factory,
+        num_collectors=1,
         policy=actor,
         replay_buffer=replay_buffer,
         frames_per_batch=frames_per_batch,
@@ -424,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
         sync=False,
     )
     torchrl_logger.info(
-        "MultiCollector(sync=False, replay_buffer=rb) ready -- starting "
+        "Collector(num_collectors=1, sync=False, replay_buffer=rb) ready -- starting "
         "async collection now."
     )
 

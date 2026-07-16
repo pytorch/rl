@@ -25,9 +25,11 @@ from .weight_update import (
 )
 
 __all__ = [
-    # New canonical names (preferred)
+    # Shared collector API
     "BaseCollector",
+    # Main construction API
     "Collector",
+    # Specialized and concrete implementations
     "AsyncCollector",
     "MultiCollector",
     "MultiSyncCollector",

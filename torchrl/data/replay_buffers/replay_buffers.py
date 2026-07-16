@@ -302,6 +302,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     """
 
+    _accepts_transport_backend = True
+
     @classmethod
     def _ServiceClass(
         cls,
@@ -1915,6 +1917,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        transport (str, optional): physical transport used by a remote replay
+            owner. ``"auto"`` selects the backend default. Defaults to
+            ``"auto"``.
+        transport_options (dict, optional): options for the selected transport.
+            For ``transport="distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. TensorDict layouts are bound lazily on first use.
 
     .. note::
         Generic prioritized replay buffers (ie. non-tensordict backed) require
@@ -1970,6 +1978,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         batch_size: int | None = None,
         dim_extend: int | None = None,
         delayed_init: bool = False,
+        transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
+        transport_options: dict[str, Any] | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -2004,6 +2014,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             batch_size=batch_size,
             dim_extend=dim_extend,
             delayed_init=delayed_init,
+            transport=transport,
+            transport_options=transport_options,
         )
 
     @property
@@ -2597,6 +2609,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        transport (str, optional): physical transport used by a remote replay
+            owner. ``"auto"`` selects the backend default. Defaults to
+            ``"auto"``.
+        transport_options (dict, optional): options for the selected transport.
+            For ``transport="distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. TensorDict layouts are bound lazily on first use.
 
     Examples:
         >>> import torch
@@ -2675,6 +2693,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         generator: torch.Generator | None = None,
         shared: bool = False,
         compilable: bool = False,
+        transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
+        transport_options: dict[str, Any] | None = None,
     ) -> None:
         storage = self._maybe_make_storage(storage, compilable=compilable)
         self._sync = sync
@@ -2711,6 +2731,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             generator=generator,
             shared=shared,
             compilable=compilable,
+            transport=transport,
+            transport_options=transport_options,
         )
 
     @property

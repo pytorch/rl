@@ -177,7 +177,7 @@ class WandbLogger(Logger):
         name: str,
         value: float,
         step: int | None = None,
-        commit: bool = False,
+        commit: bool = True,
         *,
         override_global_step: bool = False,
     ) -> None:
@@ -188,8 +188,10 @@ class WandbLogger(Logger):
             value (float): The value of the scalar.
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
-            commit: If true, data for current step is assumed to be final (and
-                no further data for this step should be logged).
+            commit (bool, optional): If ``True``, data for the current step is
+                assumed to be final (and no further data for this step should
+                be logged). Set to ``False`` to batch multiple calls into the
+                same W&B history row. Defaults to ``True``.
             override_global_step (bool, optional): If ``True``, bypasses
                 per-group step injection and forwards ``step`` to wandb's
                 global ``step`` argument. Defaults to ``False``.
