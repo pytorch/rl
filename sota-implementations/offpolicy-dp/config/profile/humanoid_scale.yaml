@@ -9,6 +9,9 @@ environment:
   num_collectors: 4
   compile_step: true
   compile_mode: default
+  # Check health and reset after every physics step. With 25K environments per
+  # collector, a five-substep action eventually exposes unstable solver state.
+  frame_skip: 1
   max_episode_steps: 1_000
 
 collection:
@@ -37,6 +40,7 @@ logging:
   sample_size: 1_024
 
 evaluation:
+  frame_skip: 1
   interval_frames: 2_000_000
   num_envs: 16
   num_trajectories: 16

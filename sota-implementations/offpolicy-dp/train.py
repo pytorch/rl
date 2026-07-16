@@ -242,6 +242,7 @@ def make_continuous_env(
     device: str,
     compile_step: bool,
     compile_mode: str | None,
+    frame_skip: int | None,
     max_episode_steps: int,
     seed: int,
 ) -> TransformedEnv:
@@ -253,6 +254,7 @@ def make_continuous_env(
         num_envs=num_envs,
         device=torch.device(device),
         seed=seed,
+        frame_skip=frame_skip,
         max_episode_steps=max_episode_steps,
         compile_step=compile_step,
         compile_kwargs=compile_kwargs,
@@ -574,6 +576,11 @@ def _make_env_factories(cfg: DictConfig) -> list[partial]:
             device="cuda",
             compile_step=bool(cfg.environment.compile_step),
             compile_mode=cfg.environment.compile_mode,
+            frame_skip=(
+                None
+                if cfg.environment.frame_skip is None
+                else int(cfg.environment.frame_skip)
+            ),
             max_episode_steps=int(cfg.environment.max_episode_steps),
             seed=int(cfg.seed) + worker,
         )
@@ -593,6 +600,11 @@ def _make_proof_env(cfg: DictConfig) -> TransformedEnv:
         device="cpu",
         compile_step=False,
         compile_mode=None,
+        frame_skip=(
+            None
+            if cfg.environment.frame_skip is None
+            else int(cfg.environment.frame_skip)
+        ),
         max_episode_steps=int(cfg.environment.max_episode_steps),
         seed=int(cfg.seed),
     )
@@ -644,6 +656,11 @@ def _make_evaluation_env_unlocked(
             num_envs=num_envs,
             device=torch.device(str(cfg.evaluation.device)),
             seed=int(cfg.seed) + 10_000,
+            frame_skip=(
+                None
+                if cfg.evaluation.frame_skip is None
+                else int(cfg.evaluation.frame_skip)
+            ),
             max_episode_steps=max_steps,
             compile_step=bool(cfg.evaluation.compile_step),
             dtype=torch.float32,

@@ -9,6 +9,9 @@ environment:
   num_collectors: 2
   compile_step: true
   compile_mode: default
+  # Check health and reset after every physics step. With large batches, a
+  # five-substep action can let one unstable state reach the solver first.
+  frame_skip: 1
   max_episode_steps: 1_000
 
 collection:
@@ -38,6 +41,7 @@ logging:
   sample_size: 512
 
 evaluation:
+  frame_skip: 1
   interval_frames: 65_536
   num_envs: 8
   num_trajectories: 8

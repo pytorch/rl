@@ -5,6 +5,11 @@ defaults:
 
 seed: 42
 
+environment:
+  # Use the task default unless a stability profile requests finer-grained
+  # termination checks between physics substeps.
+  frame_skip: null
+
 logging:
   project: torchrl-dp-offpolicy-validation
   group: dp-stack-main
@@ -19,6 +24,7 @@ evaluation:
   backend: mujoco-torch
   device: cuda:7
   compile_step: false
+  frame_skip: null
   interval_frames: 2_000_000
   num_envs: 16
   num_trajectories: 16

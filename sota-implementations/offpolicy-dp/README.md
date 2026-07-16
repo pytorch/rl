@@ -84,6 +84,10 @@ python sota-implementations/offpolicy-dp/train.py \
   algorithm=ddpg profile=humanoid_scale
 ```
 
+The Humanoid profiles use `frame_skip=1` so health termination is checked after
+every physics step. This prevents an unstable state in a 25,000-environment
+collector batch from advancing through a five-substep action before reset.
+
 Hydra overrides can reduce or expand any resource or training setting. Runtime
 summaries and Hydra output are written under `/root/artifacts/offpolicy-dp`.
 
