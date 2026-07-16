@@ -271,7 +271,12 @@ class RayCollector(BaseCollector):
         replay_buffer (ReplayBuffer, optional): if provided, the collector will
             populate it instead of yielding TensorDicts. The replay buffer must
             use ``service_backend="ray"``; the collector creates restricted
-            worker clients internally. Defaults to ``None``.
+            worker clients internally. A regular in-process replay buffer is
+            rejected because serializing it into Ray actors would create remote
+            copies rather than populate the driver-owned buffer. For large,
+            fixed-layout TensorDict payloads, ``transport="distributed"`` is
+            the recommended data path (Gloo for CPU tensors and NCCL for CUDA
+            tensors). Defaults to ``None``.
         weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
@@ -416,7 +421,10 @@ class RayCollector(BaseCollector):
                 raise TypeError(
                     "RayCollector requires a replay buffer with "
                     "service_backend='ray' and a client() method. Construct it "
-                    "with ReplayBuffer(..., service_backend='ray')."
+                    "with ReplayBuffer(..., service_backend='ray'). A regular "
+                    "in-process replay buffer cannot be shared with distant Ray "
+                    "actors. For large fixed-layout TensorDict payloads, consider "
+                    "transport='distributed'."
                 )
         if trajs_per_batch is not None:
             if isinstance(collector_kwargs, dict):

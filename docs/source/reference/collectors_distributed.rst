@@ -54,6 +54,16 @@ rollouts use Ray's object store. See :ref:`ref_service_transports` for the
 backend/transport compatibility table and the recommended direct-to-replay
 topology.
 
+.. note::
+
+  For large, fixed-layout TensorDict rollouts, the preferred Ray topology is a
+  replay buffer owned by Ray (``service_backend="ray"``) with a distributed
+  payload transport (Gloo for CPU or NCCL for CUDA). The replay service acts as
+  the shared dataset between collector actors and learners. Ray collectors
+  reject regular in-process replay buffers because each actor would otherwise
+  receive an independent serialized copy rather than write into the original
+  driver object.
+
 *Resources*: Find examples for these collectors in the
 `dedicated folder <https://github.com/pytorch/rl/examples/distributed/collectors>`_.
 

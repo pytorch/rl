@@ -114,6 +114,21 @@ Selection can also be scoped with :func:`torchrl.service_backend`; see
 :ref:`ref_services_workflow` for composing collector placement with replay and
 inference transports.
 
+.. note::
+
+   **High-throughput Ray data path.** For large, fixed-layout TensorDict
+   payloads, prefer a Ray-owned replay buffer configured with
+   ``service_backend="ray"`` and ``transport="distributed"``. Collector actors
+   then write directly to the shared replay service over Gloo (CPU) or NCCL
+   (CUDA), and the learner samples it as the training dataset without routing
+   each rollout through the driver. A regular in-process replay buffer is
+   rejected by the Ray collector: copying it into distant actors would create
+   independent buffers, not populate the original object. If no replay buffer
+   is attached, yielded batches return to the driver through Ray's object
+   store. Use ``transport="ray"`` instead when payloads contain dynamic shapes,
+   non-tensor values, or arbitrary Python objects. See
+   :ref:`ref_service_transports` for the full compatibility table.
+
 Process collection
 ------------------
 

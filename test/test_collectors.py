@@ -758,6 +758,21 @@ class TestCollectorGeneric:
         finally:
             collector.shutdown()
 
+    def test_ray_backend_rejects_direct_replay_buffer(self):
+        replay = ReplayBuffer()
+        try:
+            with pytest.raises(
+                TypeError, match="cannot be shared with distant Ray actors"
+            ):
+                Collector(
+                    ContinuousActionVecMockEnv,
+                    backend="ray",
+                    replay_buffer=replay,
+                    frames_per_batch=20,
+                )
+        finally:
+            replay.shutdown()
+
     def test_concrete_default_divergences_are_pinned(self):
         collector_parameters = inspect.signature(Collector.__init__).parameters
         expected = {
