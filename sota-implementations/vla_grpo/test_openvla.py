@@ -464,6 +464,7 @@ def _complete_toy_env_cfg(**env_overrides):
         "render_gpu_ids": [2, 3],
         "eval_render_gpu_ids": None,
         "render_gpu_device_zero_fallback": True,
+        "metadata_from_workers": False,
         "env_kwargs": None,
     }
     env.update(env_overrides)
@@ -632,6 +633,116 @@ class TestCollectorFactory:
 
         assert isinstance(collector, _FakeMultiCollector)
         assert len(captured["multi_args"][0]) == 4
+
+    def test_make_collector_env_uses_common_factory_with_worker_kwargs(
+        self, monkeypatch
+    ):
+        captured = {}
+
+        def _fake_make_env_worker(cfg, tokenizer, worker_idx, **kwargs):
+            worker_idx_with_offset = worker_idx + kwargs["worker_idx_offset"]
+            logical_worker = worker_idx_with_offset // kwargs["group_repeats"]
+            task_id = cfg.env.task_ids[logical_worker % len(cfg.env.task_ids)]
+            return {
+                "task_id": task_id,
+                "language_instruction": f"instruction-{task_id}",
+                "group_id": logical_worker,
+                "worker_idx": worker_idx,
+                "worker_idx_with_offset": worker_idx_with_offset,
+                "seed": kwargs["seed"] + worker_idx_with_offset,
+                "init_state_slot": logical_worker,
+            }
+
+        class _FakeParallelEnv:
+            def __init__(
+                self,
+                num_envs,
+                create_env_fn,
+                *,
+                create_env_kwargs,
+                **kwargs,
+            ):
+                captured["num_envs"] = num_envs
+                captured["create_env_fn"] = create_env_fn
+                captured["create_env_kwargs"] = create_env_kwargs
+                captured["kwargs"] = kwargs
+                captured["workers"] = [
+                    create_env_fn(**worker_kwargs)
+                    for worker_kwargs in create_env_kwargs
+                ]
+
+        monkeypatch.setattr(utils, "_make_env_worker", _fake_make_env_worker)
+        monkeypatch.setattr(utils, "ParallelEnv", _FakeParallelEnv)
+        cfg = SimpleNamespace(
+            collector=_complete_collector_cfg(group_size=2),
+            env=_complete_toy_env_cfg(
+                backend="libero",
+                metadata_from_workers=True,
+                task_ids=[10, 11],
+            ),
+        )
+
+        env = utils._make_collector_env(
+            cfg,
+            tokenizer=None,
+            num_envs=4,
+            group_repeats=2,
+            seed=5,
+            device=torch.device("cpu"),
+            worker_idx_offset=4,
+            render_gpu_device_id=3,
+        )
+
+        assert isinstance(env, _FakeParallelEnv)
+        assert captured["num_envs"] == 4
+        assert callable(captured["create_env_fn"])
+        assert captured["create_env_kwargs"] == [
+            {"worker_idx": 0},
+            {"worker_idx": 1},
+            {"worker_idx": 2},
+            {"worker_idx": 3},
+        ]
+        assert captured["kwargs"]["mp_start_method"] == "spawn"
+        assert captured["kwargs"]["device"] == torch.device("cpu")
+        assert captured["kwargs"]["metadata_from_workers"]
+        assert captured["workers"] == [
+            {
+                "task_id": 10,
+                "language_instruction": "instruction-10",
+                "group_id": 2,
+                "worker_idx": 0,
+                "worker_idx_with_offset": 4,
+                "seed": 9,
+                "init_state_slot": 2,
+            },
+            {
+                "task_id": 10,
+                "language_instruction": "instruction-10",
+                "group_id": 2,
+                "worker_idx": 1,
+                "worker_idx_with_offset": 5,
+                "seed": 10,
+                "init_state_slot": 2,
+            },
+            {
+                "task_id": 11,
+                "language_instruction": "instruction-11",
+                "group_id": 3,
+                "worker_idx": 2,
+                "worker_idx_with_offset": 6,
+                "seed": 11,
+                "init_state_slot": 3,
+            },
+            {
+                "task_id": 11,
+                "language_instruction": "instruction-11",
+                "group_id": 3,
+                "worker_idx": 3,
+                "worker_idx_with_offset": 7,
+                "seed": 12,
+                "init_state_slot": 3,
+            },
+        ]
 
 
 class TestEvaluatorFactory:

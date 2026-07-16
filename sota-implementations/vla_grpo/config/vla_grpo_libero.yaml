@@ -36,6 +36,7 @@ env:
   render_gpu_ids: [2, 3, 4, 5] # H100 fast mode render GPUs for rollout workers
   eval_render_gpu_ids: [7] # reserve GPU 7 for eval/video rendering
   render_gpu_device_zero_fallback: true
+  metadata_from_workers: true # construct LIBERO/EGL only in long-lived worker processes
   env_kwargs: null
   chunk_size: 8 # NUM_ACTIONS_CHUNK of the checkpoint
   max_env_steps: 512 # base env steps per episode (the paper's cap)

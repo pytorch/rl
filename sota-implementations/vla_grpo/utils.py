@@ -623,26 +623,29 @@ def make_env(
             eval_mode=eval_mode,
             override=override,
         )
+        env_factory = partial(
+            _make_libero_worker,
+            cfg,
+            group_repeats=group_repeats,
+            eval_mode=eval_mode,
+            from_pixels=from_pixels,
+            worker_idx_offset=worker_idx_offset,
+            render_gpu_device_id=render_gpu_device_id,
+        )
         base = ParallelEnv(
             num_envs,
-            [
-                partial(
-                    _make_libero_worker,
-                    cfg,
-                    worker_idx,
-                    group_repeats=group_repeats,
-                    eval_mode=eval_mode,
-                    from_pixels=from_pixels,
-                    worker_idx_offset=worker_idx_offset,
-                    render_gpu_device_id=render_gpu_device_id,
-                )
-                for worker_idx in range(num_envs)
+            env_factory,
+            create_env_kwargs=[
+                {"worker_idx": worker_idx} for worker_idx in range(num_envs)
             ],
             mp_start_method="spawn",
             # MuJoCo runs on CPU; pin the env device so the collector/rollout
             # cast the GPU policy's action back to CPU before stepping (else a
             # cuda action reaches the CPU transforms -> mixed-device error)
             device="cpu",
+            metadata_from_workers=bool(
+                _cfg_get(cfg.env, "metadata_from_workers", False)
+            ),
         )
         if seed is not None:
             base.set_seed(seed)
@@ -669,24 +672,25 @@ def _make_collector_env(
     worker_idx_offset: int,
     render_gpu_device_id: int | None,
 ) -> ParallelEnv:
+    env_factory = partial(
+        _make_env_worker,
+        cfg,
+        tokenizer,
+        group_repeats=group_repeats,
+        seed=seed,
+        device=device if cfg.env.backend == "toy" else None,
+        worker_idx_offset=worker_idx_offset,
+        render_gpu_device_id=render_gpu_device_id,
+    )
     return ParallelEnv(
         num_envs,
-        [
-            partial(
-                _make_env_worker,
-                cfg,
-                tokenizer,
-                worker_idx,
-                group_repeats=group_repeats,
-                seed=seed,
-                device=device if cfg.env.backend == "toy" else None,
-                worker_idx_offset=worker_idx_offset,
-                render_gpu_device_id=render_gpu_device_id,
-            )
-            for worker_idx in range(num_envs)
+        env_factory,
+        create_env_kwargs=[
+            {"worker_idx": worker_idx} for worker_idx in range(num_envs)
         ],
         mp_start_method="spawn",
         device=device,
+        metadata_from_workers=bool(_cfg_get(cfg.env, "metadata_from_workers", False)),
     )
 
 
