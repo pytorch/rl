@@ -1387,10 +1387,17 @@ class MCAdvantage(Transform):
         trajectory groups should nevertheless have a consistent concrete
         representation, both to avoid backend-specific lazy-stack assumptions
         and to keep replay-buffer storage writes predictable.
+
+        Trajectories whose leaves are ragged across (but uniform within)
+        trajectories materialize individually yet cannot be concatenated into
+        a contiguous result; those fall back to a lazy concatenation.
         """
-        return torch.cat(
-            [MCAdvantage._concrete_if_possible(td) for td in tensordicts], dim
-        )
+        concrete = [MCAdvantage._concrete_if_possible(td) for td in tensordicts]
+        try:
+            return torch.cat(concrete, dim)
+        except RuntimeError:
+            steps = [step for td in tensordicts for step in td.unbind(dim)]
+            return lazy_stack(steps, dim)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase | None:
         if self.verbose:
