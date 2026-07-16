@@ -34,7 +34,7 @@ import torch
 
 from tensordict import NonTensorData, TensorDict, TensorDictBase
 from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.collectors import Evaluator, MultiCollector
+from torchrl.collectors import BaseCollector, Collector, Evaluator
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.vla import (
     ACTION_TOKENS_KEY,
@@ -859,13 +859,13 @@ def make_collector(
     tokenizer: ActionTokenizerBase | None,
     replay_buffer: TensorDictReplayBuffer,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
-) -> tuple[MultiCollector, ProcessInferenceServer, PolicyClientModule]:
+) -> tuple[BaseCollector, ProcessInferenceServer, PolicyClientModule]:
     """Build the TorchRL-native VLA rollout stack.
 
-    The stack is always a ``MultiCollector`` whose workers own batched
-    ``ParallelEnv`` instances and call a shared process policy server through
-    ``PolicyClientModule``. The collector writes complete trajectories directly
-    into the replay buffer.
+    The stack uses the process backend of ``Collector``. Its concrete
+    ``MultiCollector`` workers own batched ``ParallelEnv`` instances and call a
+    shared process policy server through ``PolicyClientModule``. The collector
+    writes complete trajectories directly into the replay buffer.
     """
     num_collectors = int(cfg.collector.num_collectors)
     envs_per_collector = int(cfg.collector.envs_per_collector)
@@ -961,8 +961,9 @@ def make_collector(
         in_keys=policy_in_keys,
         out_keys=policy_out_keys,
     )
-    collector = MultiCollector(
+    collector = Collector(
         env_factories,
+        backend="process",
         policy=None,
         policy_factory=policy_client_factories,
         frames_per_batch=envs_per_collector,
@@ -1236,7 +1237,7 @@ _WORKER_ADVANTAGE_PATH = "replay_buffer._transform[0]"
 
 
 def _advantage_stats(
-    advantage: MCAdvantage, collector: MultiCollector | None = None
+    advantage: MCAdvantage, collector: BaseCollector | None = None
 ) -> list[dict[str, float | int]]:
     if collector is not None and not advantage.is_shared:
         return collector.map_fn(f"{_WORKER_ADVANTAGE_PATH}.get_stats")
@@ -1244,7 +1245,7 @@ def _advantage_stats(
 
 
 def reset_advantage_state(
-    advantage: MCAdvantage, collector: MultiCollector | None = None
+    advantage: MCAdvantage, collector: BaseCollector | None = None
 ) -> None:
     """Clear incomplete groups and reset counters at a policy boundary."""
     advantage.clear_queues()
@@ -1254,14 +1255,14 @@ def reset_advantage_state(
         collector.map_fn(f"{_WORKER_ADVANTAGE_PATH}.reset_stats")
 
 
-def reset_collection_state(advantage: MCAdvantage, collector: MultiCollector) -> None:
+def reset_collection_state(advantage: MCAdvantage, collector: BaseCollector) -> None:
     """Drop partial trajectories before advancing the behavior policy."""
     reset_advantage_state(advantage, collector)
     collector.map_fn("reset")
 
 
 def advantage_metrics(
-    advantage: MCAdvantage, collector: MultiCollector | None = None
+    advantage: MCAdvantage, collector: BaseCollector | None = None
 ) -> dict[str, float | int]:
     """Compact metrics snapshot from GRPO replay-transform writer states."""
     stats = _advantage_stats(advantage, collector)

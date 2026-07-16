@@ -25,6 +25,10 @@ from torchrl.collectors.utils import split_trajectories
 class MultiAsyncCollector(MultiCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
 
+    .. note::
+        Prefer ``Collector(num_collectors=N, sync=False)`` for construction in
+        new code. This class is the concrete asynchronous result.
+
     .. aafig::
 
 

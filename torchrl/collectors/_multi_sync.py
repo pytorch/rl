@@ -27,6 +27,10 @@ from torchrl.collectors.utils import split_trajectories
 class MultiSyncCollector(MultiCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
 
+    .. note::
+        Prefer ``Collector(num_collectors=N, sync=True)`` for construction in
+        new code. This class is the concrete synchronous result.
+
     .. aafig::
 
             +----------------------------------------------------------------------+

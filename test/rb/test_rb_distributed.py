@@ -17,6 +17,7 @@ import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
 from _rb_common import _has_ray
 from tensordict import TensorDict
+from torchrl import service_backend, transport_backend
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
@@ -244,14 +245,14 @@ class TestRayRB:
     def test_construct_from_replay_buffer_service_backend(self):
         import ray
 
-        rb = ReplayBuffer(
-            storage=partial(LazyTensorStorage, 100),
-            service_backend="ray",
-            service_backend_options={
-                "ray_init_config": {"num_cpus": 1},
-                "remote_config": {"num_cpus": 0},
-            },
-        )
+        with service_backend("ray"):
+            rb = ReplayBuffer(
+                storage=partial(LazyTensorStorage, 100),
+                service_backend_options={
+                    "ray_init_config": {"num_cpus": 1},
+                    "remote_config": {"num_cpus": 0},
+                },
+            )
         try:
             assert isinstance(rb, RayReplayBuffer)
             assert isinstance(rb, ReplayBuffer)
@@ -268,14 +269,13 @@ class TestRayRB:
         rb.shutdown()
 
     def test_ray_replay_with_gloo_transport(self):
-        rb = ReplayBuffer(
-            storage=partial(LazyTensorStorage, 100),
-            batch_size=4,
-            service_backend="ray",
-            service_backend_options={"remote_config": {"num_cpus": 0}},
-            transport="distributed",
-            transport_options={"backend": "gloo", "timeout": 30.0},
-        )
+        with service_backend("ray"), transport_backend("distributed"):
+            rb = ReplayBuffer(
+                storage=partial(LazyTensorStorage, 100),
+                batch_size=4,
+                service_backend_options={"remote_config": {"num_cpus": 0}},
+                transport_options={"timeout": 30.0},
+            )
         try:
             client = rb.client()
             indices = client.extend(

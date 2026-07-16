@@ -27,6 +27,7 @@ from tensordict import NestedKey, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
 from torch import multiprocessing as mp, nn
+from torchrl import service_backend
 from torchrl._utils import logger as torchrl_logger
 from torchrl.checkpoint import Checkpoint
 
@@ -1380,39 +1381,43 @@ class TestRayCollector(DistributedCollectorBase):
             replay.shutdown()
 
     def test_ray_owned_inference_and_replay(self):
-        replay = TensorDictReplayBuffer(
-            storage=partial(LazyTensorStorage, 100),
-            batch_size=4,
-            service_backend="ray",
-            service_backend_options={"remote_config": {"num_cpus": 0}},
-            transport="auto",
-        )
-        inference = InferenceServer(
-            policy_factory=CountingPolicy,
-            service_backend="ray",
-            service_backend_options={"remote_config": {"num_cpus": 0}},
-            transport="auto",
-        )
-        collector = None
+        replay = inference = collector = None
         try:
-            collector = RayCollector(
-                create_env_fn=[CountingEnv],
-                policy=inference,
-                replay_buffer=replay,
-                collector_class=Collector,
-                frames_per_batch=8,
-                total_frames=16,
-                remote_configs={"num_cpus": 1, "num_gpus": 0},
-                sync=True,
-            )
+            with service_backend("ray"):
+                replay = TensorDictReplayBuffer(
+                    storage=partial(LazyTensorStorage, 100),
+                    batch_size=4,
+                    service_backend_options={"remote_config": {"num_cpus": 0}},
+                    transport="auto",
+                )
+                inference = InferenceServer(
+                    policy_factory=CountingPolicy,
+                    service_backend_options={"remote_config": {"num_cpus": 0}},
+                    transport="auto",
+                )
+                collector = Collector(
+                    create_env_fn=CountingEnv,
+                    num_collectors=1,
+                    policy=inference,
+                    replay_buffer=replay,
+                    backend_options={
+                        "collector_class": Collector,
+                        "remote_configs": {"num_cpus": 1, "num_gpus": 0},
+                    },
+                    frames_per_batch=8,
+                    total_frames=16,
+                    sync=True,
+                )
             assert all(batch is None for batch in collector)
             assert len(replay) == 16
             assert replay.sample().shape == (4,)
         finally:
             if collector is not None:
                 collector.shutdown()
-            inference.shutdown()
-            replay.shutdown()
+            if inference is not None:
+                inference.shutdown()
+            if replay is not None:
+                replay.shutdown()
 
     def test_ray_collector_pause_drains_and_resumes(self):
         replay = TensorDictReplayBuffer(

@@ -35,9 +35,11 @@ terms with the minimum context needed to find the relevant code.
       full lifecycle.
 
    Collector
-      The single-process data collector, exposed as
-      :class:`~torchrl.collectors.Collector`. It alternates policy calls and
-      environment steps to produce rollout tensordicts.
+      The main collector construction API,
+      :class:`~torchrl.collectors.Collector`. By default it alternates policy
+      calls and environment steps in the training process. ``backend`` and
+      ``num_collectors`` select local process, Ray, RPC, or distributed
+      implementations without changing the entry point.
 
    compact_obs
       Collector setting that drops observation and state keys from the
@@ -80,9 +82,8 @@ terms with the minimum context needed to find the relevant code.
    EnvCreator
       A small callable wrapper, :class:`~torchrl.envs.EnvCreator`, used to build
       environments lazily or in worker processes. It is useful when constructors
-      need to be serialized for :class:`~torchrl.collectors.MultiSyncCollector`,
-      :class:`~torchrl.collectors.MultiAsyncCollector`, or distributed
-      collectors.
+      need to be serialized for ``Collector(num_collectors=N)`` or another
+      distributed ``Collector`` backend.
 
    functional (loss)
       A :class:`~torchrl.objectives.LossModule` is *functional* when it stores
