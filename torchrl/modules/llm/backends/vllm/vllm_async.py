@@ -489,7 +489,13 @@ class _AsyncLLMEngine:
             Whether the cache was fully reset, when reported by vLLM. ``False``
             means some cached blocks are still held by in-flight requests.
         """
-        return await self.engine.reset_prefix_cache()
+        try:
+            # Also reset KV-connector-backed entries: vLLM defaults
+            # reset_connector=False, which only clears the local cache.
+            return await self.engine.reset_prefix_cache(reset_connector=True)
+        except TypeError:
+            # Older vLLM without the reset_connector kwarg.
+            return await self.engine.reset_prefix_cache()
 
 
 def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:

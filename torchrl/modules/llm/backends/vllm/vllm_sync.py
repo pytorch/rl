@@ -333,10 +333,15 @@ class RayLLMWorker(RLvLLMEngine):
             return
         try:
             import ray
-
-            ray.get(self.ray_actor.reset_prefix_cache.remote())
         except ImportError:
             raise ImportError("Ray not available for prefix cache reset")
+        try:
+            # Also reset KV-connector-backed entries: vLLM defaults
+            # reset_connector=False, which only clears the local cache.
+            ray.get(self.ray_actor.reset_prefix_cache.remote(reset_connector=True))
+        except TypeError:
+            # Older vLLM without the reset_connector kwarg.
+            ray.get(self.ray_actor.reset_prefix_cache.remote())
 
     # Delegate generation methods to the Ray actor
     def generate(self, *args, **kwargs):
@@ -408,7 +413,13 @@ class LocalLLMWrapper(RLvLLMEngine):
 
     def reset_prefix_cache(self) -> None:
         """Reset the KV prefix cache on the wrapped local LLM instance."""
-        self.llm_instance.reset_prefix_cache()
+        try:
+            # Also reset KV-connector-backed entries: vLLM defaults
+            # reset_connector=False, which only clears the local cache.
+            self.llm_instance.reset_prefix_cache(reset_connector=True)
+        except TypeError:
+            # Older vLLM without the reset_connector kwarg.
+            self.llm_instance.reset_prefix_cache()
 
     # Delegate generation methods to the local LLM
     def generate(self, *args, **kwargs):
