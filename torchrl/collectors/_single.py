@@ -259,6 +259,13 @@ class Collector(BaseCollector):
             .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` requires
                 `extend_buffer=True`, as the whole batch needs to be observed to apply these transforms.
 
+        flatten_data (bool, optional): if ``True`` and a replay buffer is
+            provided, flatten all collector batch dimensions before extending
+            the buffer. For example, a rollout with shape ``[N, T]`` is written
+            as ``[N * T]`` transitions to a flat, 1-D replay buffer instead of
+            ``N`` items whose payload shape is ``[T]``. This is the recommended
+            replay-buffer layout in TorchRL. Defaults to ``False`` for backward
+            compatibility with multidimensional replay-buffer storage.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True`.
 
@@ -451,6 +458,7 @@ class Collector(BaseCollector):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        flatten_data: bool = False,
         extend_buffer: bool = True,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
@@ -523,6 +531,7 @@ class Collector(BaseCollector):
         # Set up replay buffer
         self._setup_replay_buffer(
             replay_buffer=replay_buffer,
+            flatten_data=flatten_data,
             extend_buffer=extend_buffer,
             postproc=postproc,
             split_trajs=split_trajs,
@@ -783,6 +792,7 @@ class Collector(BaseCollector):
     def _setup_replay_buffer(
         self,
         replay_buffer: ReplayBuffer | None,
+        flatten_data: bool,
         extend_buffer: bool,
         postproc: Callable | None,
         split_trajs: bool | None,
@@ -791,8 +801,20 @@ class Collector(BaseCollector):
     ) -> None:
         """Set up replay buffer configuration and validate compatibility."""
         self.replay_buffer = replay_buffer
+        self.flatten_data = flatten_data
         self.extend_buffer = extend_buffer
         self.local_init_rb = True
+
+        if self.replay_buffer is not None and self.flatten_data:
+            if not self.extend_buffer:
+                raise TypeError(
+                    "flatten_data=True requires extend_buffer=True when a replay buffer is passed."
+                )
+            if split_trajs not in (None, False):
+                raise TypeError(
+                    "flatten_data=True is incompatible with split_trajs=True because split trajectories are padded. "
+                    "Use trajs_per_batch for flat complete-trajectory writes."
+                )
 
         # Validate replay buffer compatibility
         if self.replay_buffer is not None and not self._ignore_rb:
@@ -1718,6 +1740,8 @@ class Collector(BaseCollector):
                 key for key in tensordict_out.keys(True) if is_private(key)
             ]
             tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+        if self.flatten_data and self.replay_buffer is not None:
+            tensordict_out = tensordict_out.reshape(-1)
         return tensordict_out
 
     def _update_traj_ids(self, env_output) -> None:

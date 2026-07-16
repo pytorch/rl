@@ -267,6 +267,12 @@ class RayCollector(BaseCollector):
             populate it instead of yielding TensorDicts. The replay buffer must
             use ``service_backend="ray"``; the collector creates restricted
             worker clients internally. Defaults to ``None``.
+        flatten_data (bool, optional): if ``True`` and ``replay_buffer`` is
+            provided, flatten each remote collector rollout before extending
+            the buffer. A rollout with shape ``[N, T]`` is written as
+            ``[N * T]`` transitions to the recommended flat, 1-D replay-buffer
+            layout. Defaults to ``False`` for backward compatibility with
+            multidimensional replay-buffer storage.
         weight_updater (WeightUpdaterBase or constructor, optional): (Deprecated) An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers managed by Ray.
             If not provided, a :class:`~torchrl.collectors.RayWeightUpdater` will be used by default, leveraging
@@ -366,6 +372,7 @@ class RayCollector(BaseCollector):
         update_after_each_batch: bool = False,
         max_weight_update_interval: int = -1,
         replay_buffer: ReplayBuffer | None = None,
+        flatten_data: bool = False,
         weight_updater: WeightUpdaterBase
         | Callable[[], WeightUpdaterBase]
         | None = None,
@@ -413,6 +420,12 @@ class RayCollector(BaseCollector):
                     "service_backend='ray' and a client() method. Construct it "
                     "with ReplayBuffer(..., service_backend='ray')."
                 )
+            if flatten_data:
+                if isinstance(collector_kwargs, dict):
+                    collector_kwargs["flatten_data"] = True
+                else:
+                    for ck in collector_kwargs:
+                        ck["flatten_data"] = True
         if trajs_per_batch is not None:
             if isinstance(collector_kwargs, dict):
                 collector_kwargs.setdefault("trajs_per_batch", trajs_per_batch)
@@ -531,6 +544,7 @@ class RayCollector(BaseCollector):
 
         self.no_cuda_sync = no_cuda_sync
         self.replay_buffer = replay_buffer
+        self.flatten_data = flatten_data
         if not isinstance(policy_factory, Sequence):
             policy_factory = [policy_factory] * len(create_env_fn)
         self.policy_factory = policy_factory

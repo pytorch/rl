@@ -10,6 +10,9 @@ which trajectories are concatenated end-to-end and their boundaries are
 recovered from the per-step ``is_init`` / ``("next", "done")`` /
 ``("next", "truncated")`` / ``("next", "terminated")`` markers, **not**
 from a fixed ``[B, T]`` shape with a padding mask.
+For collectors that write directly to a replay buffer, pass
+``flatten_data=True`` to reshape batched rollouts to this layout before each
+``extend`` call.
 
 Two main patterns coexist in TorchRL:
 

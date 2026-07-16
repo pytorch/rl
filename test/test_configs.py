@@ -1133,13 +1133,25 @@ class TestCollectorsConfig:
         if collector == "async":
 
             cfg_cls = AsyncCollectorConfig
-            kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
+            kwargs = {
+                "create_env_fn": env_cfg,
+                "frames_per_batch": 10,
+                "flatten_data": True,
+            }
         elif collector == "multi_sync":
             cfg_cls = MultiSyncCollectorConfig
-            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
+            kwargs = {
+                "create_env_fn": [env_cfg],
+                "frames_per_batch": 10,
+                "flatten_data": True,
+            }
         elif collector == "multi_async":
             cfg_cls = MultiAsyncCollectorConfig
-            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
+            kwargs = {
+                "create_env_fn": [env_cfg],
+                "frames_per_batch": 10,
+                "flatten_data": True,
+            }
         else:
             raise ValueError(f"Unknown collector type: {collector}")
 
@@ -1172,6 +1184,7 @@ class TestCollectorsConfig:
                 assert isinstance(collector_instance, MultiSyncCollector)
             elif collector == "multi_async":
                 assert isinstance(collector_instance, MultiAsyncCollector)
+            assert collector_instance.flatten_data
             for _c in collector_instance:
                 # Just check that we can iterate
                 break

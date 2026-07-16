@@ -273,8 +273,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             combined with ``replay_buffer`` is supported for
             :class:`~torchrl.collectors.MultiSyncCollector`,
             :class:`~torchrl.collectors.MultiAsyncCollector`,
-            :class:`~torchrl.collectors.distributed.RayCollector`, and
-            :class:`~torchrl.collectors.distributed.RPCCollector`.
+            and :class:`~torchrl.collectors.distributed.RayCollector`.
             Trajectory assembly is delegated to each worker's inner collector,
             which calls :meth:`_iter_by_trajectories` independently and writes
             complete trajectories to the shared replay buffer.  Both the

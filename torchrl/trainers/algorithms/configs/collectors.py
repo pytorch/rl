@@ -49,6 +49,7 @@ class CollectorConfig(BaseCollectorConfig):
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: Any = None
+    flatten_data: bool = False
     extend_buffer: bool = False
     trust_policy: bool = True
     compile_policy: Any = None
@@ -109,6 +110,7 @@ class AsyncCollectorConfig(BaseCollectorConfig):
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
+    flatten_data: bool = False
     extend_buffer: bool = False
     trust_policy: bool = True
     compile_policy: Any = None
@@ -163,6 +165,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
+    flatten_data: bool = False
     extend_buffer: bool = False
     trust_policy: bool = True
     compile_policy: Any = None
@@ -226,6 +229,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
+    flatten_data: bool = False
     extend_buffer: bool = False
     trust_policy: bool = True
     compile_policy: Any = None

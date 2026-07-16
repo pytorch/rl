@@ -5411,6 +5411,62 @@ class TestCollectorRemoteHelpers:
 
 
 class TestCollectorRB:
+    @pytest.mark.parametrize(
+        "collector_class",
+        [Collector, AsyncCollector, MultiSyncCollector, MultiAsyncCollector],
+    )
+    def test_flatten_data_replay_buffer(self, collector_class):
+        """Batched collector rollouts can be written to flat 1-D storage."""
+
+        def make_env():
+            return SerialEnv(2, CountingEnv)
+
+        probe = make_env()
+        policy = RandomPolicy(probe.action_spec)
+        probe.close(raise_if_closed=False)
+        rb = ReplayBuffer(storage=LazyTensorStorage(64), batch_size=4)
+        if collector_class is Collector:
+            create_env_fn = make_env()
+        elif collector_class is AsyncCollector:
+            create_env_fn = make_env
+        else:
+            create_env_fn = [make_env]
+        collector = collector_class(
+            create_env_fn,
+            policy,
+            replay_buffer=rb,
+            flatten_data=True,
+            total_frames=8,
+            frames_per_batch=8,
+        )
+        try:
+            assert all(data is None for data in collector)
+        finally:
+            collector.shutdown()
+
+        assert rb.write_count == 8
+        assert rb[:].shape == (8,)
+        traj_ids = rb["collector", "traj_ids"]
+        torch.testing.assert_close(traj_ids[:4], torch.zeros(4, dtype=torch.long))
+        torch.testing.assert_close(traj_ids[4:], torch.ones(4, dtype=torch.long))
+
+    def test_flatten_data_replay_buffer_requires_extend(self):
+        env = CountingEnv()
+        rb = ReplayBuffer(storage=LazyTensorStorage(64), batch_size=4)
+        try:
+            with pytest.raises(TypeError, match="requires extend_buffer=True"):
+                Collector(
+                    env,
+                    RandomPolicy(env.action_spec),
+                    replay_buffer=rb,
+                    flatten_data=True,
+                    extend_buffer=False,
+                    total_frames=8,
+                    frames_per_batch=8,
+                )
+        finally:
+            env.close(raise_if_closed=False)
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_sync(self):
         env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))

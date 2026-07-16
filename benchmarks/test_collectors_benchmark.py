@@ -26,6 +26,7 @@ from torchrl.envs import (
     EnvCreator,
     GymEnv,
     ParallelEnv,
+    SerialEnv,
     StepCounter,
     TransformedEnv,
 )
@@ -292,6 +293,25 @@ def single_collector_with_rb_setup_pixels():
     return ((c, rb), {})
 
 
+def flat_collector_with_rb_setup():
+    """Setup batched collection into the preferred flat replay layout."""
+    env = SerialEnv(4, functools.partial(_PayloadEnv, payload_size=4096))
+    rb = ReplayBuffer(storage=LazyTensorStorage(10000))
+    c = Collector(
+        env,
+        RandomPolicy(env.action_spec),
+        total_frames=-1,
+        frames_per_batch=128,
+        replay_buffer=rb,
+        flatten_data=True,
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c, rb), {})
+
+
 def sync_collector_with_rb_setup():
     """Setup a multi-process collector whose workers write whole rollouts."""
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
@@ -358,6 +378,12 @@ def test_sync_payload_with_rb(benchmark):
         )
     finally:
         collector.shutdown()
+
+
+def test_flatten_data_with_rb(benchmark):
+    """Benchmark one reshape and one extend for a batched rollout."""
+    (c, rb), _ = flat_collector_with_rb_setup()
+    benchmark(execute_collector_with_rb, c, rb)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")

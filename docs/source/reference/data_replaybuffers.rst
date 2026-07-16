@@ -18,6 +18,16 @@ transport or a fixed-layout Gloo/NCCL tensor transport. See
 :ref:`ref_service_transports` for the compatibility table, payload
 restrictions, and expected performance trade-offs.
 
+.. important::
+
+    TorchRL recommends a flat, 1-D replay-buffer layout (the default
+    ``ndim=1`` storage). Flatten batched collector output before insertion and
+    recover trajectory structure from per-step boundary markers with
+    :class:`~torchrl.data.replay_buffers.SliceSampler`. Higher-dimensional
+    storage is supported when fixed-shape chunks are intentionally part of each
+    replay item, but it is not the preferred general-purpose layout. See
+    :ref:`Data layout: contiguous trajectories <data-layout>`.
+
 .. code-block:: python
 
     from functools import partial
