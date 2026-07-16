@@ -104,6 +104,20 @@ def test_explicit_backend_values_override_context():
         replay.shutdown()
 
 
+def test_context_selected_backend_errors_report_the_context():
+    with service_backend("process"):
+        with pytest.raises(
+            ValueError, match="enclosing torchrl.service_backend context"
+        ):
+            ReplayBuffer()
+
+    with transport_backend("distributed"):
+        with pytest.raises(
+            ValueError, match="enclosing torchrl.transport_backend context"
+        ):
+            ReplayBuffer()
+
+
 def _clear_gym_implement_for_state():
     """Clear all gym/gymnasium-related state from implement_for caches.
 

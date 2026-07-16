@@ -293,6 +293,19 @@ class TestInferenceServerCore:
         finally:
             server.shutdown()
 
+    def test_contextual_backend_errors_report_the_context(self):
+        with service_backend("distributed"):
+            with pytest.raises(
+                ValueError, match="enclosing torchrl.service_backend context"
+            ):
+                InferenceServer(_make_policy())
+
+        with transport_backend("distributed"):
+            with pytest.raises(
+                ValueError, match="enclosing torchrl.transport_backend context"
+            ):
+                InferenceServer(_make_policy())
+
     def test_canonical_thread_constructor(self):
         with InferenceServer(_make_policy(), transport="auto") as server:
             assert server.service_backend == "thread"

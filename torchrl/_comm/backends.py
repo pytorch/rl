@@ -143,6 +143,24 @@ def _get_transport_backend() -> TransportBackend | None:
     return cast(TransportBackend | None, _context_value(_TRANSPORT_BACKEND_CONTEXT))
 
 
+def _contextual_backend_error(
+    message: str,
+    *,
+    service: bool = False,
+    transport: bool = False,
+) -> str:
+    """Annotate a validation error with the scoped default that selected it."""
+    contexts = []
+    if service:
+        contexts.append("torchrl.service_backend")
+    if transport:
+        contexts.append("torchrl.transport_backend")
+    if not contexts:
+        return message
+    context_names = " and ".join(contexts)
+    return f"{message} (selected by an enclosing {context_names} context.)"
+
+
 def _resolve_service_backend(
     backend: ServiceBackend | ServiceBackendAlias | str | None,
     *,

@@ -27,7 +27,13 @@ from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl._comm import CommandChannel, Mailbox, watch_process_liveness
-from torchrl._comm.backends import _resolve_service_backend, _resolve_transport_backend
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    _get_transport_backend,
+    _resolve_service_backend,
+    _resolve_transport_backend,
+)
 from torchrl._comm.ray_runtime import _RayRuntimeLease, _set_ray_client_liveness
 from torchrl.modules.inference_server._client import (
     _NO_INTERACTION_TYPE_CODE,
@@ -81,6 +87,11 @@ class _InferenceServerMeta(type):
             server_config.service_backend if server_config is not None else "thread"
         )
         service_backend = kwargs.pop("service_backend", None)
+        service_backend_from_context = (
+            service_backend is None
+            and server_config is None
+            and _get_service_backend() is not None
+        )
         if service_backend is None:
             service_backend = _resolve_service_backend(
                 configured_backend if server_config is not None else None,
@@ -99,23 +110,45 @@ class _InferenceServerMeta(type):
             )
         if service_backend not in ("thread", "process", "ray"):
             raise ValueError(
-                "InferenceServer service_backend must be 'thread', 'process', or 'ray'."
+                _contextual_backend_error(
+                    "InferenceServer service_backend must be 'thread', 'process', or 'ray'.",
+                    service=service_backend_from_context,
+                )
             )
 
         service_options = dict(kwargs.pop("service_backend_options", None) or {})
+        transport_backend_from_context = (
+            transport is None and _get_transport_backend() is not None
+        )
         if transport is None:
             transport = _resolve_transport_backend(None, default="auto")
         transport_options = kwargs.pop("transport_options", None)
         request_spec = kwargs.pop("request_spec", None)
         response_spec = kwargs.pop("response_spec", None)
         num_clients = kwargs.pop("num_clients", None)
-        _validate_inference_transport_selection(
-            transport,
-            service_backend=service_backend,
-            transport_options=transport_options,
-            request_spec=request_spec,
-            response_spec=response_spec,
-        )
+        try:
+            _validate_inference_transport_selection(
+                transport,
+                service_backend=service_backend,
+                transport_options=transport_options,
+                request_spec=request_spec,
+                response_spec=response_spec,
+            )
+        except ValueError as err:
+            message = str(err)
+            service_error = (
+                service_backend_from_context and "service_backend" in message
+            )
+            transport_error = transport_backend_from_context and "transport" in message
+            if not service_error and not transport_error:
+                raise
+            raise ValueError(
+                _contextual_backend_error(
+                    message,
+                    service=service_error,
+                    transport=transport_error,
+                )
+            ) from err
 
         if service_backend == "ray":
             if model is not None:

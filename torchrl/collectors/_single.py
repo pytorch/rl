@@ -17,7 +17,11 @@ from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from torch import nn
 from torchrl import compile_with_warmup
-from torchrl._comm.backends import _get_service_backend, normalize_service_backend
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    normalize_service_backend,
+)
 from torchrl._utils import (
     _ends_with,
     _maybe_record_function,
@@ -203,16 +207,21 @@ class _CollectorMeta(abc.ABCMeta):
             if num_collectors < 1:
                 raise ValueError("num_collectors must be a positive integer.")
 
+        backend_from_context = False
         if backend is not None:
             backend = normalize_service_backend(backend)
         else:
             backend = _get_service_backend()
+            backend_from_context = backend is not None
             if backend is None:
                 backend = "process" if num_collectors is not None else "direct"
         if backend not in cls._BACKENDS:
             raise ValueError(
-                f"Collector does not support backend={backend!r}. Expected one "
-                f"of {sorted(cls._BACKENDS)}."
+                _contextual_backend_error(
+                    f"Collector does not support backend={backend!r}. Expected one "
+                    f"of {sorted(cls._BACKENDS)}.",
+                    service=backend_from_context,
+                )
             )
 
         options = dict(backend_options or {})

@@ -32,7 +32,13 @@ from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 from torch.autograd.profiler import record_function
 
-from torchrl._comm.backends import _resolve_service_backend, _resolve_transport_backend
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    _get_transport_backend,
+    _resolve_service_backend,
+    _resolve_transport_backend,
+)
 
 try:
     from torch.compiler import is_compiling
@@ -1607,38 +1613,70 @@ class _RayServiceMetaClass(type):
             # been resolved by the outer construction and must not dispatch a
             # second time from the still-active context.
             service_backend = "direct"
+        service_backend_from_context = (
+            service_backend is None and _get_service_backend() is not None
+        )
         service_backend = _resolve_service_backend(service_backend, default="direct")
         options = dict(service_backend_options or {})
 
+        transport_backend_from_context = False
         if getattr(cls, "_accepts_transport_backend", False):
             transport = kwargs.get("transport")
             if transport is None:
+                transport_backend_from_context = _get_transport_backend() is not None
                 kwargs["transport"] = _resolve_transport_backend(None, default="auto")
+
+        def construct(factory):
+            try:
+                return factory()
+            except ValueError as err:
+                message = str(err)
+                service_error = (
+                    service_backend_from_context and "service_backend" in message
+                )
+                transport_error = (
+                    transport_backend_from_context and "transport" in message
+                )
+                if not service_error and not transport_error:
+                    raise
+                raise ValueError(
+                    _contextual_backend_error(
+                        message,
+                        service=service_error,
+                        transport=transport_error,
+                    )
+                ) from err
 
         if service_backend == "direct":
             if options:
                 raise ValueError(
                     "service_backend_options are only valid for non-direct services."
                 )
-            return super().__call__(*args, **kwargs)
+            direct_constructor = super().__call__
+            return construct(lambda: direct_constructor(*args, **kwargs))
 
         if hasattr(cls, "_ServiceClass"):
             token = _SERVICE_BACKEND_DISPATCHING.set(os.getpid())
             try:
-                return cls._ServiceClass(
-                    service_backend,
-                    *args,
-                    service_backend_options=options,
-                    **kwargs,
+                return construct(
+                    lambda: cls._ServiceClass(
+                        service_backend,
+                        *args,
+                        service_backend_options=options,
+                        **kwargs,
+                    )
                 )
             finally:
                 _SERVICE_BACKEND_DISPATCHING.reset(token)
         if service_backend == "ray" and hasattr(cls, "_RayServiceClass"):
             if options and "ray_actor_options" not in kwargs:
                 kwargs["ray_actor_options"] = options.get("actor_options", options)
-            return cls._RayServiceClass(*args, **kwargs)
+            return construct(lambda: cls._RayServiceClass(*args, **kwargs))
         raise ValueError(
-            f"{cls.__name__} does not support service_backend={service_backend!r}."
+            _contextual_backend_error(
+                f"{cls.__name__} does not support service_backend={service_backend!r}.",
+                service=service_backend_from_context,
+            )
         )
 
 

@@ -893,7 +893,9 @@ class TestCollectorGeneric:
                 frames_per_batch=20,
             )
         with service_backend("thread"):
-            with pytest.raises(ValueError, match="does not support"):
+            with pytest.raises(
+                ValueError, match="enclosing torchrl.service_backend context"
+            ):
                 Collector(
                     ContinuousActionVecMockEnv,
                     frames_per_batch=20,
