@@ -90,7 +90,7 @@ Memory-Efficient RL Training
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f6f67838350>
+    <torch._C.Generator object at 0x7f0a119182f0>
 
 
 
@@ -387,8 +387,8 @@ trajectory id changes (or where the trajectory ended):
 
  .. code-block:: none
 
-    rows with NaN next-obs:                 [39]
-    rows flagged as trajectory boundaries:  [39]
+    rows with NaN next-obs:                 [19, 39]
+    rows flagged as trajectory boundaries:  [19, 39]
 
 
 
@@ -1079,7 +1079,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.364 seconds)
+   **Total running time of the script:** (0 minutes 0.360 seconds)
 
 
 .. _sphx_glr_download_tutorials_memory_efficient_rl.py:
