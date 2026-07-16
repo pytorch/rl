@@ -62,8 +62,10 @@ from torchrl.collectors._multi_base import MultiCollector
 from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 
 from torchrl.collectors.utils import (
+    _device_shareable_across_processes,
     _make_policy_factory,
     _maybe_normalize_replay_buffer_tensordict_device,
+    _stage_unshareable_weights_on_cpu,
     _traj_chunk_ends_done,
     _traj_emit,
     _traj_ingest,
@@ -186,6 +188,130 @@ def test_weight_sync_scheme_from_backend_forwards_kwargs():
 def test_weight_sync_scheme_from_backend_rejects_unknown():
     with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
         WeightSyncScheme.from_backend("unknown")
+
+
+class TestWeightSyncCPUStaging:
+    """Weights on devices without cross-process sharing support (CUDA on
+    Windows/WSL2, MPS anywhere) must be staged through CPU shared memory,
+    otherwise they are silently received as zeros and can corrupt the
+    sender's memory (https://github.com/pytorch/rl/issues/3985)."""
+
+    def test_cpu_and_meta_always_shareable(self):
+        assert _device_shareable_across_processes(torch.device("cpu"))
+        assert _device_shareable_across_processes(torch.device("meta"))
+
+    def test_mps_never_shareable(self):
+        assert not _device_shareable_across_processes(torch.device("mps"))
+
+    @pytest.mark.parametrize("ipc_supported", [True, False])
+    def test_cuda_shareable_iff_cuda_ipc(self, monkeypatch, ipc_supported):
+        import torchrl.collectors.utils as collector_utils
+
+        monkeypatch.setattr(
+            collector_utils, "_platform_supports_cuda_ipc", lambda: ipc_supported
+        )
+        assert (
+            _device_shareable_across_processes(torch.device("cuda:0")) is ipc_supported
+        )
+
+    @pytest.mark.parametrize(
+        "scheme_cls", [SharedMemWeightSyncScheme, MultiProcessWeightSyncScheme]
+    )
+    def test_params_map_stages_cuda_weights_without_ipc(self, monkeypatch, scheme_cls):
+        import torchrl.collectors.utils as collector_utils
+
+        monkeypatch.setattr(
+            collector_utils, "_platform_supports_cuda_ipc", lambda: False
+        )
+        model = nn.Linear(2, 1)
+        scheme = scheme_cls()
+        with pytest.warns(UserWarning, match="staged through CPU shared memory"):
+            params_map = scheme._get_params_map(
+                model=model,
+                devices=[torch.device("cuda:0"), torch.device("cuda:0")],
+            )
+        assert params_map[0] is params_map[1]
+        for weights in params_map.values():
+            assert weights.is_shared()
+            for tensor in weights.values(True, True):
+                assert tensor.device.type == "cpu"
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_params_map_keeps_cuda_weights_with_ipc(self, monkeypatch):
+        import torchrl.collectors.utils as collector_utils
+
+        monkeypatch.setattr(
+            collector_utils, "_platform_supports_cuda_ipc", lambda: True
+        )
+        model = nn.Linear(2, 1)
+        scheme = SharedMemWeightSyncScheme()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            params_map = scheme._get_params_map(
+                model=model, devices=[torch.device("cuda:0")]
+            )
+        for tensor in params_map[0].values(True, True):
+            assert tensor.device.type == "cuda"
+
+    def test_params_map_cpu_weights_unchanged(self):
+        model = nn.Linear(2, 1)
+        scheme = SharedMemWeightSyncScheme()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            params_map = scheme._get_params_map(
+                model=model, devices=[torch.device("cpu")]
+            )
+        for tensor in params_map[0].values(True, True):
+            assert tensor.device.type == "cpu"
+
+    @pytest.mark.parametrize("weight_format", ["tensordict", "state_dict"])
+    def test_stage_unshareable_weights_on_cpu(self, monkeypatch, weight_format):
+        import torchrl.collectors.utils as collector_utils
+
+        monkeypatch.setattr(
+            collector_utils, "_platform_supports_cuda_ipc", lambda: False
+        )
+        model = nn.Linear(2, 1)
+        if weight_format == "tensordict":
+            weights = TensorDict.from_module(model).data
+        else:
+            weights = {key: value.detach() for key, value in model.state_dict().items()}
+        staged = _stage_unshareable_weights_on_cpu(weights)
+        assert staged is weights
+
+    @pytest.mark.skipif(
+        not torch.backends.mps.is_available(), reason="needs an MPS device"
+    )
+    def test_multicollector_mps_policy(self):
+        device = torch.device("mps")
+        env_maker = ContinuousActionVecMockEnv
+        policy = TensorDictModule(
+            nn.LazyLinear(7), in_keys=["observation"], out_keys=["action"]
+        )
+        env = env_maker()
+        policy(env.reset())
+        policy = policy.to(device)
+        weights_before = TensorDict.from_module(policy).data.cpu().clone()
+        with pytest.warns(UserWarning, match="staged through CPU shared memory"):
+            collector = MultiSyncCollector(
+                [env_maker, env_maker],
+                policy=policy,
+                frames_per_batch=16,
+                total_frames=32,
+                policy_device=device,
+                storing_device="cpu",
+                env_device="cpu",
+            )
+        try:
+            for data in collector:
+                assert data.numel() == 16
+                break
+            weights_after = TensorDict.from_module(policy).data
+            assert_allclose_td(weights_before, weights_after.cpu())
+        finally:
+            collector.shutdown()
+            del collector
 
 
 def test_ray_weight_sync_copy_preserves_config_and_resets_runtime():
