@@ -29,7 +29,11 @@ from torchrl import (
 )
 from torchrl._comm.backends import _get_service_backend, _get_transport_backend
 from torchrl._utils import _rng_decorator, as_remote, get_binary_env_var, implement_for
-from torchrl.data import ReplayBuffer
+from torchrl.data import (
+    PrioritizedReplayBuffer,
+    ReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+)
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
 from torchrl.objectives.utils import _pseudo_vmap
@@ -116,6 +120,37 @@ def test_context_selected_backend_errors_report_the_context():
             ValueError, match="enclosing torchrl.transport_backend context"
         ):
             ReplayBuffer()
+
+
+@pytest.mark.parametrize(
+    "buffer_cls", [PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer]
+)
+def test_transport_default_is_not_injected_into_constructors(buffer_cls):
+    # Regression test: the service metaclass used to inject transport="auto"
+    # into every construction, breaking subclasses whose __init__ did not
+    # accept the keyword (e.g. PrioritizedReplayBuffer(alpha=..., beta=...)).
+    replay = buffer_cls(alpha=1.1, beta=1.1)
+    try:
+        assert replay.service_backend == "direct"
+    finally:
+        replay.shutdown()
+
+
+@pytest.mark.parametrize(
+    "buffer_cls", [PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer]
+)
+def test_prioritized_buffers_accept_transport_kwargs(buffer_cls):
+    replay = buffer_cls(alpha=1.1, beta=1.1, transport="auto")
+    try:
+        assert replay.service_backend == "direct"
+    finally:
+        replay.shutdown()
+
+    with transport_backend("distributed"):
+        with pytest.raises(
+            ValueError, match="enclosing torchrl.transport_backend context"
+        ):
+            buffer_cls(alpha=1.1, beta=1.1)
 
 
 def _clear_gym_implement_for_state():
