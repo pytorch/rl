@@ -151,7 +151,14 @@ class _CollectorMeta(abc.ABCMeta):
 
     @staticmethod
     def _drop_inapplicable_defaults(target, kwargs):
-        """Let a selected backend apply its defaults to generic config values."""
+        """Let a selected backend apply its defaults to generic config values.
+
+        Generic structured configs materialize every ``Collector`` default,
+        whereas concrete backends have a few different but semantically
+        equivalent defaults. Because an explicitly passed value equal to the
+        generic default is indistinguishable from a materialized config value,
+        tests pin the allowed concrete-default divergences.
+        """
         target_parameters = inspect.signature(target.__init__).parameters
         collector_parameters = inspect.signature(Collector.__init__).parameters
         for name, parameter in collector_parameters.items():
@@ -184,6 +191,11 @@ class _CollectorMeta(abc.ABCMeta):
                     "only supported when constructing Collector directly."
                 )
             return super().__call__(*args, **kwargs)
+
+        if len(args) > 2:
+            raise TypeError(
+                "Collector accepts at most create_env_fn and policy positionally."
+            )
 
         if num_collectors is not None:
             if isinstance(num_collectors, bool) or not isinstance(num_collectors, int):
@@ -281,7 +293,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
     Ray, RPC, or distributed execution. Dispatch occurs only when constructing
     this exact class; the returned object retains its concrete implementation
     type. Existing concrete collector classes remain available for subclassing
-    and implementation-specific APIs.
+    and implementation-specific APIs. Use :class:`BaseCollector` rather than
+    ``Collector`` as the target of an ``isinstance`` check that must accept
+    every dispatched collector.
 
     A collector requires an environment constructor and a policy.
 

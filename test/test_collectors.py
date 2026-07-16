@@ -61,7 +61,9 @@ from torchrl.collectors import (
 from torchrl.collectors._base import _ProfilerHook
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors.distributed.generic import DistributedCollector
 from torchrl.collectors.distributed.ray import _has_ray, RayCollector
+from torchrl.collectors.distributed.rpc import RPCCollector
 
 from torchrl.collectors.utils import (
     _make_policy_factory,
@@ -743,6 +745,60 @@ class TestCollectorGeneric:
         assert result is sentinel
         assert target.call_args.kwargs["sync"] is False
 
+    def test_explicit_direct_backend_overrides_context(self):
+        with service_backend("ray"):
+            collector = Collector(
+                ContinuousActionVecMockEnv,
+                backend="direct",
+                frames_per_batch=20,
+                total_frames=20,
+            )
+        try:
+            assert type(collector) is Collector
+        finally:
+            collector.shutdown()
+
+    def test_concrete_default_divergences_are_pinned(self):
+        collector_parameters = inspect.signature(Collector.__init__).parameters
+        expected = {
+            MultiCollector: set(),
+            RayCollector: {
+                "init_random_frames",
+                "max_frames_per_traj",
+                "no_cuda_sync",
+                "split_trajs",
+            },
+            RPCCollector: {
+                "init_random_frames",
+                "max_frames_per_traj",
+                "split_trajs",
+            },
+            DistributedCollector: {
+                "init_random_frames",
+                "max_frames_per_traj",
+                "split_trajs",
+            },
+        }
+        ignored = {
+            "self",
+            "backend",
+            "backend_options",
+            "num_collectors",
+            "sync",
+            "kwargs",
+        }
+        for target, expected_divergences in expected.items():
+            target_parameters = inspect.signature(target.__init__).parameters
+            divergences = {
+                name
+                for name, parameter in collector_parameters.items()
+                if name not in ignored
+                and parameter.default is not inspect.Parameter.empty
+                and name in target_parameters
+                and target_parameters[name].default != parameter.default
+            }
+            assert divergences == expected_divergences
+
     def test_sequence_inference_and_options_are_not_mutated(self):
         options = {"remote_configs": {"num_cpus": 1}}
         with patch("torchrl.collectors.distributed.ray.RayCollector") as target:
@@ -847,6 +903,14 @@ class TestCollectorGeneric:
                 ContinuousActionVecMockEnv,
                 backend="submitit",
                 backend_options={"launcher": "mp"},
+                frames_per_batch=20,
+            )
+        with pytest.raises(TypeError, match="at most"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                None,
+                3,
+                backend="process",
                 frames_per_batch=20,
             )
 

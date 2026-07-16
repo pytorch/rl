@@ -34,10 +34,8 @@ workers.
 
 .. currentmodule:: torchrl
 
-.. autosummary::
-
-    service_backend
-    transport_backend
+.. autofunction:: service_backend
+.. autofunction:: transport_backend
 
 .. code-block:: python
 

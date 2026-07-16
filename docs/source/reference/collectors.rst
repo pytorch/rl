@@ -60,6 +60,12 @@ The available selectors are ``"direct"``, ``"process"``, ``"ray"``,
 shortcut for a distributed collector with ``launcher="submitit"``. For every
 non-direct backend, omitted ``sync`` defaults to ``False``.
 
+.. important::
+
+   Process and distributed selection is asynchronous when ``sync`` is omitted.
+   On-policy algorithms should normally pass ``sync=True`` explicitly so every
+   worker contributes to each synchronized batch.
+
 Selection precedence is explicit ``backend``, then an enclosing
 :func:`torchrl.service_backend`, then ``num_collectors`` implying
 ``"process"``, and finally ``"direct"``. An explicit ``backend="direct"``
@@ -101,7 +107,8 @@ an explicitly supplied positive count must match. Empty sequences,
 non-positive counts, and mismatches are rejected before construction. The
 returned object keeps its concrete type, so a process selection returns
 :class:`MultiCollector` rather than an instance of the direct
-:class:`Collector`.
+:class:`Collector`. Use :class:`BaseCollector` for an ``isinstance`` check that
+must accept every collector returned by the unified constructor.
 
 Selection can also be scoped with :func:`torchrl.service_backend`; see
 :ref:`ref_services_workflow` for composing collector placement with replay and
