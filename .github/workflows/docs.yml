@@ -74,6 +74,9 @@ jobs:
           python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
           python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0" --quiet --root-user-action=ignore
           python -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --quiet --root-user-action=ignore
+          # torchcodec builds with scikit-build-core; --no-build-isolation requires
+          # the build backend to be present in the environment.
+          python -m pip install "scikit-build-core>=0.10" pybind11 ninja --quiet --root-user-action=ignore
           torchcodec_dir=$(mktemp -d)
           git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
           python_base="$(python -c 'import sys; print(sys.base_prefix)')"
