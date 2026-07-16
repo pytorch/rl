@@ -25,6 +25,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import (
     CompositeDistribution,
     ProbabilisticTensorDictModule,
@@ -1356,12 +1357,24 @@ class MCAdvantage(Transform):
         (version-dependent) error message.
         """
         try:
-            return tensordict.contiguous()
+            out = tensordict.contiguous()
         except RuntimeError as err:
             torchrl_logger.debug(
                 f"MCAdvantage: keeping lazy tensordict; contiguous() failed with: {err}"
             )
             return tensordict
+        # contiguous() can silently turn stacked NonTensorData entries (e.g.
+        # string prompts) into empty TensorDicts. Keep the lazy input whenever
+        # materialization would lose entries.
+        lazy_keys = set(tensordict.keys(True, True, is_leaf=_is_leaf_nontensor))
+        concrete_keys = set(out.keys(True, True, is_leaf=_is_leaf_nontensor))
+        if lazy_keys - concrete_keys:
+            torchrl_logger.debug(
+                "MCAdvantage: keeping lazy tensordict; contiguous() dropped "
+                f"entries {lazy_keys - concrete_keys}"
+            )
+            return tensordict
+        return out
 
     @staticmethod
     def _cat_tensordicts(
@@ -1374,10 +1387,17 @@ class MCAdvantage(Transform):
         trajectory groups should nevertheless have a consistent concrete
         representation, both to avoid backend-specific lazy-stack assumptions
         and to keep replay-buffer storage writes predictable.
+
+        Trajectories whose leaves are ragged across (but uniform within)
+        trajectories materialize individually yet cannot be concatenated into
+        a contiguous result; those fall back to a lazy concatenation.
         """
-        return torch.cat(
-            [MCAdvantage._concrete_if_possible(td) for td in tensordicts], dim
-        )
+        concrete = [MCAdvantage._concrete_if_possible(td) for td in tensordicts]
+        try:
+            return torch.cat(concrete, dim)
+        except RuntimeError:
+            steps = [step for td in tensordicts for step in td.unbind(dim)]
+            return lazy_stack(steps, dim)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase | None:
         if self.verbose:
@@ -1486,10 +1506,12 @@ class MCAdvantage(Transform):
             self.completed_groups += 1
             # Cat is the most robust way to combine the trajs
             tds = self._cat_tensordicts(trajs, -1)
-            # Collect rewards
+            # Collect rewards. Same-length trajectories concatenate into a
+            # regular strided tensor rather than a nested one.
             reward = tds.get(self.rewards_key, as_nested_tensor=True)
-            reward_mean = reward.values().mean()
-            reward_scale = reward.values().std()
+            reward_values = reward.values() if reward.is_nested else reward
+            reward_mean = reward_values.mean()
+            reward_scale = reward_values.std()
             advantage = (reward - reward_mean) / reward_scale.clamp_min(1e-6)
             if self.verbose:
                 torchrl_logger.info(f"Advantage: {reward_mean=} {reward_scale=}")

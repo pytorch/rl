@@ -136,6 +136,40 @@ class TestMCAdvantage:
         for chunk, exp in zip(out["advantage"].squeeze(-1).split([2, 3, 2]), expected):
             torch.testing.assert_close(chunk, exp.expand_as(chunk))
 
+    def test_mc_advantage_string_prompt_survives_contiguous(self):
+        # String prompts are stored as NonTensorData in lazy-stacked
+        # trajectories. TensorDict.contiguous() can silently turn those stacks
+        # into empty TensorDicts, so the group id must be read from the lazy
+        # input rather than the materialized trajectory (regression test).
+        from tensordict import NonTensorData
+
+        def traj(prompt, reward, n_steps=2, n_tokens=4):
+            # tokens are uniform within a trajectory (contiguous() succeeds on
+            # the single trajectory) but ragged across trajectories, like real
+            # variable-length generations
+            steps = [
+                TensorDict(
+                    {
+                        "query": NonTensorData(prompt),
+                        "tokens": torch.zeros(n_tokens, dtype=torch.long),
+                        ("next", "reward"): torch.tensor([reward]),
+                        ("next", "done"): torch.tensor([i == n_steps - 1]),
+                    }
+                )
+                for i in range(n_steps)
+            ]
+            return lazy_stack(steps)
+
+        adv_t = MCAdvantage(grpo_size=2, prompt_key="query")
+        # uniform tensor shapes within a trajectory: contiguous() succeeds
+        assert traj("p", 0.0).contiguous() is not None
+        assert adv_t.inv(traj("prompt-a", 0.0, n_steps=2, n_tokens=4)) is None
+        out = adv_t.inv(traj("prompt-a", 1.0, n_steps=3, n_tokens=6))
+        assert out is not None
+        assert "advantage" in out.keys()
+        # the stored trajectories keep their prompt strings intact
+        assert out[0]["query"] in ("prompt-a",)
+
     @pytest.mark.parametrize("group_key", ["group_id", ("meta", "group_id")])
     def test_mc_advantage_tensor_group_key(self, group_key):
         # tensor group identifiers (under a flat or nested key) are grouped by
