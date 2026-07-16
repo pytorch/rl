@@ -520,9 +520,17 @@ class _RayTrainerExecution:
     def shutdown(self, timeout: float | None = None) -> None:
         timeout = self.command_timeout if timeout is None else timeout
         actors, self._actors = self._actors, []
-        for actor in reversed(actors):
+        close_refs = []
+        for actor in actors:
             with contextlib.suppress(Exception):
-                ray.get(actor.close.remote(), timeout=timeout)
+                close_refs.append(actor.close.remote())
+        if close_refs:
+            # ray.wait, unlike ray.get, does not abandon the remaining ranks
+            # when one rank's close raises, so every rank keeps its chance to
+            # finish process-group teardown before the kill pass below.
+            with contextlib.suppress(Exception):
+                ray.wait(close_refs, num_returns=len(close_refs), timeout=timeout)
+        for actor in reversed(actors):
             with contextlib.suppress(Exception):
                 ray.kill(actor, no_restart=True)
         if self._placement_group is not None:
