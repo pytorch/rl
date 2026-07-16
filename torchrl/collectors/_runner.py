@@ -101,6 +101,8 @@ def _main_async_collector(
     original_init_random_frames = (
         init_random_frames if init_random_frames is not None else 0
     )
+    # Only forward flatten_data when requested: collector_class may be a custom
+    # collector whose constructor predates (and does not accept) this kwarg.
     flatten_kwargs = {"flatten_data": True} if flatten_data else {}
     try:
         # When trajs_per_batch is set, _iter_by_trajectories() handles RB writes

@@ -300,11 +300,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
-        flatten_data (bool, optional): if ``True`` and a replay buffer is
-            provided, flatten each worker rollout before extending the buffer.
-            A worker rollout with shape ``[N, T]`` is therefore written as
-            ``[N * T]`` transitions to the recommended flat, 1-D replay-buffer
-            layout. Defaults to ``False`` for backward compatibility with
+        flatten_data (bool, optional): if ``True``, flatten each worker
+            rollout before extending the replay buffer. A worker rollout with
+            shape ``[N, T]`` is therefore written as ``[N * T]`` transitions
+            to the recommended flat, 1-D replay-buffer layout. Requires
+            ``replay_buffer`` to be set (a ``TypeError`` is raised otherwise).
+            When ``trajs_per_batch`` is set this option is redundant: complete
+            trajectories are already written to the buffer as flat 1-D
+            sequences. Defaults to ``False`` for backward compatibility with
             multidimensional replay-buffer storage.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True` for multiprocessed data collectors.
@@ -703,10 +706,16 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.flatten_data = flatten_data
         self.extend_buffer = extend_buffer
 
-        if replay_buffer is not None and self.flatten_data and not self.extend_buffer:
-            raise TypeError(
-                "flatten_data=True requires extend_buffer=True when a replay buffer is passed."
-            )
+        if self.flatten_data:
+            if replay_buffer is None:
+                raise TypeError(
+                    "flatten_data=True requires a replay buffer to be passed to the collector. "
+                    "To flatten yielded batches, reshape them at consumption time with data.reshape(-1)."
+                )
+            if not self.extend_buffer:
+                raise TypeError(
+                    "flatten_data=True requires extend_buffer=True when a replay buffer is passed."
+                )
 
         self._check_replay_buffer_init()
 

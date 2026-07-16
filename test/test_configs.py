@@ -1133,25 +1133,13 @@ class TestCollectorsConfig:
         if collector == "async":
 
             cfg_cls = AsyncCollectorConfig
-            kwargs = {
-                "create_env_fn": env_cfg,
-                "frames_per_batch": 10,
-                "flatten_data": True,
-            }
+            kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
             cfg_cls = MultiSyncCollectorConfig
-            kwargs = {
-                "create_env_fn": [env_cfg],
-                "frames_per_batch": 10,
-                "flatten_data": True,
-            }
+            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
         elif collector == "multi_async":
             cfg_cls = MultiAsyncCollectorConfig
-            kwargs = {
-                "create_env_fn": [env_cfg],
-                "frames_per_batch": 10,
-                "flatten_data": True,
-            }
+            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
         else:
             raise ValueError(f"Unknown collector type: {collector}")
 
@@ -1184,12 +1172,61 @@ class TestCollectorsConfig:
                 assert isinstance(collector_instance, MultiSyncCollector)
             elif collector == "multi_async":
                 assert isinstance(collector_instance, MultiAsyncCollector)
-            assert collector_instance.flatten_data
+            assert collector_instance.flatten_data is False
             for _c in collector_instance:
                 # Just check that we can iterate
                 break
         finally:
             collector_instance.shutdown(timeout=10)
+
+    @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_collector_config_flatten_data_requires_replay_buffer(self, collector):
+        """flatten_data is forwarded by the config: without a replay buffer the collector raises."""
+        from hydra.errors import InstantiationException
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import (
+            AsyncCollectorConfig,
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+        )
+
+        env_cfg = GymEnvConfig(env_name="Pendulum-v1")
+        policy_cfg = TanhNormalModelConfig(
+            network=MLPConfig(in_features=3, out_features=2, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        if collector == "async":
+            cfg = AsyncCollectorConfig(
+                create_env_fn=env_cfg,
+                policy=policy_cfg,
+                frames_per_batch=10,
+                flatten_data=True,
+            )
+        elif collector == "multi_sync":
+            cfg = MultiSyncCollectorConfig(
+                create_env_fn=[env_cfg],
+                policy=policy_cfg,
+                frames_per_batch=10,
+                flatten_data=True,
+            )
+        else:
+            cfg = MultiAsyncCollectorConfig(
+                create_env_fn=[env_cfg],
+                policy=policy_cfg,
+                frames_per_batch=10,
+                flatten_data=True,
+            )
+        # Hydra wraps the collector's TypeError in an InstantiationException.
+        with pytest.raises(InstantiationException, match="requires a replay buffer"):
+            instantiate(cfg)
 
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])

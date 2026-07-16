@@ -5467,6 +5467,58 @@ class TestCollectorRB:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.parametrize(
+        "collector_class", [Collector, MultiSyncCollector, MultiAsyncCollector]
+    )
+    def test_flatten_data_requires_replay_buffer(self, collector_class):
+        """flatten_data without a replay buffer is an error, not a silent no-op."""
+        env = CountingEnv()
+        try:
+            policy = RandomPolicy(env.action_spec)
+            if collector_class is Collector:
+                create_env_fn = env
+            else:
+                create_env_fn = [CountingEnv]
+            with pytest.raises(TypeError, match="requires a replay buffer"):
+                collector_class(
+                    create_env_fn,
+                    policy,
+                    flatten_data=True,
+                    total_frames=8,
+                    frames_per_batch=8,
+                )
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_flatten_data_replay_buffer_postproc(self):
+        """postproc runs on the batched [N, T] rollout, before flattening."""
+        env = SerialEnv(2, CountingEnv)
+        rb = ReplayBuffer(storage=LazyTensorStorage(64), batch_size=4)
+        postproc_shapes = []
+
+        def postproc(data):
+            postproc_shapes.append(tuple(data.shape))
+            data["postproc_flag"] = torch.ones(data.shape, dtype=torch.bool)
+            return data
+
+        collector = Collector(
+            env,
+            RandomPolicy(env.action_spec),
+            replay_buffer=rb,
+            flatten_data=True,
+            postproc=postproc,
+            total_frames=8,
+            frames_per_batch=8,
+        )
+        try:
+            assert all(data is None for data in collector)
+        finally:
+            collector.shutdown()
+
+        assert postproc_shapes == [(2, 4)]
+        assert rb[:].shape == (8,)
+        assert rb["postproc_flag"].all()
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_sync(self):
         env = SerialEnv(8, lambda cp=CARTPOLE_VERSIONED(): GymEnv(cp))
