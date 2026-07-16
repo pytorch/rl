@@ -23,6 +23,9 @@ def _benchmark_name(benchmark: dict) -> str:
 
 def _benchmark_ops(benchmark: dict) -> float | None:
     stats = benchmark.get("stats", {})
+    median = stats.get("median")
+    if median is not None and float(median) > 0:
+        return 1.0 / float(median)
     ops = stats.get("ops")
     if ops is not None:
         return float(ops)
@@ -72,7 +75,6 @@ def _collect_results(root: Path) -> list[dict]:
 
 
 def _comparison_rows(result: dict) -> list[dict]:
-    confirmed_benchmarks = set(result["metadata"].get("confirmed_benchmarks", []))
     baseline = {
         _benchmark_name(benchmark): benchmark
         for benchmark in result["baseline"].get("benchmarks", [])
@@ -94,7 +96,6 @@ def _comparison_rows(result: dict) -> list[dict]:
                 "baseline_ops": baseline_ops,
                 "contender_ops": contender_ops,
                 "change": change,
-                "confirmed": name in confirmed_benchmarks,
             }
         )
     return rows
@@ -103,22 +104,21 @@ def _comparison_rows(result: dict) -> list[dict]:
 def _table(rows: list[dict], max_rows: int) -> list[str]:
     selected = sorted(rows, key=lambda row: abs(row["change"]), reverse=True)[:max_rows]
     lines = [
-        "| Benchmark | main ops | PR ops | Change | Measurement |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Benchmark | main ops | PR ops | Change |",
+        "| --- | ---: | ---: | ---: |",
     ]
     for row in selected:
         lines.append(
-            "| `{}` | {} | {} | {} | {} |".format(
+            "| `{}` | {} | {} | {} |".format(
                 _truncate(row["name"]),
                 _format_number(row["baseline_ops"]),
                 _format_number(row["contender_ops"]),
                 _format_percent(row["change"]),
-                "same runner" if row["confirmed"] else "parallel",
             )
         )
     if len(rows) > max_rows:
         lines.append(
-            f"| ... | ... | ... | ... | Showing {max_rows} of {len(rows)} "
+            f"| ... | ... | ... | Showing {max_rows} of {len(rows)} "
             "comparisons, sorted by absolute change. |"
         )
     return lines
@@ -130,7 +130,6 @@ def _device_section(result: dict, max_rows: int) -> list[str]:
     reporting_threshold = float(metadata.get("reporting_threshold_pct", 5.0))
     regressions = sum(row["change"] <= -reporting_threshold for row in rows)
     improvements = sum(row["change"] >= reporting_threshold for row in rows)
-    confirmations = sum(row["confirmed"] for row in rows)
     device = metadata["device"]
     lines = [
         f"#### {device}",
@@ -138,7 +137,7 @@ def _device_section(result: dict, max_rows: int) -> list[str]:
         f"Compared {len(rows)} benchmarks. Regressions over "
         f"{reporting_threshold:g}%: {regressions}. Improvements over "
         f"{reporting_threshold:g}%: {improvements}.",
-        f"Sequential same-runner confirmations: {confirmations}.",
+        "Each revision was measured once on a separate pinned runner.",
         "",
     ]
     lines.extend(_table(rows, max_rows))
@@ -164,7 +163,8 @@ def build_comment(results: list[dict], run_url: str) -> tuple[int, str]:
             "",
             f"Benchmark run: {run_url}",
             "",
-            "Higher ops/sec is better. Tables are sorted by largest absolute change.",
+            "Rates use inverse median round duration; higher is better. Tables are "
+            "sorted by largest absolute change.",
             "",
         ]
         for result in sorted(results, key=lambda item: item["metadata"]["device"]):

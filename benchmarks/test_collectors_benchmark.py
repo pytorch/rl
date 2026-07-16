@@ -148,11 +148,12 @@ def async_collector_setup():
         frames_per_batch=100,
         device=device,
     )
-    c = iter(c)
+    collector = c
+    c = iter(collector)
     for i, _ in enumerate(c):
         if i == 10:
             break
-    return ((c,), {})
+    return ((c, collector), {})
 
 
 def parallel_env_compact_obs_setup(payload_size):
@@ -164,10 +165,10 @@ def parallel_env_compact_obs_setup(payload_size):
         frames_per_batch=128,
         compact_obs=True,
     )
-    collector = iter(collector)
-    next(collector)
-    next(collector)
-    return ((collector,), {})
+    collector_iterator = iter(collector)
+    for _ in range(10):
+        next(collector_iterator)
+    return ((collector_iterator, collector), {})
 
 
 def single_collector_setup_pixels():
@@ -326,10 +327,11 @@ def sync_payload_collector_with_rb_setup():
         frames_per_batch=64,
         replay_buffer=rb,
     )
-    c = iter(c)
-    next(c)
-    next(c)
-    return ((c, rb), {})
+    collector = c
+    c = iter(collector)
+    for _ in range(10):
+        next(c)
+    return ((c, rb, collector), {})
 
 
 def test_single_with_rb(benchmark):
@@ -346,8 +348,16 @@ def test_sync_with_rb(benchmark):
 
 def test_sync_payload_with_rb(benchmark):
     """Benchmark clone avoidance for large runner-managed rollouts."""
-    (c, rb), _ = sync_payload_collector_with_rb_setup()
-    benchmark(execute_collector_with_rb, c, rb)
+    (c, rb, collector), _ = sync_payload_collector_with_rb_setup()
+    try:
+        benchmark.pedantic(
+            execute_collector_with_rb,
+            args=(c, rb),
+            iterations=5,
+            rounds=10,
+        )
+    finally:
+        collector.shutdown()
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
@@ -373,15 +383,31 @@ def test_sync_preempt(benchmark):
 
 
 def test_async(benchmark):
-    (c,), _ = async_collector_setup()
-    benchmark(execute_collector, c)
+    (c, collector), _ = async_collector_setup()
+    try:
+        benchmark.pedantic(
+            execute_collector,
+            args=(c,),
+            iterations=10,
+            rounds=10,
+        )
+    finally:
+        collector.shutdown()
 
 
 @pytest.mark.parametrize("payload_size", [65536, 262144], ids=["256KiB", "1MiB"])
 def test_parallel_env_compact_obs(benchmark, payload_size):
     """Benchmark copies for a collector over a large-payload ParallelEnv."""
-    (c,), _ = parallel_env_compact_obs_setup(payload_size)
-    benchmark(execute_collector, c)
+    (c, collector), _ = parallel_env_compact_obs_setup(payload_size)
+    try:
+        benchmark.pedantic(
+            execute_collector,
+            args=(c,),
+            iterations=2,
+            rounds=10,
+        )
+    finally:
+        collector.shutdown()
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
