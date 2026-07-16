@@ -243,6 +243,30 @@ workers plus the evaluator share one process policy server.
 python sota-implementations/vla_grpo/vla-grpo.py --config-name vla_grpo_libero
 ```
 
+The LIBERO recipe enables worker-originated environment metadata. This keeps
+MuJoCo/EGL construction inside the long-lived rollout workers and avoids a
+temporary parent-side environment wave. The nested startup path can be measured
+without loading the VLA policy:
+
+```bash
+python sota-implementations/vla_grpo/bench_libero_startup.py \
+  --mode legacy-parent --inner-start-method spawn \
+  --output-dir /root/artifacts/libero-startup/legacy-spawn
+python sota-implementations/vla_grpo/bench_libero_startup.py \
+  --mode worker-metadata --inner-start-method spawn \
+  --output-dir /root/artifacts/libero-startup/worker-spawn
+python sota-implementations/vla_grpo/bench_libero_startup.py \
+  --mode worker-metadata --inner-start-method forkserver \
+  --output-dir /root/artifacts/libero-startup/worker-forkserver
+```
+
+Outer subcollector processes always use ``spawn``. The script permits
+``forkserver`` or diagnostic ``fork`` only in worker-metadata mode, after the
+subcollector parent has been kept free of EGL contexts. Each output directory
+contains the exact command, per-construction marker files, and a JSON summary
+covering nested environment readiness, first-step latency, peak process count,
+and shutdown cleanup.
+
 Rollout clients request random sampling; eval and video clients request
 deterministic decoding from the same server, so rollout and eval are synced by
 one explicit TensorDict weight update after each optimizer step. The replay

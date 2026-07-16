@@ -24,6 +24,28 @@ It is important that your environment specs match the input and output that it s
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`~torchrl.envs.check_env_specs` method for a sanity check.
 
+By default, :class:`ParallelEnv` obtains those specs by creating temporary
+environments in the parent process. For environments that are expensive or
+unsafe to construct in the parent, ``metadata_from_workers=True`` obtains the
+metadata from the real, long-lived worker environments instead. The workers
+start during :class:`ParallelEnv` construction, their schemas are validated,
+and no parent-side environment is created. This opt-in mode currently requires
+``use_buffers=False`` (which is selected automatically when the argument is
+unset); passing ``use_buffers=True`` raises an error. A common factory can still
+receive per-worker settings through ``create_env_kwargs``:
+
+.. code-block:: python
+
+    from functools import partial
+
+    make_env = partial(GymEnv, "Pendulum-v1")
+    env = ParallelEnv(
+        4,
+        make_env,
+        create_env_kwargs=[{"frame_skip": i + 1} for i in range(4)],
+        metadata_from_workers=True,
+    )
+
 .. code-block::
    :caption: Parallel environment
 
