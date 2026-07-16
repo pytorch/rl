@@ -70,3 +70,12 @@ class RLvLLMEngine(abc.ABC):
         Args:
             weights: Iterator yielding (parameter_name, tensor) tuples
         """
+
+    def reset_prefix_cache(self) -> None:  # noqa: B027
+        """Invalidate cached KV prefixes after a weight update.
+
+        Prefix caches are keyed by prompt content, not by the weights that
+        produced them, so engines that enable prefix caching must clear the
+        cache whenever new weights are loaded. The default implementation is
+        a no-op for engines without a prefix cache.
+        """
