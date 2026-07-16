@@ -3,8 +3,11 @@
 # MultiCollector rollout workers; see the README for the multi-GPU notes and
 # the LoRA fallback. Requires LIBERO (and its deps) plus transformers/timm.
 #
-# Per-target-wave accounting: groups_per_iter x group_size = 320 trajectories,
-# each up to max_outer_steps = 64 chunk decisions (512 env steps / chunk 8).
+# Per-update accounting: groups_per_iter x group_size = 512 selected
+# trajectories. With candidate_group_size=32, collection oversamples 2,048
+# completed trajectories per update and balanced selection keeps the 512
+# useful mixed-group rollouts for PPO. Each trajectory is capped at
+# max_outer_steps = 64 chunk decisions (512 env steps / chunk 8).
 
 env:
   backend: libero
@@ -21,21 +24,19 @@ env:
   # collector.envs_per_collector) to be a multiple of collector.group_size and,
   # to cover all tasks in one wave, that total to be at least
   # len(task_ids) * collector.group_size.
-  # For lowest boundary waste, set collector.groups_per_iter to the logical
-  # worker count (collector env total / collector.group_size). Asking each
-  # logical worker to advance through multiple group ids in one collector batch
-  # creates partial groups when episodes have variable lengths. Additional
-  # collector batches can overcollect under one policy, but without a group
-  # barrier they may also drift; the LIBERO wrapper groups parallel repeats by
-  # cycled init-state id to reduce this waste.
+  # collector.groups_per_iter is independent of this logical worker count.
+  # Completed trajectories waiting for the rest of a group and in-flight
+  # trajectories survive optimizer boundaries; each decision retains the
+  # policy_version that generated it so any resulting lag is observable.
   parallel_group_repeats: true
   eval_num_envs: 10 # parallel MuJoCo processes (evaluation); >= len(task_ids)
   camera_height: 256
   camera_width: 256
   render_backend: egl # egl (GPU/headless) | osmesa (CPU fallback)
-  render_gpu_ids: [2, 3, 4, 5] # H100 fast mode render GPUs for rollout workers
+  render_gpu_ids: [2, 3, 4, 5, 6] # H100 fast mode render GPUs for rollout workers
   eval_render_gpu_ids: [7] # reserve GPU 7 for eval/video rendering
   render_gpu_device_zero_fallback: true
+  metadata_from_workers: true # avoid parent-side shadow LIBERO/EGL env construction
   env_kwargs: null
   chunk_size: 8 # NUM_ACTIONS_CHUNK of the checkpoint
   max_env_steps: 512 # base env steps per episode (the paper's cap)
@@ -45,21 +46,21 @@ env:
   seed: 0
 
 tokenizer:
-  vocab_size: 256 # unused for the openvla backend (codec comes from the checkpoint)
+  vocab_size: 256 # OpenVLA action-token window; stats are loaded without the model
 
 policy:
   backend: openvla
   mode: tokens # tokens: SimpleVLA-RL GRPO path; l1: official continuous OFT reference/eval path
   # the checkpoint MUST match task_suite (it fixes the SFT policy AND the
   # action statistics unnorm_key resolves into)
-  checkpoint: Haozhan72/Openvla-oft-SFT-libero-spatial-traj1
+  checkpoint: Haozhan72/Openvla-oft-SFT-libero-spatial-trajall
   unnorm_key: libero_spatial_no_noops
   # the SimpleVLA-RL checkpoints omit their LIBERO fine-tuning stats; pull the
   # matching official OFT release's dataset_statistics.json (same LIBERO data).
   # Must match unnorm_key's suite (libero-object/goal/10 for the other suites).
   dataset_statistics: moojink/openvla-7b-oft-finetuned-libero-spatial
   dtype: bfloat16
-  temperature: 1.6 # rollout sampling temperature (greedy eval)
+  temperature: 1.0 # rollout sampling temperature (greedy eval)
   top_k: null # null = full categorical; small values keep token exploration local
   use_wrist_image: false
   # L1 reference path: set mode=l1, checkpoint=moojink/openvla-7b-oft-finetuned-libero-spatial,
@@ -84,23 +85,28 @@ policy:
 
 collector:
   group_size: 8 # n: rollouts per initial state (GRPO group)
-  candidate_group_size: null # null = group_size; e.g. 16 samples 16 and selects 8
-  # Initial states per iteration (320 trajectories). With shared fast mode and
-  # env.parallel_group_repeats=true, use
-  # num_collectors * envs_per_collector / group_size.
-  groups_per_iter: 40
-  # null/0 = one full selected rollout set:
-  # groups_per_iter * group_size * max_outer_steps decisions.
+  candidate_group_size: 32 # oversample 32 candidates and select 8 mixed returns
+  # Useful initial-state groups per policy update. This matches the paper's
+  # 64 groups x 8 rollouts = 512 selected trajectories; readiness is measured
+  # from complete kept groups rather than an estimated decision count.
+  groups_per_iter: 64
+  # Optional additional decision floor. null relies on the complete kept-group
+  # target above, so variable-length trajectories cannot trigger an early update.
   min_replay_decisions: null
-  total_iters: 100 # the paper's total_epochs
+  # The 500-state dataset yields floor(500 / 64) = 7 actor batches per epoch.
+  # 700 updates is the paper-scale selected-trajectory budget. Leave
+  # total_trajectories unset when oversampling so the selected budget is not
+  # cut short by discarded candidates.
+  total_iters: 700
+  total_trajectories: null
   policy_device: cuda:1 # H100 default: rollout/eval inference server device
-  # null = one model forward for the complete request batch. Set to 1 for
-  # single-environment numerical parity while keeping batched env collection.
-  policy_micro_batch_size: null
+  # Limits only real OpenVLA forwards inside the inference server. Eight is
+  # the largest size validated against sequential real-checkpoint inference.
+  policy_micro_batch_size: 8
   replay_wait_s: 0.5
   replay_log_s: 30.0
-  num_collectors: 4
-  envs_per_collector: 80
+  num_collectors: 5
+  envs_per_collector: 64
   num_threads: 1
   server_max_batch_size: 1 # one batched ParallelEnv request; avoids mixed eval/rollout modes
   server_min_batch_size: 1
@@ -116,24 +122,26 @@ advantage:
   trajectory_return: sum # binary success return per trajectory
   keep_return_bounds: [0.1, 0.9] # dynamic sampling: drop all-fail / all-success groups
   candidate_selection: balanced # first | uniform | balanced, used if candidate_group_size > group_size
-  # null = try selecting as soon as group_size candidates are available; keep
-  # queueing up to candidate_group_size only if no useful subset exists yet.
-  candidate_selection_min_size: null
+  # Wait for the full candidate group so balanced selection can pick a mixed
+  # subset even when successes are sparse.
+  candidate_selection_min_size: 32
   candidate_selection_max_combinations: 100000
 
 buffer:
   device: cpu # decisions hold raw uint8 images; keep the buffer off-GPU
   shared_init: true
-  capacity_group_waves: 7 # replay capacity as multiples of one target group wave
+  capacity_group_waves: 2 # headroom for asynchronous collector overrun
   consume_after_n_samples: 1 # sampled decisions leave the buffer after one update pass
 
 loss:
   clip_epsilon: [0.2, 0.28] # asymmetric DAPO Clip-Higher (per-token, see ratio_level)
   ratio_level: token # the paper's semantics: one clipped ratio per action token
-  # epochs are controlled by buffer.consume_after_n_samples: each decision
-  # leaves the buffer after that many sampling passes
-  mini_batch_size: 16 # decisions per micro-batch (one forward)
-  accumulate_batches: 8 # optimizer step every N micro-batches (grad accumulation)
+  # epochs are controlled by buffer.consume_after_n_samples. The update
+  # averages decisions within each trajectory, then averages 128 trajectories
+  # per optimizer step, matching the reference implementation. mini_batch_size
+  # only limits the number of decisions in an actual training-model forward.
+  mini_batch_size: 16
+  trajectories_per_optimizer_step: 128
 
 optim:
   lr: 5e-6
@@ -147,6 +155,10 @@ train:
   # TensorDict in place, so frozen base weights stay untouched. false ships
   # the full parameter/buffer set (~14 GB in bf16 for the 7B policy).
   weight_sync_trainable_only: true
+  # Behavior-policy lag is reported explicitly. These distribution-level
+  # guards still catch excessive lag or misrouted weights before PPO proceeds.
+  pre_update_min_ess: 0.95
+  pre_update_max_clip_fraction: 0.05
 
 logger:
   backend: wandb
@@ -155,15 +167,20 @@ logger:
   group_name: null
   exp_name: vla_grpo_libero
   mode: online
+  eval_before_train: true # frozen SFT baseline at step 0
   eval_iter: 4 # evaluate every N iterations (the paper's cadence)
-  eval_episodes: 50 # greedy episodes per evaluation (cycled init states)
+  eval_episodes: 500 # suite-wide cycled rollouts across all 10 tasks
   eval_backend: process # TorchRL Evaluator backend: thread | process | ray
-  eval_async: false # submit eval and log result later
+  eval_async: true # submit full 500-episode eval and log result later
   eval_busy_policy: skip # skip | error | queue
   eval_timeout_s: 1800.0
   eval_device: cpu # eval env/client device; inference stays on the policy-server device
+  record_video: true # record a bounded visual eval alongside scalar curves
+  video_episodes: 1 # int count, or a fraction in (0, 1) of eval_episodes
+  video_num_envs: 1 # parallel envs in the separate video evaluator
   video_fps: 8 # frames per second of the logged video (one frame per decision)
-  # VideoRecorder logs a synchronized grid from these same scalar-eval envs.
+  # The scalar evaluator still runs eval_episodes without pixels; this separate
+  # visual evaluator renders only video_episodes trajectories.
 
 checkpoint:
   save_iter: 25

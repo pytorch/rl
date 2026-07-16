@@ -1,0 +1,73 @@
+schema_version = 1
+id = "vla-grpo-libero"
+description = "OpenVLA GRPO training on the LIBERO simulator"
+capabilities = [
+    "cuda",
+    "pytorch-nightly",
+    "tensordict-main",
+    "torchrl",
+    "headless-egl",
+    "libero",
+]
+caches = ["huggingface", "torch", "uv", "wandb"]
+entrypoint = [
+    "python",
+    "sota-implementations/vla_grpo/vla-grpo.py",
+    "--config-name",
+    "vla_grpo_libero",
+]
+
+[python]
+requires = "3.12"
+extras = ["rendering", "utils", "vla"]
+packages = [
+    "bddl==1.0.1",
+    "cloudpickle",
+    "easydict",
+    "future",
+    "gym==0.25.2",
+    "imageio[ffmpeg]",
+    "matplotlib",
+    "mujoco==3.2.3",
+    "opencv-python<5",
+    "pyopengl<4",
+    "robosuite==1.4.1",
+]
+
+[resources]
+gpus = 8
+gpu_memory_gb = 80
+time = "24:00:00"
+
+[environment]
+MUJOCO_GL = "egl"
+PYOPENGL_PLATFORM = "egl"
+ROBOT_PLATFORM = "LIBERO"
+
+[[sources]]
+name = "libero"
+url = "https://github.com/Lifelong-Robot-Learning/LIBERO.git"
+revision = "8f1084e3132a39270c3a13ebe37270a43ece2a01"
+target = "LIBERO"
+pythonpath = true
+create_directories = ["libero/datasets"]
+
+[[artifacts]]
+id = "libero-simulator-assets"
+kind = "source-assets"
+required = true
+description = "Task definitions, simulator assets, and initial states shipped by LIBERO"
+
+[[artifacts]]
+id = "libero-demonstrations"
+kind = "dataset"
+required = false
+description = "Optional demonstrations used for imitation or offline training"
+
+[healthcheck]
+command = [
+    "python",
+    "sota-implementations/vla_grpo/smoke.py",
+    "--expected-gpus",
+    "8",
+]

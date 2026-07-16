@@ -36,6 +36,7 @@ collector:
   groups_per_iter: 8 # initial states per iteration
   min_replay_decisions: null # null/0 = collect one target group wave
   total_iters: 200
+  total_trajectories: null
   replay_wait_s: 0.05
   replay_log_s: 30.0
   policy_device: null
@@ -75,7 +76,7 @@ loss:
   # epochs are controlled by buffer.consume_after_n_samples: each decision
   # leaves the buffer after that many sampling passes
   mini_batch_size: 64 # decisions per micro-batch
-  accumulate_batches: 1 # optimizer step every N micro-batches
+  trajectories_per_optimizer_step: 16
 
 optim:
   lr: 1e-3
@@ -89,6 +90,8 @@ train:
   # the full parameter/buffer set. TinyVLA trains all parameters, so this only
   # skips buffers at toy scale; it matters for the LoRA LIBERO config.
   weight_sync_trainable_only: true
+  pre_update_min_ess: null
+  pre_update_max_clip_fraction: null
 
 logger:
   backend: wandb
@@ -97,6 +100,7 @@ logger:
   group_name: null
   exp_name: vla_grpo_toy
   mode: online
+  eval_before_train: false
   eval_iter: 10 # evaluate every N iterations
   eval_episodes: 50 # greedy episodes per evaluation
   eval_backend: thread # TorchRL Evaluator backend: thread | process | ray
@@ -104,8 +108,12 @@ logger:
   eval_busy_policy: skip # skip | error | queue
   eval_timeout_s: 300.0
   eval_device: cpu # eval env/client device; inference stays on the policy-server device
+  record_video: true # record a bounded visual eval alongside scalar curves
+  video_episodes: 1 # int count, or a fraction in (0, 1) of eval_episodes
+  video_num_envs: 1 # parallel envs in the separate video evaluator
   video_fps: 4 # frames per second of the logged video (one frame per decision)
-  # VideoRecorder logs the frames from the same rollout used for eval metrics.
+  # The scalar evaluator still runs eval_episodes without pixels; this separate
+  # visual evaluator renders only video_episodes trajectories.
 
 checkpoint:
   save_iter: 25 # save every N iterations (0 disables)

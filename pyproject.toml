@@ -95,13 +95,23 @@ replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
 video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
-# lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
-# recent torch), so the extra is empty on older interpreters
-vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
+# lerobot requires Python >= 3.12, while the remaining VLA runtime dependencies
+# are also used by the vendored OpenVLA-OFT path.
+vla = [
+    "accelerate>=0.25.0",
+    "lerobot>=0.5.0; python_version >= '3.12'",
+    "peft==0.11.1",
+    "pillow",
+    "timm==0.9.10",
+    "tokenizers==0.19.1",
+    "transformers==4.40.1",
+    "torchvision>=0.17",
+]
 rendering = ["moviepy", "pygame", "pyyaml", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
+    "tomli>=1.1.0; python_version < '3.11'",
     "pytest-instafail",
     "scipy",
     "psutil",

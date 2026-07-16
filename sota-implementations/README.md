@@ -30,6 +30,21 @@ or similar. Hyperparameters can be easily changed by providing the arguments to 
 python sac.py collector.frames_per_batch=63
 ```
 
+## Execution recipes
+
+Environment-heavy implementations can provide a versioned `recipe.toml` next
+to their entrypoint. The recipe is a backend-neutral description of the
+Python extras, pinned source checkouts, system capabilities, environment
+variables, resource requirements, artifacts, entrypoint, and end-to-end
+health check needed by the implementation.
+
+Recipe-aware executors are responsible for satisfying that contract on their
+platform. Cluster-specific hostnames, storage paths, scheduler arguments, and
+IDE configuration do not belong in the recipe. Every committed recipe is
+validated as part of the SOTA test suite.
+
+See [`vla_grpo/recipe.toml`](vla_grpo/recipe.toml) for an example.
+
 [//]: # (# Results)
 
 [//]: # ()

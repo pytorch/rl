@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import gc
 import os
+from functools import partial
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.batched_envs import _stackable
+from torchrl.envs.env_creator import get_env_metadata
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import Compose, StepCounter
@@ -54,6 +56,12 @@ from torchrl.testing.mocking_classes import (
     MockBatchedLockedEnv,
     NestedCountingEnv,
 )
+
+
+def _make_parent_guarded_env(parent_pid):
+    if os.getpid() == parent_pid:
+        raise RuntimeError("env factory should only be called in a worker")
+    return ContinuousActionVecMockEnv()
 
 
 class TestParallel:
@@ -77,6 +85,26 @@ class TestParallel:
     @staticmethod
     def _batched_count(env):
         return torch.stack([count.detach().cpu().clone() for count in env.count], 0)
+
+    def test_get_env_metadata_closes_callable_env(self):
+        closed = []
+
+        class CloseCountingEnv(CountingEnv):
+            def close(self, *args, **kwargs):
+                closed.append(True)
+                return super().close(*args, **kwargs)
+
+        get_env_metadata(lambda: CloseCountingEnv())
+        assert closed == [True]
+
+        with pytest.raises(RuntimeError, match="validator failed"):
+            get_env_metadata(
+                lambda: CloseCountingEnv(),
+                env_validator=lambda env: (_ for _ in ()).throw(
+                    RuntimeError("validator failed")
+                ),
+            )
+        assert closed == [True, True]
 
     @staticmethod
     def _ones_action(env):
@@ -202,6 +230,51 @@ class TestParallel:
             assert rollout.shape[0] == 2
         finally:
             env.close(raise_if_closed=False)
+
+    def test_metadata_from_workers(self, maybe_fork_ParallelEnv):
+        parent_pid = os.getpid()
+        env = maybe_fork_ParallelEnv(
+            2,
+            partial(_make_parent_guarded_env, parent_pid),
+            metadata_from_workers=True,
+        )
+        try:
+            assert env._use_buffers is False
+            assert not env.is_closed
+            rollout = env.rollout(3)
+            assert rollout.shape[:2] == torch.Size([2, 3])
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_metadata_from_workers_lambda_does_not_use_env_creator(
+        self, maybe_fork_ParallelEnv
+    ):
+        parent_pid = os.getpid()
+        env = maybe_fork_ParallelEnv(
+            2,
+            lambda: _make_parent_guarded_env(parent_pid),
+            metadata_from_workers=True,
+        )
+        try:
+            assert all(
+                not isinstance(env_fn, EnvCreator) for env_fn in env.create_env_fn
+            )
+            rollout = env.rollout(3)
+            assert rollout.shape[:2] == torch.Size([2, 3])
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_metadata_from_workers_rejects_buffers(self, maybe_fork_ParallelEnv):
+        with pytest.raises(
+            RuntimeError,
+            match="metadata_from_workers=True is incompatible with use_buffers=True",
+        ):
+            maybe_fork_ParallelEnv(
+                2,
+                ContinuousActionVecMockEnv,
+                metadata_from_workers=True,
+                use_buffers=True,
+            )
 
     @pytest.mark.parametrize("parallel", [False, True])
     @pytest.mark.parametrize("use_buffers", [False, True])

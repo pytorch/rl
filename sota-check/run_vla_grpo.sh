@@ -12,6 +12,7 @@ project_name="torchrl-example-check-$current_commit"
 group_name="vla_grpo"
 export PYTHONPATH=$(dirname $(dirname $PWD))
 python $PYTHONPATH/sota-implementations/vla_grpo/vla-grpo.py \
+  --config-name vla_grpo_toy \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"

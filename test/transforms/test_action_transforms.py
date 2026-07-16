@@ -2044,6 +2044,41 @@ class TestMultiAction(TransformBase):
         assert rollout["next", "done"].squeeze(-1).tolist() == [False, True]
         assert rollout["next", "success"].squeeze(-1).tolist() == [False, True]
 
+    def test_stack_rewards_false_done_mid_chunk_keeps_terminal_reward(self):
+        # LIBERO emits reward=float(success) from the base step. With
+        # stack_rewards=False, an outer transition that terminates before the
+        # last action slot must still report that terminal reward.
+        class SuccessCountingEnv(CountingEnv):
+            def __init__(self):
+                super().__init__(max_steps=1)
+                self.observation_spec["success"] = Categorical(
+                    2,
+                    dtype=torch.bool,
+                    shape=(*self.batch_size, 1),
+                    device=self.device,
+                )
+
+            def _reset(self, tensordict, **kwargs):
+                out = super()._reset(tensordict, **kwargs)
+                out["success"] = out["done"].clone()
+                return out
+
+            def _step(self, tensordict):
+                out = super()._step(tensordict)
+                success = out["done"].clone()
+                out["success"] = success
+                out["reward"] = success.to(dtype=out["reward"].dtype)
+                return out
+
+        env = TransformedEnv(SuccessCountingEnv(), MultiAction(stack_rewards=False))
+        td = env.reset()
+        td["action"] = torch.ones(4, 1)
+        out = env.step(td)["next"]
+
+        assert out["success"].item()
+        assert out["done"].item()
+        torch.testing.assert_close(out["reward"], torch.ones(1))
+
 
 @pytest.mark.skipif(IS_WIN, reason="Test is flaky on Windows")
 class TestConditionalSkip(TransformBase):
