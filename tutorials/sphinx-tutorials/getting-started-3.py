@@ -41,9 +41,10 @@ import tempfile
 # .. _gs_storage_collector:
 #
 #
-# The primary data collector discussed here is the
-# :class:`~torchrl.collectors.Collector`, which is the focus of this
-# documentation. At a fundamental level, a collector is a straightforward
+# :class:`~torchrl.collectors.Collector` is the main construction entry point
+# for TorchRL data collection. It can build a direct, local multi-process, Ray,
+# RPC, or distributed collector without changing the class imported by the
+# training code. At a fundamental level, a collector is a straightforward
 # class responsible for executing your policy within the environment,
 # resetting the environment when necessary, and providing batches of a
 # predefined size. Unlike the :meth:`~torchrl.envs.EnvBase.rollout` method
@@ -93,6 +94,52 @@ for data in collector:
 
 print(data["collector", "traj_ids"])
 
+#################################
+# Changing the execution topology
+# --------------------------------
+#
+# The default above collects directly in the training process. Scale the same
+# entry point to local worker processes with ``num_collectors``. ``sync=True``
+# waits for every worker and is a natural fit for on-policy algorithms;
+# ``sync=False`` delivers the first available worker batch and is usually used
+# for off-policy training:
+#
+# .. code-block:: python
+#
+#     def make_env():
+#         return GymEnv("CartPole-v1")
+#
+#     process_collector = Collector(
+#         make_env,
+#         policy,
+#         num_collectors=4,
+#         sync=False,
+#         frames_per_batch=200,
+#         total_frames=-1,
+#     )
+#
+# Distributed placement uses the same constructor. Backend-specific resources
+# and launcher settings belong in ``backend_options``:
+#
+# .. code-block:: python
+#
+#     ray_collector = Collector(
+#         make_env,
+#         policy,
+#         backend="ray",
+#         num_collectors=4,
+#         backend_options={
+#             "remote_configs": {"num_cpus": 1, "num_gpus": 0}
+#         },
+#         frames_per_batch=200,
+#         total_frames=-1,
+#     )
+#
+# The resulting object retains its concrete implementation type, but the
+# iteration, replay-buffer, lifecycle, and weight-update APIs stay the same.
+# See :ref:`ref_collectors` for RPC, distributed, submitit, and scoped backend
+# selection.
+#
 #################################
 # Data collectors are very useful when it comes to coding state-of-the-art
 # algorithms, as performance is usually measured by the capability of a
@@ -180,12 +227,10 @@ print(sample)
 # Next steps
 # ----------
 #
-# - You can have look at other multiprocessed
-#   collectors such as :class:`~torchrl.collectors.MultiSyncCollector` or
-#   :class:`~torchrl.collectors.MultiAsyncCollector`.
-# - TorchRL also offers distributed collectors if you have multiple nodes to
-#   use for inference. Check them out in the
-#   :ref:`API reference <ref_collectors>`.
+# - Scale collection with ``Collector(num_collectors=N, sync=...)`` or select
+#   Ray, RPC, and distributed execution through ``Collector(backend=...)``.
+#   See the :ref:`API reference <ref_collectors>` for the full selection and
+#   configuration rules.
 # - Check the dedicated :ref:`Replay Buffer tutorial <rb_tuto>` to know
 #   more about the options you have when building a buffer, or the
 #   :ref:`API reference <ref_data>` which covers all the features in

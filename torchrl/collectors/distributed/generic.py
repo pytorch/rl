@@ -353,6 +353,12 @@ class DistributedCollector(BaseCollector):
 
     Supports sync and async data collection.
 
+    .. note::
+        Prefer ``Collector(backend="distributed", ...)`` or
+        ``Collector(backend="submitit", ...)`` for construction in new code.
+        Pass launcher and process-group settings through ``backend_options``.
+        This class remains the concrete distributed implementation API.
+
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.

@@ -483,8 +483,9 @@ value_module.eval()
 # Data collector
 # --------------
 #
-# TorchRL provides a set of :ref:`DataCollector classes <ref_collectors>`.
-# Briefly, these classes execute three operations: reset an environment,
+# TorchRL provides the :class:`~torchrl.collectors.Collector` construction API
+# for the execution strategies in :ref:`ref_collectors`. Briefly, collectors
+# execute three operations: reset an environment,
 # compute an action given the latest observation, execute a step in the environment,
 # and repeat the last two steps until the environment signals a stop (or reaches
 # a done state).
@@ -495,14 +496,12 @@ value_module.eval()
 # on which ``device`` the policy should be executed, etc. They are also
 # designed to work efficiently with batched and multiprocessed environments.
 #
-# The simplest data collector is the :class:`~torchrl.collectors.Collector`:
-# it is an iterator that you can use to get batches of data of a given length, and
-# that will stop once a total number of frames (``total_frames``) have been
-# collected.
-# Other data collectors (:class:`~torchrl.collectors.MultiSyncCollector` and
-# :class:`~torchrl.collectors.MultiAsyncCollector`) will execute
-# the same operations in synchronous and asynchronous manner over a
-# set of multiprocessed workers.
+# :class:`~torchrl.collectors.Collector` is the main construction entry point.
+# It is an iterator that yields batches of a given length and stops once a
+# total number of frames (``total_frames``) has been collected. The default
+# runs directly in the training process; ``num_collectors`` and ``sync`` select
+# synchronous or asynchronous local worker processes, while ``backend`` selects
+# Ray, RPC, or distributed execution.
 #
 # As for the policy and environment before, the data collector will return
 # :class:`~tensordict.TensorDict` instances with a total number of elements that will

@@ -25,7 +25,6 @@ def main(cfg: DictConfig):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import Collector
-    from torchrl.collectors.distributed import DistributedCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -80,20 +79,22 @@ def main(cfg: DictConfig):  # noqa: F821
         raise NotImplementedError(
             f"device assignment not implemented for backend {cfg.collector.backend}"
         )
-    collector = DistributedCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
-        * num_workers,
+    collector = Collector(
+        create_env_fn=make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend),
+        backend="submitit",
+        num_collectors=num_workers,
         policy=actor,
-        num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        collector_class=Collector,
-        collector_kwargs=collector_kwargs,
-        slurm_kwargs=slurm_kwargs,
+        backend_options={
+            "backend": cfg.collector.backend,
+            "collector_class": Collector,
+            "collector_kwargs": collector_kwargs,
+            "num_workers_per_collector": 1,
+            "slurm_kwargs": slurm_kwargs,
+        },
         storing_device="cuda:0" if cfg.collector.backend == "nccl" else "cpu",
-        launcher="submitit",
         # update_after_each_batch=True,
-        backend=cfg.collector.backend,
     )
 
     # Create data buffer

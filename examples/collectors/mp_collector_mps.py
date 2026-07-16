@@ -45,7 +45,7 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl.collectors import MultiSyncCollector, WeightUpdaterBase
+from torchrl.collectors import Collector, WeightUpdaterBase
 
 from torchrl.envs.libs.gym import GymEnv
 
@@ -91,8 +91,10 @@ if __name__ == "__main__":
     policy = policy_factory()
     policy_weights = tensordict.from_module(policy)
 
-    collector = MultiSyncCollector(
-        create_env_fn=[env_maker, env_maker],
+    collector = Collector(
+        create_env_fn=env_maker,
+        num_collectors=2,
+        sync=True,
         policy_factory=policy_factory,
         total_frames=2000,
         max_frames_per_traj=50,

@@ -254,6 +254,9 @@ fi
 
 # install torchcodec (from source for nightly, from the PyTorch wheel index for stable)
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  # torchcodec builds with scikit-build-core; --no-build-isolation requires the
+  # build backend to be present in the environment (pybind11/ninja/cmake already are).
+  uv_pip_install "scikit-build-core>=0.10"
   torchcodec_dir=$(mktemp -d)
   git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
   python_base="$(python -c 'import sys; print(sys.base_prefix)')"

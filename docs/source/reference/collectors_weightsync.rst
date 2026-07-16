@@ -396,7 +396,7 @@ Weight sync schemes integrate seamlessly with TorchRL collectors. The collector 
 
     import torch.nn as nn
     from tensordict.nn import TensorDictModule
-    from torchrl.collectors import MultiCollector
+    from torchrl.collectors import Collector
     from torchrl.envs import GymEnv
     from torchrl.weight_update import SharedMemWeightSyncScheme
 
@@ -412,9 +412,10 @@ Weight sync schemes integrate seamlessly with TorchRL collectors. The collector 
     # Create scheme - collector handles initialization
     scheme = SharedMemWeightSyncScheme(strategy="tensordict")
 
-    collector = MultiCollector(
+    collector = Collector(
+        create_env_fn=lambda: GymEnv("CartPole-v1"),
+        num_collectors=3,
         sync=True,
-        create_env_fn=[lambda: GymEnv("CartPole-v1")] * 3,
         policy=policy,
         frames_per_batch=192,
         total_frames=10000,
@@ -560,7 +561,7 @@ Example: Policy + Env Transform + Replay Buffer
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiSyncCollector
+    from torchrl.collectors import Collector
     from torchrl.weight_update import MultiProcessWeightSyncScheme
 
     weight_sync_schemes = {
@@ -573,8 +574,10 @@ Example: Policy + Env Transform + Replay Buffer
         ),
     }
 
-    collector = MultiSyncCollector(
-        create_env_fn=[make_env, make_env],
+    collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=2,
+        sync=True,
         policy_factory=policy_factory,
         frames_per_batch=200,
         total_frames=10000,
@@ -621,7 +624,7 @@ only the training process accumulates statistics:
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiSyncCollector
+    from torchrl.collectors import Collector
     from torchrl.weight_update import MultiProcessWeightSyncScheme
 
     def make_worker_env():
@@ -640,8 +643,10 @@ only the training process accumulates statistics:
         ),
     }
 
-    collector = MultiSyncCollector(
-        create_env_fn=[make_worker_env, make_worker_env],
+    collector = Collector(
+        create_env_fn=make_worker_env,
+        num_collectors=2,
+        sync=True,
         policy_factory=policy_factory,
         frames_per_batch=200,
         total_frames=10000,

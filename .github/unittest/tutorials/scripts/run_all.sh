@@ -117,7 +117,9 @@ bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERS
 
 printf "* Installing torchcodec\n"
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-progress setuptools ninja packaging "pybind11[global]"
+  # torchcodec builds with scikit-build-core; --no-build-isolation requires the
+  # build backend to be present in the environment.
+  uv pip install --no-progress setuptools ninja packaging "pybind11[global]" "scikit-build-core>=0.10"
   torchcodec_dir="$(mktemp -d)"
   git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
   python_base="$(python -c 'import sys; print(sys.base_prefix)')"

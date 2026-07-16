@@ -24,11 +24,18 @@ comparison = _load_script("compare_pr_benchmarks.py")
 comments = _load_script("comment_pr_benchmarks.py")
 
 
-def _document(ops_by_name: dict[str, float]) -> dict:
+def _document(durations_by_name: dict[str, float]) -> dict:
     return {
         "benchmarks": [
-            {"fullname": name, "stats": {"ops": ops}}
-            for name, ops in ops_by_name.items()
+            {
+                "fullname": name,
+                "stats": {
+                    "mean": duration,
+                    "median": duration,
+                    "ops": 1.0 / duration,
+                },
+            }
+            for name, duration in durations_by_name.items()
         ]
     }
 
@@ -62,9 +69,8 @@ def _write_raw_pair(root: Path) -> None:
         json.dumps(
             _document(
                 {
-                    "test_bench.py::test_regression": 100.0,
-                    "test_bench.py::test_near_threshold": 100.0,
-                    "test_bench.py::test_clear_improvement": 100.0,
+                    "test_bench.py::test_regression": 0.010,
+                    "test_bench.py::test_improvement": 0.010,
                 }
             )
         ),
@@ -74,9 +80,8 @@ def _write_raw_pair(root: Path) -> None:
         json.dumps(
             _document(
                 {
-                    "test_bench.py::test_regression": 90.0,
-                    "test_bench.py::test_near_threshold": 104.0,
-                    "test_bench.py::test_clear_improvement": 108.0,
+                    "test_bench.py::test_regression": 1.0 / 90.0,
+                    "test_bench.py::test_improvement": 1.0 / 108.0,
                 }
             )
         ),
@@ -88,86 +93,61 @@ def _write_raw_pair(root: Path) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("change", "expected"),
-    [(-20.0, True), (-8.0, True), (-4.0, True), (4.0, True), (8.0, False)],
-)
-def test_confirmation_selection(change, expected):
-    assert comparison.needs_confirmation(change, 5.0, 2.0) is expected
+def test_comparison_prefers_median_over_mean_and_ops():
+    baseline = {
+        "benchmarks": [
+            {
+                "fullname": "test_bench.py::test_stall",
+                "stats": {"median": 1.0, "mean": 1.0, "ops": 1.0},
+            }
+        ]
+    }
+    contender = {
+        "benchmarks": [
+            {
+                "fullname": "test_bench.py::test_stall",
+                "stats": {"median": 1.0, "mean": 10.0, "ops": 0.1},
+            }
+        ]
+    }
+
+    [row] = comparison.comparison_rows(baseline, contender)
+    assert row["baseline_ops"] == pytest.approx(1.0)
+    assert row["contender_ops"] == pytest.approx(1.0)
+    assert row["change"] == pytest.approx(0.0)
 
 
-def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
+def test_compare_writes_single_measurement_results(tmp_path):
     raw_root = tmp_path / "raw"
-    plan_root = tmp_path / "plan"
-    confirmation_root = tmp_path / "confirmation"
     output_root = tmp_path / "output"
+    summary_path = tmp_path / "summary.md"
     _write_raw_pair(raw_root)
 
-    matrix = comparison.create_confirmation_plan(
+    comparison.compare_results(
         raw_root,
-        plan_root,
-        tmp_path / "matrix.json",
+        output_root,
+        summary_path,
         {"CPU": "pinned-image"},
         reporting_threshold=5.0,
-        threshold_margin=2.0,
-    )
-    assert matrix == {"include": [{"device": "CPU", "image": "pinned-image"}]}
-    plan = json.loads((plan_root / "CPU.json").read_text(encoding="utf-8"))
-    assert set(plan["nodeids"]) == {
-        "test_bench.py::test_regression",
-        "test_bench.py::test_near_threshold",
-    }
-    assert set(plan["pytest_nodeids"]) == set(plan["nodeids"])
-
-    confirmation_device = confirmation_root / "CPU"
-    confirmation_device.mkdir(parents=True)
-    (confirmation_device / "baseline.json").write_text(
-        json.dumps(
-            _document(
-                {
-                    "test_bench.py::test_regression": 100.0,
-                    "test_bench.py::test_near_threshold": 100.0,
-                }
-            )
-        ),
-        encoding="utf-8",
-    )
-    (confirmation_device / "contender.json").write_text(
-        json.dumps(
-            _document(
-                {
-                    "test_bench.py::test_regression": 98.0,
-                    "test_bench.py::test_near_threshold": 106.0,
-                }
-            )
-        ),
-        encoding="utf-8",
     )
 
-    comparison.finalize_results(
-        raw_root,
-        plan_root,
-        confirmation_root,
-        output_root,
-        tmp_path / "summary.md",
-    )
     result = json.loads(
         (output_root / "CPU" / "comparison.json").read_text(encoding="utf-8")
     )
     rows = {row["name"]: row for row in result["benchmarks"]}
-    assert rows["test_bench.py::test_regression"]["change"] == pytest.approx(-2.0)
-    assert rows["test_bench.py::test_near_threshold"]["change"] == pytest.approx(6.0)
-    assert rows["test_bench.py::test_clear_improvement"]["change"] == pytest.approx(8.0)
-    assert rows["test_bench.py::test_regression"]["measurement"] == (
-        "same-runner-confirmation"
-    )
-    assert rows["test_bench.py::test_clear_improvement"]["measurement"] == (
-        "parallel-runners"
-    )
+    assert rows["test_bench.py::test_regression"]["change"] == pytest.approx(-10.0)
+    assert rows["test_bench.py::test_improvement"]["change"] == pytest.approx(8.0)
+    assert {row["measurement"] for row in rows.values()} == {"separate-pinned-runners"}
 
     final_metadata = json.loads(
         (output_root / "CPU" / "metadata.json").read_text(encoding="utf-8")
     )
+    assert final_metadata["comparison_statistic"] == "median duration"
+    assert final_metadata["measurements_per_revision"] == 1
+    assert "confirmed_benchmarks" not in final_metadata
+    summary = summary_path.read_text(encoding="utf-8")
+    assert "once on a separate pinned runner" in summary
+
     _, body = comments.build_comment(
         [
             {
@@ -182,43 +162,12 @@ def test_plan_and_finalize_replace_only_confirmed_results(tmp_path):
         ],
         "https://example.com/run",
     )
-    assert "Sequential same-runner confirmations: 2." in body
-    assert "same runner" in body
+    assert "once on a separate pinned runner" in body
+    assert "inverse median round duration" in body
+    assert "same runner" not in body
 
 
-def test_plan_uses_nodeids_relative_to_benchmark_working_directory(tmp_path):
-    raw_root = tmp_path / "raw"
-    _write_raw_pair(raw_root)
-    for revision in ("baseline", "contender"):
-        result_path = raw_root / "CPU" / f"{revision}.json"
-        result = json.loads(result_path.read_text(encoding="utf-8"))
-        for benchmark in result["benchmarks"]:
-            benchmark["fullname"] = (
-                "benchmark-definitions/benchmarks/" + benchmark["fullname"]
-            )
-        result_path.write_text(json.dumps(result), encoding="utf-8")
-
-    comparison.create_confirmation_plan(
-        raw_root,
-        tmp_path / "plan",
-        tmp_path / "matrix.json",
-        {"CPU": "pinned-image"},
-        reporting_threshold=5.0,
-        threshold_margin=2.0,
-    )
-
-    plan = json.loads((tmp_path / "plan" / "CPU.json").read_text(encoding="utf-8"))
-    assert all(
-        nodeid.startswith("benchmark-definitions/benchmarks/")
-        for nodeid in plan["nodeids"]
-    )
-    assert all(
-        not nodeid.startswith("benchmark-definitions/benchmarks/")
-        for nodeid in plan["pytest_nodeids"]
-    )
-
-
-def test_plan_rejects_mismatched_environments(tmp_path):
+def test_compare_rejects_mismatched_environments(tmp_path):
     raw_root = tmp_path / "raw"
     _write_raw_pair(raw_root)
     metadata_path = raw_root / "CPU" / "contender-metadata.json"
@@ -227,14 +176,42 @@ def test_plan_rejects_mismatched_environments(tmp_path):
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="metadata differs for image"):
-        comparison.create_confirmation_plan(
+        comparison.compare_results(
             raw_root,
-            tmp_path / "plan",
-            tmp_path / "matrix.json",
+            tmp_path / "output",
+            tmp_path / "summary.md",
             {"CPU": "pinned-image"},
             reporting_threshold=5.0,
-            threshold_margin=2.0,
         )
+
+
+def test_compare_rejects_unpinned_image(tmp_path):
+    raw_root = tmp_path / "raw"
+    _write_raw_pair(raw_root)
+
+    with pytest.raises(RuntimeError, match="not the pinned image"):
+        comparison.compare_results(
+            raw_root,
+            tmp_path / "output",
+            tmp_path / "summary.md",
+            {"CPU": "different-image"},
+            reporting_threshold=5.0,
+        )
+
+
+def test_workflow_runs_only_four_primary_measurements():
+    workflow = (_REPO_ROOT / ".github" / "workflows" / "benchmarks_pr.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert workflow.count("          - device: CPU") == 2
+    assert workflow.count("          - device: GPU") == 2
+    assert workflow.count("            revision: baseline") == 2
+    assert workflow.count("            revision: contender") == 2
+    assert "\n  confirmation:" not in workflow
+    assert "\n  finalize:" not in workflow
+    assert "same-runner" not in workflow
+    assert "needs: benchmark" in workflow
 
 
 if __name__ == "__main__":

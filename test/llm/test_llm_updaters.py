@@ -257,7 +257,9 @@ class TestVLLMUpdaterV2WithAsyncVLLM(BaseVLLMUpdaterTest):
             dtype="float16",
             max_model_len=512,  # Short context for minimal KV cache
             max_num_seqs=1,  # Minimal batch size
-            enable_prefix_caching=False,  # Disable to save memory
+            # Enabled so weight-update tests exercise the automatic
+            # prefix-cache reset path.
+            enable_prefix_caching=True,
         )
 
         logger.info(f"Created AsyncVLLM service with {service.num_replicas} replicas")
@@ -290,6 +292,16 @@ class TestVLLMUpdaterV2WithAsyncVLLM(BaseVLLMUpdaterTest):
         assert target_vllm_engine._launched is True
 
         logger.info("✓ AsyncVLLM-specific tests passed")
+
+    def test_prefix_cache_reset_after_update(self, target_vllm_engine):
+        """Prefix-cache opt-in must survive launch and reset must run cleanly."""
+        # The opt-in must reach the engine args (regression: launch() used to
+        # clobber enable_prefix_caching back to False).
+        assert target_vllm_engine.engine_args.enable_prefix_caching is True
+
+        # The reset RPC must round-trip on a live engine; update_weights calls
+        # this automatically after every weight sync.
+        target_vllm_engine.reset_prefix_cache()
 
 
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
@@ -465,6 +477,9 @@ class TestWeightSyncVLLMNCCL:
         async_engine = AsyncVLLM.from_pretrained(
             model_name,
             num_replicas=2,  # Number of engine replicas
+            # Enabled so the NCCL weight-sync path exercises the automatic
+            # prefix-cache reset before generation resumes.
+            enable_prefix_caching=True,
         )
         wrapper = vLLMWrapper(async_engine, input_mode="history")
         return wrapper
@@ -723,6 +738,48 @@ class TestWeightSyncVLLMDoubleBuffer:
         finally:
             if ray.is_initialized():
                 ray.shutdown()
+
+
+class TestDoubleBufferPrefixCacheReset:
+    """CPU-only: double-buffer weight loads must invalidate the prefix cache."""
+
+    def test_apply_weights_resets_prefix_cache_direct_path(self):
+        from types import SimpleNamespace
+
+        from tensordict import TensorDict
+        from torchrl.weight_update.llm.vllm_double_buffer import (
+            VLLMDoubleBufferWeightReceiver,
+        )
+
+        loaded, resets = [], []
+
+        class FakeEngine:
+            # no collective_rpc attribute: exercises the direct-load branch
+            llm_engine = SimpleNamespace(
+                model_executor=SimpleNamespace(
+                    driver_worker=SimpleNamespace(
+                        model_runner=SimpleNamespace(
+                            model=SimpleNamespace(
+                                load_weights=lambda w: loaded.append(list(w))
+                            )
+                        )
+                    )
+                )
+            )
+
+            def reset_prefix_cache(self):
+                resets.append(True)
+                # first attempt reports blocks still in use, second succeeds
+                return len(resets) > 1
+
+        receiver = VLLMDoubleBufferWeightReceiver.__new__(
+            VLLMDoubleBufferWeightReceiver
+        )
+        receiver._vllm_engine = FakeEngine()
+        receiver.apply_weights(TensorDict(w=torch.zeros(2)))
+
+        assert len(loaded) == 1
+        assert len(resets) == 2  # retried once after the partial clear
 
 
 if __name__ == "__main__":

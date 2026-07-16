@@ -5,15 +5,17 @@
 Collector Internals
 ===================
 
-This page describes how :class:`~torchrl.collectors.Collector` steps through an
-environment.  It is meant for
+This page describes the direct implementation returned by
+:class:`~torchrl.collectors.Collector` and how it steps through an environment.
+It is meant for
 contributors and for users debugging unexpected rollout behaviour: device
 casts, per-step bookkeeping, and trajectory tracking are implementation details
 that are not visible from the public API.
 
-The multi-process collectors (:class:`MultiSyncCollector` and
-:class:`MultiAsyncCollector`) delegate their per-worker rollouts to
-:class:`Collector`, so the per-worker flow on this page applies to
+When the main constructor selects the process backend with
+``Collector(num_collectors=N)``, the concrete :class:`MultiSyncCollector` and
+:class:`MultiAsyncCollector` implementations delegate their per-worker
+rollouts to :class:`Collector`, so the per-worker flow on this page applies to
 them too.
 
 Per-timestep flow
@@ -224,10 +226,10 @@ Two opt-in callbacks let you instrument collection without subclassing:
     yielded. Return value is ignored. Use it to log metrics derived from the
     batch.
 
-Hooks are worker-local: in :class:`MultiSyncCollector` /
-:class:`MultiAsyncCollector` they run inside each worker process, not on the
-training worker. Exceptions raised by a hook propagate up and stop collection;
-they are not swallowed.
+Hooks are worker-local: when ``Collector(num_collectors=N)`` selects
+:class:`MultiSyncCollector` or :class:`MultiAsyncCollector`, they run inside
+each worker process, not on the training worker. Exceptions raised by a hook
+propagate up and stop collection; they are not swallowed.
 
 For batch *transformations* (rather than instrumentation), use ``postproc`` on
 the collector constructor instead.
