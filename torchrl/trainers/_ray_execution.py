@@ -525,8 +525,11 @@ class _RayTrainerExecution:
             with contextlib.suppress(Exception):
                 close_refs.append(actor.close.remote())
         if close_refs:
+            # ray.wait, unlike ray.get, does not abandon the remaining ranks
+            # when one rank's close raises, so every rank keeps its chance to
+            # finish process-group teardown before the kill pass below.
             with contextlib.suppress(Exception):
-                ray.get(close_refs, timeout=timeout)
+                ray.wait(close_refs, num_returns=len(close_refs), timeout=timeout)
         for actor in reversed(actors):
             with contextlib.suppress(Exception):
                 ray.kill(actor, no_restart=True)
