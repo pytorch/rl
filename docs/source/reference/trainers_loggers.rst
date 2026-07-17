@@ -45,6 +45,40 @@ backpressure when several clients log concurrently.
     get_logger
     generate_exp_name
 
+Monitoring collectors and replay buffers
+----------------------------------------
+
+Any collector or replay buffer exposes a cheap
+:meth:`~torchrl.collectors.BaseCollector.stats` /
+:meth:`~torchrl.data.ReplayBuffer.stats` snapshot of operational counters
+(frames collected, buffer size, write count, worker liveness, ...). A
+:class:`~torchrl.record.loggers.monitoring.LoggerMonitor` periodically pulls
+those snapshots on a wall-clock or counter
+(:class:`~torchrl.record.loggers.monitoring.Every`) schedule, derives rates
+such as frames per second, and forwards namespaced metrics to any logger,
+without adding work to collection or sampling hot paths. This works with
+local, multiprocessing and Ray implementations alike.
+
+.. code-block:: python
+
+    from torchrl.record import WandbLogger
+    from torchrl.record.loggers.monitoring import Every, LoggerMonitor
+
+    logger = WandbLogger(exp_name="experiment", project="torchrl")
+
+    with LoggerMonitor(logger, poll_interval=1.0) as monitor:
+        monitor.watch(collector, name="collector", schedule=Every.counter("frames", 10_000))
+        monitor.watch(replay_buffer, name="replay_buffer", schedule=Every.seconds(5), step="write_count")
+        collector.start()
+        run_training()
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    monitoring.LoggerMonitor
+    monitoring.Every
+
 Recording utils
 ---------------
 

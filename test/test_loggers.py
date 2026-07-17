@@ -20,10 +20,12 @@ from tensordict import MemoryMappedTensor
 
 from torchrl._comm import MailboxPeerClosedError
 from torchrl.checkpoint import Checkpoint
+from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
+from torchrl.record.loggers.monitoring import Every, LoggerMonitor
 from torchrl.record.loggers.process import ProcessLogger
 from torchrl.record.loggers.ray import _RayLoggerClient, RayLogger
 from torchrl.record.loggers.tensorboard import _has_tb, TensorboardLogger
@@ -1300,6 +1302,200 @@ class TestRayLogger:
             logger = get_logger("csv", tmpdir, "test_get_logger", use_ray_service=True)
             assert isinstance(logger, RayLogger)
             logger.log_scalar("x", 1.0, step=0)
+
+
+class _RecordingLogger(Logger):
+    def __init__(self):
+        self.calls = []
+        super().__init__(exp_name="recording", log_dir=tempfile.mkdtemp())
+
+    def _create_experiment(self):
+        return None
+
+    def log_scalar(self, name, value, step=None):
+        self.calls.append((name, value, step))
+
+    def log_video(self, name, video, step=None, **kwargs):
+        raise NotImplementedError
+
+    def log_hparams(self, cfg):
+        raise NotImplementedError
+
+    def __repr__(self):
+        return "RecordingLogger()"
+
+    def log_histogram(self, name, data, **kwargs):
+        raise NotImplementedError
+
+
+class _FakeStatsSource:
+    def __init__(self):
+        self.counters = {"frames": 0, "write_count": 0}
+        self.fail = False
+
+    def stats(self):
+        if self.fail:
+            raise RuntimeError("stats failure")
+        return {**self.counters, "note": "not-a-number"}
+
+
+class TestLoggerMonitor:
+    def test_every_validation(self):
+        assert Every.seconds(5.0).kind == "seconds"
+        counter = Every.counter("frames", 100)
+        assert counter.key == "frames"
+        with pytest.raises(ValueError, match="strictly positive"):
+            Every.seconds(0)
+        with pytest.raises(ValueError, match="counter key"):
+            Every(kind="counter", interval=10)
+        with pytest.raises(ValueError, match="kind"):
+            Every(kind="minutes", interval=10)
+
+    def test_manual_step_logs_namespaced_numeric_metrics(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(source, name="src")
+        logged = monitor.step()
+        assert "src/frames" in logged["src"]
+        assert "src/note" not in logged["src"]
+        assert ("src/frames", 0.0, None) in logger.calls
+
+    def test_watch_rejects_targets_without_stats(self):
+        monitor = LoggerMonitor(_RecordingLogger(), background=False)
+        with pytest.raises(TypeError, match="stats"):
+            monitor.watch(object(), name="src")
+
+    def test_duplicate_and_default_names(self):
+        monitor = LoggerMonitor(_RecordingLogger(), background=False)
+        source = _FakeStatsSource()
+        monitor.watch(source, name="src")
+        with pytest.raises(ValueError, match="already registered"):
+            monitor.watch(source, name="src")
+        first = monitor.watch(source)
+        second = monitor.watch(source)
+        assert first == "_fakestatssource"
+        assert second == "_fakestatssource_1"
+        monitor.unwatch(second)
+        with pytest.raises(KeyError):
+            monitor.unwatch(second)
+
+    def test_counter_schedule_thresholds(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(
+            source,
+            name="src",
+            schedule=Every.counter("frames", 100),
+            log_on_start=False,
+        )
+        assert monitor.step() == {}
+        source.counters["frames"] = 50
+        assert monitor.step() == {}
+        source.counters["frames"] = 120
+        logged = monitor.step()
+        assert logged["src"]["src/frames"] == 120.0
+        source.counters["frames"] = 180
+        assert monitor.step() == {}
+        source.counters["frames"] = 410
+        logged = monitor.step()
+        assert logged["src"]["src/frames"] == 410.0
+        assert len([c for c in logger.calls if c[0] == "src/frames"]) == 2
+
+    def test_counter_schedule_uses_counter_as_step(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(source, name="src", schedule=Every.counter("frames", 100))
+        monitor.step()
+        source.counters["frames"] = 150
+        monitor.step()
+        steps = [c[2] for c in logger.calls if c[0] == "src/frames"]
+        assert steps == [0, 150]
+
+    def test_counter_reset_rebaselines_without_negative_rates(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(
+            source,
+            name="src",
+            schedule=Every.counter("frames", 100),
+            log_on_start=False,
+        )
+        monitor.step()
+        source.counters["frames"] = 410
+        assert monitor.step() != {}
+        source.counters["frames"] = 10
+        assert monitor.step() == {}
+        source.counters["frames"] = 120
+        logged = monitor.step()
+        assert logged["src"]["src/frames"] == 120.0
+        rates = [
+            value for name, value, _ in logger.calls if name == "src/frames_per_second"
+        ]
+        assert all(rate >= 0 for rate in rates)
+
+    def test_rates_are_derived_from_counter_deltas(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(source, name="src")
+        monitor.step()
+        source.counters["frames"] = 100
+        source.counters["write_count"] = 50
+        sleep(0.02)
+        logged = monitor.step()
+        assert logged["src"]["src/frames_per_second"] > 0
+        assert logged["src"]["src/writes_per_second"] > 0
+
+    def test_on_error_policies(self):
+        source = _FakeStatsSource()
+        source.fail = True
+        monitor = LoggerMonitor(_RecordingLogger(), background=False, on_error="raise")
+        monitor.watch(source, name="src")
+        with pytest.raises(RuntimeError, match="stats failure"):
+            monitor.step()
+        for policy in ("warn", "ignore"):
+            monitor = LoggerMonitor(
+                _RecordingLogger(), background=False, on_error=policy
+            )
+            monitor.watch(source, name="src")
+            assert monitor.step() == {}
+        with pytest.raises(ValueError, match="on_error"):
+            LoggerMonitor(_RecordingLogger(), on_error="explode")
+
+    def test_background_polling_and_final_snapshot(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        with LoggerMonitor(logger, poll_interval=0.02) as monitor:
+            monitor.watch(source, name="src")
+            deadline = 100
+            while (
+                not any(name == "src/frames" for name, _, _ in logger.calls)
+                and deadline > 0
+            ):
+                sleep(0.02)
+                deadline -= 1
+        assert any(name == "src/frames" for name, _, _ in logger.calls)
+        count_after_exit = len(logger.calls)
+        sleep(0.1)
+        assert len(logger.calls) == count_after_exit
+
+    def test_monitor_with_replay_buffer_and_csv_logger(self, tmp_path):
+        logger = CSVLogger(exp_name="monitor", log_dir=str(tmp_path))
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(rb, name="replay_buffer", step="write_count")
+        rb.extend(torch.arange(10))
+        logged = monitor.step()
+        assert logged["replay_buffer"]["replay_buffer/size"] == 10.0
+        assert logged["replay_buffer"]["replay_buffer/write_count"] == 10.0
+        monitor.stop()
+        scalar_files = list(tmp_path.rglob("*.csv"))
+        assert scalar_files
+        logger.close()
 
 
 if __name__ == "__main__":
