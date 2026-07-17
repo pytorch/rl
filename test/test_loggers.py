@@ -1427,8 +1427,14 @@ class TestLoggerMonitor:
         monitor.step()
         source.counters["frames"] = 410
         assert monitor.step() != {}
+        watch = monitor._watches["src"]
+        time_of_last_log = watch.baseline_time
+        sleep(0.02)
         source.counters["frames"] = 10
         assert monitor.step() == {}
+        # the reset also re-baselines the clock, so the next rate only covers
+        # the post-reset window
+        assert watch.baseline_time > time_of_last_log
         source.counters["frames"] = 120
         logged = monitor.step()
         assert logged["src"]["src/frames"] == 120.0
@@ -1436,6 +1442,30 @@ class TestLoggerMonitor:
             value for name, value, _ in logger.calls if name == "src/frames_per_second"
         ]
         assert all(rate >= 0 for rate in rates)
+
+    def test_log_on_start_false_without_schedule_skips_first_poll(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        monitor = LoggerMonitor(logger, background=False)
+        monitor.watch(source, name="src", log_on_start=False)
+        assert monitor.step() == {}
+        source.counters["frames"] = 100
+        sleep(0.02)
+        logged = monitor.step()
+        assert logged["src"]["src/frames"] == 100.0
+        # the baselining first poll lets the very first log carry a rate
+        assert logged["src"]["src/frames_per_second"] > 0
+
+    def test_stop_is_idempotent(self):
+        logger = _RecordingLogger()
+        source = _FakeStatsSource()
+        with LoggerMonitor(logger, poll_interval=60.0) as monitor:
+            monitor.watch(source, name="src")
+            monitor.stop()
+            calls_after_stop = len(logger.calls)
+            assert calls_after_stop > 0  # final snapshot was logged
+        # __exit__ does not log the final snapshots a second time
+        assert len(logger.calls) == calls_after_stop
 
     def test_rates_are_derived_from_counter_deltas(self):
         logger = _RecordingLogger()

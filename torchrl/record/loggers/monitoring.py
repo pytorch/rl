@@ -46,11 +46,24 @@ class Every:
     logs.
 
     Examples:
-        >>> from torchrl.record.loggers.monitoring import Every
-        >>> Every.seconds(5.0)
-        Every(kind='seconds', interval=5.0, key=None)
-        >>> Every.counter("frames", 10_000)
-        Every(kind='counter', interval=10000, key='frames')
+        >>> import tempfile
+        >>> import torch
+        >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+        >>> from torchrl.record import CSVLogger
+        >>> from torchrl.record.loggers.monitoring import Every, LoggerMonitor
+        >>> logger = CSVLogger(exp_name="every_demo", log_dir=tempfile.mkdtemp())
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        >>> monitor = LoggerMonitor(logger, background=False)
+        >>> name = monitor.watch(
+        ...     rb, name="rb", schedule=Every.counter("write_count", 50), log_on_start=False
+        ... )
+        >>> logged = monitor.step()  # primes the schedule, nothing logged yet
+        >>> print(logged)
+        {}
+        >>> _ = rb.extend(torch.arange(60))
+        >>> logged = monitor.step()  # write_count crossed the 50 threshold
+        >>> print(logged["rb"]["rb/write_count"])
+        60.0
     """
 
     kind: Literal["seconds", "counter"]
@@ -165,7 +178,7 @@ class LoggerMonitor:
         >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
         >>> monitor = LoggerMonitor(logger, background=False)
         >>> handle = monitor.watch(rb, name="replay_buffer", step="write_count")
-        >>> rb.extend(torch.arange(10))
+        >>> _ = rb.extend(torch.arange(10))
         >>> logged = monitor.step()
         >>> print(logged["replay_buffer"]["replay_buffer/size"])
         10.0
@@ -201,6 +214,7 @@ class LoggerMonitor:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._stopped = False
 
     def watch(
         self,
@@ -235,7 +249,13 @@ class LoggerMonitor:
                 snapshot provider. Runs in the monitor's process and thread.
             stats_kwargs (dict, optional): keyword arguments forwarded to the
                 snapshot provider, for example ``{"workers": "both"}`` for
-                distributed collectors.
+                distributed collectors. For multiprocessing collectors,
+                per-worker snapshots travel over the collector control pipes
+                and must not race with control calls (such as weight updates)
+                issued from other threads; see
+                :meth:`~torchrl.collectors.MultiSyncCollector.stats` for the
+                thread-safety contract before enabling per-worker views on a
+                background monitor.
             rate_keys (tuple of str, optional): snapshot entries to derive
                 per-second rates from, based on their delta since the last
                 logged snapshot. Defaults to the entries of the snapshot that
@@ -243,7 +263,9 @@ class LoggerMonitor:
                 ``write_count``, ...). A counter decrease re-baselines the
                 rate instead of reporting a negative value.
             log_on_start (bool, optional): whether the first poll of this
-                target logs unconditionally. Defaults to ``True``.
+                target logs unconditionally. When ``False``, the first poll
+                only records baselines, so the first logged snapshot can
+                carry rates. Defaults to ``True``.
             log_on_close (bool, optional): whether :meth:`stop` logs a final
                 snapshot of this target. Defaults to ``True``.
 
@@ -309,6 +331,7 @@ class LoggerMonitor:
 
     def start(self) -> LoggerMonitor:
         """Starts the background polling thread (no-op when ``background=False``)."""
+        self._stopped = False
         if self._background and self._thread is None:
             self._stop_event.clear()
             self._thread = threading.Thread(
@@ -321,7 +344,10 @@ class LoggerMonitor:
         """Stops polling and logs a final snapshot of each target.
 
         The watched objects and the logger are left untouched: shutting them
-        down remains the caller's responsibility.
+        down remains the caller's responsibility. Calling :meth:`stop` again
+        without an intervening :meth:`start` is a no-op, so exiting the
+        context manager after an explicit stop does not log the final
+        snapshots twice.
 
         Keyword Args:
             log_final (bool, optional): overrides the per-watch
@@ -329,9 +355,21 @@ class LoggerMonitor:
         """
         self._stop_event.set()
         thread = self._thread
+        polling_thread_stuck = False
         if thread is not None:
             thread.join(timeout=max(5.0, 2 * self._poll_interval))
+            polling_thread_stuck = thread.is_alive()
             self._thread = None
+        if self._stopped:
+            return
+        self._stopped = True
+        if polling_thread_stuck:
+            torchrl_logger.warning(
+                "LoggerMonitor could not join its polling thread within the stop "
+                "timeout (a stats() call is probably hanging); skipping the final "
+                "snapshots to avoid polling concurrently with the stuck thread."
+            )
+            return
         with self._lock:
             watches = list(self._watches.values())
         for watch in watches:
@@ -402,6 +440,9 @@ class LoggerMonitor:
             if watch.log_on_start:
                 self._prime_schedule(watch, snapshot)
                 return True
+            if schedule is None:
+                # log_on_start=False: the first poll only records baselines.
+                return False
         if schedule is None:
             return True
         if schedule.kind == "seconds":
@@ -418,7 +459,11 @@ class LoggerMonitor:
             self._prime_schedule(watch, snapshot)
             return False
         if watch.last_counter_value is not None and counter < watch.last_counter_value:
+            # the counter was reset (empty(), state restore, ...): re-baseline
+            # both the counters and the clock so the next rate only covers the
+            # post-reset window.
             watch.baseline_counters = dict(snapshot)
+            watch.baseline_time = now
             watch.next_threshold = (
                 counter // schedule.interval + 1
             ) * schedule.interval
