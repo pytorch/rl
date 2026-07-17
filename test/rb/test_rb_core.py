@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+import json
 
 import pytest
 import torch
@@ -1128,6 +1129,59 @@ def test_replay_buffer_prefetch_queue_length():
     assert (
         len(rb._prefetch_queue) == 2
     ), f"Expected prefetch queue to have 2 items, but got {len(rb._prefetch_queue)}."
+
+
+class TestBufferStats:
+    def test_stats_tracks_writes(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
+        stats = rb.stats()
+        assert stats["size"] == 0
+        assert stats["write_count"] == 0
+        assert stats["capacity"] == 10
+        assert stats["utilization"] == 0.0
+        assert stats["prefetch_queue_size"] == 0
+        assert stats["initialized"]
+        rb.extend(torch.arange(15))
+        stats = rb.stats()
+        assert stats["size"] == 10
+        assert stats["write_count"] == 15
+        assert stats["utilization"] == 1.0
+
+    def test_stats_is_side_effect_free(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
+        rb.extend(torch.arange(4))
+        before = rb.stats()
+        rb.stats()
+        rb.sample()
+        assert rb.stats() == before
+
+    def test_stats_does_not_initialize_buffer(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10), delayed_init=True)
+        stats = rb.stats()
+        assert stats["initialized"] is False
+        assert stats["size"] == 0
+        assert not rb.initialized
+        rb.extend(torch.arange(3))
+        stats = rb.stats()
+        assert stats["initialized"] is True
+        assert stats["size"] == 3
+
+    def test_stats_after_empty(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(6))
+        rb.empty(empty_write_count=False)
+        stats = rb.stats()
+        assert stats["size"] == 0
+        assert stats["write_count"] == 6
+        rb.empty()
+        stats = rb.stats()
+        assert stats["write_count"] == 0
+
+    def test_stats_is_serializable(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(4))
+        deserialized = json.loads(json.dumps(rb.stats()))
+        assert deserialized["size"] == 4
 
 
 if __name__ == "__main__":

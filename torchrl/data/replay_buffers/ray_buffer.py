@@ -74,6 +74,9 @@ class _RayReplayBufferClient:
     def write_count(self):
         return ray.get(self._actor._getattr.remote("write_count"))
 
+    def stats(self):
+        return ray.get(self._actor.stats.remote())
+
     @property
     def dim_extend(self):
         return ray.get(self._actor._getattr.remote("dim_extend"))
@@ -179,6 +182,10 @@ class _LazyDistributedReplayClient:
             {"operation": torch.zeros((), dtype=torch.int64)}, batch_size=[]
         )
         return self._control_client(request, timeout=timeout)
+
+    def stats(self, *, timeout: float | None = None) -> dict[str, int | float | bool]:
+        snapshot = self._stats(timeout=timeout)
+        return {key: value.item() for key, value in snapshot.items()}
 
     def extend(self, data: TensorDictBase, *, timeout: float | None = None):
         if self._extend_client is None:
@@ -541,6 +548,13 @@ class RayReplayBuffer(ReplayBuffer):
     @property
     def write_count(self):
         return self._client.write_count
+
+    def stats(self) -> dict[str, int | float | bool]:
+        """Returns the buffer stats snapshot through a single actor round-trip.
+
+        See :meth:`~torchrl.data.ReplayBuffer.stats`.
+        """
+        return self._client.stats()
 
     @property
     def dim_extend(self):
