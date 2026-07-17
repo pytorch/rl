@@ -190,6 +190,29 @@ class TestRayRB:
         finally:
             rb.close()
 
+    def test_ray_rb_stats(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            stats = rb.stats()
+            assert stats["size"] == 0
+            assert stats["write_count"] == 0
+            rb.extend(
+                TensorDict(
+                    {"x": torch.ones(10, 2), "y": torch.ones(10, 2)}, batch_size=10
+                )
+            )
+            stats = rb.stats()
+            assert stats["size"] == 10
+            assert stats["write_count"] == 10
+            assert stats["capacity"] == 100
+            assert stats["utilization"] == 0.1
+            client = rb.client()
+            assert client.stats()["write_count"] == 10
+        finally:
+            rb.close()
+
     def test_ray_rb_iter(self):
         rb = RayReplayBuffer(
             storage=partial(LazyTensorStorage, 100),
