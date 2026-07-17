@@ -8,7 +8,7 @@ hydra-core==1.3.2
 ray==2.55.0
 tqdm==4.67.1
 tensordict==0.9.0
-vllm==0.22.0
+vllm==0.24.0
 accelerate==1.7.0
 xformers==0.0.30 
 nltk==3.9.4
