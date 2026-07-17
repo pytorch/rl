@@ -5,6 +5,8 @@
 
 from .loggers import (
     CSVLogger,
+    Every,
+    LoggerMonitor,
     MLFlowLogger,
     ProcessLogger,
     RayLogger,
@@ -15,6 +17,8 @@ from .recorder import PixelRenderTransform, TensorDictRecorder, VideoRecorder
 
 __all__ = [
     "CSVLogger",
+    "Every",
+    "LoggerMonitor",
     "MLFlowLogger",
     "ProcessLogger",
     "RayLogger",

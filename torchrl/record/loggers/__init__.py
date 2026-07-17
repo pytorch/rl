@@ -7,6 +7,7 @@ from .common import Logger
 
 from .csv import CSVLogger
 from .mlflow import MLFlowLogger
+from .monitoring import Every, LoggerMonitor
 from .process import ProcessLogger
 from .ray import RayLogger
 from .tensorboard import TensorboardLogger
@@ -16,6 +17,8 @@ from .wandb import WandbLogger
 
 __all__ = [
     "Logger",
+    "LoggerMonitor",
+    "Every",
     "ProcessLogger",
     "RayLogger",
     "CSVLogger",
