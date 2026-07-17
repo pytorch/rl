@@ -9,6 +9,7 @@ import contextlib
 import functools
 import gc
 import inspect
+import json
 import os
 import subprocess
 import sys
@@ -5678,6 +5679,113 @@ class TestCollectorRemoteHelpers:
             ) == [0, 1]
             with pytest.raises(ValueError, match="Expected 2 argument entries"):
                 collector.map_fn("get_distant_attr", list_of_args=[("worker_idx",)])
+        finally:
+            collector.shutdown()
+
+
+class TestCollectorStats:
+    def test_single_collector_stats(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            stats = collector.stats()
+            assert stats["frames"] == 0
+            assert stats["batches"] == 0
+            assert stats["total_frames"] == 32
+            assert stats["requested_frames_per_batch"] == 16
+            assert not stats["completed"]
+            frames_seen = []
+            for _ in collector:
+                frames_seen.append(collector.stats()["frames"])
+            stats = collector.stats()
+            assert frames_seen == [16, 32]
+            assert stats["batches"] == 2
+            assert stats["completed"]
+        finally:
+            collector.shutdown()
+
+    def test_single_collector_stats_policy_version(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            track_policy_version=True,
+        )
+        try:
+            assert isinstance(collector.stats().get("policy_version"), int)
+        finally:
+            collector.shutdown()
+
+    def test_stats_is_serializable(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            for _ in collector:
+                break
+            deserialized = json.loads(json.dumps(collector.stats()))
+            assert deserialized["frames"] == 16
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
+    def test_multiprocess_collector_stats(self, collector_cls):
+        collector = collector_cls(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            with pytest.raises(ValueError, match="workers must be one of"):
+                collector.stats(workers="bogus")
+            for _ in collector:
+                break
+            stats = collector.stats()
+            assert stats["workers"] == 2
+            assert stats["workers_alive"] == 2
+            assert stats["frames"] >= 16
+            both = collector.stats(workers="both")
+            assert "frames" in both
+            assert "worker_0/frames" in both
+            assert "worker_1/frames" in both
+            per_worker = collector.stats(workers="per_worker")
+            assert "frames" not in per_worker
+            assert "worker_0/frames" in per_worker
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="requires ray.")
+    def test_ray_collector_stats(self):
+        collector = RayCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            num_collectors=2,
+            ray_init_config={"num_cpus": 2, "include_dashboard": False},
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+        )
+        try:
+            for _ in collector:
+                break
+            stats = collector.stats()
+            assert stats["workers"] == 2
+            assert stats["workers_alive"] == 2
+            assert stats["frames"] >= 16
+            assert stats["worker_frames"] >= 16
+            assert stats["requested_frames_per_batch"] == 16
+            both = collector.stats(workers="both", timeout=30.0)
+            assert "worker_0/frames" in both
+            assert "worker_1/frames" in both
         finally:
             collector.shutdown()
 
