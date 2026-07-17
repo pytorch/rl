@@ -939,18 +939,24 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
         Calling this method on an uninitialized buffer does not trigger its
         initialization; an empty snapshot with ``initialized=False`` is
-        returned instead.
+        returned instead (``capacity`` is still reported when the storage
+        already advertises it).
 
         Returns:
             A dictionary with the following entries:
 
             - ``"size"``: current number of elements in the buffer (mirrors ``len(buffer)``);
-            - ``"write_count"``: total number of items written through ``add`` and ``extend``;
+            - ``"write_count"``: total number of items written through ``add`` and
+              ``extend`` (``0`` for writers that do not track writes, such as
+              :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter`);
             - ``"prefetch_queue_size"``: number of pending prefetched batches;
             - ``"initialized"``: whether the buffer components are initialized;
             - ``"capacity"``: maximum number of elements the storage can hold
               (only present when the storage advertises a ``max_size``);
             - ``"utilization"``: ``size / capacity`` (only present alongside ``capacity``).
+
+            Remote clients backed by the distributed transport report a subset
+            of these entries (``size`` and ``write_count``).
 
         Examples:
             >>> import torch
@@ -962,16 +968,24 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             5 5 10
         """
         if not self.initialized:
-            return {
+            stats = {
                 "size": 0,
                 "write_count": 0,
                 "prefetch_queue_size": 0,
                 "initialized": False,
             }
+            storage = getattr(self, "_storage", None) or getattr(
+                self, "_init_storage", None
+            )
+            capacity = getattr(storage, "max_size", None)
+            if isinstance(capacity, int):
+                stats["capacity"] = capacity
+                stats["utilization"] = 0.0
+            return stats
         with self._replay_lock:
             size = len(self)
             capacity = getattr(self._storage, "max_size", None)
-            write_count = self._writer._write_count
+            write_count = getattr(self._writer, "_write_count", 0)
             prefetch_queue_size = len(self._prefetch_queue)
         stats = {
             "size": int(size),

@@ -36,7 +36,7 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     TensorStorage,
 )
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, RoundRobinWriter
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.objectives.llm import MCAdvantage
 
@@ -1160,6 +1160,8 @@ class TestBufferStats:
         stats = rb.stats()
         assert stats["initialized"] is False
         assert stats["size"] == 0
+        assert stats["capacity"] == 10
+        assert stats["utilization"] == 0.0
         assert not rb.initialized
         rb.extend(torch.arange(3))
         stats = rb.stats()
@@ -1182,6 +1184,16 @@ class TestBufferStats:
         rb.extend(torch.arange(4))
         deserialized = json.loads(json.dumps(rb.stats()))
         assert deserialized["size"] == 4
+
+    def test_stats_with_non_counting_writer(self):
+        # dataset buffers use ImmutableDatasetWriter, which has no _write_count
+        storage = LazyTensorStorage(10)
+        rb = ReplayBuffer(storage=storage, writer=ImmutableDatasetWriter())
+        storage.set(torch.arange(10), torch.zeros(10))
+        stats = rb.stats()
+        assert stats["size"] == 10
+        assert stats["write_count"] == 0
+        assert stats["capacity"] == 10
 
 
 if __name__ == "__main__":
