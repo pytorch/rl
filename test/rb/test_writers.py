@@ -13,6 +13,7 @@ from torch import multiprocessing as mp
 
 from torchrl.data import (
     PrioritizedReplayBuffer,
+    ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -28,6 +29,7 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
 )
 from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
     TensorDictMaxValueWriter,
     TensorDictRoundRobinWriter,
 )
@@ -368,6 +370,37 @@ class TestMultiProc:
         # list storage cannot be shared
         with pytest.raises(RuntimeError, match="it has not been initialized yet"):
             self.exec_multiproc_rb(init=False)
+
+
+class TestWriterStateDict:
+    def test_roundrobin_state_dict_restores_write_count(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(15))
+        assert rb.write_count == 15
+        sd = rb.state_dict()
+        rb2 = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb2.load_state_dict(sd)
+        assert rb2.write_count == 15
+        assert rb2._writer._cursor == rb._writer._cursor
+
+    def test_roundrobin_load_legacy_state_dict_without_write_count(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(5))
+        sd = rb.state_dict()
+        del sd["_writer"]["_write_count"]
+        rb2 = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb2.load_state_dict(sd)
+        assert rb2._writer._cursor == 5
+
+    def test_roundrobin_dumps_loads_write_count(self, tmp_path):
+        writer = RoundRobinWriter()
+        writer._cursor = 3
+        writer._write_count = 23
+        writer.dumps(tmp_path)
+        writer2 = RoundRobinWriter()
+        writer2.loads(tmp_path)
+        assert writer2._cursor == 3
+        assert writer2._write_count == 23
 
 
 if __name__ == "__main__":

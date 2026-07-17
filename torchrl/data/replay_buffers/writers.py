@@ -164,13 +164,16 @@ class RoundRobinWriter(Writer):
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
         with open(path / "metadata.json", "w") as file:
-            json.dump({"cursor": self._cursor}, file)
+            json.dump({"cursor": self._cursor, "write_count": self._write_count}, file)
 
     def loads(self, path):
         path = Path(path).absolute()
         with open(path / "metadata.json") as file:
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
+            write_count = metadata.get("write_count")
+            if write_count is not None:
+                self._write_count = write_count
 
     def add(self, data: Any) -> int | torch.Tensor:
         index = self._cursor
@@ -246,10 +249,13 @@ class RoundRobinWriter(Writer):
         )
 
     def state_dict(self) -> dict[str, Any]:
-        return {"_cursor": self._cursor}
+        return {"_cursor": self._cursor, "_write_count": self._write_count}
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
+        write_count = state_dict.get("_write_count")
+        if write_count is not None:
+            self._write_count = write_count
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
@@ -692,6 +698,7 @@ class TensorDictMaxValueWriter(Writer):
             json.dump(
                 {
                     "cursor": self._cursor,
+                    "write_count": self._write_count,
                     "rank_key": self._rank_key,
                     "dtype": str(t.dtype),
                     "shape": list(t.shape),
@@ -704,6 +711,9 @@ class TensorDictMaxValueWriter(Writer):
         with open(path / "metadata.json") as file:
             metadata = json.load(file)
             self._cursor = metadata["cursor"]
+            write_count = metadata.get("write_count")
+            if write_count is not None:
+                self._write_count = write_count
             self._rank_key = metadata["rank_key"]
             shape = torch.Size(metadata["shape"])
             dtype = metadata["dtype"]
