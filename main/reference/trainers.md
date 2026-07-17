@@ -56,6 +56,7 @@ trainer.train()
 - [WandbLogger](generated/torchrl.record.loggers.wandb.WandbLogger.html)
 - [get_logger](generated/torchrl.record.loggers.get_logger.html)
 - [generate_exp_name](generated/torchrl.record.loggers.generate_exp_name.html)
+- [Monitoring collectors and replay buffers](trainers_loggers.html#monitoring-collectors-and-replay-buffers)
 - [Recording utils](trainers_loggers.html#recording-utils)
 - [Training Hooks](trainers_hooks.html)
 

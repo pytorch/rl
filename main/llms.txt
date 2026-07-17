@@ -567,6 +567,8 @@
 - [generate_exp_name](reference/generated/torchrl.record.loggers.generate_exp_name.md)
 - [get_logger](reference/generated/torchrl.record.loggers.get_logger.md)
 - [MLFlowLogger](reference/generated/torchrl.record.loggers.mlflow.MLFlowLogger.md)
+- [Every](reference/generated/torchrl.record.loggers.monitoring.Every.md)
+- [LoggerMonitor](reference/generated/torchrl.record.loggers.monitoring.LoggerMonitor.md)
 - [TensorboardLogger](reference/generated/torchrl.record.loggers.tensorboard.TensorboardLogger.md)
 - [TrackioLogger](reference/generated/torchrl.record.loggers.trackio.TrackioLogger.md)
 - [WandbLogger](reference/generated/torchrl.record.loggers.wandb.WandbLogger.md)

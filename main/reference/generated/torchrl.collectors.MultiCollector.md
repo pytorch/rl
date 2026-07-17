@@ -864,6 +864,26 @@ Returns the state_dict of the data collector.
 
 Each field represents a worker containing its own state_dict.
 
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*) → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/_multi_base.html#MultiCollector.stats)
+
+Returns a cheap, serializable snapshot of the collector's progress.
+
+See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the base
+entries. On top of those, multiprocessing collectors report
+`"workers"` (number of worker processes) and `"workers_alive"`.
+
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), only coordinator-side counters are
+reported and no worker communication happens, so the call is
+safe from any thread. With `"per_worker"` or `"both"`,
+each worker is queried through the control pipes and its
+snapshot is namespaced as `"worker_<idx>/<metric>"`; since
+this shares the control channel with other coordinator
+commands, it should not race with concurrent control calls
+such as weight updates issued from other threads.
+
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | dict | None = None*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, *model_id: str | None = None*, *weights_dict: dict[str, Any] | None = None*, ***kwargs*) → None
 
 Update policy weights for the data collector.

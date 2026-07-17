@@ -37,6 +37,36 @@ logger.shutdown()
 | [`get_logger`](generated/torchrl.record.loggers.get_logger.html#torchrl.record.loggers.get_logger)(logger_type, logger_name, ...[, ...]) | Get a logger instance of the provided logger_type. |
 | [`generate_exp_name`](generated/torchrl.record.loggers.generate_exp_name.html#torchrl.record.loggers.generate_exp_name)(model_name, experiment_name) | Generates an ID (str) for the described experiment using UUID and current date. |
 
+## Monitoring collectors and replay buffers
+
+Any collector or replay buffer exposes a cheap
+[`stats()`](generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) /
+[`stats()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.stats) snapshot of operational counters
+(frames collected, buffer size, write count, worker liveness, ...). A
+[`LoggerMonitor`](generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor) periodically pulls
+those snapshots on a wall-clock or counter
+([`Every`](generated/torchrl.record.loggers.monitoring.Every.html#torchrl.record.loggers.monitoring.Every)) schedule, derives rates
+such as frames per second, and forwards namespaced metrics to any logger,
+without adding work to collection or sampling hot paths. This works with
+local, multiprocessing and Ray implementations alike.
+
+```
+from torchrl.record import WandbLogger
+from torchrl.record.loggers.monitoring import Every, LoggerMonitor
+
+logger = WandbLogger(exp_name="experiment", project="torchrl")
+
+with LoggerMonitor(logger, poll_interval=1.0) as monitor:
+ monitor.watch(collector, name="collector", schedule=Every.counter("frames", 10_000))
+ monitor.watch(replay_buffer, name="replay_buffer", schedule=Every.seconds(5), step="write_count")
+ collector.start()
+ run_training()
+```
+
+| [`monitoring.LoggerMonitor`](generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor)(logger, *[, ...]) | A pull-based monitor logging operational statistics of collectors and replay buffers. |
+| --- | --- |
+| [`monitoring.Every`](generated/torchrl.record.loggers.monitoring.Every.html#torchrl.record.loggers.monitoring.Every)(kind, interval[, key]) | A logging schedule for [`LoggerMonitor`](generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor). |
+
 ## Recording utils
 
 | [`VideoRecorder`](generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder)(logger, tag[, in_keys, skip, ...]) | Video Recorder transform. |

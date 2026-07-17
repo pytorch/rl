@@ -53,7 +53,7 @@ print(
 ```
 
 ```
-Collected 10 steps, total reward: 10
+Collected 8 steps, total reward: 8
 ```
 
 That's it! We wrapped a Gym environment, created a Q-value actor with an
@@ -469,11 +469,11 @@ collector.shutdown()
 ```
 
 ```
-Collected batch: torch.Size([200]), reward: -9.02
-Collected batch: torch.Size([200]), reward: -9.02
-Collected batch: torch.Size([200]), reward: -5.87
-Collected batch: torch.Size([200]), reward: -8.31
-Collected batch: torch.Size([200]), reward: -6.95
+Collected batch: torch.Size([200]), reward: -8.98
+Collected batch: torch.Size([200]), reward: -9.15
+Collected batch: torch.Size([200]), reward: -8.45
+Collected batch: torch.Size([200]), reward: -8.83
+Collected batch: torch.Size([200]), reward: -8.47
 ```
 
 For asynchronous collection (useful when training takes longer than
@@ -524,7 +524,7 @@ print("Prioritized sample indices:", info["index"][:5], "...") # First 5 indices
 ```
 
 ```
-Prioritized sample indices: tensor([ 7, 20, 50, 41, 82]) ...
+Prioritized sample indices: tensor([92, 5, 53, 59, 62]) ...
 ```
 
 ## Loss Functions
@@ -579,7 +579,7 @@ print("Loss:", loss_td["loss"])
 ```
 
 ```
-Loss: tensor(1.4968, grad_fn=<MeanBackward0>)
+Loss: tensor(0.7207, grad_fn=<MeanBackward0>)
 ```
 
 The loss function handles target network updates, Bellman backup
@@ -645,10 +645,10 @@ env.close()
 ```
 
 ```
-Step 0: loss=1.031
-Step 5: loss=0.693
-Step 10: loss=0.405
-Step 15: loss=0.257
+Step 0: loss=1.004
+Step 5: loss=0.645
+Step 10: loss=0.407
+Step 15: loss=0.269
 ```
 
 This is a minimal example - a production DQN would include target network
@@ -688,7 +688,7 @@ folder contains production-ready implementations of:
 - [GitHub](https://github.com/pytorch/rl)
 - [Contributing Guide](https://github.com/pytorch/rl/blob/main/CONTRIBUTING.md)
 
-**Total running time of the script:** (0 minutes 5.113 seconds)
+**Total running time of the script:** (0 minutes 5.058 seconds)
 
 [`Download Jupyter notebook: torchrl_demo.ipynb`](../_downloads/36fe09d5d4546649ee1a029c7144936e/torchrl_demo.ipynb)
 

@@ -371,6 +371,53 @@ start() → T
 
 Return this already-started direct replay buffer.
 
+stats() → dict[str, int | float | bool]
+
+Returns a cheap, serializable snapshot of the buffer's operational state.
+
+The snapshot only contains scalar counters and gauges. It never
+includes the storage content, does not modify the buffer state and is
+safe to call concurrently with writes and samples. Cumulative
+counters such as `write_count` are meant to be converted into rates
+by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Calling this method on an uninitialized buffer does not trigger its
+initialization; an empty snapshot with `initialized=False` is
+returned instead (`capacity` is still reported when the storage
+already advertises it).
+
+Returns:
+
+- `"size"`: current number of elements in the buffer (mirrors `len(buffer)`);
+- `"write_count"`: total number of items written through `add` and
+`extend` (`0` for writers that do not track writes, such as
+[`ImmutableDatasetWriter`](torchrl.data.replay_buffers.ImmutableDatasetWriter.html#torchrl.data.replay_buffers.ImmutableDatasetWriter));
+- `"prefetch_queue_size"`: number of pending prefetched batches;
+- `"initialized"`: whether the buffer components are initialized;
+- `"capacity"`: maximum number of elements the storage can hold
+(only present when the storage advertises a `max_size`);
+- `"utilization"`: `size / capacity` (only present alongside `capacity`).
+
+Remote clients backed by the distributed transport report a subset
+of these entries (`size` and `write_count`).
+
+Return type:
+
+A dictionary with the following entries
+
+Examples
+
+```
+>>> import torch
+>>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+>>> rb = ReplayBuffer(storage=LazyTensorStorage(10))
+>>> rb.extend(torch.arange(5))
+>>> snapshot = rb.stats()
+>>> print(snapshot["size"], snapshot["write_count"], snapshot["capacity"])
+5 5 10
+```
+
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 
 The storage of the replay buffer.

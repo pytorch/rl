@@ -2082,6 +2082,8 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.wandb.WandbLogger.html">WandbLogger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.get_logger.html">get_logger</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.generate_exp_name.html">generate_exp_name</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.monitoring.LoggerMonitor.html">LoggerMonitor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.loggers.monitoring.Every.html">Every</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.VideoRecorder.html">VideoRecorder</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.TensorDictRecorder.html">TensorDictRecorder</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.record.PixelRenderTransform.html">PixelRenderTransform</a></li>
@@ -2502,6 +2504,42 @@ backpressure when several clients log concurrently.</p>
 </tbody>
 </table>
 </div>
+<section id="monitoring-collectors-and-replay-buffers">
+<h2>Monitoring collectors and replay buffers<a class="headerlink" href="#monitoring-collectors-and-replay-buffers" title="Link to this heading">#</a></h2>
+<p>Any collector or replay buffer exposes a cheap
+<a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats" title="torchrl.collectors.BaseCollector.stats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stats()</span></code></a> /
+<a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.stats" title="torchrl.data.ReplayBuffer.stats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stats()</span></code></a> snapshot of operational counters
+(frames collected, buffer size, write count, worker liveness, …). A
+<a class="reference internal" href="generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor" title="torchrl.record.loggers.monitoring.LoggerMonitor"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggerMonitor</span></code></a> periodically pulls
+those snapshots on a wall-clock or counter
+(<a class="reference internal" href="generated/torchrl.record.loggers.monitoring.Every.html#torchrl.record.loggers.monitoring.Every" title="torchrl.record.loggers.monitoring.Every"><code class="xref py py-class docutils literal notranslate"><span class="pre">Every</span></code></a>) schedule, derives rates
+such as frames per second, and forwards namespaced metrics to any logger,
+without adding work to collection or sampling hot paths. This works with
+local, multiprocessing and Ray implementations alike.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.record</span> <span class="kn">import</span> <span class="n">WandbLogger</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.monitoring</span> <span class="kn">import</span> <span class="n">Every</span><span class="p">,</span> <span class="n">LoggerMonitor</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">WandbLogger</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="s2">&quot;experiment&quot;</span><span class="p">,</span> <span class="n">project</span><span class="o">=</span><span class="s2">&quot;torchrl&quot;</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="n">LoggerMonitor</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">poll_interval</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span> <span class="k">as</span> <span class="n">monitor</span><span class="p">:</span>
+    <span class="n">monitor</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">collector</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">schedule</span><span class="o">=</span><span class="n">Every</span><span class="o">.</span><span class="n">counter</span><span class="p">(</span><span class="s2">&quot;frames&quot;</span><span class="p">,</span> <span class="mi">10_000</span><span class="p">))</span>
+    <span class="n">monitor</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;replay_buffer&quot;</span><span class="p">,</span> <span class="n">schedule</span><span class="o">=</span><span class="n">Every</span><span class="o">.</span><span class="n">seconds</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="n">step</span><span class="o">=</span><span class="s2">&quot;write_count&quot;</span><span class="p">)</span>
+    <span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="n">run_training</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor" title="torchrl.record.loggers.monitoring.LoggerMonitor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">monitoring.LoggerMonitor</span></code></a>(logger, *[, ...])</p></td>
+<td><p>A pull-based monitor logging operational statistics of collectors and replay buffers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.record.loggers.monitoring.Every.html#torchrl.record.loggers.monitoring.Every" title="torchrl.record.loggers.monitoring.Every"><code class="xref py py-obj docutils literal notranslate"><span class="pre">monitoring.Every</span></code></a>(kind, interval[, key])</p></td>
+<td><p>A logging schedule for <a class="reference internal" href="generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor" title="torchrl.record.loggers.monitoring.LoggerMonitor"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoggerMonitor</span></code></a>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="recording-utils">
 <h2>Recording utils<a class="headerlink" href="#recording-utils" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
@@ -2638,6 +2676,7 @@ backpressure when several clients log concurrently.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#monitoring-collectors-and-replay-buffers">Monitoring collectors and replay buffers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recording-utils">Recording utils</a></li>
 </ul>
   </nav></div>
@@ -2891,7 +2930,7 @@ backpressure when several clients log concurrently.</p>
        "headline": "Loggers",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/trainers_loggers.html",
-       "articleBody": "Loggers# Logger classes for experiment tracking and visualization. Loggers support an owner/client deployment model. The direct backend returns the logger itself from client(). Process and Ray backends return a picklable client that only exposes logging operations; lifecycle calls remain on the owner. Remote calls preserve direct-logger semantics: they return after the concrete logger method has run, propagate service-side errors immediately, and preserve custom log_* return values. Bounded transport queues provide backpressure when several clients log concurrently. from torchrl.record import CSVLogger logger = CSVLogger( exp_name=\"run\", log_dir=\"logs\", service_backend=\"process\", service_backend_options={\"max_queue_size\": 256}, ) worker_logger = logger.client() worker_logger.log_scalar(\"loss\", 1.0, step=0) logger.flush() # Flush buffers owned by the concrete logging SDK. logger.shutdown() Logger(*args[, use_ray_service, ...]) A template for loggers. ProcessLogger(logger_cls, *args[, ...]) Driver-owned logger service running in a dedicated process. RayLogger(logger_cls, *args[, ...]) Driver-owned Ray logger service with restricted worker clients. csv.CSVLogger(*args[, use_ray_service, ...]) A minimal-dependency CSV logger. mlflow.MLFlowLogger(*args[, ...]) Wrapper for the mlflow logger. tensorboard.TensorboardLogger(*args[, ...]) Wrapper for the Tensoarboard logger. trackio.TrackioLogger(*args[, ...]) Wrapper for the trackio logger. wandb.WandbLogger(*args[, use_ray_service, ...]) Wrapper for the wandb logger. get_logger(logger_type, logger_name, ...[, ...]) Get a logger instance of the provided logger_type. generate_exp_name(model_name, experiment_name) Generates an ID (str) for the described experiment using UUID and current date. Recording utils# VideoRecorder(logger, tag[, in_keys, skip, ...]) Video Recorder transform. TensorDictRecorder(out_file_base[, ...]) TensorDict recorder. PixelRenderTransform([out_keys, preproc, ...]) A transform to call render on the parent environment and register the pixel observation in the tensordict.",
+       "articleBody": "Loggers# Logger classes for experiment tracking and visualization. Loggers support an owner/client deployment model. The direct backend returns the logger itself from client(). Process and Ray backends return a picklable client that only exposes logging operations; lifecycle calls remain on the owner. Remote calls preserve direct-logger semantics: they return after the concrete logger method has run, propagate service-side errors immediately, and preserve custom log_* return values. Bounded transport queues provide backpressure when several clients log concurrently. from torchrl.record import CSVLogger logger = CSVLogger( exp_name=\"run\", log_dir=\"logs\", service_backend=\"process\", service_backend_options={\"max_queue_size\": 256}, ) worker_logger = logger.client() worker_logger.log_scalar(\"loss\", 1.0, step=0) logger.flush() # Flush buffers owned by the concrete logging SDK. logger.shutdown() Logger(*args[, use_ray_service, ...]) A template for loggers. ProcessLogger(logger_cls, *args[, ...]) Driver-owned logger service running in a dedicated process. RayLogger(logger_cls, *args[, ...]) Driver-owned Ray logger service with restricted worker clients. csv.CSVLogger(*args[, use_ray_service, ...]) A minimal-dependency CSV logger. mlflow.MLFlowLogger(*args[, ...]) Wrapper for the mlflow logger. tensorboard.TensorboardLogger(*args[, ...]) Wrapper for the Tensoarboard logger. trackio.TrackioLogger(*args[, ...]) Wrapper for the trackio logger. wandb.WandbLogger(*args[, use_ray_service, ...]) Wrapper for the wandb logger. get_logger(logger_type, logger_name, ...[, ...]) Get a logger instance of the provided logger_type. generate_exp_name(model_name, experiment_name) Generates an ID (str) for the described experiment using UUID and current date. Monitoring collectors and replay buffers# Any collector or replay buffer exposes a cheap stats() / stats() snapshot of operational counters (frames collected, buffer size, write count, worker liveness, \u2026). A LoggerMonitor periodically pulls those snapshots on a wall-clock or counter (Every) schedule, derives rates such as frames per second, and forwards namespaced metrics to any logger, without adding work to collection or sampling hot paths. This works with local, multiprocessing and Ray implementations alike. from torchrl.record import WandbLogger from torchrl.record.loggers.monitoring import Every, LoggerMonitor logger = WandbLogger(exp_name=\"experiment\", project=\"torchrl\") with LoggerMonitor(logger, poll_interval=1.0) as monitor: monitor.watch(collector, name=\"collector\", schedule=Every.counter(\"frames\", 10_000)) monitor.watch(replay_buffer, name=\"replay_buffer\", schedule=Every.seconds(5), step=\"write_count\") collector.start() run_training() monitoring.LoggerMonitor(logger, *[, ...]) A pull-based monitor logging operational statistics of collectors and replay buffers. monitoring.Every(kind, interval[, key]) A logging schedule for LoggerMonitor. Recording utils# VideoRecorder(logger, tag[, in_keys, skip, ...]) Video Recorder transform. TensorDictRecorder(out_file_base[, ...]) TensorDict recorder. PixelRenderTransform([out_keys, preproc, ...]) A transform to call render on the parent environment and register the pixel observation in the tensordict.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

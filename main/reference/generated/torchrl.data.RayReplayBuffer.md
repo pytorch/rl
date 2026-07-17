@@ -430,6 +430,12 @@ start() → RayReplayBuffer[[source]](../../_modules/torchrl/data/replay_buffers
 
 Return this already-started Ray replay-buffer owner.
 
+stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.stats)
+
+Returns the buffer stats snapshot through a single actor round-trip.
+
+See [`stats()`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.stats).
+
 *property*storage*: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*
 
 The storage of the replay buffer.

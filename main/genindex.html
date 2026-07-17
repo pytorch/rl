@@ -6335,6 +6335,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator">Evaluator (class in torchrl.collectors)</a>
 </li>
+      <li><a href="reference/generated/torchrl.record.loggers.monitoring.Every.html#torchrl.record.loggers.monitoring.Every">Every() (in module torchrl.record.loggers.monitoring)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.ExcludeTransform.html#torchrl.envs.transforms.ExcludeTransform">ExcludeTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.ExcludeTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.ExcludeTransformConfig">ExcludeTransformConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -11358,6 +11360,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger">Logger() (in module torchrl.record.loggers)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.logging.LoggerConfig.html#torchrl.trainers.algorithms.configs.logging.LoggerConfig">LoggerConfig (class in torchrl.trainers.algorithms.configs.logging)</a>
+</li>
+      <li><a href="reference/generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor">LoggerMonitor() (in module torchrl.record.loggers.monitoring)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.LogProbs.html#torchrl.modules.llm.LogProbs">LogProbs (class in torchrl.modules.llm)</a>
 </li>
@@ -19469,9 +19473,67 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.stateless_init_process_group_async.html#torchrl.modules.llm.stateless_init_process_group_async">stateless_init_process_group_async (class in torchrl.modules.llm)</a>
 </li>
-      <li><a href="reference/generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.stats">stats() (torchrl.modules.inference_server.InferenceServer method)</a>
+      <li><a href="reference/generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector.stats">stats() (torchrl.collectors.AsyncBatchedCollector method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector.stats">(torchrl.collectors.AsyncCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats">(torchrl.collectors.BaseCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.stats">(torchrl.collectors.Collector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedCollector.html#torchrl.collectors.distributed.DistributedCollector.stats">(torchrl.collectors.distributed.DistributedCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.DistributedSyncCollector.html#torchrl.collectors.distributed.DistributedSyncCollector.stats">(torchrl.collectors.distributed.DistributedSyncCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.stats">(torchrl.collectors.distributed.RayCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.distributed.RPCCollector.html#torchrl.collectors.distributed.RPCCollector.stats">(torchrl.collectors.distributed.RPCCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.LLMCollector.html#torchrl.collectors.llm.LLMCollector.stats">(torchrl.collectors.llm.LLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.llm.RayLLMCollector.html#torchrl.collectors.llm.RayLLMCollector.stats">(torchrl.collectors.llm.RayLLMCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector.stats">(torchrl.collectors.MultiAsyncCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector.stats">(torchrl.collectors.MultiCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector.stats">(torchrl.collectors.MultiSyncCollector method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.AtariDQNExperienceReplay.html#torchrl.data.datasets.AtariDQNExperienceReplay.stats">(torchrl.data.datasets.AtariDQNExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.stats">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.stats">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.stats">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.stats">(torchrl.data.datasets.MinariExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.stats">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay.stats">(torchrl.data.datasets.OpenXExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.RobosetExperienceReplay.html#torchrl.data.datasets.RobosetExperienceReplay.stats">(torchrl.data.datasets.RobosetExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.VD4RLExperienceReplay.html#torchrl.data.datasets.VD4RLExperienceReplay.stats">(torchrl.data.datasets.VD4RLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.stats">(torchrl.data.PrioritizedReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer.stats">(torchrl.data.RayReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer.stats">(torchrl.data.RemoteTensorDictReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.stats">(torchrl.data.ReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble.stats">(torchrl.data.ReplayBufferEnsemble method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer.stats">(torchrl.data.TensorDictPrioritizedReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.stats">(torchrl.data.TensorDictReplayBuffer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.inference_server.InferenceServer.html#torchrl.modules.inference_server.InferenceServer.stats">(torchrl.modules.inference_server.InferenceServer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.inference_server.ProcessInferenceServer.html#torchrl.modules.inference_server.ProcessInferenceServer.stats">(torchrl.modules.inference_server.ProcessInferenceServer method)</a>
 </li>
       </ul></li>

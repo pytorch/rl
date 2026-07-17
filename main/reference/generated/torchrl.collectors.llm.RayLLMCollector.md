@@ -529,6 +529,50 @@ Returns:
 an ordered dictionary with fields `"policy_state_dict"` and
 "env_state_dict".
 
+stats() → dict[str, int | float | bool]
+
+Returns a cheap, serializable snapshot of the collector's progress.
+
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames collected so far;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+Multi-worker collectors extend this signature with a `workers`
+argument controlling aggregate versus per-worker views.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
+
 *property*total_dialog_turns
 
 Total number of dialog turns to collect.

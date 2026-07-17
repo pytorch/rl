@@ -583,6 +583,42 @@ state_dict() → list[OrderedDict][[source]](../../_modules/torchrl/collectors/d
 
 Calls parent method for each remote collector and returns a list of results.
 
+stats(*workers: Literal['aggregate', 'per_worker', 'both'] = 'aggregate'*, ***, *timeout: float | None = 10.0*) → dict[str, int | float | bool][[source]](../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.stats)
+
+Returns a cheap, serializable snapshot of the collector's progress.
+
+See [`stats()`](torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.stats) for the general
+contract. Worker snapshots are requested from all remote collectors
+concurrently, one RPC per worker bounded by `timeout`; a worker
+whose request fails or does not reply in time is counted as dead and
+skipped. Note that, unlike multiprocessing collectors, every call
+(including `workers="aggregate"`) contacts each remote collector to
+derive `"workers_alive"` and `"worker_frames"`.
+
+Parameters:
+
+**workers** (*str**,**optional*) - controls the worker view. With
+`"aggregate"` (default), the snapshot contains the
+coordinator counters plus `"worker_frames"`, the sum of the
+frame counters reported by the remote collectors. With
+`"per_worker"`, each remote snapshot is namespaced as
+`"worker_<idx>/<metric>"` instead. `"both"` returns the
+union. `"workers"` and `"workers_alive"` are always
+present.
+
+Keyword Arguments:
+
+**timeout** ([*float*](torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float)*,**optional*) - how long to wait for the worker
+snapshots, in seconds, so that a hung worker cannot block the
+caller (for example a monitoring thread) indefinitely.
+`None` waits forever. Defaults to `10.0`.
+
+The coordinator-side `"frames"` counter tracks frames dispatched
+through the iterator. When remote collectors write directly into a
+replay buffer, the buffer's `write_count` is the authoritative
+production counter and `"worker_frames"` is the closest
+collector-side estimate.
+
 stop_remote_collectors()[[source]](../../_modules/torchrl/collectors/distributed/ray.html#RayCollector.stop_remote_collectors)
 
 Stops all remote collectors.

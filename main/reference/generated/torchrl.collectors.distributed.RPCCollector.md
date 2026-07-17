@@ -533,6 +533,50 @@ Raises:
 
 **NotImplementedError** - If not implemented by a subclass.
 
+stats() → dict[str, int | float | bool]
+
+Returns a cheap, serializable snapshot of the collector's progress.
+
+The snapshot only contains scalar counters and gauges: it never
+includes policy, environment or batch data, does not modify the
+collector state and is safe to call while the collector is running.
+Cumulative counters such as `frames` are meant to be converted into
+rates by an external monitor such as
+[`LoggerMonitor`](torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor).
+
+Entries are only present when the corresponding state exists on the
+collector:
+
+- `"frames"`: total number of frames collected so far;
+- `"batches"`: number of batches delivered so far;
+- `"total_frames"`: requested total frames (absent for endless collectors);
+- `"completed"`: whether the frame budget has been reached;
+- `"requested_frames_per_batch"`: the per-batch frame budget;
+- `"policy_version"`: current policy version, when the collector
+tracks it with an integer version.
+
+Multi-worker collectors extend this signature with a `workers`
+argument controlling aggregate versus per-worker views.
+
+Examples
+
+```
+>>> from torchrl.collectors import Collector
+>>> from torchrl.envs import GymEnv
+>>> from torchrl.envs.utils import RandomPolicy
+>>> env = GymEnv("Pendulum-v1")
+>>> collector = Collector(
+... env,
+... RandomPolicy(env.action_spec),
+... frames_per_batch=10,
+... total_frames=20,
+... )
+>>> for batch in collector:
+... print(collector.stats()["frames"])
+10
+20
+```
+
 update_policy_weights_(*policy_or_weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | dict | None = None*, ***, *weights: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | dict | None = None*, *policy: [TensorDictModuleBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) | [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module) | None = None*, *worker_ids: int | list[int] | [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | list[[device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)] | None = None*, *model_id: str | None = None*, *weights_dict: dict[str, Any] | None = None*, ***kwargs*) → None
 
 Update policy weights for the data collector.
