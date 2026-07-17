@@ -68,7 +68,7 @@ def test_callable_metadata_env_closes_when_extraction_fails(monkeypatch):
     def fake_tensordict():
         raise RuntimeError("metadata extraction failed")
 
-    def close():
+    def close(*, raise_if_closed: bool = True):
         nonlocal closed
         closed = True
 
