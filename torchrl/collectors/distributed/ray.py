@@ -10,7 +10,7 @@ import threading
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import torch
 import torch.nn as nn
@@ -1061,6 +1061,72 @@ class RayCollector(BaseCollector):
                 for collector in self.remote_collectors
             ]
         )
+
+    def stats(
+        self, workers: Literal["aggregate", "per_worker", "both"] = "aggregate"
+    ) -> dict[str, int | float | bool]:
+        """Returns a cheap, serializable snapshot of the collector's progress.
+
+        See :meth:`~torchrl.collectors.BaseCollector.stats` for the general
+        contract. Worker snapshots are requested from all remote collectors
+        concurrently, one bounded RPC per worker; a worker whose request
+        fails is counted as dead and skipped.
+
+        Args:
+            workers (str, optional): controls the worker view. With
+                ``"aggregate"`` (default), the snapshot contains the
+                coordinator counters plus ``"worker_frames"``, the sum of the
+                frame counters reported by the remote collectors. With
+                ``"per_worker"``, each remote snapshot is namespaced as
+                ``"worker_<idx>/<metric>"`` instead. ``"both"`` returns the
+                union. ``"workers"`` and ``"workers_alive"`` are always
+                present.
+
+        The coordinator-side ``"frames"`` counter tracks frames dispatched
+        through the iterator. When remote collectors write directly into a
+        replay buffer, the buffer's ``write_count`` is the authoritative
+        production counter and ``"worker_frames"`` is the closest
+        collector-side estimate.
+        """
+        if workers not in ("aggregate", "per_worker", "both"):
+            raise ValueError(
+                f"workers must be one of 'aggregate', 'per_worker' or 'both', got {workers!r}."
+            )
+        stats: dict[str, int | float | bool] = {}
+        if workers in ("aggregate", "both"):
+            stats["frames"] = int(self.collected_frames)
+            stats["frames_per_batch"] = int(self.frames_per_batch)
+            if isinstance(self.total_frames, int) and self.total_frames >= 0:
+                stats["total_frames"] = int(self.total_frames)
+                stats["completed"] = bool(self.collected_frames >= self.total_frames)
+        remote_collectors = self.remote_collectors
+        stats["workers"] = len(remote_collectors)
+        futures = [collector.stats.remote() for collector in remote_collectors]
+        per_worker = []
+        alive = 0
+        for future in futures:
+            try:
+                snapshot = ray.get(future)
+                alive += 1
+            except Exception:
+                snapshot = None
+            per_worker.append(snapshot)
+        stats["workers_alive"] = alive
+        if workers in ("aggregate", "both"):
+            worker_frames = [
+                snapshot["frames"]
+                for snapshot in per_worker
+                if snapshot is not None and "frames" in snapshot
+            ]
+            if worker_frames:
+                stats["worker_frames"] = int(sum(worker_frames))
+        if workers in ("per_worker", "both"):
+            for idx, snapshot in enumerate(per_worker):
+                if snapshot is None:
+                    continue
+                for key, value in snapshot.items():
+                    stats[f"worker_{idx}/{key}"] = value
+        return stats
 
     def _install_profile_hooks(self, config: ProfileConfig) -> None:
         """Install per-actor :class:`_ProfilerHook` on each selected remote actor.
