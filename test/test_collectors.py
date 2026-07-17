@@ -5782,7 +5782,8 @@ class TestCollectorStats:
             assert stats["workers_alive"] == 2
             assert stats["frames"] >= 16
             assert stats["worker_frames"] >= 16
-            both = collector.stats(workers="both")
+            assert stats["requested_frames_per_batch"] == 16
+            both = collector.stats(workers="both", timeout=30.0)
             assert "worker_0/frames" in both
             assert "worker_1/frames" in both
         finally:

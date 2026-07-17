@@ -1063,14 +1063,20 @@ class RayCollector(BaseCollector):
         )
 
     def stats(
-        self, workers: Literal["aggregate", "per_worker", "both"] = "aggregate"
+        self,
+        workers: Literal["aggregate", "per_worker", "both"] = "aggregate",
+        *,
+        timeout: float | None = 10.0,
     ) -> dict[str, int | float | bool]:
         """Returns a cheap, serializable snapshot of the collector's progress.
 
         See :meth:`~torchrl.collectors.BaseCollector.stats` for the general
         contract. Worker snapshots are requested from all remote collectors
-        concurrently, one bounded RPC per worker; a worker whose request
-        fails is counted as dead and skipped.
+        concurrently, one RPC per worker bounded by ``timeout``; a worker
+        whose request fails or does not reply in time is counted as dead and
+        skipped. Note that, unlike multiprocessing collectors, every call
+        (including ``workers="aggregate"``) contacts each remote collector to
+        derive ``"workers_alive"`` and ``"worker_frames"``.
 
         Args:
             workers (str, optional): controls the worker view. With
@@ -1081,6 +1087,12 @@ class RayCollector(BaseCollector):
                 ``"worker_<idx>/<metric>"`` instead. ``"both"`` returns the
                 union. ``"workers"`` and ``"workers_alive"`` are always
                 present.
+
+        Keyword Args:
+            timeout (float, optional): how long to wait for the worker
+                snapshots, in seconds, so that a hung worker cannot block the
+                caller (for example a monitoring thread) indefinitely.
+                ``None`` waits forever. Defaults to ``10.0``.
 
         The coordinator-side ``"frames"`` counter tracks frames dispatched
         through the iterator. When remote collectors write directly into a
@@ -1095,21 +1107,27 @@ class RayCollector(BaseCollector):
         stats: dict[str, int | float | bool] = {}
         if workers in ("aggregate", "both"):
             stats["frames"] = int(self.collected_frames)
-            stats["frames_per_batch"] = int(self.frames_per_batch)
+            stats["requested_frames_per_batch"] = int(self.frames_per_batch)
             if isinstance(self.total_frames, int) and self.total_frames >= 0:
                 stats["total_frames"] = int(self.total_frames)
                 stats["completed"] = bool(self.collected_frames >= self.total_frames)
         remote_collectors = self.remote_collectors
         stats["workers"] = len(remote_collectors)
         futures = [collector.stats.remote() for collector in remote_collectors]
+        ready = set()
+        if futures:
+            ready_list, _ = ray.wait(futures, num_returns=len(futures), timeout=timeout)
+            ready = set(ready_list)
         per_worker = []
         alive = 0
         for future in futures:
-            try:
-                snapshot = ray.get(future)
-                alive += 1
-            except Exception:
-                snapshot = None
+            snapshot = None
+            if future in ready:
+                try:
+                    snapshot = ray.get(future)
+                    alive += 1
+                except Exception:
+                    snapshot = None
             per_worker.append(snapshot)
         stats["workers_alive"] = alive
         if workers in ("aggregate", "both"):
