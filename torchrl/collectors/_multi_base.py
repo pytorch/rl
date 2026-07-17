@@ -1851,6 +1851,43 @@ also that the state dict is synchronised across processes if needed."""
             results.append(result)
         return results
 
+    def stats(
+        self, workers: Literal["aggregate", "per_worker", "both"] = "aggregate"
+    ) -> dict[str, int | float | bool]:
+        """Returns a cheap, serializable snapshot of the collector's progress.
+
+        See :meth:`~torchrl.collectors.BaseCollector.stats` for the base
+        entries. On top of those, multiprocessing collectors report
+        ``"workers"`` (number of worker processes) and ``"workers_alive"``.
+
+        Args:
+            workers (str, optional): controls the worker view. With
+                ``"aggregate"`` (default), only coordinator-side counters are
+                reported and no worker communication happens, so the call is
+                safe from any thread. With ``"per_worker"`` or ``"both"``,
+                each worker is queried through the control pipes and its
+                snapshot is namespaced as ``"worker_<idx>/<metric>"``; since
+                this shares the control channel with other coordinator
+                commands, it should not race with concurrent control calls
+                such as weight updates issued from other threads.
+        """
+        if workers not in ("aggregate", "per_worker", "both"):
+            raise ValueError(
+                f"workers must be one of 'aggregate', 'per_worker' or 'both', got {workers!r}."
+            )
+        stats: dict[str, int | float | bool] = {}
+        if workers in ("aggregate", "both"):
+            stats.update(super().stats())
+        procs = getattr(self, "procs", None)
+        stats["workers"] = int(self.num_workers)
+        if procs:
+            stats["workers_alive"] = sum(int(proc.is_alive()) for proc in procs)
+        if workers in ("per_worker", "both"):
+            for idx, worker_stats in enumerate(self.map_fn("stats")):
+                for key, value in worker_stats.items():
+                    stats[f"worker_{idx}/{key}"] = value
+        return stats
+
     def __del__(self):
         try:
             self.shutdown()
