@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
-from tensordict.nn import TensorDictModuleBase
+from tensordict.nn import TensorDictModuleBase, TensorDictSequential
 
 from torchrl.collectors import BaseCollector
 from torchrl.data import Categorical, Composite, OneHot
@@ -943,6 +943,7 @@ class DDPGTrainerConfig(TrainerConfig):
     create_env_fn: Any = None
     actor_network: Any = None
     critic_network: Any = None
+    exploration_module: Any = None
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
@@ -993,6 +994,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     seed = kwargs.pop("seed")
     actor_network = kwargs.pop("actor_network")
     critic_network = kwargs.pop("critic_network")
+    exploration_module = kwargs.pop("exploration_module", None)
     kwargs.pop("create_env_fn", None)
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
@@ -1016,11 +1018,27 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         actor_network = actor_network()
     if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
+    if exploration_module is not None and not isinstance(
+        exploration_module, torch.nn.Module
+    ):
+        exploration_module = exploration_module()
+    if exploration_module is not None and actor_network is None:
+        raise ValueError(
+            "DDPGTrainerConfig requires actor_network when exploration_module is set."
+        )
+    exploration_policy = (
+        TensorDictSequential(actor_network, exploration_module)
+        if exploration_module is not None
+        else actor_network
+    )
     if not isinstance(collector, BaseCollector):
+        collector_kwargs = (
+            {"policy": exploration_policy} if exploration_policy is not None else {}
+        )
         if not async_collection:
-            collector = collector()
+            collector = collector(**collector_kwargs)
         elif replay_buffer is not None:
-            collector = collector(replay_buffer=replay_buffer)
+            collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
     if not isinstance(loss_module, LossModule):
         loss_module = loss_module(
@@ -1079,6 +1097,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         episode_reward_key=episode_reward_key,
         action_key=action_key,
         observation_key=observation_key,
+        exploration_module=exploration_module,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer

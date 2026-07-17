@@ -458,6 +458,15 @@ def _make_ddpg(cfg: DictConfig, proof_env: TransformedEnv) -> AlgorithmObjects:
     qvalue = _make_qvalue(observation_dim, action_dim, hidden_sizes)
     _materialize(actor, proof_env)
     _materialize(qvalue, proof_env)
+    exploration_module = AdditiveGaussianModule(
+        spec=action_spec,
+        sigma_init=1.0,
+        sigma_end=1.0,
+        mean=0.0,
+        std=float(cfg.algorithm.exploration_std),
+        safe=False,
+    )
+    policy = TensorDictSequential(actor, exploration_module)
     loss_module = DDPGLoss(
         actor_network=actor,
         value_network=qvalue,
@@ -473,12 +482,13 @@ def _make_ddpg(cfg: DictConfig, proof_env: TransformedEnv) -> AlgorithmObjects:
         loss_module, eps=float(cfg.algorithm.target_update_polyak)
     )
     return AlgorithmObjects(
-        policy=actor,
+        policy=policy,
         evaluation_policy=actor,
         loss_module=loss_module,
         optimizer=optimizer,
         target_updater=target_updater,
         trainer_cls=DDPGTrainer,
+        trainer_kwargs={"exploration_module": exploration_module},
     )
 
 
@@ -803,7 +813,7 @@ def _make_collector(
         "num_cpus": 1,
         "num_gpus": 1 if use_gpu else 0,
     }
-    return RayCollector(
+    collector = RayCollector(
         create_env_fn=_make_env_factories(cfg),
         policy=policy,
         replay_buffer=replay,
@@ -826,6 +836,13 @@ def _make_collector(
         ray_init_config=_ray_init_config(cfg),
         sync=False,
     )
+    # Random-only collection and replay prefill are separate concerns. The
+    # inner collectors receive init_random_frames above, while the controller
+    # uses this threshold to delay learning until stochastic-policy data has
+    # filled replay. This also avoids per-collector random-frame thresholds
+    # being compared against the shared replay write count.
+    collector.init_random_frames = int(cfg.collection.learning_starts)
+    return collector
 
 
 def _git_commit() -> str:
@@ -959,6 +976,15 @@ class RuntimeValidationHook:
             metrics["policy_version/sample_min"] = float(policy_version.min())
             metrics["policy_version/sample_max"] = float(policy_version.max())
             metrics["policy_version/sample_mean"] = float(policy_version.float().mean())
+        action = sample.get("action", None)
+        if action is not None and action.is_floating_point():
+            action = action.float()
+            metrics["exploration/action_mean"] = float(action.mean())
+            metrics["exploration/action_std"] = float(action.std())
+            metrics["exploration/action_abs_max"] = float(action.abs().max())
+            metrics["exploration/action_saturation_fraction"] = float(
+                (action.abs() >= 0.99).float().mean()
+            )
         done = sample.get(("next", "done"), None)
         episode_return = sample.get(("next", "episode_reward"), None)
         if done is not None and episode_return is not None:

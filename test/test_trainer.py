@@ -1660,6 +1660,30 @@ class TestPostOptimCompleteLog:
         assert parameter.default is None
 
 
+class TestDDPGTrainer:
+    def test_exploration_module_execution_weight_publication(self):
+        trainer = object.__new__(DDPGTrainer)
+        trainer.exploration_module = nn.Linear(3, 2)
+
+        model_weights_key, auxiliary_weights = trainer._execution_weight_publication()
+
+        assert model_weights_key == ("module", "0")
+        assert torch.equal(
+            auxiliary_weights["module", "1", "weight"],
+            trainer.exploration_module.weight,
+        )
+        assert torch.equal(
+            auxiliary_weights["module", "1", "bias"],
+            trainer.exploration_module.bias,
+        )
+
+    def test_no_exploration_module_uses_default_weight_publication(self):
+        trainer = object.__new__(DDPGTrainer)
+        trainer.exploration_module = None
+
+        assert trainer._execution_weight_publication() == (None, None)
+
+
 class TestDefaultOptimizationStepper:
     def test_loss_components_partial(self):
         torch.manual_seed(0)

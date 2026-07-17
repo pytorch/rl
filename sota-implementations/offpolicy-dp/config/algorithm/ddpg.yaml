@@ -5,3 +5,6 @@ learning_rate: 0.0003
 gamma: 0.99
 hidden_sizes: [256, 256]
 target_update_polyak: 0.995
+# Keep collection stochastic throughout training. Evaluation uses the actor
+# without this module and remains deterministic.
+exploration_std: 0.2

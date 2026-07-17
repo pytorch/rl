@@ -9,13 +9,23 @@ environment:
   max_episode_steps: 1000
 
 collection:
-  total_frames: 20_000_000
-  init_random_frames: 1_000_000
+  # Two thousand decisions per environment gives the stream enough temporal
+  # depth for learning while preserving 100K-way collection.
+  total_frames: 200_000_000
+  # SAC is stochastic, TD3/DDPG add action noise, and DQN is epsilon-greedy.
+  # Avoid a separate random-only phase whose accounting is ambiguous with a
+  # shared direct replay service.
+  init_random_frames: 0
+  # Prefill with 100 stochastic-policy decisions per environment before the
+  # first learner step. This is replay fill, not random-action warmup.
+  learning_starts: 10_000_000
   frames_per_env: 1
 
 replay:
-  capacity: 5_000_000
-  batch_size: 4096
+  capacity: 20_000_000
+  # A 4K batch per learner rank uses the H200s more efficiently. Twenty-five
+  # steps per 100K collected frames preserves the previous 4.096 sample UTD.
+  batch_size: 16_384
   num_cpus: 2
   transport: distributed
 
@@ -24,11 +34,21 @@ learner:
   num_cpus_per_rank: 1
   num_gpus_per_rank: 1
   backend: nccl
-  optim_steps_per_batch: 100
+  optim_steps_per_batch: 25
   poll_interval: 0.05
   setup_timeout: 600.0
   command_timeout: 1200.0
 
 logging:
-  # Distributed replay binds a fixed per-rank sample schema: 4096 / 4.
-  sample_size: 1024
+  interval_frames: 1_000_000
+  # Distributed replay binds a fixed per-rank sample schema: 16384 / 4.
+  sample_size: 4_096
+
+evaluation:
+  interval_frames: 10_000_000
+  num_envs: 64
+  num_trajectories: 64
+  max_steps: 1_000
+  video_interval_frames: 20_000_000
+  video_max_steps: 500
+  video_max_frames: 250

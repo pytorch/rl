@@ -10,7 +10,8 @@ environment:
 
 collection:
   total_frames: 4_096
-  init_random_frames: 512
+  init_random_frames: 0
+  learning_starts: 512
   frames_per_env: 256
 
 replay:
