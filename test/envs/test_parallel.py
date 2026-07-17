@@ -224,13 +224,27 @@ class TestParallel:
             metadata_from_workers=True,
             use_buffers=False,
             mp_start_method="spawn",
+            shutdown_timeout=0.1,
         )
         workers = list(env._workers)
-        env._timeout = 0.1
 
         env.close()
 
         assert all(not worker.is_alive() for worker in workers)
+
+    def test_metadata_from_workers_serial_for_single_fallback(self):
+        env = ParallelEnv(
+            1,
+            CountingEnv,
+            serial_for_single=True,
+            metadata_from_workers=True,
+            use_buffers=False,
+        )
+        try:
+            assert isinstance(env, SerialEnv)
+            env.reset()
+        finally:
+            env.close(raise_if_closed=False)
 
     def test_compact_collector_skips_next_observation_copy(
         self, maybe_fork_ParallelEnv
@@ -320,6 +334,9 @@ class TestParallel:
                 mp_start_method=start_method,
             )
             assert isinstance(env, ParallelEnv)
+            # serial_for_single must not swallow the start method when the
+            # env stays parallel
+            assert env._mp_start_method == start_method
         finally:
             env.close(raise_if_closed=False)
 

@@ -9,6 +9,7 @@ import functools
 import gc
 import os
 import time
+import traceback
 import warnings
 import weakref
 from collections import OrderedDict
@@ -252,12 +253,14 @@ class _PEnvMeta(_EnvPostInit):
         serial_for_single = kwargs.pop("serial_for_single", False)
         if serial_for_single:
             num_workers = kwargs.get("num_workers")
-            # Remove start method from kwargs
-            kwargs.pop("mp_start_method", None)
             if num_workers is None:
                 num_workers = args[0]
             if num_workers == 1:
-                # We still use a serial to keep the shape unchanged
+                # We still use a serial to keep the shape unchanged.
+                # SerialEnv constructs its envs in-process, so ParallelEnv-only
+                # kwargs are dropped rather than forwarded (they would raise).
+                kwargs.pop("mp_start_method", None)
+                kwargs.pop("metadata_from_workers", None)
                 return SerialEnv(*args, **kwargs)
 
         # Wrap lambda functions with EnvCreator so they can be pickled for
@@ -387,10 +390,21 @@ class BatchedEnvBase(EnvBase):
             its environment and sends its metadata to the parent during startup. This
             avoids constructing temporary environments in the parent process. The mode
             is only supported by :class:`~torchrl.envs.ParallelEnv`, starts its workers
-            eagerly, and currently requires ``use_buffers=False``. Defaults to ``False``.
+            eagerly, and currently requires ``use_buffers=False``. All workers must
+            report the same tensor schema: specs and example tensors may only differ
+            in non-tensor payload values (such as language instructions). In this
+            mode workers are also closed one at a time at shutdown to bound teardown
+            resource spikes. Defaults to ``False``.
         daemon (bool, optional): whether the processes should be daemonized.
             This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
             Defaults to ``False``.
+        shutdown_timeout (float, optional): grace period in seconds granted to
+            workers to exit cleanly when the environment is closed. Workers that
+            are still alive after this window are terminated, then killed.
+            Increase it for environments whose ``close()`` legitimately takes
+            long (e.g. flushing recorders or tearing down native renderers).
+            This is only applicable to parallel environments such as
+            :class:`~torchrl.envs.ParallelEnv`. Defaults to ``10.0``.
         auto_wrap_envs (bool, optional): if ``True`` (default), lambda functions passed as
             ``create_env_fn`` will be automatically wrapped in an :class:`~torchrl.envs.EnvCreator`
             to enable pickling for multiprocessing with the ``spawn`` start method.
@@ -522,6 +536,7 @@ class BatchedEnvBase(EnvBase):
         metadata_from_workers: bool = False,
         consolidate: bool = True,
         daemon: bool = False,
+        shutdown_timeout: float = 10.0,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -536,6 +551,7 @@ class BatchedEnvBase(EnvBase):
         self._metadata_from_workers = metadata_from_workers
         self.consolidate = consolidate
         self.daemon = daemon
+        self.shutdown_timeout = float(shutdown_timeout)
 
         if metadata_from_workers:
             if not isinstance(self, ParallelEnv):
@@ -622,6 +638,7 @@ class BatchedEnvBase(EnvBase):
         num_sub_threads: int | None = None,
         non_blocking: bool | None = None,
         daemon: bool | None = None,
+        shutdown_timeout: float | None = None,
     ) -> BatchedEnvBase:
         """Configure parallel execution parameters before the environment starts.
 
@@ -642,6 +659,8 @@ class BatchedEnvBase(EnvBase):
             non_blocking (bool, optional): if ``True``, device moves will be done using
                 the ``non_blocking=True`` option.
             daemon (bool, optional): whether the processes should be daemonized.
+            shutdown_timeout (float, optional): grace period in seconds granted to
+                workers to exit cleanly at shutdown before they are terminated.
 
         Returns:
             self: Returns self for method chaining.
@@ -677,6 +696,8 @@ class BatchedEnvBase(EnvBase):
             self._non_blocking = non_blocking
         if daemon is not None:
             self.daemon = daemon
+        if shutdown_timeout is not None:
+            self.shutdown_timeout = float(shutdown_timeout)
         return self
 
     def select_and_clone(self, name, tensor, selected_keys=None):
@@ -2047,7 +2068,8 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         import torchrl
 
         initial_num_threads = torch.get_num_threads()
-        self._timeout = 10.0
+        # getattr: envs unpickled from older versions lack the attribute
+        self._timeout = getattr(self, "shutdown_timeout", 10.0)
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
 
         num_threads = max(
@@ -3665,11 +3687,11 @@ def _run_worker_pipe_direct(
         if metadata_from_worker:
             BatchedEnvBase._validate_worker_env(env)
             child_pipe.send(("metadata", EnvMetaData.metadata_from_env(env)))
-    except Exception as err:
+    except Exception:
         if not metadata_from_worker:
             raise
         try:
-            child_pipe.send(("metadata_error", f"{type(err).__name__}: {err}"))
+            child_pipe.send(("metadata_error", traceback.format_exc()))
         except (EOFError, OSError):
             pass
         if env is not None:

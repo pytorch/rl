@@ -265,7 +265,9 @@ def get_env_metadata(
                 env_validator(env)
             return EnvMetaData.metadata_from_env(env)
         finally:
-            env.close()
+            # raise_if_closed=False: a close failure must not mask the
+            # metadata result or the original validator error.
+            env.close(raise_if_closed=False)
     elif isinstance(env_or_creator, EnvCreator):
         if not (
             kwargs == env_or_creator.create_env_kwargs

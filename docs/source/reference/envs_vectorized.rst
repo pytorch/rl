@@ -69,7 +69,13 @@ needed.
   normal initialization. The workers start eagerly, their tensor schemas are
   validated for compatibility, and no temporary environment is created in the
   parent. This mode currently requires pipe-based communication with
-  ``use_buffers=False``. Use one common factory with ``create_env_kwargs`` for
+  ``use_buffers=False``. All workers must expose the same tensor schema: specs
+  and example tensors may only differ in non-tensor payload values (such as
+  language instructions). Environments with genuinely heterogeneous specs
+  should keep the default metadata path. At shutdown, workers started in this
+  mode are closed one at a time to bound teardown resource spikes; the
+  per-worker grace period is controlled by the ``shutdown_timeout`` argument.
+  Use one common factory with ``create_env_kwargs`` for
   worker-specific arguments:
 
   .. code-block:: python
