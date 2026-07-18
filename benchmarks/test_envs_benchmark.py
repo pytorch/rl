@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import time
+from functools import partial
 
 import pytest
 import torch
@@ -12,6 +14,30 @@ from torchrl.envs import ParallelEnv, SerialEnv, step_mdp, StepCounter, Transfor
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.libero import _has_libero, LiberoEnv
 from torchrl.envs.transforms.functional import cat_frames
+from torchrl.testing.mocking_classes import CountingEnv
+
+
+class _SlowStartEnv(CountingEnv):
+    def __init__(self, delay: float = 0.1):
+        time.sleep(delay)
+        super().__init__()
+
+
+def _make_slow_start_env(delay: float) -> _SlowStartEnv:
+    return _SlowStartEnv(delay)
+
+
+def _run_parallel_cold_start(metadata_from_workers: bool) -> None:
+    env = ParallelEnv(
+        4,
+        partial(_make_slow_start_env, 0.1),
+        mp_start_method="spawn",
+        metadata_from_workers=metadata_from_workers,
+    )
+    try:
+        env.reset()
+    finally:
+        env.close(raise_if_closed=False)
 
 
 def make_simple_env():
@@ -109,6 +135,16 @@ def test_serial(benchmark):
 def test_parallel(benchmark):
     (c,), _ = make_parallel_env()
     benchmark(execute_env, c)
+
+
+@pytest.mark.parametrize("metadata_from_workers", [False, True])
+def test_parallel_cold_start(benchmark, metadata_from_workers):
+    benchmark.pedantic(
+        _run_parallel_cold_start,
+        args=(metadata_from_workers,),
+        rounds=3,
+        iterations=1,
+    )
 
 
 @pytest.mark.skipif(not _has_libero, reason="libero not found")
