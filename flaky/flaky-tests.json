@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-07-17T06:53:56.458531+00:00",
+  "generated_at": "2026-07-18T06:50:24.704226+00:00",
   "analysis_period": {
-    "start": "2026-07-15",
-    "end": "2026-07-16",
+    "start": "2026-07-16",
+    "end": "2026-07-17",
     "runs_analyzed": 45
   },
   "summary": {
-    "total_tests": 30947,
+    "total_tests": 30975,
     "flaky_count": 4,
     "new_flaky_count": 4,
     "resolved_count": 0
@@ -14,86 +14,86 @@
   "flaky_tests": [
     {
       "nodeid": "test/test_inference_server.py::TestRayTransport::test_ray_owned_inference_with_nccl_transport",
-      "executions": 60,
-      "failures": 12,
+      "executions": 65,
+      "failures": 13,
       "failure_rate": 0.2,
       "flaky_score": 0.4,
-      "passed": 48,
-      "failed": 12,
+      "passed": 52,
+      "failed": 13,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 2.34,
+      "avg_duration": 2.357,
       "recent_failures": [
-        "2026-07-16T13:30:41Z",
-        "2026-07-16T13:57:24Z",
-        "2026-07-16T13:58:01Z",
-        "2026-07-16T14:59:18Z",
-        "2026-07-16T15:05:04Z"
+        "2026-07-17T16:58:29Z",
+        "2026-07-17T16:59:20Z",
+        "2026-07-17T16:59:52Z",
+        "2026-07-17T17:00:37Z",
+        "2026-07-17T17:01:12Z"
       ],
-      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "first_seen_flaky": "2026-07-16T11:21:14Z",
       "is_new": true
     },
     {
       "nodeid": "test/rb/test_rb_distributed.py::TestRayRB::test_ray_replay_with_gloo_transport",
-      "executions": 60,
-      "failures": 12,
+      "executions": 65,
+      "failures": 13,
       "failure_rate": 0.2,
       "flaky_score": 0.4,
-      "passed": 48,
-      "failed": 12,
+      "passed": 52,
+      "failed": 13,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 2.369,
+      "avg_duration": 2.395,
       "recent_failures": [
-        "2026-07-16T13:30:41Z",
-        "2026-07-16T13:57:24Z",
-        "2026-07-16T13:58:01Z",
-        "2026-07-16T14:59:18Z",
-        "2026-07-16T15:05:04Z"
+        "2026-07-17T16:58:29Z",
+        "2026-07-17T16:59:20Z",
+        "2026-07-17T16:59:52Z",
+        "2026-07-17T17:00:37Z",
+        "2026-07-17T17:01:12Z"
       ],
-      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "first_seen_flaky": "2026-07-16T11:21:14Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_inference_server.py::TestRayTransport::test_ray_owned_inference_with_gloo_transport",
-      "executions": 132,
-      "failures": 12,
+      "executions": 143,
+      "failures": 13,
       "failure_rate": 0.0909,
       "flaky_score": 0.1818,
-      "passed": 96,
-      "failed": 12,
+      "passed": 104,
+      "failed": 13,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 1.593,
+      "avg_duration": 1.603,
       "recent_failures": [
-        "2026-07-16T13:30:41Z",
-        "2026-07-16T13:57:24Z",
-        "2026-07-16T13:58:01Z",
-        "2026-07-16T14:59:18Z",
-        "2026-07-16T15:05:04Z"
+        "2026-07-17T16:58:29Z",
+        "2026-07-17T16:59:20Z",
+        "2026-07-17T16:59:52Z",
+        "2026-07-17T17:00:37Z",
+        "2026-07-17T17:01:12Z"
       ],
-      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "first_seen_flaky": "2026-07-16T11:21:14Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_inference_server.py::TestProcessInferenceServer::test_process_server_with_distributed_gloo_transport",
-      "executions": 132,
-      "failures": 12,
+      "executions": 143,
+      "failures": 13,
       "failure_rate": 0.0909,
       "flaky_score": 0.1818,
-      "passed": 120,
-      "failed": 12,
+      "passed": 130,
+      "failed": 13,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 1.877,
+      "avg_duration": 1.883,
       "recent_failures": [
-        "2026-07-16T13:30:41Z",
-        "2026-07-16T13:57:24Z",
-        "2026-07-16T13:58:01Z",
-        "2026-07-16T14:59:18Z",
-        "2026-07-16T15:05:04Z"
+        "2026-07-17T16:58:29Z",
+        "2026-07-17T16:59:20Z",
+        "2026-07-17T16:59:52Z",
+        "2026-07-17T17:00:37Z",
+        "2026-07-17T17:01:12Z"
       ],
-      "first_seen_flaky": "2026-07-15T12:21:48Z",
+      "first_seen_flaky": "2026-07-16T11:21:14Z",
       "is_new": true
     }
   ],

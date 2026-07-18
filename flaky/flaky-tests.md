@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-07-17
+# Flaky Test Report - 2026-07-18
 
 ## Summary
 
 - **Flaky tests**: 4
 - **Newly flaky** (last 7 days): 4
 - **Resolved**: 0
-- **Total tests analyzed**: 30947
+- **Total tests analyzed**: 30975
 - **CI runs analyzed**: 45
 
 ---
@@ -14,10 +14,10 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ayTransport::test_ray_owned_inference_with_nccl_transport` 🆕 | 20.0% (12/60) | 12 | 0.40 | 2026-07-16 |
-| `...ibuted.py::TestRayRB::test_ray_replay_with_gloo_transport` 🆕 | 20.0% (12/60) | 12 | 0.40 | 2026-07-16 |
-| `...ayTransport::test_ray_owned_inference_with_gloo_transport` 🆕 | 9.1% (12/132) | 12 | 0.18 | 2026-07-16 |
-| `...rver::test_process_server_with_distributed_gloo_transport` 🆕 | 9.1% (12/132) | 12 | 0.18 | 2026-07-16 |
+| `...ayTransport::test_ray_owned_inference_with_nccl_transport` 🆕 | 20.0% (13/65) | 13 | 0.40 | 2026-07-17 |
+| `...ibuted.py::TestRayRB::test_ray_replay_with_gloo_transport` 🆕 | 20.0% (13/65) | 13 | 0.40 | 2026-07-17 |
+| `...ayTransport::test_ray_owned_inference_with_gloo_transport` 🆕 | 9.1% (13/143) | 13 | 0.18 | 2026-07-17 |
+| `...rver::test_process_server_with_distributed_gloo_transport` 🆕 | 9.1% (13/143) | 13 | 0.18 | 2026-07-17 |
 
 
 ### Newly Flaky Tests
@@ -38,4 +38,4 @@
 
 ---
 
-*Generated at 2026-07-17T06:53:56.458531+00:00*
+*Generated at 2026-07-18T06:50:24.704226+00:00*
