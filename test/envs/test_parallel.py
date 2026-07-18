@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import gc
 import os
+import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -31,6 +33,7 @@ from torchrl.envs import (
     EnvCreator,
     ParallelEnv,
     SerialEnv,
+    ToyVLAEnv,
     TransformedEnv,
 )
 from torchrl.envs.batched_envs import _stackable
@@ -54,6 +57,42 @@ from torchrl.testing.mocking_classes import (
     MockBatchedLockedEnv,
     NestedCountingEnv,
 )
+
+
+class _WorkerMetadataToyEnv(ToyVLAEnv):
+    def __init__(
+        self,
+        worker_idx: int,
+        marker_dir: str,
+        *,
+        state_dim: int = 4,
+        fail: bool = False,
+    ) -> None:
+        self._worker_idx = worker_idx
+        self._marker_dir = Path(marker_dir)
+        self._marker_dir.joinpath(f"constructed-{worker_idx}-{os.getpid()}").touch()
+        if fail:
+            raise RuntimeError("intentional worker construction failure")
+        super().__init__(
+            action_dim=2,
+            state_dim=state_dim,
+            instruction=f"instruction-{worker_idx}",
+            seed=worker_idx,
+        )
+
+    def close(self, *, raise_if_closed: bool = True) -> None:
+        self._marker_dir.joinpath(f"closed-{self._worker_idx}-{os.getpid()}").touch()
+        super().close(raise_if_closed=raise_if_closed)
+
+
+class _SlowCloseCountingEnv(CountingEnv):
+    def __init__(self, close_delay: float) -> None:
+        self.close_delay = close_delay
+        super().__init__()
+
+    def close(self, *, raise_if_closed: bool = True) -> None:
+        time.sleep(self.close_delay)
+        super().close(raise_if_closed=raise_if_closed)
 
 
 class TestParallel:
@@ -103,6 +142,109 @@ class TestParallel:
             maybe_fork_ParallelEnv(
                 4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
             )
+
+    def test_metadata_from_workers_uses_live_envs(self, tmp_path):
+        env = ParallelEnv(
+            2,
+            _WorkerMetadataToyEnv,
+            create_env_kwargs=[
+                {"worker_idx": i, "marker_dir": str(tmp_path)} for i in range(2)
+            ],
+            metadata_from_workers=True,
+            use_buffers=False,
+            mp_start_method="spawn",
+        )
+        try:
+            assert not env.is_closed
+            assert env._use_buffers is False
+            constructed = list(tmp_path.glob("constructed-*"))
+            assert len(constructed) == 2
+            assert all(f"-{os.getpid()}" not in path.name for path in constructed)
+            td = env.reset()
+            assert td["language_instruction"][0] == "instruction-0"
+            assert td["language_instruction"][1] == "instruction-1"
+        finally:
+            env.close(raise_if_closed=False)
+        assert len(list(tmp_path.glob("closed-*"))) == 2
+
+    def test_metadata_from_workers_rejects_buffers(self):
+        with pytest.raises(RuntimeError, match="requires use_buffers=False"):
+            ParallelEnv(
+                2,
+                CountingEnv,
+                metadata_from_workers=True,
+                use_buffers=True,
+            )
+
+    def test_metadata_from_workers_rejects_incompatible_schemas(self, tmp_path):
+        with pytest.raises(RuntimeError, match="metadata are incompatible"):
+            ParallelEnv(
+                2,
+                _WorkerMetadataToyEnv,
+                create_env_kwargs=[
+                    {
+                        "worker_idx": 0,
+                        "marker_dir": str(tmp_path),
+                        "state_dim": 4,
+                    },
+                    {
+                        "worker_idx": 1,
+                        "marker_dir": str(tmp_path),
+                        "state_dim": 5,
+                    },
+                ],
+                metadata_from_workers=True,
+                use_buffers=False,
+                mp_start_method="spawn",
+            )
+        assert len(list(tmp_path.glob("closed-*"))) == 2
+
+    def test_metadata_from_workers_reports_construction_failure(self, tmp_path):
+        with pytest.raises(
+            RuntimeError, match="intentional worker construction failure"
+        ):
+            ParallelEnv(
+                2,
+                _WorkerMetadataToyEnv,
+                create_env_kwargs=[
+                    {"worker_idx": 0, "marker_dir": str(tmp_path)},
+                    {"worker_idx": 1, "marker_dir": str(tmp_path), "fail": True},
+                ],
+                metadata_from_workers=True,
+                use_buffers=False,
+                mp_start_method="spawn",
+            )
+        assert len(list(tmp_path.glob("closed-0-*"))) == 1
+
+    def test_metadata_from_workers_shutdown_is_bounded(self):
+        env = ParallelEnv(
+            1,
+            _SlowCloseCountingEnv,
+            create_env_kwargs={"close_delay": 10.0},
+            metadata_from_workers=True,
+            use_buffers=False,
+            mp_start_method="spawn",
+            shutdown_timeout=0.1,
+        )
+        workers = list(env._workers)
+
+        env.close()
+
+        assert all(not worker.is_alive() for worker in workers)
+
+    def test_metadata_from_workers_serial_for_single_fallback(self):
+        env = ParallelEnv(
+            1,
+            CountingEnv,
+            serial_for_single=True,
+            metadata_from_workers=True,
+            use_buffers=False,
+        )
+        try:
+            assert isinstance(env, SerialEnv)
+            env.reset()
+        finally:
+            env.close(raise_if_closed=False)
 
     def test_compact_collector_skips_next_observation_copy(
         self, maybe_fork_ParallelEnv
@@ -192,6 +334,9 @@ class TestParallel:
                 mp_start_method=start_method,
             )
             assert isinstance(env, ParallelEnv)
+            # serial_for_single must not swallow the start method when the
+            # env stays parallel
+            assert env._mp_start_method == start_method
         finally:
             env.close(raise_if_closed=False)
 
