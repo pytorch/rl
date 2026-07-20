@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import contextlib
+import platform
+import sys
 import warnings
 from collections.abc import Callable, Sequence
 from typing import Literal
@@ -414,6 +416,113 @@ def _map_to_cpu_if_needed(x):
         # Exotic devices (MPS, NPU, etc.) need to be mapped to CPU
         return x.cpu()
     return x
+
+
+def _platform_supports_cuda_ipc() -> bool:
+    """Whether torch.multiprocessing can share CUDA tensors with other processes.
+
+    CUDA tensors are exchanged between processes through CUDA IPC handles,
+    which the CUDA driver only implements on native Linux. On Windows and on
+    WSL2 the exchange fails silently: the receiving process observes zeroed
+    tensors and the sender's CUDA memory can be corrupted as well. See
+    https://github.com/pytorch/pytorch/issues/149155 and
+    https://github.com/pytorch/rl/issues/3985.
+    """
+    if sys.platform != "linux":
+        return False
+    return "microsoft" not in platform.uname().release.lower()
+
+
+def _device_shareable_across_processes(device: torch.device | str | int) -> bool:
+    """Whether tensors on ``device`` can be sent to another process without a copy.
+
+    CPU and meta tensors can be shared on every platform. CUDA tensors rely on
+    CUDA IPC, which is only available on native Linux. Other backends
+    (MPS, NPU, ...) cannot be shared across processes at all.
+    """
+    if not isinstance(device, torch.device):
+        device = torch.device(device)
+    if device.type in ("cpu", "meta"):
+        return True
+    if device.type == "cuda":
+        return _platform_supports_cuda_ipc()
+    return False
+
+
+def _unshareable_devices(
+    device: torch.device | str | int | None, weights: TensorDictBase | None
+) -> list[torch.device]:
+    """Return the devices of ``weights`` that cannot cross process boundaries.
+
+    ``device`` is the target device the weights are about to be moved to; when
+    it is ``None`` the weights are shipped on their current devices, so each
+    leaf tensor's device is checked instead.
+    """
+    if device is not None:
+        if _device_shareable_across_processes(device):
+            return []
+        return [torch.device(device)]
+    if weights is None:
+        return []
+    return sorted(
+        {
+            tensor.device
+            for tensor in weights.values(True, True)
+            if not _device_shareable_across_processes(tensor.device)
+        },
+        key=str,
+    )
+
+
+def _stage_unshareable_weights_on_cpu(
+    weights: TensorDictBase | dict | None,
+) -> TensorDictBase | dict | None:
+    """Return ``weights`` moved to CPU when any leaf cannot cross process boundaries.
+
+    Accepts a ``TensorDictBase`` or a state-dict mapping and returns the input
+    unchanged when every leaf tensor can be shared with other processes.
+    A warning is emitted when staging happens.
+    """
+    if isinstance(weights, TensorDictBase):
+        offending = _unshareable_devices(None, weights)
+        if offending:
+            _warn_cpu_staging(offending)
+            weights = weights.to("cpu")
+        return weights
+    if isinstance(weights, dict):
+        offending = sorted(
+            {
+                value.device
+                for value in weights.values()
+                if isinstance(value, torch.Tensor)
+                and not _device_shareable_across_processes(value.device)
+            },
+            key=str,
+        )
+        if offending:
+            _warn_cpu_staging(offending)
+            weights = {
+                key: value.cpu() if isinstance(value, torch.Tensor) else value
+                for key, value in weights.items()
+            }
+        return weights
+    return weights
+
+
+def _warn_cpu_staging(devices: Sequence[torch.device]) -> None:
+    """Warn that weights bound for ``devices`` are staged through CPU shared memory."""
+    device_names = sorted({str(d) for d in devices})
+    warnings.warn(
+        f"Policy weights on device(s) {device_names} cannot be shared across processes "
+        "on this platform: sharing CUDA tensors requires CUDA IPC, which is only "
+        "available on native Linux (not Windows or WSL2), and backends such as MPS "
+        "cannot be shared at all. Sending such tensors to another process silently "
+        "corrupts them (they are received as zeros and the sender's memory can be "
+        "zeroed too, see https://github.com/pytorch/rl/issues/3985). The weights will "
+        "be staged through CPU shared memory instead and moved back to the policy "
+        "device inside each worker, adding a host-device copy to every weight sync.",
+        UserWarning,
+    )
 
 
 def _make_meta_params(param):
