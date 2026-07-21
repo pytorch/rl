@@ -544,6 +544,19 @@ SFT
     SFTLoss
     SFTLossOutput
 
+Distillation
+~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    DistillationLoss
+    DistillationLossOutput
+    reverse_kl_token_estimate
+
 .. currentmodule:: torchrl.data.llm
 
 .. autosummary::
