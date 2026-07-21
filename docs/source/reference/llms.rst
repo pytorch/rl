@@ -15,7 +15,7 @@ Key Components
 2. **LLM Wrappers**: Unified interfaces for Transformers, vLLM, SGLang, and async variants  
 3. **Environments**: ChatEnv, task-specific environments, and transforms
 4. **Collectors**: LLMCollector and RayLLMCollector for data collection
-5. **Objectives**: GRPOLoss, SFTLoss for training
+5. **Objectives**: GRPOLoss, SFTLoss, DistillationLoss for training
 
 Quick Example
 -------------
@@ -543,6 +543,20 @@ SFT
 
     SFTLoss
     SFTLossOutput
+
+Distillation
+~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.objectives.llm
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    DistillationLoss
+    DistillationLossOutput
+    distillation_loss
+    reverse_kl_token_estimate
 
 .. currentmodule:: torchrl.data.llm
 

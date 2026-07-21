@@ -29,3 +29,15 @@ SFT
 
     SFTLoss
     SFTLossOutput
+
+Distillation
+------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    DistillationLoss
+    DistillationLossOutput
+    distillation_loss
+    reverse_kl_token_estimate
