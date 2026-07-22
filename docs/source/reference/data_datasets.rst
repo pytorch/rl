@@ -74,6 +74,7 @@ are called as ``factory(dataset_id, **kwargs)``.
     datasets.OpenMLExperienceReplay
     datasets.OpenXExperienceReplay
     datasets.RobosetExperienceReplay
+    datasets.TDMPC2ExperienceReplay
     datasets.VD4RLExperienceReplay
 
 .. autosummary::
