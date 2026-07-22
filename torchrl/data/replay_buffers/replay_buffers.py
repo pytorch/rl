@@ -612,6 +612,20 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """Return a restricted control endpoint for length and write count."""
         return self._distributed_service.control_client()
 
+    def _distributed_bound_extend_client(self):
+        """Return the pre-bound extend endpoint without transferring payload data."""
+        service = self._distributed_service
+        if service.extend_transport is None:
+            return None
+        return service.extend_client()
+
+    def _distributed_bound_sample_client(self):
+        """Return the pre-bound sample endpoint and its fixed batch size."""
+        service = self._distributed_service
+        if service.sample_transport is None:
+            return None, None
+        return service.sample_client(), service._sample_batch_size
+
     def _distributed_service_client(self):
         """Create an independently routed client for the private service."""
         service = getattr(self, "_distributed_service", None)

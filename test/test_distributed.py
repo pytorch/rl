@@ -99,6 +99,12 @@ class CountingPolicy(TensorDictModuleBase):
         return tensordict
 
 
+class BatchedCountingPolicy(CountingPolicy):
+    def forward(self, tensordict):
+        tensordict.set("action", self.weight.expand(*tensordict.shape, 1).clone())
+        return tensordict
+
+
 class MismatchedCountingPolicy(CountingPolicy):
     def __init__(self):
         super().__init__()
@@ -137,6 +143,10 @@ class CountingTargetUpdater(TargetNetUpdater):
 
     def load_state_dict(self, state_dict):
         self.calls = state_dict["calls"]
+
+
+def flatten_batch(tensordict):
+    return tensordict.reshape(-1)
 
 
 class MultiOptimizerRayLoss(LossModule):
@@ -1451,6 +1461,110 @@ class TestRayCollector(DistributedCollectorBase):
                 inference.shutdown()
             if replay is not None:
                 replay.shutdown()
+
+    @pytest.mark.parametrize("flatten", [False, True])
+    def test_async_trainer_tracks_frames_independently_of_replay_shape(self, flatten):
+        num_envs = 2
+        frames_per_batch = 8
+        total_frames = 16
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=2,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        policy = BatchedCountingPolicy()
+        collector = RayCollector(
+            create_env_fn=[partial(CountingEnv, batch_size=[num_envs])],
+            policy=policy,
+            replay_buffer=replay,
+            collector_class=Collector,
+            collector_kwargs={"postproc": flatten_batch} if flatten else None,
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=True,
+        )
+        loss = ScalarRayLoss()
+        with pytest.warns(UserWarning, match="experimental"):
+            trainer = DQNTrainer(
+                collector=collector,
+                total_frames=total_frames,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss,
+                optimizer=torch.optim.SGD(loss.parameters(), lr=0.1),
+                replay_buffer=replay,
+                async_collection=True,
+                progress_bar=False,
+                batch_size=2,
+                target_net_updater=CountingTargetUpdater(loss),
+                learner_backend="ray",
+                learner_backend_options={
+                    "world_size": 2,
+                    "resources_per_rank": {"num_cpus": 1, "num_gpus": 0},
+                    "backend": "gloo",
+                    "setup_timeout": 60.0,
+                    "command_timeout": 60.0,
+                },
+                enable_logging=False,
+            )
+        try:
+            trainer.train()
+            assert trainer.collected_frames == total_frames
+            assert collector.collected_frames == total_frames
+            assert trainer._optim_count > 0
+            assert trainer._published_model_version == trainer._optim_count
+            if flatten:
+                assert replay.write_count == total_frames
+                assert replay.sample().shape == (2,)
+            else:
+                assert replay.write_count == total_frames // (
+                    frames_per_batch // num_envs
+                )
+                assert replay[0].shape == (frames_per_batch // num_envs,)
+                assert replay.sample().shape == (
+                    2,
+                    frames_per_batch // num_envs,
+                )
+        finally:
+            collector.shutdown()
+            replay.shutdown()
+
+    def test_async_ray_collector_does_not_write_unreserved_batches(self):
+        num_envs = 2
+        frames_per_batch = 4
+        total_frames = 16
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            batch_size=2,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="auto",
+        )
+        policy = BatchedCountingPolicy()
+        env_fn = partial(CountingEnv, batch_size=[num_envs])
+        collector = RayCollector(
+            create_env_fn=[env_fn, env_fn],
+            policy=policy,
+            replay_buffer=replay,
+            collector_class=Collector,
+            collector_kwargs={"postproc": flatten_batch},
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+            sync=False,
+        )
+        try:
+            collector.update_policy_weights_(policy)
+            assert all(batch is None for batch in collector)
+            assert collector.collected_frames == total_frames
+            assert replay.write_count == total_frames
+            assert replay.sample().shape == (2,)
+        finally:
+            collector.shutdown()
+            replay.shutdown()
 
     def test_ray_collector_pause_drains_and_resumes(self):
         replay = TensorDictReplayBuffer(

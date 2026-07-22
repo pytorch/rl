@@ -188,13 +188,19 @@ class _LazyDistributedReplayClient:
         return {key: value.item() for key, value in snapshot.items()}
 
     def extend(self, data: TensorDictBase, *, timeout: float | None = None):
+        handled = False
+        result = None
         if self._extend_client is None:
-            self._extend_client, result, handled = ray.get(
-                self._actor._bootstrap_distributed_extend.remote(data)
+            self._extend_client = ray.get(
+                self._actor._distributed_bound_extend_client.remote()
             )
+            if self._extend_client is None:
+                self._extend_client, result, handled = ray.get(
+                    self._actor._bootstrap_distributed_extend.remote(data)
+                )
             _set_ray_client_liveness(self._extend_client, self._actor)
-            if handled:
-                return result
+        if handled:
+            return result
         response = self._extend_client(data, timeout=timeout)
         return response.get("result", None)
 
@@ -209,26 +215,29 @@ class _LazyDistributedReplayClient:
             batch_size = self.batch_size
         if batch_size is None:
             raise RuntimeError("A sample batch size must be provided.")
+        handled = False
+        result = None
         if self._sample_client is None:
-            (
-                self._sample_client,
-                result,
-                handled,
-                self._sample_batch_size,
-            ) = ray.get(self._actor._bootstrap_distributed_sample.remote(batch_size))
-            _set_ray_client_liveness(self._sample_client, self._actor)
-            if batch_size != self._sample_batch_size:
-                raise ValueError(
-                    "The distributed replay schema is bound to sample batch size "
-                    f"{self._sample_batch_size}, got {batch_size}."
+            self._sample_client, self._sample_batch_size = ray.get(
+                self._actor._distributed_bound_sample_client.remote()
+            )
+            if self._sample_client is None:
+                (
+                    self._sample_client,
+                    result,
+                    handled,
+                    self._sample_batch_size,
+                ) = ray.get(
+                    self._actor._bootstrap_distributed_sample.remote(batch_size)
                 )
-            if handled:
-                return result
-        elif batch_size != self._sample_batch_size:
+            _set_ray_client_liveness(self._sample_client, self._actor)
+        if batch_size != self._sample_batch_size:
             raise ValueError(
                 "The distributed replay schema is bound to sample batch size "
                 f"{self._sample_batch_size}, got {batch_size}."
             )
+        if handled:
+            return result
         request = TensorDict(
             {
                 "batch_size": torch.tensor(
