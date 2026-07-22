@@ -511,6 +511,16 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             .. warning:: Using a replay buffer with a `postproc` or `split_trajs=True` requires
                 `extend_buffer=True`, as the whole batch needs to be observed to apply these transforms.
 
+        flatten_data (bool, optional): if ``True``, flatten all collector
+            batch dimensions before extending the replay buffer. For example, a
+            rollout with shape ``[N, T]`` is written as ``[N * T]`` transitions
+            to a flat, 1-D replay buffer instead of ``N`` items whose payload
+            shape is ``[T]``. This is the recommended replay-buffer layout in
+            TorchRL. Requires ``replay_buffer`` to be set (a ``TypeError`` is
+            raised otherwise). When ``trajs_per_batch`` is set this option is
+            redundant: complete trajectories are already written to the buffer
+            as flat 1-D sequences. Defaults to ``False`` for backward
+            compatibility with multidimensional replay-buffer storage.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True`.
 
@@ -708,6 +718,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        flatten_data: bool = False,
         extend_buffer: bool = True,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
@@ -785,6 +796,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         # Set up replay buffer
         self._setup_replay_buffer(
             replay_buffer=replay_buffer,
+            flatten_data=flatten_data,
             extend_buffer=extend_buffer,
             postproc=postproc,
             split_trajs=split_trajs,
@@ -1045,6 +1057,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
     def _setup_replay_buffer(
         self,
         replay_buffer: ReplayBuffer | None,
+        flatten_data: bool,
         extend_buffer: bool,
         postproc: Callable | None,
         split_trajs: bool | None,
@@ -1053,8 +1066,25 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
     ) -> None:
         """Set up replay buffer configuration and validate compatibility."""
         self.replay_buffer = replay_buffer
+        self.flatten_data = flatten_data
         self.extend_buffer = extend_buffer
         self.local_init_rb = True
+
+        if self.flatten_data:
+            if self.replay_buffer is None:
+                raise TypeError(
+                    "flatten_data=True requires a replay buffer to be passed to the collector. "
+                    "To flatten yielded batches, reshape them at consumption time with data.reshape(-1)."
+                )
+            if not self.extend_buffer:
+                raise TypeError(
+                    "flatten_data=True requires extend_buffer=True when a replay buffer is passed."
+                )
+            if split_trajs not in (None, False):
+                raise TypeError(
+                    "flatten_data=True is incompatible with split_trajs=True because split trajectories are padded. "
+                    "Use trajs_per_batch for flat complete-trajectory writes."
+                )
 
         # Validate replay buffer compatibility
         if self.replay_buffer is not None and not self._ignore_rb:
@@ -1980,6 +2010,13 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                 key for key in tensordict_out.keys(True) if is_private(key)
             ]
             tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+        if self.flatten_data and self.replay_buffer is not None:
+            # LLMCollector reuses the `flatten_data` attribute with different
+            # semantics: it flattens yielded rollouts inside rollout() itself
+            # (via view(-1)), so its data is already 1-D here and this reshape
+            # must remain a lazy no-op (reshape(-1) on an already-flat lazy
+            # stack preserves laziness and non-tensor data).
+            tensordict_out = tensordict_out.reshape(-1)
         return tensordict_out
 
     def _update_traj_ids(self, env_output) -> None:
@@ -2278,7 +2315,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         - ``set_truncated=True`` last-step ``truncated``/``done`` masking
           applied;
         - ``postproc`` / ``split_trajs`` / private-key exclusion applied,
-          mirroring :meth:`_postproc`.
+          mirroring :meth:`_postproc`;
+        - with ``flatten_data=True`` and a replay buffer, the result is
+          reshaped to the flat 1-D layout written to the buffer.
 
         Intended for storage initialization and ``torch.compile`` /
         cudagraph warmup without having to step the environment first.

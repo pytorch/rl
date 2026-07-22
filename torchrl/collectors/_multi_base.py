@@ -305,6 +305,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             for envs without dynamic specs, ``False`` for others.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
+        flatten_data (bool, optional): if ``True``, flatten each worker
+            rollout before extending the replay buffer. A worker rollout with
+            shape ``[N, T]`` is therefore written as ``[N * T]`` transitions
+            to the recommended flat, 1-D replay-buffer layout. Requires
+            ``replay_buffer`` to be set (a ``TypeError`` is raised otherwise).
+            When ``trajs_per_batch`` is set this option is redundant: complete
+            trajectories are already written to the buffer as flat 1-D
+            sequences. Defaults to ``False`` for backward compatibility with
+            multidimensional replay-buffer storage.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
             with single steps. Defaults to `True` for multiprocessed data collectors.
         trust_policy (bool, optional): if ``True``, a non-TensorDictModule policy will be trusted to be
@@ -453,6 +462,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         set_truncated: bool = False,
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
+        flatten_data: bool = False,
         extend_buffer: bool = True,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
@@ -564,7 +574,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.policy = policy
         self.policy_factory = policy_factory
 
-        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
+        self._setup_multi_replay_buffer(replay_buffer, flatten_data, extend_buffer)
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
@@ -693,14 +703,26 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _setup_multi_replay_buffer(
         self,
         replay_buffer: ReplayBuffer | None,
+        flatten_data: bool,
         extend_buffer: bool,
     ) -> None:
         """Set up replay buffer for multi-process collector."""
         self.local_init_rb = True
+        self.flatten_data = flatten_data
+        self.extend_buffer = extend_buffer
+
+        if self.flatten_data:
+            if replay_buffer is None:
+                raise TypeError(
+                    "flatten_data=True requires a replay buffer to be passed to the collector. "
+                    "To flatten yielded batches, reshape them at consumption time with data.reshape(-1)."
+                )
+            if not self.extend_buffer:
+                raise TypeError(
+                    "flatten_data=True requires extend_buffer=True when a replay buffer is passed."
+                )
 
         self._check_replay_buffer_init()
-
-        self.extend_buffer = extend_buffer
 
         if (
             replay_buffer is not None
@@ -1052,10 +1074,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
             fake_td = self._add_policy_outputs_to_fake_td(fake_td)
-            if getattr(self, "_worker_trajs_per_batch", None) is not None:
-                # With trajs_per_batch, workers write flat 1-D timesteps to
-                # the buffer.  Initialise the storage as 1-D so that the
-                # shapes match when real trajectories are written.
+            if (
+                getattr(self, "_worker_trajs_per_batch", None) is not None
+                or self.flatten_data
+            ):
+                # These paths write flat 1-D timesteps to the buffer. Initialise
+                # the storage as 1-D so that real writes have the same shape.
                 fake_td = fake_td.reshape(-1)[:1]
                 fake_td["collector", "traj_ids"] = torch.zeros(
                     fake_td.shape, dtype=torch.long
@@ -1395,6 +1419,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
                     "replay_buffer": self.replay_buffer,
+                    "flatten_data": self.flatten_data,
                     "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,
                     "trust_policy": self.trust_policy,

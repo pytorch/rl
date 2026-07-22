@@ -78,6 +78,9 @@ padding) instead of being yielded.  This is the recommended pattern for
 off-policy training with :class:`~torchrl.data.replay_buffers.SliceSampler`, especially
 with multi-process collectors where fixed-frame batches can silently mix
 episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
+For regular fixed-frame collection from a batched environment, pass
+``flatten_data=True`` to reshape each ``[N, T]`` rollout once and extend the
+recommended 1-D storage with ``N * T`` transitions.
 
 .. note::
     The deprecated collector aliases were removed in v0.13. Construct new
