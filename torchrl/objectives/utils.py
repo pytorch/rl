@@ -14,7 +14,13 @@ from enum import Enum
 from typing import Any, TypeVar
 
 import torch
-from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
+from tensordict import (
+    is_tensorclass,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+    unravel_key,
+)
 from tensordict.nn import TensorDictModule
 from torch import nn, Tensor
 from torch.nn import functional as F
@@ -991,6 +997,18 @@ def _get_default_device(net):
         return p.device
     else:
         return getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
+
+
+def _make_writable(td: TensorDictBase) -> TensorDictBase:
+    """Returns a container that accepts new keys, for use as network scratch.
+
+    Networks write their ``out_keys`` into the tensordict they run on. A
+    tensorclass has a fixed schema and rejects keys that were not declared as
+    fields, so it is converted to a plain :class:`~tensordict.TensorDict`.
+    Dynamic containers (``TensorDict``, lazy stacks) already accept new keys and
+    are returned unchanged to avoid a needless clone on the hot path.
+    """
+    return td.to_tensordict() if is_tensorclass(td) else td
 
 
 def group_optimizers(*optimizers: torch.optim.Optimizer) -> torch.optim.Optimizer:
