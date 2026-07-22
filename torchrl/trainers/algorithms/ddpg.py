@@ -14,8 +14,9 @@ from functools import partial
 from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictSequential
 from tensordict.utils import NestedKey
-from torch import optim
+from torch import nn, optim
 
 from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import BaseCollector
@@ -76,6 +77,9 @@ class DDPGTrainer(Trainer):
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
         target_net_updater (TargetNetUpdater): Target network updater (typically
             :class:`~torchrl.objectives.utils.SoftUpdate`).
+        exploration_module (nn.Module, optional): Exploration module appended to
+            the deterministic actor for collection. The actor without this module
+            is used for the DDPG loss. Defaults to ``None``.
         async_collection (bool, optional): Whether to use async data collection. Defaults to False.
         log_timings (bool, optional): Whether to log timing information for hooks. Defaults to False.
         done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
@@ -128,6 +132,7 @@ class DDPGTrainer(Trainer):
         episode_reward_key: NestedKey = "reward_sum",
         action_key: NestedKey = "action",
         observation_key: NestedKey = "observation",
+        exploration_module: nn.Module | None = None,
     ) -> None:
         warnings.warn(
             "DDPGTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -189,10 +194,15 @@ class DDPGTrainer(Trainer):
         if learner_backend == "local":
             self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
+        self.exploration_module = exploration_module
+
         if learner_backend == "local":
-            policy_weights_getter = partial(
-                TensorDict.from_module, self.loss_module.actor_network
-            )
+            weights_source = self.loss_module.actor_network
+            if exploration_module is not None:
+                weights_source = TensorDictSequential(
+                    weights_source, exploration_module
+                )
+            policy_weights_getter = partial(TensorDict.from_module, weights_source)
             update_weights = UpdateWeights(
                 self.collector, 1, policy_weights_getter=policy_weights_getter
             )
@@ -218,6 +228,11 @@ class DDPGTrainer(Trainer):
 
         if self.enable_logging:
             self._setup_ddpg_logging()
+
+    def _execution_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        return self._compose_execution_weight_publication(self.exploration_module)
 
     def _setup_ddpg_logging(self):
         """Set up logging hooks for DDPG-specific metrics."""

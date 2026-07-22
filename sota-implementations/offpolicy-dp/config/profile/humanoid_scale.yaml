@@ -1,0 +1,58 @@
+# @package _global_
+
+algorithm:
+  environment_name: humanoid
+
+environment:
+  backend: mujoco-torch
+  total_num_envs: 100_000
+  num_collectors: 4
+  compile_step: true
+  compile_mode: default
+  # Check health and reset after every physics step. With 25K environments per
+  # collector, a five-substep action eventually exposes unstable solver state.
+  frame_skip: 1
+  max_episode_steps: 1_000
+
+collection:
+  # At 100K environments this provides 2K decisions per environment instead
+  # of the 200-decision transport validation run.
+  total_frames: 200_000_000
+  init_random_frames: 0
+  # Collect 100 noisy-policy decisions per environment before learning. A full
+  # 1K-step prefill would cost 100M transitions before the first update.
+  learning_starts: 10_000_000
+  frames_per_env: 1
+
+replay:
+  capacity: 20_000_000
+  batch_size: 16_384
+  num_cpus: 2
+  transport: distributed
+
+learner:
+  world_size: 4
+  num_cpus_per_rank: 1
+  num_gpus_per_rank: 1
+  backend: nccl
+  # 25 * 16384 / 100000 = 4.096 sampled transitions per collected transition.
+  optim_steps_per_batch: 25
+  poll_interval: 0.05
+  setup_timeout: 600.0
+  command_timeout: 1_200.0
+
+logging:
+  interval_frames: 1_000_000
+  sample_size: 4_096
+
+evaluation:
+  frame_skip: 1
+  interval_frames: 10_000_000
+  num_envs: 64
+  num_trajectories: 64
+  max_steps: 1_000
+  video_interval_frames: 20_000_000
+  video_num_envs: 1
+  video_num_trajectories: 1
+  video_max_steps: 1_000
+  video_max_frames: 500

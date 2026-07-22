@@ -1,0 +1,10 @@
+name: dqn
+environment_kind: gym
+environment_name: CartPole-v1
+learning_rate: 0.0003
+gamma: 0.99
+hidden_sizes: [256, 256]
+target_update_interval: 100
+eps_init: 1.0
+eps_end: 0.05
+annealing_num_steps: 100_000

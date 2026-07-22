@@ -1,0 +1,38 @@
+# @package _global_
+
+environment:
+  backend: mujoco-torch
+  total_num_envs: 2048
+  num_collectors: 2
+  compile_step: true
+  compile_mode: default
+  max_episode_steps: 1000
+
+collection:
+  total_frames: 32_768
+  init_random_frames: 0
+  learning_starts: 4_096
+  frames_per_env: 2
+
+replay:
+  capacity: 65_536
+  batch_size: 512
+  num_cpus: 1
+  transport: auto
+
+learner:
+  world_size: 2
+  num_cpus_per_rank: 1
+  num_gpus_per_rank: 1
+  backend: nccl
+  optim_steps_per_batch: 1
+  poll_interval: 0.05
+  setup_timeout: 300.0
+  command_timeout: 600.0
+
+logging:
+  interval_frames: 4_096
+
+evaluation:
+  interval_frames: 16_384
+  video_max_frames: 50

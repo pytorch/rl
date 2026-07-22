@@ -1986,6 +1986,7 @@ class TestTrainerConfigs:
         assert cfg.total_frames == 200
         assert cfg.optim_steps_per_batch == 4
         assert cfg.async_collection is False
+        assert cfg.exploration_module is None
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_iql_trainer_config(self):
