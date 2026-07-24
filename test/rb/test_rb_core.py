@@ -1196,6 +1196,53 @@ class TestBufferStats:
         assert stats["capacity"] == 10
 
 
+class TestSampleGenerationInfo:
+    """Executable spec for exposing slot generations at sampling time (RFC step 1).
+
+    Contract pinned by this class:
+
+    - ``sample(return_info=True)`` returns an ``"index_generation"`` entry in
+      the info dict, aligned element-for-element with ``info["index"]`` and
+      equal to the writer's generation for those slots at sampling time.
+    - ``TensorDictReplayBuffer`` samples carry an ``"index_generation"`` key
+      alongside the existing ``"index"`` key.
+    - After a wraparound, previously captured (index, generation) handles
+      disagree with the writer's current generations exactly on the reused
+      slots, which is what makes staleness detectable.
+    """
+
+    def test_sample_info_contains_index_generation(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        rb.extend(torch.arange(10))
+        _, info = rb.sample(return_info=True)
+        assert "index_generation" in info
+        index = torch.as_tensor(info["index"]).reshape(-1)
+        generations = torch.as_tensor(info["index_generation"]).reshape(-1)
+        assert generations.shape == index.shape
+        torch.testing.assert_close(generations, rb._writer.generations_of(index))
+
+    def test_tensordict_sample_carries_index_generation(self):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        rb.extend(TensorDict({"obs": torch.randn(10, 3)}, batch_size=[10]))
+        rb.extend(TensorDict({"obs": torch.randn(4, 3)}, batch_size=[4]))
+        sample = rb.sample()
+        assert "index_generation" in sample.keys()
+        batch = sample.batch_size[0]
+        index = sample.get("index").reshape(batch, -1)[:, 0]
+        generations = sample.get("index_generation").reshape(batch, -1)[:, 0]
+        torch.testing.assert_close(generations, rb._writer.generations_of(index))
+
+    def test_stale_handles_detectable_after_wraparound(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        index = rb.extend(torch.arange(10))
+        generations = rb._writer.generations_of(index)
+        rb.extend(torch.arange(4))
+        live = rb._writer.generations_of(index) == generations
+        assert live.sum() == 6
+        assert not live[:4].any()
+        assert live[4:].all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
