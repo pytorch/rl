@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-23T06:58:50.201947+00:00",
+  "generated_at": "2026-07-24T07:00:03.770647+00:00",
   "analysis_period": {
     "start": "2026-07-16",
     "end": "2026-07-17",
@@ -8,7 +8,7 @@
   "summary": {
     "total_tests": 30975,
     "flaky_count": 4,
-    "new_flaky_count": 4,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -31,7 +31,7 @@
         "2026-07-17T17:01:12Z"
       ],
       "first_seen_flaky": "2026-07-16T11:21:14Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/rb/test_rb_distributed.py::TestRayRB::test_ray_replay_with_gloo_transport",
@@ -52,7 +52,7 @@
         "2026-07-17T17:01:12Z"
       ],
       "first_seen_flaky": "2026-07-16T11:21:14Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_inference_server.py::TestRayTransport::test_ray_owned_inference_with_gloo_transport",
@@ -73,7 +73,7 @@
         "2026-07-17T17:01:12Z"
       ],
       "first_seen_flaky": "2026-07-16T11:21:14Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_inference_server.py::TestProcessInferenceServer::test_process_server_with_distributed_gloo_transport",
@@ -94,7 +94,7 @@
         "2026-07-17T17:01:12Z"
       ],
       "first_seen_flaky": "2026-07-16T11:21:14Z",
-      "is_new": true
+      "is_new": false
     }
   ],
   "thresholds": {
