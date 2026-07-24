@@ -411,7 +411,7 @@ class TestWriterGeneration:
         gen = rb._writer.generations_of(index)
         assert gen.dtype == torch.int64
         assert gen.shape == index.shape
-        assert (gen == 1).all()
+        assert (gen == 0).all()
 
     def test_non_tracking_writer_reports_minus_one(self):
         writer = TensorDictMaxValueWriter(rank_key="key")
@@ -425,11 +425,11 @@ class TestWriterGeneration:
         rb.extend(torch.arange(size))
         torch.testing.assert_close(
             rb._writer.generations_of(torch.arange(size)),
-            torch.ones(size, dtype=torch.int64),
+            torch.zeros(size, dtype=torch.int64),
         )
         rb.extend(torch.arange(size, size + 3))
         torch.testing.assert_close(
-            rb._writer.generations_of(torch.arange(size)), torch.tensor([2, 2, 2, 1])
+            rb._writer.generations_of(torch.arange(size)), torch.tensor([1, 1, 1, 0])
         )
 
     def test_generation_wraparound(self):
@@ -438,7 +438,7 @@ class TestWriterGeneration:
         rb.extend(torch.arange(2 * size))
         torch.testing.assert_close(
             rb._writer.generations_of(torch.arange(size)),
-            torch.full((size,), 2, dtype=torch.int64),
+            torch.full((size,), 1, dtype=torch.int64),
         )
 
     def test_generation_add(self):
@@ -447,14 +447,14 @@ class TestWriterGeneration:
         for i in range(size + 1):
             rb.add(torch.tensor(i))
         torch.testing.assert_close(
-            rb._writer.generations_of(torch.arange(size)), torch.tensor([2, 1, 1])
+            rb._writer.generations_of(torch.arange(size)), torch.tensor([1, 0, 0])
         )
 
-    def test_generations_of_returns_zero_for_unwritten(self):
+    def test_generations_of_unwritten_reports_minus_one(self):
         rb = ReplayBuffer(storage=LazyTensorStorage(4))
         rb.extend(torch.arange(2))
         gen = rb._writer.generations_of(torch.arange(4))
-        torch.testing.assert_close(gen, torch.tensor([1, 1, 0, 0]))
+        torch.testing.assert_close(gen, torch.tensor([0, 0, -1, -1]))
 
     def test_generation_tensordict_writer(self):
         size = 4
@@ -462,7 +462,7 @@ class TestWriterGeneration:
         rb.extend(TensorDict({"a": torch.arange(2 * size)}, [2 * size]))
         torch.testing.assert_close(
             rb._writer.generations_of(torch.arange(size)),
-            torch.full((size,), 2, dtype=torch.int64),
+            torch.full((size,), 1, dtype=torch.int64),
         )
 
     def test_generation_write_at(self):
@@ -472,7 +472,7 @@ class TestWriterGeneration:
         writer.extend(torch.arange(4))
         writer.write_at(torch.tensor([0, 1]), torch.tensor([10, 11]))
         torch.testing.assert_close(
-            writer.generations_of(torch.arange(4)), torch.tensor([2, 2, 1, 1])
+            writer.generations_of(torch.arange(4)), torch.tensor([1, 1, 0, 0])
         )
 
     def test_empty_is_monotonic(self):
