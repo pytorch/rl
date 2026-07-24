@@ -1,0 +1,56 @@
+# Let contributors self-assign issues by commenting `/assign`
+#
+# Usage:
+#  - Comment `/assign` on an issue to assign it to yourself
+#  - Comment `/unassign` to remove yourself from an issue
+#------------------------------------------------------------
+
+name: Issue Self-Assign
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  assign:
+    # Only trigger on issue comments (not PR comments), and only for
+    # exact `/assign` or `/unassign` commands (optionally surrounded by
+    # whitespace).
+    if: >-
+      github.event.issue.pull_request == null &&
+      contains(fromJSON('["/assign", "/unassign"]'), github.event.comment.body)
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Update assignees
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const command = context.payload.comment.body.trim();
+            const login = context.payload.comment.user.login;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+
+            if (command === '/assign') {
+              await github.rest.issues.addAssignees({
+                owner,
+                repo,
+                issue_number,
+                assignees: [login],
+              });
+            } else {
+              await github.rest.issues.removeAssignees({
+                owner,
+                repo,
+                issue_number,
+                assignees: [login],
+              });
+            }
+
+            await github.rest.reactions.createForIssueComment({
+              owner,
+              repo,
+              comment_id: context.payload.comment.id,
+              content: '+1',
+            });
