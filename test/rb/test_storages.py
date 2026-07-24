@@ -306,7 +306,7 @@ class TestStorages:
 
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample()
-        assert (s.exclude("index") == 1).all()
+        assert (s.exclude("index", "index_generation") == 1).all()
 
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"

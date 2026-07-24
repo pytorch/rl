@@ -1534,8 +1534,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             if self._sample_unit is not None:
                 index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
-            if self._writer.supports_generation:
-                info["index_generation"] = self._writer._get_generation(index)
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -2159,8 +2159,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             if self._sample_unit is not None:
                 index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
-            if self._writer.supports_generation:
-                info["index_generation"] = self._writer._get_generation(index)
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -2638,8 +2638,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
             if self._sample_unit is not None:
                 index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
-            if self._writer.supports_generation:
-                info["index_generation"] = self._writer._get_generation(index)
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -3009,8 +3009,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             if self._sample_unit is not None:
                 index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
-            if self._writer.supports_generation:
-                info["index_generation"] = self._writer._get_generation(index)
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)

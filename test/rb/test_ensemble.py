@@ -437,7 +437,7 @@ class TestRBMultidim:
         s = rb.sample()
         assert str(rb)
         if datatype in ("tensordict", "tensorclass"):
-            assert (s.exclude("index") == 1).all()
+            assert (s.exclude("index", "index_generation") == 1).all()
             assert s.numel() == 4
         else:
             for leaf in tree_iter(s):
