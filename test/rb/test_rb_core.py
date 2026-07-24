@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import json
+import threading
 
 import pytest
 import torch
@@ -1241,6 +1242,256 @@ class TestSampleGenerationInfo:
         assert live.sum() == 6
         assert not live[:4].any()
         assert live[4:].all()
+
+
+class TestUpdateIfPresent:
+    """Executable spec for ReplayBuffer.update_if_present (RFC step 2).
+
+    Contract pinned by this class:
+
+    - Signature: ``rb.update_if_present(index=..., generation=..., patch=...)``
+      with keyword-only arguments. ``patch`` maps tensordict keys (flat or
+      nested) to tensors whose leading dimension equals ``len(index)``.
+    - Records whose (index, generation) pair is still live receive every
+      patch key; records whose slot was reused or emptied are skipped and
+      their current content is never modified.
+    - The result exposes ``updated`` (bool tensor aligned with the input
+      index order), ``updated_count`` and ``stale_count``.
+    - Updating a record does not consume its handle: the same (index,
+      generation) pair keeps working until the slot is rewritten.
+    - The whole patch is validated before any write: an unknown key raises
+      ``KeyError``, a shape or dtype mismatch raises ``ValueError``, and in
+      both cases storage is left byte-for-byte untouched, even when other
+      keys of the same patch were valid.
+    - Storages that cannot validate generations raise a capability error
+      mentioning "conditional" instead of writing through raw indices.
+    """
+
+    def _make_rb(self, size=10):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size), batch_size=4)
+        data = TensorDict(
+            {
+                "obs": torch.arange(size, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(size, 3)
+                .clone(),
+                "info": {"label": torch.zeros(size, dtype=torch.int64)},
+            },
+            batch_size=[size],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        return rb, data, index, generation
+
+    def test_updates_live_records(self):
+        rb, _, index, generation = self._make_rb()
+        patch = {"obs": torch.full((10, 3), 42.0)}
+        result = rb.update_if_present(index=index, generation=generation, patch=patch)
+        assert result.updated.dtype == torch.bool
+        assert result.updated.all()
+        assert result.updated_count == 10
+        assert result.stale_count == 0
+        torch.testing.assert_close(rb[:]["obs"], patch["obs"])
+
+    def test_stale_records_skipped_and_unmodified(self):
+        rb, _, index, generation = self._make_rb()
+        overwrite = TensorDict(
+            {
+                "obs": torch.full((4, 3), -1.0),
+                "info": {"label": torch.ones(4, dtype=torch.int64)},
+            },
+            batch_size=[4],
+        )
+        rb.extend(overwrite)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+        )
+        assert result.updated.tolist() == [False] * 4 + [True] * 6
+        assert result.updated_count == 6
+        assert result.stale_count == 4
+        torch.testing.assert_close(rb[:]["obs"][:4], overwrite["obs"])
+        torch.testing.assert_close(rb[:]["obs"][4:], torch.full((6, 3), 42.0))
+
+    def test_mask_aligns_with_input_order(self):
+        rb, _, index, generation = self._make_rb()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(4, 3),
+                    "info": {"label": torch.zeros(4, dtype=torch.int64)},
+                },
+                batch_size=[4],
+            )
+        )
+        permutation = torch.tensor([7, 0, 5, 2, 9, 1])
+        result = rb.update_if_present(
+            index=index[permutation],
+            generation=generation[permutation],
+            patch={"obs": torch.full((6, 3), 42.0)},
+        )
+        expected_live = (permutation >= 4).tolist()
+        assert result.updated.tolist() == expected_live
+
+    def test_handle_survives_repeated_updates(self):
+        rb, _, index, generation = self._make_rb()
+        for value in (1.0, 2.0):
+            result = rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.full((10, 3), value)},
+            )
+            assert result.updated.all()
+        torch.testing.assert_close(rb[:]["obs"], torch.full((10, 3), 2.0))
+
+    def test_unknown_key_raises_and_storage_untouched(self):
+        rb, data, index, generation = self._make_rb()
+        with pytest.raises(KeyError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"not_a_key": torch.zeros(10, 3)},
+            )
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+
+    def test_invalid_shape_or_dtype_raises_before_any_write(self):
+        rb, data, index, generation = self._make_rb()
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={
+                    "obs": torch.full((10, 3), 42.0),
+                    ("info", "label"): torch.zeros(10, 5, dtype=torch.int64),
+                },
+            )
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3, dtype=torch.int64)},
+            )
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+        torch.testing.assert_close(rb[:]["info", "label"], data["info", "label"])
+
+    def test_nested_key_patch(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={("info", "label"): torch.full((10,), 7, dtype=torch.int64)},
+        )
+        assert result.updated.all()
+        assert (rb[:]["info", "label"] == 7).all()
+
+    def test_capability_error_on_list_storage(self):
+        rb = ReplayBuffer(storage=ListStorage(10))
+        index = rb.extend([torch.randn(3) for _ in range(5)])
+        with pytest.raises(
+            (RuntimeError, TypeError, NotImplementedError), match="(?i)conditional"
+        ):
+            rb.update_if_present(
+                index=torch.as_tensor(index),
+                generation=torch.zeros(5, dtype=torch.int64),
+                patch={"obs": torch.zeros(5, 3)},
+            )
+
+    def test_empty_invalidates_handles(self):
+        rb, _, index, generation = self._make_rb()
+        rb.empty()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(10, 3),
+                    "info": {"label": torch.zeros(10, dtype=torch.int64)},
+                },
+                batch_size=[10],
+            )
+        )
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+        )
+        assert not result.updated.any()
+        assert result.stale_count == 10
+        assert (rb[:]["obs"] == 0).all()
+
+    def test_sampled_handles_roundtrip(self):
+        rb, _, _, _ = self._make_rb()
+        sample = rb.sample()
+        batch = sample.batch_size[0]
+        index = sample.get("index").reshape(batch, -1)[:, 0]
+        generation = sample.get("index_generation").reshape(batch, -1)[:, 0]
+        marker = torch.full((batch, 3), 123.0)
+        result = rb.update_if_present(
+            index=index, generation=generation, patch={"obs": marker}
+        )
+        assert result.updated.all()
+        torch.testing.assert_close(rb[:]["obs"][index], marker)
+
+    def test_multidim_storage_roundtrip(self):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(6, ndim=2), batch_size=4)
+        data = TensorDict(
+            {"obs": torch.arange(6, dtype=torch.float32).reshape(2, 3)},
+            batch_size=[2, 3],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full_like(data["obs"], 42.0)},
+        )
+        assert result.updated.all()
+        assert (rb[:]["obs"] == 42.0).all()
+
+    def test_concurrent_updates_do_not_tear_records(self):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(64), batch_size=8)
+        rb.extend(
+            TensorDict({"a": torch.zeros(64), "b": torch.zeros(64)}, batch_size=[64])
+        )
+        stop = threading.Event()
+        errors = []
+
+        def writer_loop():
+            value = 1.0
+            try:
+                while not stop.is_set():
+                    rb.extend(
+                        TensorDict(
+                            {
+                                "a": torch.full((8,), value),
+                                "b": torch.full((8,), value),
+                            },
+                            batch_size=[8],
+                        )
+                    )
+                    value += 1.0
+            except Exception as err:
+                errors.append(err)
+
+        thread = threading.Thread(target=writer_loop)
+        thread.start()
+        try:
+            for step in range(200):
+                sample = rb.sample()
+                batch = sample.batch_size[0]
+                index = sample.get("index").reshape(batch, -1)[:, 0]
+                generation = sample.get("index_generation").reshape(batch, -1)[:, 0]
+                marker = torch.full((batch,), 10_000.0 + step)
+                rb.update_if_present(
+                    index=index,
+                    generation=generation,
+                    patch={"a": marker, "b": marker},
+                )
+                content = rb[:]
+                torch.testing.assert_close(content["a"], content["b"])
+        finally:
+            stop.set()
+            thread.join(timeout=10)
+        assert not errors
 
 
 if __name__ == "__main__":
