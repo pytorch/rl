@@ -402,6 +402,35 @@ def test_rb_populate(benchmark, rb, storage, sampler, size):
     )
 
 
+class create_wraparound_rb:
+    """Builds a full buffer so every timed extend reuses slots and bumps generations."""
+
+    def __init__(self, size=10_000, batch=1_000):
+        self.size = size
+        self.batch = batch
+
+    def __call__(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(self.size))
+        data = TensorDict({"a": torch.zeros(self.batch, 5)}, batch_size=[self.batch])
+        while rb.write_count < self.size:
+            rb.extend(data)
+        return ((rb, data), {})
+
+
+def extend_wraparound(rb, data):
+    for _ in range(10):
+        rb.extend(data)
+
+
+def test_rb_extend_generation_stamping(benchmark):
+    benchmark.pedantic(
+        extend_wraparound,
+        setup=create_wraparound_rb(),
+        iterations=1,
+        rounds=50,
+    )
+
+
 class create_compiled_tensor_rb:
     def __init__(
         self, rb, storage, sampler, storage_size, data_size, iters, compilable=False

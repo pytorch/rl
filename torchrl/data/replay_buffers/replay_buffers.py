@@ -1516,6 +1516,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(
+                    index[0] if isinstance(index, tuple) else index
+                )
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -1555,6 +1559,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         Returns:
             A batch of data selected in the replay buffer.
             A tuple containing this batch and info if return_info flag is set to True.
+            The info entries include ``"index"``, the storage slots the batch
+            was read from, and ``"index_generation"``, the generation of each
+            slot at sampling time (see
+            :meth:`~torchrl.data.replay_buffers.RoundRobinWriter.generations_of`).
         """
         if (
             batch_size is not None
@@ -2135,6 +2143,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         ):
             index, info = self.prioritized_sampler.sample(self._storage, batch_size)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(
+                    index[0] if isinstance(index, tuple) else index
+                )
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -2564,6 +2576,10 @@ class TensorDictReplayBuffer(ReplayBuffer):
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(
+                    index[0] if isinstance(index, tuple) else index
+                )
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -2929,6 +2945,10 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         ):
             index, info = self.prioritized_sampler.sample(self._storage, batch_size)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(
+                    index[0] if isinstance(index, tuple) else index
+                )
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)

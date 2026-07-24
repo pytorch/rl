@@ -243,7 +243,7 @@ class TestSamplers:
             replay_buffer.extend(transition.clone())
         for _ in range(n_samples):
             s = replay_buffer.sample(batch_size=1)
-            assert (s.exclude("index") == 1).all()
+            assert (s.exclude("index", "index_generation") == 1).all()
 
         replay_buffer.extend(torch.zeros_like(transition))
 
@@ -257,7 +257,7 @@ class TestSamplers:
 
         new_replay_buffer.load_state_dict(state_dict)
         s = new_replay_buffer.sample(batch_size=1)
-        assert (s.exclude("index") == 0).all()
+        assert (s.exclude("index", "index_generation") == 0).all()
 
     def test_sampler_without_rep_dumps_loads(self, tmpdir):
         d0 = tmpdir + "/save0"
