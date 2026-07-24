@@ -164,10 +164,11 @@ class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers.
 
     Round-robin writers stamp every physical storage slot with an int64
-    generation counter, incremented once per write. Sampling returns the
-    generation observed for each index (see :meth:`generations_of`), so a
-    captured ``(index, generation)`` pair identifies one specific record and
-    becomes detectably stale once its slot is reused or the buffer is emptied.
+    generation counter: the first write of a slot has generation ``0`` and every
+    reuse increments it. Sampling returns the generation observed for each index
+    (see :meth:`generations_of`), so a captured ``(index, generation)`` pair
+    identifies one specific record and becomes detectably stale once its slot is
+    reused or the buffer is emptied.
 
     Args:
         compilable (bool, optional): whether the writer is compilable.
@@ -195,7 +196,7 @@ class RoundRobinWriter(Writer):
         size = (
             capacity if capacity < _GENERATION_UNBOUNDED else max(min_size, current * 2)
         )
-        new_generation = torch.zeros(size, dtype=torch.int64)
+        new_generation = torch.full((size,), -1, dtype=torch.int64)
         if generation is not None:
             new_generation[:current] = generation
         if not self._compilable:
@@ -223,8 +224,9 @@ class RoundRobinWriter(Writer):
     def generations_of(self, index: int | torch.Tensor) -> torch.Tensor:
         """Returns the int64 generation stamp for each physical slot in ``index``.
 
-        For multidimensional storages the index is reduced to its first (slot)
-        dimension. Slots that have never been written report ``0``.
+        The first write of a slot has generation ``0`` and every reuse increments
+        it. For multidimensional storages the index is reduced to its first (slot)
+        dimension. Slots that have never been written report ``-1``.
         """
         if isinstance(index, tuple):
             index = index[0]
@@ -238,11 +240,11 @@ class RoundRobinWriter(Writer):
             index = index[..., 0]
         index = torch.as_tensor(index, dtype=torch.long)
         if self._generation is None:
-            return torch.zeros(index.shape, dtype=torch.int64, device=index.device)
+            return torch.full(index.shape, -1, dtype=torch.int64, device=index.device)
         idx = index.to(self._generation.device)
         n = self._generation.numel()
         gen = self._generation[idx.clamp(max=n - 1)]
-        return torch.where(idx < n, gen, torch.zeros_like(gen))
+        return torch.where(idx < n, gen, torch.full_like(gen, -1))
 
     def dumps(self, path):
         path = Path(path).absolute()
