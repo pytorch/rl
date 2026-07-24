@@ -11,7 +11,7 @@ import multiprocessing
 import textwrap
 import threading
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
@@ -33,6 +33,7 @@ from tensordict import (
     is_tensorclass,
     LazyStackedTensorDict,
     NestedKey,
+    TensorClass,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -121,6 +122,30 @@ def _maybe_delay_init(func):
         return func(self, *args, **kwargs)
 
     return wrapper
+
+
+class ConditionalUpdateResult(TensorClass["nocast"]):
+    """Result of :meth:`ReplayBuffer.update_if_present`.
+
+    Attributes:
+        updated (torch.Tensor): boolean mask aligned with the order of the
+            indices passed to the update. ``True`` marks records that were
+            still live and received the patch; ``False`` marks stale records
+            whose slot had been reused or emptied and whose content was left
+            untouched.
+    """
+
+    updated: torch.Tensor
+
+    @property
+    def updated_count(self) -> int:
+        """Number of records that were live and patched."""
+        return int(self.updated.sum().item())
+
+    @property
+    def stale_count(self) -> int:
+        """Number of records that were stale and skipped."""
+        return int(self.updated.numel()) - self.updated_count
 
 
 class ReplayBuffer(metaclass=_RayServiceMetaClass):
@@ -997,6 +1022,96 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             stats["capacity"] = int(capacity)
             stats["utilization"] = float(size) / capacity if capacity else 0.0
         return stats
+
+    def update_if_present(
+        self,
+        *,
+        index: torch.Tensor,
+        generation: torch.Tensor,
+        patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+    ) -> ConditionalUpdateResult:
+        """Conditionally updates stored records that are still live.
+
+        Replay slots are recycled by round-robin writers, so a physical index
+        captured at sampling time can point to a different record by the time
+        an asynchronous computation writes back. This method applies ``patch``
+        only to records whose ``(index, generation)`` pair still matches the
+        writer's current slot generation, skipping records whose slot was
+        reused or emptied since the handle was captured. Skipped records are
+        never modified.
+
+        The whole patch is validated (key existence, shape and dtype) before
+        any write happens; a validation failure leaves the storage untouched.
+        Updating a record refreshes its content, not its identity: the same
+        handle keeps working until the slot is rewritten by ``add``,
+        ``extend`` or ``empty``.
+
+        Keyword Args:
+            index (torch.Tensor): storage indices, as returned by
+                :meth:`extend` or found in the sample under ``"index"``.
+            generation (torch.Tensor): slot generations captured with the
+                indices, as found in the sample under ``"index_generation"``.
+            patch (mapping of NestedKey to torch.Tensor, or TensorDictBase):
+                the fields to overwrite for live records. Leading dimension
+                must match the number of records addressed by ``index``.
+
+        Returns:
+            A :class:`ConditionalUpdateResult` whose ``updated`` mask is
+            aligned with the input index order, with ``updated_count`` and
+            ``stale_count`` conveniences.
+
+        Raises:
+            RuntimeError: if the storage or writer does not support
+                conditional updates (for example :class:`ListStorage`).
+            KeyError: if a patch key does not exist in the storage.
+            ValueError: if a patch entry has an incompatible shape or dtype.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+            >>> rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+            >>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+            >>> sample = rb.sample()
+            >>> result = rb.update_if_present(
+            ...     index=sample["index"],
+            ...     generation=sample["index_generation"],
+            ...     patch={"obs": torch.ones(4, 3)},
+            ... )
+            >>> print(result.updated_count, result.stale_count)
+            4 0
+        """
+        storage = self._storage
+        if not getattr(storage, "supports_conditional_update", False) or not getattr(
+            self._writer, "tracks_generations", False
+        ):
+            raise RuntimeError(
+                f"Conditional updates are not supported by {type(storage).__name__} "
+                f"with {type(self._writer).__name__}: the storage must support "
+                "conditional updates and the writer must track slot generations."
+            )
+        index = torch.as_tensor(index, dtype=torch.long)
+        dim0 = index[..., 0] if index.ndim > 1 else index.reshape(-1)
+        generation = torch.as_tensor(generation, dtype=torch.long).reshape(-1)
+        if generation.numel() != dim0.numel():
+            raise ValueError(
+                f"index and generation must address the same number of records, "
+                f"got {dim0.numel()} indices and {generation.numel()} generations."
+            )
+        if isinstance(patch, TensorDictBase):
+            patch = dict(patch.items(include_nested=True, leaves_only=True))
+        else:
+            patch = dict(patch)
+        normalized = storage._validate_conditional_patch(index, patch)
+        with self._replay_lock, self._write_lock:
+            live = self._writer.generations_of(dim0) == generation
+            if live.any():
+                live_index = index[live]
+                storage._apply_conditional_patch(
+                    live_index,
+                    {key: value[live] for key, value in normalized.items()},
+                )
+        return ConditionalUpdateResult(updated=live, batch_size=live.shape)
 
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose

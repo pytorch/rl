@@ -24,6 +24,7 @@ from .query import (
 )
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
+    ConditionalUpdateResult,
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
@@ -94,6 +95,7 @@ __all__ = [
     "RayReplayBuffer",
     "PrioritizedReplayBuffer",
     "RemoteTensorDictReplayBuffer",
+    "ConditionalUpdateResult",
     "ReplayBuffer",
     "ReplayBufferEnsemble",
     "TensorDictPrioritizedReplayBuffer",
