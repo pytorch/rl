@@ -53,6 +53,11 @@ class Writer(ABC):
     def register_storage(self, storage: Storage) -> None:
         self._storage = storage
 
+    @property
+    def supports_generation(self) -> bool:
+        """Whether this writer maintains per-slot generation stamps."""
+        return False
+
     @abstractmethod
     def add(self, data: Any) -> int:
         """Inserts one piece of data at an appropriate index, and returns that index."""
@@ -153,18 +158,95 @@ class RoundRobinWriter(Writer):
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
 
+    Keyword Args:
+        track_generation (bool, optional): if ``True``, the writer maintains a
+            per-slot generation counter that is incremented every time a physical
+            storage slot is written. Samplers can then stamp sampled indices with
+            the generation they observed, allowing delayed priority updates to
+            detect whether a slot has since been reused. Defaults to ``False``.
+
     """
 
-    def __init__(self, compilable: bool = False) -> None:
+    def __init__(
+        self, compilable: bool = False, *, track_generation: bool = False
+    ) -> None:
         super().__init__(compilable=compilable)
         self._cursor = 0
         self._write_count  # noqa
+        self._track_generation = track_generation
+        self._generation = None
+
+    @property
+    def supports_generation(self) -> bool:
+        return self._track_generation
+
+    def _ensure_generation(self, size: int) -> None:
+        if self._generation is None:
+            generation = torch.zeros(int(size), dtype=torch.long)
+            if not self._compilable:
+                generation.share_memory_()
+            self._generation = generation
+
+    def _bump_generation(self, index: int | torch.Tensor, data: Any) -> None:
+        if not self._track_generation:
+            return
+        if _is_int(index):
+            self._ensure_generation(
+                self._storage._max_size_along_dim0(single_data=data)
+            )
+            self._generation[int(index)] += 1
+        else:
+            self._ensure_generation(
+                self._storage._max_size_along_dim0(batched_data=data)
+            )
+            index = torch.as_tensor(index, dtype=torch.long).reshape(-1)
+            self._generation.index_put_(
+                (index,), torch.ones_like(index), accumulate=True
+            )
+
+    def _get_generation(self, index: int | torch.Tensor) -> torch.Tensor:
+        if not self._track_generation:
+            raise RuntimeError(
+                "This writer does not track generations. Construct it with "
+                "track_generation=True to use generation-stamped indices."
+            )
+        if self._generation is None:
+            raise RuntimeError("No data has been written yet; generation is undefined.")
+        if (
+            isinstance(index, torch.Tensor)
+            and index.ndim
+            and self._storage.ndim > 1
+            and index.shape[-1] == self._storage.ndim
+        ):
+            index = index[..., 0]
+        if _is_int(index):
+            return self._generation[int(index)]
+        return self._generation[torch.as_tensor(index, dtype=torch.long)]
 
     def dumps(self, path):
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
+        metadata = {
+            "cursor": self._cursor,
+            "write_count": self._write_count,
+            "track_generation": self._track_generation,
+        }
+        generation = self._generation
+        if generation is not None:
+            try:
+                MemoryMappedTensor.from_filename(
+                    filename=path / "generation.memmap",
+                    shape=generation.shape,
+                    dtype=generation.dtype,
+                ).copy_(generation)
+            except FileNotFoundError:
+                MemoryMappedTensor.from_tensor(
+                    generation, filename=path / "generation.memmap"
+                )
+            metadata["generation_shape"] = list(generation.shape)
+            metadata["generation_dtype"] = str(generation.dtype)
         with open(path / "metadata.json", "w") as file:
-            json.dump({"cursor": self._cursor, "write_count": self._write_count}, file)
+            json.dump(metadata, file)
 
     def loads(self, path):
         path = Path(path).absolute()
@@ -174,6 +256,19 @@ class RoundRobinWriter(Writer):
             write_count = metadata.get("write_count")
             if write_count is not None:
                 self._write_count = write_count
+            self._track_generation = metadata.get(
+                "track_generation", self._track_generation
+            )
+            generation_shape = metadata.get("generation_shape")
+        if generation_shape is not None:
+            generation = MemoryMappedTensor.from_filename(
+                filename=path / "generation.memmap",
+                dtype=_STRDTYPE2DTYPE[metadata["generation_dtype"]],
+                shape=torch.Size(generation_shape),
+            ).clone()
+            if not self._compilable:
+                generation.share_memory_()
+            self._generation = generation
 
     def add(self, data: Any) -> int | torch.Tensor:
         index = self._cursor
@@ -186,6 +281,7 @@ class RoundRobinWriter(Writer):
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(_cursor, data)
+        self._bump_generation(_cursor, data)
         index = self._replicate_index(index)
         self._mark_update_entities(index)
         return index
@@ -214,6 +310,7 @@ class RoundRobinWriter(Writer):
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
+        self._bump_generation(index, data)
         index = self._replicate_index(index)
         self._mark_update_entities(index)
         return index
@@ -229,6 +326,7 @@ class RoundRobinWriter(Writer):
             batch_size = index.numel()
         self._write_count += batch_size
         self._storage.set(index, data, set_cursor=False)
+        self._bump_generation(index, data)
         self._update_storage_len_for_write_at(index)
         index = self._replicate_index(index)
         self._mark_update_entities(index)
@@ -249,16 +347,31 @@ class RoundRobinWriter(Writer):
         )
 
     def state_dict(self) -> dict[str, Any]:
-        return {"_cursor": self._cursor, "_write_count": self._write_count}
+        state_dict = {"_cursor": self._cursor, "_write_count": self._write_count}
+        if self._track_generation:
+            state_dict["_track_generation"] = True
+            if self._generation is not None:
+                state_dict["_generation"] = self._generation.clone()
+        return state_dict
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
         write_count = state_dict.get("_write_count")
         if write_count is not None:
             self._write_count = write_count
+        self._track_generation = state_dict.get(
+            "_track_generation", self._track_generation
+        )
+        generation = state_dict.get("_generation")
+        if generation is not None:
+            generation = generation.clone()
+            if not self._compilable:
+                generation.share_memory_()
+            self._generation = generation
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
+        self._generation = None
         if empty_write_count:
             self._write_count = 0
 
@@ -363,6 +476,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
                 ),
             )
         self._storage.set(index, data)
+        self._bump_generation(index, data)
         index = self._replicate_index(index)
         self._mark_update_entities(index)
         return index
@@ -392,6 +506,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Replicate index requires the shape of the storage to be known
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
+        self._bump_generation(index, data)
         index = self._replicate_index(index)
         self._mark_update_entities(index)
         return index
@@ -407,6 +522,7 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         if not is_tensorclass(data):
             data.set("index", expand_as_right(index_tensor, data))
         self._storage.set(index_tensor, data, set_cursor=False)
+        self._bump_generation(index_tensor, data)
         self._update_storage_len_for_write_at(index_tensor)
         index = self._replicate_index(index_tensor)
         self._mark_update_entities(index)
