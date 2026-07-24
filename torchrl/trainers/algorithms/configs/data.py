@@ -326,6 +326,7 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
     _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
     priority_key: str = "td_error"
     sampler: Any = None
+    sample_unit: Any = None
     storage: Any = None
     writer: Any = None
     collate_fn: Any = None
@@ -359,6 +360,7 @@ class ReplayBufferConfig(ReplayBufferBaseConfig):
     _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
     storage: Any = None
     sampler: Any = None
+    sample_unit: Any = None
     writer: Any = None
     collate_fn: Any = None
     pin_memory: bool = False
