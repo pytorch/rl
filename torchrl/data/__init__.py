@@ -34,6 +34,7 @@ from .postprocs import DensifyReward, MultiStep
 from .replay_buffers import (
     CompressedListStorage,
     CompressedListStorageCheckpointer,
+    ConditionalUpdateResult,
     ConsumingSampler,
     DEFAULT_DONE_KEYS,
     filter_trajectories,
@@ -176,6 +177,7 @@ __all__ = [
     "RandomSampler",
     "RayReplayBuffer",
     "RemoteTensorDictReplayBuffer",
+    "ConditionalUpdateResult",
     "ReplayBuffer",
     "ReplayBufferEnsemble",
     "RewardData",

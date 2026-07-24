@@ -49,6 +49,38 @@ discovery and buffer lifecycle.
     RemoteTensorDictReplayBuffer
 
 
+Conditional record updates
+--------------------------
+
+Round-robin writers recycle storage slots, so a physical index captured at
+sampling time can point to a different record by the time an asynchronous
+computation writes back. Replay slots therefore carry a generation counter:
+samples expose it as an ``"index_generation"`` entry next to ``"index"``, and
+:meth:`~torchrl.data.ReplayBuffer.update_if_present` applies a patch only to
+records whose ``(index, generation)`` pair is still live, skipping recycled
+slots instead of corrupting them. This supports algorithms that refresh
+stored fields after sampling, such as recurrent-state refreshes or
+asynchronously computed labels, without pinning the buffer or racing against
+collection.
+
+.. code-block:: python
+
+    sample = buffer.sample()
+    refreshed = compute_refreshed_state(sample)
+    result = buffer.update_if_present(
+        index=sample["index"],
+        generation=sample["index_generation"],
+        patch={"recurrent_state": refreshed},
+    )
+    print(f"updated {result.updated_count}, skipped {result.stale_count} stale records")
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    ConditionalUpdateResult
+
+
 Offline-to-online helpers
 -------------------------
 

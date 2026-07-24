@@ -403,6 +403,95 @@ class TestWriterStateDict:
         assert writer2._write_count == 23
 
 
+class TestSlotGenerations:
+    """Executable spec for generation-stamped replay slots (RFC step 1).
+
+    Contract pinned by this class:
+
+    - Round-robin writers maintain one int64 generation counter per storage
+      slot, exposed through ``writer.generations_of(index)`` which accepts an
+      index tensor and returns a same-shaped int64 tensor.
+    - The first write of a slot has generation 0; every reuse of a slot
+      (round-robin wraparound or rewrite through ``add``/``extend``)
+      increments that slot's generation.
+    - ``empty()`` never revives previously handed-out (index, generation)
+      pairs: generations are monotonically nondecreasing across the buffer's
+      lifetime, including through ``empty()``.
+    - Generations persist through ``state_dict``/``load_state_dict`` and
+      ``dumps``/``loads``; checkpoints created before the feature still load.
+    """
+
+    def test_first_writes_start_at_generation_zero(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        index = rb.extend(torch.arange(10))
+        generations = rb._writer.generations_of(index)
+        assert generations.dtype == torch.int64
+        assert generations.shape == index.shape
+        assert (generations == 0).all()
+
+    def test_wraparound_increments_reused_slots_only(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(10))
+        reused_index = rb.extend(torch.arange(4))
+        assert (rb._writer.generations_of(reused_index) == 1).all()
+        untouched = rb._writer.generations_of(torch.arange(4, 10))
+        assert (untouched == 0).all()
+
+    def test_add_reuse_increments_generation(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(2))
+        for value in range(5):
+            rb.add(torch.full((3,), float(value)))
+        assert rb._writer.generations_of(torch.tensor([0])).item() == 2
+        assert rb._writer.generations_of(torch.tensor([1])).item() == 1
+
+    def test_empty_never_revives_old_handles(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        index = rb.extend(torch.arange(10))
+        generations_before = rb._writer.generations_of(index)
+        rb.empty()
+        rb.extend(torch.arange(10))
+        generations_after = rb._writer.generations_of(index)
+        assert (generations_after > generations_before).all()
+
+    def test_generations_survive_state_dict_roundtrip(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(10))
+        index = rb.extend(torch.arange(4))
+        sd = rb.state_dict()
+        rb2 = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb2.load_state_dict(sd)
+        torch.testing.assert_close(
+            rb2._writer.generations_of(torch.arange(10)),
+            rb._writer.generations_of(torch.arange(10)),
+        )
+        assert (rb2._writer.generations_of(index) == 1).all()
+
+    def test_generations_survive_dumps_loads(self, tmp_path):
+        rb = ReplayBuffer(storage=LazyMemmapStorage(10, scratch_dir=tmp_path / "data"))
+        rb.extend(torch.arange(10))
+        rb.extend(torch.arange(4))
+        rb._writer.dumps(tmp_path / "writer")
+        writer2 = RoundRobinWriter()
+        writer2.loads(tmp_path / "writer")
+        torch.testing.assert_close(
+            writer2.generations_of(torch.arange(10)),
+            rb._writer.generations_of(torch.arange(10)),
+        )
+
+    def test_legacy_state_dict_without_generations_loads(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(torch.arange(5))
+        sd = rb.state_dict()
+        sd["_writer"] = {
+            key: value
+            for key, value in sd["_writer"].items()
+            if key in ("_cursor", "_write_count")
+        }
+        rb2 = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb2.load_state_dict(sd)
+        assert rb2._writer._cursor == 5
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
