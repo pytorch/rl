@@ -39,6 +39,10 @@ except ImportError:
 from torchrl.data.replay_buffers.storages import Storage
 from torchrl.data.replay_buffers.utils import _is_int, _reduce
 
+# Storage capacities at or above this value are treated as unbounded (lazy
+# storages report a sentinel max size), triggering dynamic generation growth.
+_GENERATION_UNBOUNDED = 2**40
+
 
 class Writer(ABC):
     """A ReplayBuffer base Writer class."""
@@ -50,13 +54,19 @@ class Writer(ABC):
         self._storage = None
         self._compilable = compilable
 
+    #: Whether this writer type stamps storage slots with a reuse generation.
+    tracks_generations: bool = False
+
     def register_storage(self, storage: Storage) -> None:
         self._storage = storage
 
-    @property
-    def supports_generation(self) -> bool:
-        """Whether this writer maintains per-slot generation stamps."""
-        return False
+    def generations_of(self, index: int | torch.Tensor) -> torch.Tensor:
+        """Returns the generation stamp for each physical slot in ``index``.
+
+        Writers that do not track slot reuse report ``-1``.
+        """
+        index = torch.as_tensor(index)
+        return torch.full(index.shape, -1, dtype=torch.int64, device=index.device)
 
     @abstractmethod
     def add(self, data: Any) -> int:
@@ -153,77 +163,86 @@ class ImmutableDatasetWriter(Writer):
 class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers.
 
+    Round-robin writers stamp every physical storage slot with an int64
+    generation counter, incremented once per write. Sampling returns the
+    generation observed for each index (see :meth:`generations_of`), so a
+    captured ``(index, generation)`` pair identifies one specific record and
+    becomes detectably stale once its slot is reused or the buffer is emptied.
+
     Args:
         compilable (bool, optional): whether the writer is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
             Defaults to ``False``.
 
-    Keyword Args:
-        track_generation (bool, optional): if ``True``, the writer maintains a
-            per-slot generation counter that is incremented every time a physical
-            storage slot is written. Samplers can then stamp sampled indices with
-            the generation they observed, allowing delayed priority updates to
-            detect whether a slot has since been reused. Defaults to ``False``.
-
     """
 
-    def __init__(
-        self, compilable: bool = False, *, track_generation: bool = False
-    ) -> None:
+    tracks_generations: bool = True
+
+    def __init__(self, compilable: bool = False) -> None:
         super().__init__(compilable=compilable)
         self._cursor = 0
         self._write_count  # noqa
-        self._track_generation = track_generation
         self._generation = None
 
-    @property
-    def supports_generation(self) -> bool:
-        return self._track_generation
-
-    def _ensure_generation(self, size: int) -> None:
-        if self._generation is None:
-            generation = torch.zeros(int(size), dtype=torch.long)
-            if not self._compilable:
-                generation.share_memory_()
-            self._generation = generation
+    def _ensure_generation(self, capacity: int, min_size: int) -> None:
+        # Bounded storages allocate to capacity once (stable shape, so the
+        # ``torch.compile`` extend/sample path does not recompile); lazy storages
+        # report a sentinel capacity and instead grow geometrically.
+        generation = self._generation
+        current = 0 if generation is None else generation.numel()
+        if current >= min_size:
+            return
+        size = (
+            capacity if capacity < _GENERATION_UNBOUNDED else max(min_size, current * 2)
+        )
+        new_generation = torch.zeros(size, dtype=torch.int64)
+        if generation is not None:
+            new_generation[:current] = generation
+        if not self._compilable:
+            new_generation.share_memory_()
+        self._generation = new_generation
 
     def _bump_generation(self, index: int | torch.Tensor, data: Any) -> None:
-        if not self._track_generation:
-            return
         if _is_int(index):
-            self._ensure_generation(
-                self._storage._max_size_along_dim0(single_data=data)
-            )
+            capacity = self._storage._max_size_along_dim0(single_data=data)
+            self._ensure_generation(capacity, int(index) + 1)
             self._generation[int(index)] += 1
         else:
-            self._ensure_generation(
-                self._storage._max_size_along_dim0(batched_data=data)
-            )
             index = torch.as_tensor(index, dtype=torch.long).reshape(-1)
+            if index.numel() == 0:
+                return
+            capacity = self._storage._max_size_along_dim0(batched_data=data)
+            min_size = (
+                capacity if capacity < _GENERATION_UNBOUNDED else int(index.max()) + 1
+            )
+            self._ensure_generation(capacity, min_size)
             self._generation.index_put_(
                 (index,), torch.ones_like(index), accumulate=True
             )
 
-    def _get_generation(self, index: int | torch.Tensor) -> torch.Tensor:
-        if not self._track_generation:
-            raise RuntimeError(
-                "This writer does not track generations. Construct it with "
-                "track_generation=True to use generation-stamped indices."
-            )
-        if self._generation is None:
-            raise RuntimeError("No data has been written yet; generation is undefined.")
+    def generations_of(self, index: int | torch.Tensor) -> torch.Tensor:
+        """Returns the int64 generation stamp for each physical slot in ``index``.
+
+        For multidimensional storages the index is reduced to its first (slot)
+        dimension. Slots that have never been written report ``0``.
+        """
         if isinstance(index, tuple):
             index = index[0]
         elif (
             isinstance(index, torch.Tensor)
             and index.ndim
+            and self._storage is not None
             and self._storage.ndim > 1
             and index.shape[-1] == self._storage.ndim
         ):
             index = index[..., 0]
-        if _is_int(index):
-            return self._generation[int(index)]
-        return self._generation[torch.as_tensor(index, dtype=torch.long)]
+        index = torch.as_tensor(index, dtype=torch.long)
+        if self._generation is None:
+            return torch.zeros(index.shape, dtype=torch.int64, device=index.device)
+        idx = index.to(self._generation.device)
+        n = self._generation.numel()
+        gen = self._generation[idx.clamp(max=n - 1)]
+        return torch.where(idx < n, gen, torch.zeros_like(gen))
 
     def dumps(self, path):
         path = Path(path).absolute()
@@ -231,7 +250,6 @@ class RoundRobinWriter(Writer):
         metadata = {
             "cursor": self._cursor,
             "write_count": self._write_count,
-            "track_generation": self._track_generation,
         }
         generation = self._generation
         if generation is not None:
@@ -258,9 +276,6 @@ class RoundRobinWriter(Writer):
             write_count = metadata.get("write_count")
             if write_count is not None:
                 self._write_count = write_count
-            self._track_generation = metadata.get(
-                "track_generation", self._track_generation
-            )
             generation_shape = metadata.get("generation_shape")
         if generation_shape is not None:
             generation = MemoryMappedTensor.from_filename(
@@ -350,10 +365,8 @@ class RoundRobinWriter(Writer):
 
     def state_dict(self) -> dict[str, Any]:
         state_dict = {"_cursor": self._cursor, "_write_count": self._write_count}
-        if self._track_generation:
-            state_dict["_track_generation"] = True
-            if self._generation is not None:
-                state_dict["_generation"] = self._generation.clone()
+        if self._generation is not None:
+            state_dict["_generation"] = self._generation.clone()
         return state_dict
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
@@ -361,9 +374,6 @@ class RoundRobinWriter(Writer):
         write_count = state_dict.get("_write_count")
         if write_count is not None:
             self._write_count = write_count
-        self._track_generation = state_dict.get(
-            "_track_generation", self._track_generation
-        )
         generation = state_dict.get("_generation")
         if generation is not None:
             generation = generation.clone()
@@ -373,7 +383,8 @@ class RoundRobinWriter(Writer):
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
-        self._generation = None
+        if self._generation is not None:
+            self._generation += 1
         if empty_write_count:
             self._write_count = 0
 
