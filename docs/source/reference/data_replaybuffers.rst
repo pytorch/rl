@@ -49,6 +49,35 @@ discovery and buffer lifecycle.
     RemoteTensorDictReplayBuffer
 
 
+Sample units
+------------
+
+Replay sampling combines two orthogonal decisions: which anchors are selected
+(the sampler's probability distribution) and what each anchor expands into.
+A :class:`~torchrl.data.replay_buffers.SampleUnit` passed through the
+``sample_unit`` argument owns the second decision. The default behavior,
+equivalent to :class:`~torchrl.data.replay_buffers.Transition`, keeps every
+anchor as a single transition; future units expand anchors into fixed-length
+sequences or complete trajectories with explicit boundary policies.
+
+.. code-block:: python
+
+    from torchrl.data import LazyTensorStorage, ReplayBuffer
+    from torchrl.data.replay_buffers import Transition
+
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(1000),
+        batch_size=32,
+        sample_unit=Transition(),
+    )
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    SampleUnit
+    Transition
+
 Offline-to-online helpers
 -------------------------
 

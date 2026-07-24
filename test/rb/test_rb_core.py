@@ -22,6 +22,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
+from torchrl.data.replay_buffers.sample_units import SampleUnit, Transition
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -1194,6 +1195,109 @@ class TestBufferStats:
         assert stats["size"] == 10
         assert stats["write_count"] == 0
         assert stats["capacity"] == 10
+
+
+class _RepeatTwiceUnit(SampleUnit):
+    """Toy unit doubling every anchor and recording per-record provenance."""
+
+    def expand(self, index, info, storage):
+        index = torch.as_tensor(index).repeat_interleave(2)
+        info = dict(info)
+        info["unit_repeat"] = torch.arange(index.numel()) % 2
+        return index, info
+
+
+class TestSampleUnit:
+    """Executable spec for the SampleUnit composition point (#4039, PR 1).
+
+    Contract pinned by this class:
+
+    - ``sample_unit=None`` (default) and ``sample_unit=Transition()`` are
+      behaviorally identical: same sampled data under the same generator
+      state, same info entries.
+    - A unit's ``expand`` runs after the anchor sampler and before storage
+      read and index bookkeeping, so ``info["index"]`` reports the expanded
+      indices and the returned batch is built from them.
+    - Metadata a unit adds to ``info`` flows into ``sample(return_info=True)``
+      and becomes keys of TensorDict samples.
+    - ``sample_unit`` must be a ``SampleUnit`` instance; anything else raises
+      ``TypeError`` at construction.
+    """
+
+    def test_default_and_transition_are_identical(self):
+        data = torch.arange(20)
+        samples = {}
+        for name, unit in (("default", None), ("transition", Transition())):
+            generator = torch.Generator()
+            generator.manual_seed(0)
+            rb = ReplayBuffer(
+                storage=LazyTensorStorage(20),
+                batch_size=4,
+                generator=generator,
+                sample_unit=unit,
+            )
+            rb.extend(data)
+            samples[name] = rb.sample(return_info=True)
+        default_sample, default_info = samples["default"]
+        transition_sample, transition_info = samples["transition"]
+        torch.testing.assert_close(default_sample, transition_sample)
+        assert set(default_info) == set(transition_info)
+        torch.testing.assert_close(
+            torch.as_tensor(default_info["index"]),
+            torch.as_tensor(transition_info["index"]),
+        )
+
+    def test_transition_adds_no_info_keys(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10), batch_size=4, sample_unit=Transition()
+        )
+        rb.extend(torch.arange(10))
+        _, info = rb.sample(return_info=True)
+        assert "unit_repeat" not in info
+
+    def test_custom_unit_expands_batch_and_metadata(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            batch_size=4,
+            sample_unit=_RepeatTwiceUnit(),
+        )
+        rb.extend(torch.arange(10, dtype=torch.float32))
+        sample, info = rb.sample(return_info=True)
+        assert sample.shape[0] == 8
+        torch.testing.assert_close(sample[0::2], sample[1::2])
+        index = torch.as_tensor(info["index"])
+        assert index.numel() == 8
+        assert (index[0::2] == index[1::2]).all()
+        assert info["unit_repeat"].numel() == 8
+
+    def test_tensordict_buffer_carries_unit_metadata(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            batch_size=4,
+            sample_unit=_RepeatTwiceUnit(),
+        )
+        rb.extend(TensorDict({"obs": torch.randn(10, 3)}, batch_size=[10]))
+        sample = rb.sample()
+        assert sample.batch_size[0] == 8
+        assert "unit_repeat" in sample.keys()
+        torch.testing.assert_close(sample["obs"][0::2], sample["obs"][1::2])
+
+    def test_invalid_sample_unit_raises(self):
+        with pytest.raises(TypeError, match="sample_unit"):
+            ReplayBuffer(storage=LazyTensorStorage(10), sample_unit=object())
+
+    def test_prioritized_buffer_with_transition_unit(self):
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.9,
+            storage=LazyTensorStorage(10),
+            batch_size=4,
+            sample_unit=Transition(),
+        )
+        rb.extend(TensorDict({"obs": torch.randn(10, 3)}, batch_size=[10]))
+        sample = rb.sample()
+        assert sample.batch_size[0] == 4
+        rb.update_tensordict_priority(sample)
 
 
 if __name__ == "__main__":
