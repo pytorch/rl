@@ -163,13 +163,6 @@ class ImmutableDatasetWriter(Writer):
 class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers.
 
-    Round-robin writers stamp every physical storage slot with an int64
-    generation counter: the first write of a slot has generation ``0`` and every
-    reuse increments it. Sampling returns the generation observed for each index
-    (see :meth:`generations_of`), so a captured ``(index, generation)`` pair
-    identifies one specific record and becomes detectably stale once its slot is
-    reused or the buffer is emptied.
-
     Args:
         compilable (bool, optional): whether the writer is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
@@ -222,12 +215,6 @@ class RoundRobinWriter(Writer):
             )
 
     def generations_of(self, index: int | torch.Tensor) -> torch.Tensor:
-        """Returns the int64 generation stamp for each physical slot in ``index``.
-
-        The first write of a slot has generation ``0`` and every reuse increments
-        it. For multidimensional storages the index is reduced to its first (slot)
-        dimension. Slots that have never been written report ``-1``.
-        """
         if isinstance(index, tuple):
             index = index[0]
         elif (
