@@ -506,6 +506,65 @@ class TestWriterGeneration:
         assert writer2._track_generation is True
         torch.testing.assert_close(writer2._generation, torch.tensor([3, 2, 2, 1]))
 
+    def test_sample_returns_generation(self):
+        size = 8
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(size))
+        _, info = rb.sample(4, return_info=True)
+        assert "index_generation" in info
+        gen = torch.as_tensor(info["index_generation"])
+        idx = torch.as_tensor(info["index"])
+        assert gen.shape == idx.shape
+        torch.testing.assert_close(gen, rb._writer._generation[idx])
+
+    def test_sample_no_generation_when_disabled(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(8))
+        rb.extend(torch.arange(8))
+        _, info = rb.sample(4, return_info=True)
+        assert "index_generation" not in info
+
+    def test_tensordict_sample_has_generation_key(self):
+        size = 8
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=TensorDictRoundRobinWriter(track_generation=True),
+        )
+        rb.extend(TensorDict({"a": torch.arange(size)}, [size]))
+        sample = rb.sample(4)
+        assert "index_generation" in sample.keys()
+        assert sample["index_generation"].shape[0] == 4
+
+    def test_wraparound_race_detectable(self):
+        size = 8
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(size))
+        _, info = rb.sample(4, return_info=True)
+        sampled_index = torch.as_tensor(info["index"])
+        sampled_generation = torch.as_tensor(info["index_generation"])
+        rb.extend(torch.arange(size, 2 * size))
+        current = rb._writer._get_generation(sampled_index)
+        assert (current != sampled_generation).all()
+
+    def test_partial_reuse_detectable(self):
+        size = 8
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(size))
+        _, info = rb.sample(size, return_info=True)
+        idx = torch.as_tensor(info["index"])
+        gen = torch.as_tensor(info["index_generation"])
+        rb.extend(torch.arange(size, size + 3))
+        stale = rb._writer._get_generation(idx) != gen
+        torch.testing.assert_close(stale, idx < 3)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

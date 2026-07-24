@@ -212,7 +212,9 @@ class RoundRobinWriter(Writer):
             )
         if self._generation is None:
             raise RuntimeError("No data has been written yet; generation is undefined.")
-        if (
+        if isinstance(index, tuple):
+            index = index[0]
+        elif (
             isinstance(index, torch.Tensor)
             and index.ndim
             and self._storage.ndim > 1
