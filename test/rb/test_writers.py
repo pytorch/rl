@@ -403,6 +403,110 @@ class TestWriterStateDict:
         assert writer2._write_count == 23
 
 
+class TestWriterGeneration:
+    def test_generation_disabled_by_default(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        assert rb._writer.supports_generation is False
+        assert rb._writer._generation is None
+        with pytest.raises(RuntimeError, match="does not track generations"):
+            rb._writer._get_generation(0)
+
+    def test_generation_increments_on_reuse(self):
+        size = 4
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(size))
+        assert rb._writer.supports_generation is True
+        assert (rb._writer._generation == 1).all()
+        rb.extend(torch.arange(size, size + 3))
+        torch.testing.assert_close(rb._writer._generation, torch.tensor([2, 2, 2, 1]))
+
+    def test_generation_wraparound(self):
+        size = 5
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(2 * size))
+        assert (rb._writer._generation == 2).all()
+
+    def test_generation_add(self):
+        size = 3
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        for i in range(size + 1):
+            rb.add(torch.tensor(i))
+        torch.testing.assert_close(rb._writer._generation, torch.tensor([2, 1, 1]))
+
+    def test_generation_get(self):
+        size = 4
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(size + 2))
+        gen = rb._writer._get_generation(torch.tensor([0, 3]))
+        torch.testing.assert_close(gen, torch.tensor([2, 1]))
+
+    def test_generation_tensordict_writer(self):
+        size = 4
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=TensorDictRoundRobinWriter(track_generation=True),
+        )
+        rb.extend(TensorDict({"a": torch.arange(2 * size)}, [2 * size]))
+        assert (rb._writer._generation == 2).all()
+
+    def test_generation_write_at(self):
+        storage = LazyTensorStorage(4)
+        writer = RoundRobinWriter(track_generation=True)
+        writer.register_storage(storage)
+        writer.extend(torch.arange(4))
+        writer.write_at(torch.tensor([0, 1]), torch.tensor([10, 11]))
+        torch.testing.assert_close(writer._generation, torch.tensor([2, 2, 1, 1]))
+
+    def test_generation_empty_resets(self):
+        storage = LazyTensorStorage(4)
+        writer = RoundRobinWriter(track_generation=True)
+        writer.register_storage(storage)
+        writer.extend(torch.arange(4))
+        writer._empty()
+        assert writer._generation is None
+
+    def test_generation_state_dict_roundtrip(self):
+        size = 4
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb.extend(torch.arange(size + 1))
+        sd = rb.state_dict()
+        rb2 = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generation=True),
+        )
+        rb2.load_state_dict(sd)
+        assert rb2._writer.supports_generation is True
+        torch.testing.assert_close(rb2._writer._generation, rb._writer._generation)
+
+    def test_generation_dumps_loads(self, tmp_path):
+        writer = RoundRobinWriter(track_generation=True)
+        writer._cursor = 2
+        writer._write_count = 9
+        writer._generation = torch.tensor([3, 2, 2, 1])
+        writer.dumps(tmp_path)
+        writer2 = RoundRobinWriter()
+        writer2.loads(tmp_path)
+        assert writer2._cursor == 2
+        assert writer2._write_count == 9
+        assert writer2._track_generation is True
+        torch.testing.assert_close(writer2._generation, torch.tensor([3, 2, 2, 1]))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
