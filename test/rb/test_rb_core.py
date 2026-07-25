@@ -2301,6 +2301,205 @@ class TestUpdateIfPresent:
         assert not errors
 
 
+class TestUpdateIfPresentVersioned:
+    """Executable spec for the compare-version facility (#4040, RFC extension).
+
+    Contract pinned by this class:
+
+    - The facility activates when ``version_key`` and ``version`` are both
+      passed; passing one without the other raises ``ValueError``. When
+      inactive, behavior is unchanged and ``result.version_rejected`` is
+      ``None``.
+    - For generation-live records, the patch applies iff
+      ``version > stored`` (``require_newer=True``) or ``version >= stored``
+      (``require_newer=False``, the default). Records that fail the check are
+      reported in ``result.version_rejected`` and left untouched.
+    - Records that pass both checks get ``version`` written into
+      ``version_key`` atomically with the patch; ``version_key`` may not
+      appear in ``patch``.
+    - Generation staleness takes precedence: every input record lands in
+      exactly one of updated / version_rejected / stale.
+    - Rejection is deterministic and side-effect free: retrying an outdated
+      update yields the same result and mutates nothing.
+    - ``version`` accepts a Python int (broadcast) or an int64 tensor with
+      one entry per record.
+    """
+
+    def _make_rb(self, size=10):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size), batch_size=4)
+        data = TensorDict(
+            {
+                "obs": torch.arange(size, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(size, 3)
+                .clone(),
+                "state_version": torch.full((size,), 5, dtype=torch.int64),
+            },
+            batch_size=[size],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        return rb, data, index, generation
+
+    def test_newer_version_applies_and_is_written_back(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert result.version_rejected is not None
+        assert not result.version_rejected.any()
+        assert result.version_rejected_count == 0
+        assert (rb[:]["obs"] == 42.0).all()
+        assert (rb[:]["state_version"] == 6).all()
+
+    def test_equal_version_rejected_when_require_newer(self):
+        rb, data, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=5,
+            require_newer=True,
+        )
+        assert not result.updated.any()
+        assert result.version_rejected.all()
+        assert result.version_rejected_count == 10
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+        assert (rb[:]["state_version"] == 5).all()
+
+    def test_equal_version_applies_when_not_require_newer(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=5,
+        )
+        assert result.updated.all()
+        assert (rb[:]["obs"] == 42.0).all()
+
+    def test_older_async_writer_loses_deterministically(self):
+        rb, data, index, generation = self._make_rb()
+        newer = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 2.0)},
+            version_key="state_version",
+            version=7,
+            require_newer=True,
+        )
+        assert newer.updated.all()
+        for _ in range(3):
+            older = rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.full((10, 3), 1.0)},
+                version_key="state_version",
+                version=6,
+                require_newer=True,
+            )
+            assert not older.updated.any()
+            assert older.version_rejected.all()
+            assert (rb[:]["obs"] == 2.0).all()
+            assert (rb[:]["state_version"] == 7).all()
+
+    def test_stale_takes_precedence_over_version(self):
+        rb, _, index, generation = self._make_rb()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(4, 3),
+                    "state_version": torch.zeros(4, dtype=torch.int64),
+                },
+                batch_size=[4],
+            )
+        )
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=1,
+            require_newer=True,
+        )
+        assert result.updated.tolist() == [False] * 10
+        assert result.version_rejected.tolist() == [False] * 4 + [True] * 6
+        assert result.stale_count == 4
+        assert result.version_rejected_count == 6
+        assert not (result.updated & result.version_rejected).any()
+
+    def test_per_record_version_tensor(self):
+        rb, _, index, generation = self._make_rb()
+        versions = torch.tensor([6, 6, 6, 6, 6, 4, 4, 4, 4, 4], dtype=torch.int64)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=versions,
+            require_newer=True,
+        )
+        assert result.updated.tolist() == [True] * 5 + [False] * 5
+        assert result.version_rejected.tolist() == [False] * 5 + [True] * 5
+        assert (rb[:]["state_version"][:5] == 6).all()
+        assert (rb[:]["state_version"][5:] == 5).all()
+
+    def test_validation_errors_leave_storage_untouched(self):
+        rb, data, index, generation = self._make_rb()
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3)},
+                version_key="state_version",
+            )
+        with pytest.raises(KeyError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3)},
+                version_key="not_a_key",
+                version=6,
+            )
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3)},
+                version_key="obs",
+                version=6,
+            )
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"state_version": torch.zeros(10, dtype=torch.int64)},
+                version_key="state_version",
+                version=6,
+            )
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+        assert (rb[:]["state_version"] == 5).all()
+
+    def test_facility_absent_is_backward_compatible(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+        )
+        assert result.updated.all()
+        assert result.version_rejected is None
+        assert (rb[:]["state_version"] == 5).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
