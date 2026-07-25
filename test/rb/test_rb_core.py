@@ -1604,6 +1604,142 @@ class TestSequenceUnit:
         assert sample["obs"].shape[0] == 6
 
 
+class TestSequenceBurnInBootstrap:
+    """Executable spec for Sequence burn-in, bootstrap and stride (#4039, piece 3).
+
+    Contract pinned by this class:
+
+    - ``Sequence(..., burn_in=0, bootstrap=0, stride=1)`` extends the window
+      around each anchor: ``burn_in`` records before the anchor, the learning
+      region of ``length`` records starting at the anchor, then ``bootstrap``
+      records after it. Total records per anchor:
+      ``burn_in + length + bootstrap``.
+    - A new per-record ``"learning_mask"`` info entry is True exactly on the
+      learning region; ``"validity_mask"`` keeps its meaning (real, in-episode
+      data). ``"step_in_sequence"`` runs 0..total-1 across the whole window.
+    - Burn-in never shifts the anchor: entries before the anchor's episode
+      start are invalid and clamped to the episode start, whatever the
+      boundary policy. Bootstrap entries follow ``episode_boundary`` at the
+      episode end like any tail entry.
+    - ``stride`` spaces the records of the window uniformly.
+    - Defaults reproduce the base Sequence behavior exactly.
+    - ``burn_in < 0``, ``bootstrap < 0`` or ``stride < 1`` raise ``ValueError``.
+    """
+
+    def _sequence_cls(self):
+        from torchrl.data.replay_buffers import sample_units
+
+        return sample_units.Sequence
+
+    def _make_storage(self, capacity=10, done_at=(5, 9)):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(capacity), batch_size=4)
+        done = torch.zeros(capacity, 1, dtype=torch.bool)
+        for idx in done_at:
+            done[idx] = True
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(capacity, dtype=torch.float32),
+                    ("next", "done"): done,
+                },
+                batch_size=[capacity],
+            )
+        )
+        return rb
+
+    def _expand(self, rb, unit, anchors):
+        index, info = unit.expand(
+            torch.as_tensor(anchors, dtype=torch.long), {}, rb._storage
+        )
+        return torch.as_tensor(index), info
+
+    def test_burn_in_prepends_records(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=2, burn_in=2), [8])
+        assert index.tolist() == [6, 7, 8, 9]
+        assert info["learning_mask"].tolist() == [False, False, True, True]
+        assert info["validity_mask"].all()
+        assert info["step_in_sequence"].tolist() == [0, 1, 2, 3]
+
+    def test_burn_in_clamped_at_episode_start(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=2, burn_in=2), [6])
+        assert index.tolist() == [6, 6, 6, 7]
+        assert info["validity_mask"].tolist() == [False, False, True, True]
+        assert info["learning_mask"].tolist() == [False, False, True, True]
+
+    def test_bootstrap_appends_records(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=2, bootstrap=1), [6])
+        assert index.tolist() == [6, 7, 8]
+        assert info["learning_mask"].tolist() == [True, True, False]
+        assert info["validity_mask"].all()
+
+    def test_bootstrap_masked_at_episode_end(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(
+            rb, Sequence(length=2, bootstrap=1, episode_boundary="pad"), [8]
+        )
+        assert index.tolist() == [8, 9, 9]
+        assert info["validity_mask"].tolist() == [True, True, False]
+        assert info["learning_mask"].tolist() == [True, True, False]
+
+    def test_stride_spaces_the_window(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage(done_at=(9,))
+        index, info = self._expand(rb, Sequence(length=3, stride=2), [0])
+        assert index.tolist() == [0, 2, 4]
+        assert info["step_in_sequence"].tolist() == [0, 1, 2]
+        assert info["validity_mask"].all()
+
+    def test_defaults_match_base_sequence(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        base_index, base_info = self._expand(rb, Sequence(length=3), [1, 6])
+        ext_index, ext_info = self._expand(
+            rb, Sequence(length=3, burn_in=0, bootstrap=0, stride=1), [1, 6]
+        )
+        assert base_index.tolist() == ext_index.tolist()
+        torch.testing.assert_close(
+            base_info["validity_mask"], ext_info["validity_mask"]
+        )
+        assert ext_info["learning_mask"].all()
+
+    def test_window_size_through_sampling(self):
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(30),
+            batch_size=2,
+            sample_unit=Sequence(length=3, burn_in=2, bootstrap=1),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(30, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(30, 1, dtype=torch.bool),
+                },
+                batch_size=[30],
+            )
+        )
+        sample = rb.sample()
+        assert sample.batch_size[0] == 2 * (2 + 3 + 1)
+        assert "learning_mask" in sample.keys()
+        assert sample["learning_mask"].sum() == 2 * 3
+
+    def test_validation(self):
+        Sequence = self._sequence_cls()
+        with pytest.raises(ValueError):
+            Sequence(length=3, burn_in=-1)
+        with pytest.raises(ValueError):
+            Sequence(length=3, bootstrap=-1)
+        with pytest.raises(ValueError):
+            Sequence(length=3, stride=0)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
