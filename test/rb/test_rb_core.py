@@ -2499,6 +2499,48 @@ class TestUpdateIfPresentVersioned:
         assert result.version_rejected is None
         assert (rb[:]["state_version"] == 5).all()
 
+    @pytest.mark.parametrize("storage_type", ["tensor", "memmap"])
+    def test_checkpoint_roundtrip_preserves_mutable_fields_and_generations(self, storage_type):
+        from torchrl.data import LazyTensorStorage, LazyMemmapStorage, TensorDictReplayBuffer
+        
+        size = 10
+        if storage_type == "memmap":
+            storage_in = LazyMemmapStorage(size)
+            storage_out = LazyMemmapStorage(size)
+        else:
+            storage_in = LazyTensorStorage(size)
+            storage_out = LazyTensorStorage(size)
+
+        rb = TensorDictReplayBuffer(storage=storage_in, batch_size=4)
+        data = TensorDict(
+            {
+                "obs": torch.arange(size, dtype=torch.float32).unsqueeze(-1).expand(size, 3).clone(),
+                "state_version": torch.full((size,), 5, dtype=torch.int64),
+            },
+            batch_size=[size],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        
+        sd = rb.state_dict()
+        
+        new_rb = TensorDictReplayBuffer(storage=storage_out, batch_size=4)
+        new_rb.load_state_dict(sd)
+        
+        result = new_rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((size, 3), 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        
+        assert result.updated.all()
+        assert not result.version_rejected.any()
+        assert (new_rb[:]["obs"] == 42.0).all()
+        assert (new_rb[:]["state_version"] == 6).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
