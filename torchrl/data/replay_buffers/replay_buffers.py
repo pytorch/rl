@@ -140,6 +140,7 @@ class ConditionalUpdateResult(TensorClass["nocast"]):
     """
 
     updated: torch.Tensor
+    version_rejected: torch.Tensor | None = None
 
     @property
     def updated_count(self) -> int:
@@ -147,9 +148,19 @@ class ConditionalUpdateResult(TensorClass["nocast"]):
         return int(self.updated.sum().item())
 
     @property
+    def version_rejected_count(self) -> int:
+        """Number of records that were live but rejected by version comparison."""
+        if self.version_rejected is None:
+            return 0
+        return int(self.version_rejected.sum().item())
+
+    @property
     def stale_count(self) -> int:
         """Number of records that were stale and skipped."""
-        return int(self.updated.numel()) - self.updated_count
+        base = int(self.updated.numel()) - self.updated_count
+        if self.version_rejected is not None:
+            base -= self.version_rejected_count
+        return base
 
 
 class ReplayBuffer(metaclass=_RayServiceMetaClass):
@@ -1045,6 +1056,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         index: torch.Tensor,
         generation: torch.Tensor,
         patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        version_key: str | tuple[str, ...] | None = None,
+        version: int | torch.Tensor | None = None,
+        require_newer: bool = False,
     ) -> ConditionalUpdateResult:
         """Conditionally updates stored records that are still live.
 
@@ -1129,11 +1143,25 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 f"index and generation must address the same number of records, "
                 f"got {dim0.numel()} indices and {generation.numel()} generations."
             )
+        if (version_key is None) != (version is None):
+            raise ValueError("version_key and version must be provided together.")
+            
         if isinstance(patch, TensorDictBase):
             patch = dict(patch.items(include_nested=True, leaves_only=True))
         else:
             patch = dict(patch)
+            
+        if version_key is not None:
+            if version_key in patch:
+                raise ValueError(f"version_key {version_key!r} may not appear in patch.")
+            version_tensor = torch.as_tensor(version)
+            if version_tensor.ndim == 0:
+                version_tensor = version_tensor.expand(dim0.shape)
+            patch[version_key] = version_tensor
+            
         normalized = storage._validate_conditional_patch(index, patch)
+        version_rejected = None
+        
         with self._replay_lock, self._write_lock:
             # ``generations_of`` returns on the index device; align the captured
             # generations with it so the comparison never crosses devices
@@ -1142,14 +1170,35 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             live = current == generation.to(current.device)
             if live.any():
                 live_index = index[live.to(index.device)]
-                storage._apply_conditional_patch(
-                    live_index,
-                    {
-                        key: value[live.to(value.device)]
-                        for key, value in normalized.items()
-                    },
-                )
-        return ConditionalUpdateResult(updated=live, batch_size=live.shape)
+                if version_key is not None:
+                    from tensordict import unravel_key
+
+                    stored_version = storage[live_index].get(unravel_key(version_key))
+                    incoming_version = normalized[version_key][live]
+                    if require_newer:
+                        version_accepted = incoming_version > stored_version
+                    else:
+                        version_accepted = incoming_version >= stored_version
+
+                    version_rejected = torch.zeros_like(live)
+                    version_rejected[live] = ~version_accepted
+
+                    live[live.clone()] = version_accepted
+
+                if live.any():
+                    live_index = index[live.to(index.device)]
+                    storage._apply_conditional_patch(
+                        live_index,
+                        {
+                            key: value[live.to(value.device)]
+                            for key, value in normalized.items()
+                        },
+                    )
+        return ConditionalUpdateResult(
+            updated=live,
+            version_rejected=version_rejected,
+            batch_size=live.shape,
+        )
 
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
