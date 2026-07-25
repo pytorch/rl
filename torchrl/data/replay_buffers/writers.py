@@ -19,7 +19,7 @@ import torch
 from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDictBase
 from tensordict.utils import expand_as_right, is_tensorclass
 from torch import multiprocessing as mp
-from torchrl._utils import _STRDTYPE2DTYPE
+from torchrl._utils import _make_ordinal_device, _STRDTYPE2DTYPE
 
 try:
     from torch.compiler import disable as compile_disable
@@ -178,28 +178,56 @@ class RoundRobinWriter(Writer):
         self._write_count  # noqa
         self._generation = None
 
-    def _ensure_generation(self, capacity: int, min_size: int) -> None:
+    def register_storage(self, storage: Storage) -> None:
+        super().register_storage(storage)
+        self._align_generation_device()
+
+    def _generation_device(self, index: int | torch.Tensor) -> torch.device:
+        # The generation buffer follows the storage: sampled indices are built on
+        # the storage device, so lookups stay sync-free on the sampling path.
+        device = getattr(self._storage, "device", None)
+        if device is None or device == "auto":
+            if isinstance(index, torch.Tensor):
+                return _make_ordinal_device(index.device)
+            return torch.device("cpu")
+        return _make_ordinal_device(torch.device(device))
+
+    def _align_generation_device(self) -> None:
+        generation = self._generation
+        if generation is None:
+            return
+        device = self._generation_device(generation)
+        if generation.device != device:
+            self._generation = generation.to(device)
+
+    def _ensure_generation(
+        self, capacity: int, min_size: int, device: torch.device
+    ) -> None:
         # Bounded storages allocate to capacity once (stable shape, so the
         # ``torch.compile`` extend/sample path does not recompile); lazy storages
         # report a sentinel capacity and instead grow geometrically.
         generation = self._generation
+        if generation is not None and generation.device != device:
+            generation = generation.to(device)
+            self._generation = generation
         current = 0 if generation is None else generation.numel()
         if current >= min_size:
             return
         size = (
             capacity if capacity < _GENERATION_UNBOUNDED else max(min_size, current * 2)
         )
-        new_generation = torch.full((size,), -1, dtype=torch.int64)
+        new_generation = torch.full((size,), -1, dtype=torch.int64, device=device)
         if generation is not None:
             new_generation[:current] = generation
-        if not self._compilable:
+        if not self._compilable and new_generation.device.type == "cpu":
             new_generation.share_memory_()
         self._generation = new_generation
 
     def _bump_generation(self, index: int | torch.Tensor, data: Any) -> None:
+        device = self._generation_device(index)
         if _is_int(index):
             capacity = self._storage._max_size_along_dim0(single_data=data)
-            self._ensure_generation(capacity, int(index) + 1)
+            self._ensure_generation(capacity, int(index) + 1, device)
             self._generation[int(index)] += 1
         else:
             index = torch.as_tensor(index, dtype=torch.long).reshape(-1)
@@ -209,7 +237,8 @@ class RoundRobinWriter(Writer):
             min_size = (
                 capacity if capacity < _GENERATION_UNBOUNDED else int(index.max()) + 1
             )
-            self._ensure_generation(capacity, min_size)
+            self._ensure_generation(capacity, min_size, device)
+            index = index.to(device)
             self._generation.index_put_(
                 (index,), torch.ones_like(index), accumulate=True
             )
@@ -231,7 +260,8 @@ class RoundRobinWriter(Writer):
         idx = index.to(self._generation.device)
         n = self._generation.numel()
         gen = self._generation[idx.clamp(max=n - 1)]
-        return torch.where(idx < n, gen, torch.full_like(gen, -1))
+        gen = torch.where(idx < n, gen, torch.full_like(gen, -1))
+        return gen.to(index.device)
 
     def dumps(self, path):
         path = Path(path).absolute()
@@ -242,6 +272,7 @@ class RoundRobinWriter(Writer):
         }
         generation = self._generation
         if generation is not None:
+            generation = generation.cpu()
             try:
                 MemoryMappedTensor.from_filename(
                     filename=path / "generation.memmap",
@@ -275,6 +306,7 @@ class RoundRobinWriter(Writer):
             if not self._compilable:
                 generation.share_memory_()
             self._generation = generation
+            self._align_generation_device()
 
     def add(self, data: Any) -> int | torch.Tensor:
         index = self._cursor
@@ -366,9 +398,10 @@ class RoundRobinWriter(Writer):
         generation = state_dict.get("_generation")
         if generation is not None:
             generation = generation.clone()
-            if not self._compilable:
+            if not self._compilable and generation.device.type == "cpu":
                 generation.share_memory_()
             self._generation = generation
+            self._align_generation_device()
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0

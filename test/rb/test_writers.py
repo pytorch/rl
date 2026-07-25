@@ -576,6 +576,92 @@ class TestWriterGeneration:
         stale = rb._writer.generations_of(idx) != gen
         torch.testing.assert_close(stale, idx < 3)
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_generation_on_storage_device(self, device):
+        size = 8
+        rb = ReplayBuffer(storage=LazyTensorStorage(size, device=device))
+        rb.extend(torch.arange(size, device=device))
+        assert rb._writer._generation.device.type == device.type
+        _, info = rb.sample(4, return_info=True)
+        gen = info["index_generation"]
+        idx = torch.as_tensor(info["index"])
+        assert gen.device == idx.device
+        torch.testing.assert_close(gen, rb._writer.generations_of(idx))
+        rb.extend(torch.arange(size, 2 * size, device=device))
+        torch.testing.assert_close(
+            rb._writer.generations_of(torch.arange(size, device=device)),
+            torch.ones(size, dtype=torch.int64, device=device),
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_generation_add_on_storage_device(self, device):
+        size = 3
+        rb = ReplayBuffer(storage=LazyTensorStorage(size, device=device))
+        for i in range(size + 1):
+            rb.add(torch.tensor(i, device=device))
+        torch.testing.assert_close(
+            rb._writer.generations_of(torch.arange(size, device=device)),
+            torch.tensor([1, 0, 0], device=device),
+        )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_generation_cuda_data_into_cuda_storage(self):
+        size = 8
+        rb = ReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb.extend(torch.arange(size, device="cuda"))
+        assert rb._writer._generation.device.type == "cuda"
+        _, info = rb.sample(4, return_info=True)
+        idx = torch.as_tensor(info["index"])
+        assert info["index_generation"].device == idx.device
+        rb.extend(torch.arange(size, 2 * size, device="cuda"))
+        torch.testing.assert_close(
+            rb._writer.generations_of(torch.arange(size, device="cuda")),
+            torch.ones(size, dtype=torch.int64, device="cuda"),
+        )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_generation_cpu_data_into_cuda_storage(self):
+        size = 4
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb.extend(TensorDict({"a": torch.arange(2 * size)}, [2 * size]))
+        assert rb._writer._generation.device.type == "cuda"
+        torch.testing.assert_close(
+            rb._writer.generations_of(torch.arange(size)),
+            torch.ones(size, dtype=torch.int64),
+        )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_generation_state_dict_roundtrip_cuda(self):
+        size = 4
+        rb = ReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb.extend(torch.arange(size + 1, device="cuda"))
+        rb2 = ReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb2.load_state_dict(rb.state_dict())
+        index = torch.arange(size, device="cuda")
+        assert rb2._writer._generation.device.type == "cuda"
+        torch.testing.assert_close(
+            rb2._writer.generations_of(index), rb._writer.generations_of(index)
+        )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_generation_dumps_loads_cuda(self, tmp_path):
+        writer = RoundRobinWriter()
+        writer.register_storage(LazyTensorStorage(4, device="cuda"))
+        writer._generation = torch.tensor([3, 2, 2, 1], device="cuda")
+        writer.dumps(tmp_path)
+        writer2 = RoundRobinWriter()
+        writer2.register_storage(LazyTensorStorage(4, device="cuda"))
+        writer2.loads(tmp_path)
+        assert writer2._generation.device.type == "cuda"
+        torch.testing.assert_close(
+            writer2.generations_of(torch.arange(4, device="cuda")),
+            torch.tensor([3, 2, 2, 1], device="cuda"),
+        )
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
