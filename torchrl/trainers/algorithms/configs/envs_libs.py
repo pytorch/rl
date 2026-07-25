@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from omegaconf import MISSING
-from torchrl.envs.libs.gym import set_gym_backend
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms.transforms import DoubleToFloat
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
@@ -57,7 +57,7 @@ def make_gym_env(
     from_pixels: bool = False,
     double_to_float: bool = False,
     **kwargs,
-):
+) -> GymEnv:
     """Create a Gym/Gymnasium environment.
 
     Args:
@@ -69,8 +69,6 @@ def make_gym_env(
     Returns:
         The created environment instance.
     """
-    from torchrl.envs.libs.gym import GymEnv
-
     if backend is not None:
         with set_gym_backend(backend):
             env = GymEnv(env_name, from_pixels=from_pixels, **kwargs)

@@ -10,9 +10,14 @@ from functools import partial
 from typing import Any
 
 import torch
-
 from omegaconf import MISSING
-
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torchrl.modules import (
+    AdditiveGaussianModule,
+    QValueActor,
+    TanhModule,
+    ValueOperator,
+)
 from torchrl.trainers.algorithms.configs.common import (
     _normalize_hydra_key,
     _normalize_hydra_keys,
@@ -420,10 +425,9 @@ class AdditiveGaussianModuleConfig(ModelConfig):
         super().__post_init__()
 
 
-def _make_tensordict_module(*args, **kwargs):
+def _make_tensordict_module(*args, **kwargs) -> TensorDictModule:
     """Helper function to create a TensorDictModule."""
     from hydra.utils import instantiate
-    from tensordict.nn import TensorDictModule
 
     module = kwargs.pop("module")
     shared = kwargs.pop("shared", False)
@@ -448,11 +452,10 @@ def _make_tensordict_module(*args, **kwargs):
     return tensordict_module
 
 
-def _make_tensordict_sequential(*args, **kwargs):
+def _make_tensordict_sequential(*args, **kwargs) -> TensorDictSequential:
     """Helper function to create a TensorDictSequential."""
     from hydra.utils import instantiate
     from omegaconf import DictConfig, ListConfig
-    from tensordict.nn import TensorDictSequential
 
     modules = kwargs.pop("modules")
     shared = kwargs.pop("shared", False)
@@ -549,11 +552,9 @@ def _make_tanh_normal_model(*args, **kwargs):
     return result
 
 
-def _make_value_model(*args, **kwargs):
+def _make_value_model(*args, **kwargs) -> ValueOperator:
     """Helper function to create a ValueOperator with the given network."""
     from hydra.utils import instantiate
-
-    from torchrl.modules import ValueOperator
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
@@ -578,10 +579,8 @@ def _make_value_model(*args, **kwargs):
     return value_operator
 
 
-def _make_tanh_module(*args, **kwargs):
+def _make_tanh_module(*args, **kwargs) -> TanhModule:
     """Helper function to create a TanhModule."""
-    from torchrl.modules import TanhModule
-
     kwargs.pop("shared", False)
 
     if "in_keys" in kwargs:
@@ -592,10 +591,8 @@ def _make_tanh_module(*args, **kwargs):
     return TanhModule(**kwargs)
 
 
-def _make_additive_gaussian_module(*args, **kwargs):
+def _make_additive_gaussian_module(*args, **kwargs) -> AdditiveGaussianModule:
     """Helper function to create an AdditiveGaussianModule."""
-    from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
-
     kwargs.pop("shared", False)
     kwargs.pop("in_keys", None)
     kwargs.pop("out_keys", None)
@@ -625,11 +622,9 @@ class QValueModelConfig(ModelConfig):
         super().__post_init__()
 
 
-def _make_qvalue_model(*args, **kwargs):
+def _make_qvalue_model(*args, **kwargs) -> QValueActor:
     """Helper function to create a QValueActor with the given network."""
     from hydra.utils import instantiate
-
-    from torchrl.modules import QValueActor
 
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
