@@ -1441,13 +1441,15 @@ class TestSequenceUnit:
         assert sample.batch_size[0] == 8
         for key in ("sequence_id", "step_in_sequence", "validity_mask"):
             assert key in sample.keys()
-        valid = sample["validity_mask"]
-        obs = sample["obs"]
-        step = sample["step_in_sequence"].float()
+        valid = sample["validity_mask"].reshape(2, 4)
+        obs = sample["obs"].reshape(2, 4)
+        step = sample["step_in_sequence"].reshape(2, 4).float()
         starts = obs - step
-        assert (starts[0:4] == starts[0]).all()
-        assert (starts[4:8] == starts[4]).all()
-        assert valid.all()
+        assert valid[:, 0].all()
+        assert (valid.int().diff(dim=1) <= 0).all()
+        for row in range(2):
+            row_valid = valid[row]
+            assert (starts[row][row_valid] == starts[row][0]).all()
 
     def test_prioritized_weights_expanded_to_records(self):
         Sequence = self._sequence_cls()
@@ -1815,12 +1817,26 @@ class TestSequencePrioritySemantics:
         rb.update_priority(index=torch.arange(20), priority=torch.rand(20) + 0.1)
         _, info = rb.sample(return_info=True)
         records = 4 * length
-        for value in info.values():
+        structural = {
+            "index",
+            "index_generation",
+            "sequence_id",
+            "step_in_sequence",
+            "anchor_index",
+        }
+        checked = 0
+        for key, value in info.items():
             value = torch.as_tensor(value).reshape(-1)
-            if value.numel() != records or value.dtype == torch.bool:
+            if (
+                key in structural
+                or value.numel() != records
+                or value.dtype == torch.bool
+            ):
                 continue
             blocks = value.reshape(4, length).float()
             torch.testing.assert_close(blocks, blocks[:, :1].expand_as(blocks))
+            checked += 1
+        assert checked > 0
 
     def test_uniform_anchor_distribution_unchanged(self):
         Sequence = self._sequence_cls()

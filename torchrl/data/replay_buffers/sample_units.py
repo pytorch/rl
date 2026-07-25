@@ -110,7 +110,12 @@ class Transition(SampleUnit):
 
 
 class Sequence(SampleUnit):
-    """Expands anchors into a fixed-length sequence of records.
+    """Expands anchors into a window of records around each anchor.
+
+    Each anchor expands into ``burn_in + length + bootstrap`` records:
+    ``burn_in`` records preceding the anchor, the learning region of
+    ``length`` records starting at the anchor, then ``bootstrap`` records
+    following it. ``stride`` spaces the records of the window uniformly.
 
     This unit requires a :class:`~torchrl.data.replay_buffers.TensorStorage`
     backed by a TensorDict (e.g. :class:`~torchrl.data.LazyTensorStorage`
@@ -118,7 +123,7 @@ class Sequence(SampleUnit):
     stored ``done_key`` entry.
 
     Args:
-        length (int): the length of the sequences.
+        length (int): the length of the learning region of the sequences.
         episode_boundary (str, optional): boundary policy. One of:
 
             - ``"pad"``: repeat the last valid state if a boundary is reached,
@@ -135,6 +140,31 @@ class Sequence(SampleUnit):
             Defaults to ``"pad"``.
         done_key (NestedKey, optional): the key for the end-of-episode flag.
             Defaults to ``("next", "done")``.
+        burn_in (int, optional): number of records preceding the anchor,
+            marked False in the ``"learning_mask"`` info entry. Burn-in never
+            shifts the anchor: entries before the anchor's episode start (or
+            before the oldest written record) are invalid and clamp to that
+            boundary. Defaults to 0.
+        bootstrap (int, optional): number of records following the learning
+            region, marked False in ``"learning_mask"`` and subject to the
+            ``episode_boundary`` policy at episode ends. Defaults to 0.
+        stride (int, optional): spacing between the records of the window.
+            Defaults to 1.
+
+    The unit also reports a per-record ``"anchor_index"`` info entry holding
+    the storage index of each record's sampled anchor, so priorities of
+    sampled sequences can be updated per anchor through ``update_priority``.
+    :meth:`TensorDictReplayBuffer.update_tensordict_priority
+    <torchrl.data.TensorDictReplayBuffer.update_tensordict_priority>` uses it
+    automatically: per-record priorities are reduced (max over the valid
+    records of each window) and written to the anchors only, so padded or
+    bootstrap records never pollute the priorities of unrelated anchors.
+
+    .. note:: ``"anchor_index"`` always reports the anchor the sampler drew.
+        With ``episode_boundary="stop"`` the window may be shifted backward,
+        and with ``stride > 1`` the shifted window is laid out on the stride
+        grid of the shifted anchor: the reported (pre-shift) anchor is then
+        not necessarily one of the window's records.
 
     .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SequenceConfig`
         for the Hydra configuration companion.
@@ -162,7 +192,22 @@ class Sequence(SampleUnit):
         >>> sample["obs"].shape  # 2 anchors x 3 records each
         torch.Size([6])
         >>> sorted(info.keys())
-        ['index', 'sequence_id', 'step_in_sequence', 'validity_mask']
+        ['anchor_index', 'index', 'learning_mask', 'sequence_id', 'step_in_sequence', 'validity_mask']
+        >>> # burn-in and bootstrap extend the window around the anchor:
+        >>> unit = Sequence(length=2, burn_in=1, bootstrap=1)
+        >>> index, info = unit.expand(torch.tensor([5]), {}, rb._storage)
+        >>> index.tolist()  # burn-in clamps at the episode start (5)
+        [5, 5, 6, 7]
+        >>> info["learning_mask"].tolist()
+        [False, True, True, False]
+        >>> info["validity_mask"].tolist()
+        [False, True, True, True]
+        >>> # stride spaces the window records uniformly:
+        >>> index, _ = Sequence(length=3, stride=2).expand(
+        ...     torch.tensor([0]), {}, rb._storage
+        ... )
+        >>> index.tolist()
+        [0, 2, 4]
     """
 
     def __init__(
@@ -170,11 +215,20 @@ class Sequence(SampleUnit):
         length: int,
         episode_boundary: Literal["pad", "stop", "include_reset"] = "pad",
         done_key: NestedKey | None = ("next", "done"),
+        burn_in: int = 0,
+        bootstrap: int = 0,
+        stride: int = 1,
     ):
         if length <= 0:
             raise ValueError(f"length must be strictly positive, got {length}.")
         if episode_boundary not in ("pad", "stop", "include_reset"):
             raise ValueError(f"Unknown episode_boundary {episode_boundary}")
+        if burn_in < 0:
+            raise ValueError(f"burn_in must be non-negative, got {burn_in}.")
+        if bootstrap < 0:
+            raise ValueError(f"bootstrap must be non-negative, got {bootstrap}.")
+        if stride < 1:
+            raise ValueError(f"stride must be strictly positive, got {stride}.")
         if done_key is not None and not isinstance(done_key, str):
             # normalize sequence-form nested keys (e.g. lists or omegaconf
             # containers coming from Hydra configs) to plain tuples
@@ -182,6 +236,9 @@ class Sequence(SampleUnit):
         self.length = length
         self.episode_boundary = episode_boundary
         self.done_key = done_key
+        self.burn_in = burn_in
+        self.bootstrap = bootstrap
+        self.stride = stride
 
     @staticmethod
     def _newest_index(storage: Storage, written: int) -> int:
@@ -233,6 +290,7 @@ class Sequence(SampleUnit):
         # returned indices live on the same device as the ones Transition
         # (identity) would return.
         device = anchor.device
+        total = self.burn_in + self.length + self.bootstrap
 
         expanded_info = {}
         for k, v in info.items():
@@ -241,19 +299,19 @@ class Sequence(SampleUnit):
                 # scalar metadata is not per-anchor: leave it untouched
                 expanded_info[k] = v
             else:
-                expanded_info[k] = val.repeat_interleave(self.length, dim=0)
+                expanded_info[k] = val.repeat_interleave(total, dim=0)
 
-        seq_id = torch.arange(B, device=device).repeat_interleave(self.length)
-        step_idx = torch.arange(self.length, device=device).repeat(B)
+        steps = torch.arange(total, device=device, dtype=torch.long)
+        learning = (steps >= self.burn_in) & (steps < self.burn_in + self.length)
 
-        expanded_info["sequence_id"] = seq_id
-        expanded_info["step_in_sequence"] = step_idx
-
-        offset = (
-            torch.arange(self.length, device=device, dtype=torch.long)
-            .unsqueeze(0)
-            .expand(B, self.length)
+        expanded_info["sequence_id"] = torch.arange(B, device=device).repeat_interleave(
+            total
         )
+        expanded_info["step_in_sequence"] = steps.repeat(B)
+        expanded_info["learning_mask"] = learning.repeat(B)
+        expanded_info["anchor_index"] = anchor.repeat_interleave(total)
+
+        offset = ((steps - self.burn_in) * self.stride).unsqueeze(0).expand(B, total)
 
         if self.episode_boundary in ("pad", "stop"):
             done = storage.get(self.done_key) if self.done_key is not None else None
@@ -275,9 +333,7 @@ class Sequence(SampleUnit):
             a_exp = anchor.unsqueeze(1)
 
             cond1 = (start_exp <= stop_exp) & (start_exp <= a_exp) & (a_exp <= stop_exp)
-            cond2 = (start_exp > stop_exp) & (
-                (a_exp >= start_exp) | (a_exp <= stop_exp)
-            )
+            cond2 = (start_exp > stop_exp) & ((a_exp >= start_exp) | (a_exp <= stop_exp))
             mask = cond1 | cond2
 
             traj_idx = mask.float().argmax(dim=1)
@@ -287,29 +343,39 @@ class Sequence(SampleUnit):
             dist_to_stop = ((a_stop - anchor) % max_len).to(torch.long)
             dist_from_start = ((anchor - a_start) % max_len).to(torch.long)
 
+            anchor_eff = anchor
             if self.episode_boundary == "stop":
-                shortfall = (self.length - 1) - dist_to_stop
+                shortfall = self.stride * (self.length - 1) - dist_to_stop
                 shift = torch.clamp(
                     shortfall, min=torch.zeros_like(shortfall), max=dist_from_start
                 )
-                anchor = anchor - shift
+                anchor_eff = anchor - shift
                 dist_to_stop = dist_to_stop + shift
+                dist_from_start = dist_from_start - shift
 
+            validity = (offset <= dist_to_stop.unsqueeze(1)) & (
+                offset >= -dist_from_start.unsqueeze(1)
+            )
             clamped_offset = torch.minimum(offset, dist_to_stop.unsqueeze(1))
-            validity = offset <= dist_to_stop.unsqueeze(1)
-            indices = (anchor.unsqueeze(1) + clamped_offset) % max_len
+            clamped_offset = torch.maximum(clamped_offset, -dist_from_start.unsqueeze(1))
+            indices = (anchor_eff.unsqueeze(1) + clamped_offset) % max_len
         else:
             # "include_reset": cross episode boundaries, but never cross the
             # write seam (between the newest and the oldest record of the
-            # ring buffer) nor read slots that were never written.
+            # ring buffer) nor read slots that were never written -- in
+            # either direction, since burn-in walks backward from the anchor.
             written = len(storage)
             newest = self._newest_index(storage, written)
-            dist_to_newest = torch.remainder(
-                torch.as_tensor(newest, device=device, dtype=torch.long) - anchor,
-                written,
+            oldest = (newest + 1) % written if storage._is_full else 0
+            newest = torch.as_tensor(newest, device=device, dtype=torch.long)
+            oldest = torch.as_tensor(oldest, device=device, dtype=torch.long)
+            dist_forward = torch.remainder(newest - anchor, written)
+            dist_backward = torch.remainder(anchor - oldest, written)
+            validity = (offset <= dist_forward.unsqueeze(1)) & (
+                offset >= -dist_backward.unsqueeze(1)
             )
-            clamped_offset = torch.minimum(offset, dist_to_newest.unsqueeze(1))
-            validity = offset <= dist_to_newest.unsqueeze(1)
+            clamped_offset = torch.minimum(offset, dist_forward.unsqueeze(1))
+            clamped_offset = torch.maximum(clamped_offset, -dist_backward.unsqueeze(1))
             indices = torch.remainder(anchor.unsqueeze(1) + clamped_offset, written)
 
         expanded_info["validity_mask"] = validity.flatten()
