@@ -1300,6 +1300,185 @@ class TestSampleUnit:
         rb.update_tensordict_priority(sample)
 
 
+class TestSequenceUnit:
+    """Executable spec for the Sequence sample unit (#4039, piece 2).
+
+    Contract pinned by this class:
+
+    - ``Sequence(length, episode_boundary="pad", done_key=("next","done"))``
+      expands each anchor into the ``length`` records that follow it in
+      stored-time order, wrapping physical ring indices when an episode spans
+      the storage seam.
+    - Boundary policies: ``"pad"`` keeps the anchor and marks entries past the
+      episode end invalid, clamping their indices inside the episode;
+      ``"stop"`` shifts the anchor backward so the sequence ends at the
+      boundary (full-length, fully valid), falling back to pad behavior when
+      the episode is shorter than ``length``; ``"include_reset"`` crosses the
+      boundary with all entries valid.
+    - ``expand`` adds per-record ``"sequence_id"``, ``"step_in_sequence"`` and
+      ``"validity_mask"`` entries to ``info``, and expands per-anchor entries
+      such as prioritized weights to the record count.
+    - ``sample(batch_size=B)`` therefore returns ``B * length`` records.
+    """
+
+    def _sequence_cls(self):
+        from torchrl.data.replay_buffers import sample_units
+
+        return sample_units.Sequence
+
+    def _make_storage(self, capacity=10, done_at=(5, 9)):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(capacity), batch_size=4)
+        size = capacity
+        done = torch.zeros(size, 1, dtype=torch.bool)
+        for idx in done_at:
+            done[idx] = True
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(size, dtype=torch.float32),
+                    ("next", "done"): done,
+                },
+                batch_size=[size],
+            )
+        )
+        return rb
+
+    def _expand(self, rb, unit, anchors):
+        index, info = unit.expand(
+            torch.as_tensor(anchors, dtype=torch.long), {}, rb._storage
+        )
+        return torch.as_tensor(index), info
+
+    def test_expansion_is_consecutive_within_episode(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=4), [1])
+        assert index.tolist() == [1, 2, 3, 4]
+        assert info["sequence_id"].tolist() == [0, 0, 0, 0]
+        assert info["step_in_sequence"].tolist() == [0, 1, 2, 3]
+        assert info["validity_mask"].all()
+
+    def test_pad_masks_tail_and_clamps_inside_episode(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=4, episode_boundary="pad"), [4])
+        assert index.tolist() == [4, 5, 5, 5]
+        assert info["validity_mask"].tolist() == [True, True, False, False]
+        obs = rb[:]["obs"][index]
+        assert obs.tolist() == [4.0, 5.0, 5.0, 5.0]
+
+    def test_stop_shifts_anchor_to_end_at_boundary(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=4, episode_boundary="stop"), [4])
+        assert index.tolist() == [2, 3, 4, 5]
+        assert info["validity_mask"].all()
+
+    def test_stop_falls_back_to_pad_for_short_episode(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage(done_at=(1, 9))
+        index, info = self._expand(rb, Sequence(length=4, episode_boundary="stop"), [0])
+        assert index.tolist() == [0, 1, 1, 1]
+        assert info["validity_mask"].tolist() == [True, True, False, False]
+
+    def test_include_reset_crosses_boundary(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(
+            rb, Sequence(length=4, episode_boundary="include_reset"), [4]
+        )
+        assert index.tolist() == [4, 5, 6, 7]
+        assert info["validity_mask"].all()
+        done = rb[:]["next", "done"].squeeze(-1)[index]
+        assert done.tolist() == [False, True, False, False]
+
+    def test_wraparound_seam(self):
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        size = 14
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(size, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(size, 1, dtype=torch.bool),
+                },
+                batch_size=[size],
+            )
+        )
+        index, info = self._expand(
+            rb, Sequence(length=4, episode_boundary="include_reset"), [8]
+        )
+        assert index.tolist() == [8, 9, 0, 1]
+        obs = rb[:]["obs"][index]
+        assert obs.tolist() == [8.0, 9.0, 10.0, 11.0]
+        assert info["validity_mask"].all()
+
+    def test_multiple_anchors_sequence_ids(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(rb, Sequence(length=3), [0, 6])
+        assert index.tolist() == [0, 1, 2, 6, 7, 8]
+        assert info["sequence_id"].tolist() == [0, 0, 0, 1, 1, 1]
+        assert info["step_in_sequence"].tolist() == [0, 1, 2, 0, 1, 2]
+
+    def test_metadata_flows_into_tensordict_sample(self):
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20),
+            batch_size=2,
+            sample_unit=Sequence(length=4),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(20, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(20, 1, dtype=torch.bool),
+                },
+                batch_size=[20],
+            )
+        )
+        sample = rb.sample()
+        assert sample.batch_size[0] == 8
+        for key in ("sequence_id", "step_in_sequence", "validity_mask"):
+            assert key in sample.keys()
+        valid = sample["validity_mask"]
+        obs = sample["obs"]
+        step = sample["step_in_sequence"].float()
+        starts = obs - step
+        assert (starts[0:4] == starts[0]).all()
+        assert (starts[4:8] == starts[4]).all()
+        assert valid.all()
+
+    def test_prioritized_weights_expanded_to_records(self):
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=PrioritizedSampler(20, alpha=0.7, beta=0.9),
+            batch_size=2,
+            sample_unit=Sequence(length=4),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(20, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(20, 1, dtype=torch.bool),
+                },
+                batch_size=[20],
+            )
+        )
+        sample, info = rb.sample(return_info=True)
+        assert sample.batch_size[0] == 8
+        for value in info.values():
+            assert torch.as_tensor(value).reshape(-1).shape[0] in (8,)
+
+    def test_invalid_length_raises(self):
+        Sequence = self._sequence_cls()
+        with pytest.raises(ValueError):
+            Sequence(length=0)
+        with pytest.raises(ValueError):
+            Sequence(length=4, episode_boundary="teleport")
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
