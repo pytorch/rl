@@ -1740,6 +1740,127 @@ class TestSequenceBurnInBootstrap:
             Sequence(length=3, stride=0)
 
 
+class TestSequencePrioritySemantics:
+    """Executable spec for sequence priority semantics and distribution
+    invariance (#4039, piece 4, first half).
+
+    Contract pinned by this class:
+
+    - Priorities live per anchor. The Sequence unit adds a per-record
+      ``"anchor_index"`` info entry (the storage index of each record's
+      anchor) so priorities can be updated for the anchors of sampled
+      sequences through the ordinary ``update_priority`` path.
+    - Per-anchor sampler entries such as importance weights are expanded
+      block-constant: reshaped to ``[anchors, window]``, every row is
+      constant.
+    - Range expansion does not change the anchor selection distribution:
+      anchors drawn through a Sequence unit follow the same distribution as
+      anchors drawn through Transition, both for uniform and prioritized
+      sampling.
+
+    The distribution tests are statistical: seeded, with wide tolerance
+    bands chosen to keep them deterministic in CI.
+    """
+
+    def _sequence_cls(self):
+        from torchrl.data.replay_buffers import sample_units
+
+        return sample_units.Sequence
+
+    def _make_rb(self, sampler=None, unit=None, capacity=20, batch_size=4):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(capacity),
+            sampler=sampler if sampler is not None else RandomSampler(),
+            batch_size=batch_size,
+            sample_unit=unit,
+            generator=torch.Generator().manual_seed(0),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(capacity, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(capacity, 1, dtype=torch.bool),
+                },
+                batch_size=[capacity],
+            )
+        )
+        return rb
+
+    def _anchor_counts(self, rb, unit_length, draws=400, capacity=20):
+        counts = torch.zeros(capacity)
+        for _ in range(draws):
+            _, info = rb.sample(return_info=True)
+            if unit_length == 1:
+                anchors = torch.as_tensor(info["index"]).reshape(-1)
+            else:
+                anchors = torch.as_tensor(info["anchor_index"]).reshape(-1)[
+                    ::unit_length
+                ]
+            counts += torch.bincount(anchors, minlength=capacity)
+        return counts / counts.sum()
+
+    def test_anchor_index_metadata(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_rb()
+        index, info = Sequence(length=3).expand(torch.tensor([1, 6]), {}, rb._storage)
+        assert info["anchor_index"].tolist() == [1, 1, 1, 6, 6, 6]
+
+    def test_weights_are_block_constant(self):
+        Sequence = self._sequence_cls()
+        length = 4
+        rb = self._make_rb(
+            sampler=PrioritizedSampler(20, alpha=0.7, beta=0.9),
+            unit=Sequence(length=length),
+        )
+        rb.update_priority(index=torch.arange(20), priority=torch.rand(20) + 0.1)
+        _, info = rb.sample(return_info=True)
+        records = 4 * length
+        for value in info.values():
+            value = torch.as_tensor(value).reshape(-1)
+            if value.numel() != records or value.dtype == torch.bool:
+                continue
+            blocks = value.reshape(4, length).float()
+            torch.testing.assert_close(blocks, blocks[:, :1].expand_as(blocks))
+
+    def test_uniform_anchor_distribution_unchanged(self):
+        Sequence = self._sequence_cls()
+        expected = 1.0 / 20
+        for unit, unit_length in ((None, 1), (Sequence(length=2), 2)):
+            rb = self._make_rb(unit=unit)
+            freqs = self._anchor_counts(rb, unit_length)
+            assert (freqs > 0.4 * expected).all()
+            assert (freqs < 1.9 * expected).all()
+
+    def test_prioritized_anchor_distribution_unchanged(self):
+        Sequence = self._sequence_cls()
+        priorities = torch.ones(20)
+        priorities[10:] = 9.0
+        for unit, unit_length in ((None, 1), (Sequence(length=2), 2)):
+            rb = self._make_rb(
+                sampler=PrioritizedSampler(20, alpha=1.0, beta=1.0),
+                unit=unit,
+            )
+            rb.update_priority(index=torch.arange(20), priority=priorities)
+            freqs = self._anchor_counts(rb, unit_length)
+            high_share = freqs[10:].sum().item()
+            assert 0.8 < high_share < 0.98
+
+    def test_update_priority_via_anchor_index(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_rb(
+            sampler=PrioritizedSampler(20, alpha=1.0, beta=1.0),
+            unit=Sequence(length=2),
+        )
+        rb.update_priority(index=torch.arange(20), priority=torch.ones(20))
+        _, info = rb.sample(return_info=True)
+        boosted = int(torch.as_tensor(info["anchor_index"]).reshape(-1)[0])
+        rb.update_priority(
+            index=torch.tensor([boosted]), priority=torch.tensor([1000.0])
+        )
+        freqs = self._anchor_counts(rb, unit_length=2, draws=200)
+        assert freqs[boosted] > 0.5
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
