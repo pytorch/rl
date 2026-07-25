@@ -405,8 +405,10 @@ class RoundRobinWriter(Writer):
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
-        if self._generation is not None:
-            self._generation += 1
+        generation = self._generation
+        if generation is not None:
+            # never-written slots keep the -1 sentinel
+            generation[generation >= 0] += 1
         if empty_write_count:
             self._write_count = 0
 

@@ -491,6 +491,14 @@ class TestWriterGeneration:
         rb.empty()
         assert (rb._writer.generations_of(index) != gen).all()
 
+    def test_empty_preserves_unwritten_sentinel(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(4))
+        rb.extend(torch.arange(2))
+        rb.empty()
+        torch.testing.assert_close(
+            rb._writer.generations_of(torch.arange(4)), torch.tensor([1, 1, -1, -1])
+        )
+
     def test_generation_state_dict_roundtrip(self):
         size = 4
         rb = ReplayBuffer(storage=LazyTensorStorage(size))
