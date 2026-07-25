@@ -1732,6 +1732,28 @@ class TestSequenceBurnInBootstrap:
         assert "learning_mask" in sample.keys()
         assert sample["learning_mask"].sum() == 2 * 3
 
+    def test_include_reset_does_not_read_unwritten_slots(self):
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(20), batch_size=2)
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(10, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(10, 1, dtype=torch.bool),
+                },
+                batch_size=[10],
+            )
+        )
+        backward = Sequence(length=3, burn_in=2, episode_boundary="include_reset")
+        index, info = backward.expand(torch.tensor([0]), {}, rb._storage)
+        assert index.min() >= 0
+        assert index.max() < 10
+        assert info["validity_mask"].tolist() == [False, False, True, True, True]
+        forward = Sequence(length=4, episode_boundary="include_reset")
+        index, info = forward.expand(torch.tensor([8]), {}, rb._storage)
+        assert index.max() < 10
+        assert info["validity_mask"].tolist() == [True, True, False, False]
+
     def test_validation(self):
         Sequence = self._sequence_cls()
         with pytest.raises(ValueError):
