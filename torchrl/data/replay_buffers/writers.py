@@ -63,7 +63,9 @@ class Writer(ABC):
     def generations_of(self, index: int | torch.Tensor) -> torch.Tensor:
         """Returns the generation stamp for each physical slot in ``index``.
 
-        Writers that do not track slot reuse report ``-1``.
+        The stamp advances once per write to that slot, so a single ``extend``
+        that wraps the storage advances a reused slot once per write it
+        receives. Writers that do not track slot reuse report ``-1``.
         """
         index = torch.as_tensor(index)
         return torch.full(index.shape, -1, dtype=torch.int64, device=index.device)
@@ -354,7 +356,11 @@ class RoundRobinWriter(Writer):
         return index
 
     def write_at(self, index: int | torch.Tensor, data: Any) -> int | torch.Tensor:
-        """Writes data at explicit storage indices without moving the cursor."""
+        """Writes data at explicit storage indices without moving the cursor.
+
+        The generation of every written slot is bumped, so handles previously
+        handed out for those slots are stale once this returns.
+        """
         if _is_int(index):
             batch_size = 1
         else:
