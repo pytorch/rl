@@ -441,6 +441,15 @@ class TestWriterGeneration:
             torch.full((size,), 1, dtype=torch.int64),
         )
 
+    def test_generation_extend_wrapping_twice(self):
+        size = 4
+        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        # slots 0 and 1 are written three times, slots 2 and 3 twice
+        rb.extend(torch.arange(2 * size + 2))
+        torch.testing.assert_close(
+            rb._writer.generations_of(torch.arange(size)), torch.tensor([2, 2, 1, 1])
+        )
+
     def test_generation_add(self):
         size = 3
         rb = ReplayBuffer(storage=LazyTensorStorage(size))
