@@ -133,10 +133,10 @@ class PostTrainingLogger:
                 reward_list = batch.get(("next", "reward"), default=None, as_list=True)
                 if reward_list is not None:
                     reward_tensor = torch.cat(reward_list).float()
-                    metrics["buffer/reward_mean"] = float(reward_tensor.mean())
-                    metrics["buffer/reward_std"] = float(reward_tensor.std())
-                    metrics["buffer/reward_min"] = float(reward_tensor.min())
-                    metrics["buffer/reward_max"] = float(reward_tensor.max())
+                    metrics["batch/reward_mean"] = float(reward_tensor.mean())
+                    metrics["batch/reward_std"] = float(reward_tensor.std())
+                    metrics["batch/reward_min"] = float(reward_tensor.min())
+                    metrics["batch/reward_max"] = float(reward_tensor.max())
             except Exception as exc:  # noqa: BLE001
                 torchrl_logger.debug(
                     f"PostTrainingLogger: could not read reward from batch: {exc}"
@@ -150,7 +150,7 @@ class PostTrainingLogger:
                     lengths = torch.tensor(
                         [t.numel() for t in response_list], dtype=torch.float
                     )
-                    metrics["buffer/seq_length_mean"] = float(lengths.mean())
+                    metrics["batch/seq_length_mean"] = float(lengths.mean())
             except Exception as exc:  # noqa: BLE001
                 torchrl_logger.debug(
                     f"PostTrainingLogger: could not read response tokens: {exc}"
@@ -159,9 +159,13 @@ class PostTrainingLogger:
             if replay_buffer is not None:
                 try:
                     metrics["buffer/write_count"] = int(replay_buffer.write_count)
-                    # _storage is private; max_size is a public plain attribute on Storage.
-                    storage = replay_buffer._storage  # noqa: SLF001
-                    if hasattr(storage, "max_size") and storage.max_size > 0:
+                    # RayReplayBuffer has no _storage; guard with getattr.
+                    storage = getattr(replay_buffer, "_storage", None)  # noqa: SLF001
+                    if (
+                        storage is not None
+                        and hasattr(storage, "max_size")
+                        and storage.max_size > 0
+                    ):
                         metrics["buffer/utilization"] = (
                             len(replay_buffer) / storage.max_size
                         )

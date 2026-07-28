@@ -24,6 +24,9 @@ from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncSche
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
+# Tracks which legacy GRPO metric keys have already fired a DeprecationWarning.
+_GRPO_WARNED: set[str] = set()
+
 
 def check_grpo_dependencies(backend: str = "vllm") -> None:
     """Check for required GRPO dependencies and provide helpful error messages.
@@ -962,6 +965,25 @@ def log_training_metrics(
         collector=collector,
         step=global_step,
     )
+
+    # Keys renamed by this PR: emit one-time DeprecationWarnings so downstream
+    # dashboards that still reference the old names get a clear migration signal.
+    _GRPO_LEGACY_KEY_MAP = {
+        "buffer/reward_mean": "batch/reward_mean",
+        "buffer/reward_std": "batch/reward_std",
+        "buffer/reward_min": "batch/reward_min",
+        "buffer/reward_max": "batch/reward_max",
+        "buffer/seq_length_mean": "batch/seq_length_mean",
+    }
+    for old_key, new_key in _GRPO_LEGACY_KEY_MAP.items():
+        if old_key not in _GRPO_WARNED:
+            warnings.warn(
+                f'GRPO metric key "{old_key}" has been renamed to "{new_key}". '
+                f'The old key will be removed in v0.15.0.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _GRPO_WARNED.add(old_key)
 
     # GRPO-specific extras: step_count and kl_penalty live in the buffer
     # but are not part of the standard PostTrainingLogger interface.

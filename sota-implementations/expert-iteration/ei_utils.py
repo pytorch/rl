@@ -25,6 +25,10 @@ from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
+# Tracks which legacy EI metric keys have already fired a DeprecationWarning
+# so that long training runs don't spam the user with repeat warnings.
+_EI_WARNED: set[str] = set()
+
 try:
     import ray
 except ImportError:
@@ -706,12 +710,14 @@ def log_training_metrics(
         "throughput (steps per second)": "throughput/gradient_steps_per_second",
     }
     for old_key, new_key in _LEGACY_KEY_MAP.items():
-        warnings.warn(
-            f'EI metric key "{old_key}" is deprecated and will be removed in v0.15.0. '
-            f'Use "{new_key}" instead.',
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        if old_key not in _EI_WARNED:
+            warnings.warn(
+                f'EI metric key "{old_key}" is deprecated and will be removed in v0.15.0. '
+                f'Use "{new_key}" instead.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _EI_WARNED.add(old_key)
 
     with torch.no_grad():
         optim_steps = global_step // gradient_accumulation_steps
@@ -732,14 +738,19 @@ def log_training_metrics(
             )
         except Exception:  # noqa: BLE001
             pass
-        legacy_metrics["reward from batch"] = float(batch["next", "reward"].mean())
-        legacy_metrics["loss_sft, from loss"] = float(loss.loss_sft)
-        kl_to_ref = getattr(loss, "loss_kl_to_ref", None)
-        if kl_to_ref is not None:
-            legacy_metrics["loss_kl_to_ref, from loss"] = float(kl_to_ref)
-        kl_val = getattr(loss, "kl_to_ref", None)
-        if kl_val is not None:
-            legacy_metrics["kl_to_ref, from loss"] = float(kl_val)
+        try:
+            legacy_metrics["reward from batch"] = float(
+                batch["next", "reward"].mean()
+            )
+            legacy_metrics["loss_sft, from loss"] = float(loss.loss_sft)
+            kl_to_ref = getattr(loss, "loss_kl_to_ref", None)
+            if kl_to_ref is not None:
+                legacy_metrics["loss_kl_to_ref, from loss"] = float(kl_to_ref)
+            kl_val = getattr(loss, "kl_to_ref", None)
+            if kl_val is not None:
+                legacy_metrics["kl_to_ref, from loss"] = float(kl_val)
+        except Exception:  # noqa: BLE001
+            pass
         legacy_metrics["grad_norm"] = (
             float(grad_norm) if global_step % gradient_accumulation_steps == 0 else 0.0
         )

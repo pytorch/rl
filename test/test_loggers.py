@@ -1689,11 +1689,11 @@ class TestPostTrainingLogger:
             pt = PostTrainingLogger(logger=csv_logger)
             metrics = pt.log_collection_step(batch, step=1)
 
-        assert "buffer/reward_mean" in metrics
-        assert abs(metrics["buffer/reward_mean"] - 1.5) < 1e-5
-        assert "buffer/reward_std" in metrics
-        assert "buffer/reward_min" in metrics
-        assert "buffer/reward_max" in metrics
+        assert "batch/reward_mean" in metrics
+        assert abs(metrics["batch/reward_mean"] - 1.5) < 1e-5
+        assert "batch/reward_std" in metrics
+        assert "batch/reward_min" in metrics
+        assert "batch/reward_max" in metrics
         # Optional metrics absent when not provided
         assert "buffer/utilization" not in metrics
         assert "inference/policy_version" not in metrics
