@@ -1,0 +1,1079 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>SACLoss &mdash; torchrl 0.4 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="DiscreteSACLoss" href="torchrl.objectives.DiscreteSACLoss.html" />
+    <link rel="prev" title="DDPGLoss" href="torchrl.objectives.DDPGLoss.html" />
+  <!-- Google Analytics -->
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-117752657-2"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'UA-117752657-2');
+    </script>
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torcharrow">
+                  <span class="dropdown-title">torcharrow</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchx/">
+                  <span class="dropdown-title">TorchX</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn about the PyTorch foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+                <div class="version">
+                  0.4
+                </div>
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="../objectives.html">torchrl.objectives package</a> &gt;</li>
+        
+      <li>SACLoss</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/reference/generated/torchrl.objectives.SACLoss.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+          <div class="pytorch-call-to-action-links">
+            <div id="tutorial-type">reference/generated/torchrl.objectives.SACLoss</div>
+
+            <div id="google-colab-link">
+              <img class="call-to-action-img" src="../../_static/images/pytorch-colab.svg"/>
+              <div class="call-to-action-desktop-view">Run in Google Colab</div>
+              <div class="call-to-action-mobile-view">Colab</div>
+            </div>
+            <div id="download-notebook-link">
+              <img class="call-to-action-notebook-img" src="../../_static/images/pytorch-download.svg"/>
+              <div class="call-to-action-desktop-view">Download Notebook</div>
+              <div class="call-to-action-mobile-view">Notebook</div>
+            </div>
+            <div id="github-view-link">
+              <img class="call-to-action-img" src="../../_static/images/pytorch-github.svg"/>
+              <div class="call-to-action-desktop-view">View on GitHub</div>
+              <div class="call-to-action-mobile-view">GitHub</div>
+            </div>
+          </div>
+
+        
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="sacloss">
+<h1>SACLoss<a class="headerlink" href="#sacloss" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrl.objectives.SACLoss">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">SACLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/sac.html#SACLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.SACLoss" title="Permalink to this definition">¶</a></dt>
+<dd><p>TorchRL implementation of the SAC loss.</p>
+<p>Presented in “Soft Actor-Critic: Off-Policy Maximum Entropy Deep
+Reinforcement Learning with a Stochastic Actor” <a class="reference external" href="https://arxiv.org/abs/1801.01290">https://arxiv.org/abs/1801.01290</a>
+and “Soft Actor-Critic Algorithms and Applications” <a class="reference external" href="https://arxiv.org/abs/1812.05905">https://arxiv.org/abs/1812.05905</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>actor_network</strong> (<a class="reference internal" href="torchrl.modules.tensordict_module.ProbabilisticActor.html#torchrl.modules.tensordict_module.ProbabilisticActor" title="torchrl.modules.tensordict_module.ProbabilisticActor"><em>ProbabilisticActor</em></a>) – stochastic actor</p></li>
+<li><p><strong>qvalue_network</strong> (<em>TensorDictModule</em>) – Q(s, a) parametric model.
+This module typically outputs a <code class="docutils literal notranslate"><span class="pre">&quot;state_action_value&quot;</span></code> entry.</p></li>
+<li><p><strong>value_network</strong> (<em>TensorDictModule</em><em>, </em><em>optional</em>) – <p>V(s) parametric model.
+This module typically outputs a <code class="docutils literal notranslate"><span class="pre">&quot;state_value&quot;</span></code> entry.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If not provided, the second version of SAC is assumed, where
+only the Q-Value network is needed.</p>
+</div>
+</p></li>
+<li><p><strong>num_qvalue_nets</strong> (<em>integer</em><em>, </em><em>optional</em>) – number of Q-Value networks used.
+Defaults to <code class="docutils literal notranslate"><span class="pre">2</span></code>.</p></li>
+<li><p><strong>loss_function</strong> (<em>str</em><em>, </em><em>optional</em>) – loss function to be used with
+the value function loss. Default is <cite>“smooth_l1”</cite>.</p></li>
+<li><p><strong>alpha_init</strong> (<em>float</em><em>, </em><em>optional</em>) – initial entropy multiplier.
+Default is 1.0.</p></li>
+<li><p><strong>min_alpha</strong> (<em>float</em><em>, </em><em>optional</em>) – min value of alpha.
+Default is None (no minimum value).</p></li>
+<li><p><strong>max_alpha</strong> (<em>float</em><em>, </em><em>optional</em>) – max value of alpha.
+Default is None (no maximum value).</p></li>
+<li><p><strong>action_spec</strong> (<a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.TensorSpec"><em>TensorSpec</em></a><em>, </em><em>optional</em>) – the action tensor spec. If not provided
+and the target entropy is <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>, it will be retrieved from
+the actor.</p></li>
+<li><p><strong>fixed_alpha</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, alpha will be fixed to its
+initial value. Otherwise, alpha will be optimized to
+match the ‘target_entropy’ value.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>target_entropy</strong> (<em>float</em><em> or </em><em>str</em><em>, </em><em>optional</em>) – Target entropy for the
+stochastic policy. Default is “auto”, where target entropy is
+computed as <code class="xref py py-obj docutils literal notranslate"><span class="pre">-prod(n_actions)</span></code>.</p></li>
+<li><p><strong>delay_actor</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to separate the target actor
+networks from the actor networks used for data collection.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>delay_qvalue</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to separate the target Q value
+networks from the Q value networks used for data collection.
+Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>delay_value</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to separate the target value
+networks from the value networks used for data collection.
+Default is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>priority_key</strong> (<em>str</em><em>, </em><em>optional</em>) – [Deprecated, use .set_keys(priority_key=priority_key) instead]
+Tensordict key where to write the
+priority (for prioritized replay buffer usage). Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;td_error&quot;</span></code>.</p></li>
+<li><p><strong>separate_losses</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, shared parameters between
+policy and critic will only be trained on the policy loss.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>, ie. gradients are propagated to shared
+parameters for both policy and critic losses.</p></li>
+<li><p><strong>reduction</strong> (<em>str</em><em>, </em><em>optional</em>) – Specifies the reduction to apply to the output:
+<code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> | <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>: no reduction will be applied,
+<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>: the sum of the output will be divided by the number of
+elements in the output, <code class="docutils literal notranslate"><span class="pre">&quot;sum&quot;</span></code>: the output will be summed. Default: <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">BoundedTensorSpec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.distributions.continuous</span> <span class="kn">import</span> <span class="n">NormalParamWrapper</span><span class="p">,</span> <span class="n">TanhNormal</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.actors</span> <span class="kn">import</span> <span class="n">ProbabilisticActor</span><span class="p">,</span> <span class="n">ValueOperator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.common</span> <span class="kn">import</span> <span class="n">SafeModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives.sac</span> <span class="kn">import</span> <span class="n">SACLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">n_act</span><span class="p">,</span> <span class="n">n_obs</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">BoundedTensorSpec</span><span class="p">(</span><span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="p">(</span><span class="n">n_act</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">net</span> <span class="o">=</span> <span class="n">NormalParamWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">n_act</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">SafeModule</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">ProbabilisticActor</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">distribution_class</span><span class="o">=</span><span class="n">TanhNormal</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">ValueClass</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span> <span class="o">+</span> <span class="n">n_act</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">act</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">obs</span><span class="p">,</span> <span class="n">act</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">ValueClass</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qvalue</span> <span class="o">=</span> <span class="n">ValueOperator</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;observation&#39;</span><span class="p">,</span> <span class="s1">&#39;action&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">ValueOperator</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">SACLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">qvalue</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">action</span><span class="p">,</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;observation&quot;</span><span class="p">):</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">},</span> <span class="n">batch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+<p>This class is compatible with non-tensordict based modules too and can be
+used without recurring to any tensordict-related primitive. In this case,
+the expected keyword arguments are:
+<code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;,</span> <span class="pre">&quot;next_reward&quot;,</span> <span class="pre">&quot;next_done&quot;,</span> <span class="pre">&quot;next_terminated&quot;]</span></code> + in_keys of the actor, value, and qvalue network.
+The return value is a tuple of tensors in the following order:
+<code class="docutils literal notranslate"><span class="pre">[&quot;loss_actor&quot;,</span> <span class="pre">&quot;loss_qvalue&quot;,</span> <span class="pre">&quot;loss_alpha&quot;,</span> <span class="pre">&quot;alpha&quot;,</span> <span class="pre">&quot;entropy&quot;]</span></code> + <code class="docutils literal notranslate"><span class="pre">&quot;loss_value&quot;</span></code> if version one is used.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">BoundedTensorSpec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.distributions.continuous</span> <span class="kn">import</span> <span class="n">NormalParamWrapper</span><span class="p">,</span> <span class="n">TanhNormal</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.actors</span> <span class="kn">import</span> <span class="n">ProbabilisticActor</span><span class="p">,</span> <span class="n">ValueOperator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module.common</span> <span class="kn">import</span> <span class="n">SafeModule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives.sac</span> <span class="kn">import</span> <span class="n">SACLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">n_act</span><span class="p">,</span> <span class="n">n_obs</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">BoundedTensorSpec</span><span class="p">(</span><span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_act</span><span class="p">),</span> <span class="p">(</span><span class="n">n_act</span><span class="p">,))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">net</span> <span class="o">=</span> <span class="n">NormalParamWrapper</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">n_act</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">SafeModule</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">ProbabilisticActor</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="o">=</span><span class="n">spec</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">distribution_class</span><span class="o">=</span><span class="n">TanhNormal</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">ValueClass</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span> <span class="o">+</span> <span class="n">n_act</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">act</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">linear</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">obs</span><span class="p">,</span> <span class="n">act</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">ValueClass</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qvalue</span> <span class="o">=</span> <span class="n">ValueOperator</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;observation&#39;</span><span class="p">,</span> <span class="s1">&#39;action&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">n_obs</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">ValueOperator</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">module</span><span class="o">=</span><span class="n">module</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss</span> <span class="o">=</span> <span class="n">SACLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">qvalue</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">action</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_actor</span><span class="p">,</span> <span class="n">loss_qvalue</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">observation</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">next_done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">next_terminated</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">next_observation</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">next_reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_actor</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The output keys can also be filtered using the <code class="xref py py-meth docutils literal notranslate"><span class="pre">SACLoss.select_out_keys()</span></code>
+method.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">loss</span><span class="o">.</span><span class="n">select_out_keys</span><span class="p">(</span><span class="s1">&#39;loss_actor&#39;</span><span class="p">,</span> <span class="s1">&#39;loss_qvalue&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_actor</span><span class="p">,</span> <span class="n">loss_qvalue</span> <span class="o">=</span> <span class="n">loss</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">observation</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">next_done</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">next_terminated</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">next_observation</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">next_reward</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loss_actor</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.objectives.SACLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/sac.html#SACLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.SACLoss.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>It is designed to read an input TensorDict and return another tensordict with loss keys named “loss*”.</p>
+<p>Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+training. Other scalars present in the output tensordict will be logged too.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tensordict</strong> – an input tensordict with the values required to compute the loss.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new tensordict with no batch dimension containing various loss scalars which will be named “loss*”. It
+is essential that the losses are returned with this name as they will be read by the trainer before
+backpropagation.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.objectives.SACLoss.load_state_dict">
+<span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assign</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.objectives.SACLoss.load_state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Copy parameters and buffers from <a class="reference internal" href="#torchrl.objectives.SACLoss.state_dict" title="torchrl.objectives.SACLoss.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> into this module and its descendants.</p>
+<p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">strict</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>, then
+the keys of <a class="reference internal" href="#torchrl.objectives.SACLoss.state_dict" title="torchrl.objectives.SACLoss.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> must exactly match the keys returned
+by this module’s <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.3)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> function.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
+the call to <a class="reference internal" href="#torchrl.objectives.SACLoss.load_state_dict" title="torchrl.objectives.SACLoss.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<a class="reference external" href="https://pytorch.org/docs/stable/future_mod.html#torch.__future__.get_swap_module_params_on_conversion" title="(in PyTorch v2.3)"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code></a> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state_dict</strong> (<em>dict</em>) – a dict containing parameters and
+persistent buffers.</p></li>
+<li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
+in <a class="reference internal" href="#torchrl.objectives.SACLoss.state_dict" title="torchrl.objectives.SACLoss.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
+<a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.3)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><dl class="simple">
+<dt><strong>missing_keys</strong> is a list of str containing any keys that are expected</dt><dd><p>by this module but missing from the provided <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>unexpected_keys</strong> is a list of str containing the keys that are not</dt><dd><p>expected by this module but present in the provided <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>.</p>
+</dd>
+</dl>
+</li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">NamedTuple</span></code> with <code class="docutils literal notranslate"><span class="pre">missing_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">unexpected_keys</span></code> fields</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If a parameter or buffer is registered as <code class="docutils literal notranslate"><span class="pre">None</span></code> and its corresponding key
+exists in <a class="reference internal" href="#torchrl.objectives.SACLoss.state_dict" title="torchrl.objectives.SACLoss.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a>, <a class="reference internal" href="#torchrl.objectives.SACLoss.load_state_dict" title="torchrl.objectives.SACLoss.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a> will raise a
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.objectives.SACLoss.make_value_estimator">
+<span class="sig-name descname"><span class="pre">make_value_estimator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.utils.ValueEstimators"><span class="pre">ValueEstimators</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">hyperparams</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/objectives/sac.html#SACLoss.make_value_estimator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.SACLoss.make_value_estimator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Value-function constructor.</p>
+<p>If the non-default value function is wanted, it must be built using
+this method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value_type</strong> (<a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.ValueEstimators"><em>ValueEstimators</em></a>) – A <a class="reference internal" href="torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators" title="torchrl.objectives.utils.ValueEstimators"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueEstimators</span></code></a>
+enum type indicating the value function to use. If none is provided,
+the default stored in the <code class="docutils literal notranslate"><span class="pre">default_value_estimator</span></code>
+attribute will be used. The resulting value estimator class
+will be registered in <code class="docutils literal notranslate"><span class="pre">self.value_type</span></code>, allowing
+future refinements.</p></li>
+<li><p><strong>**hyperparams</strong> – hyperparameters to use for the value function.
+If not provided, the value indicated by
+<a class="reference internal" href="torchrl.objectives.default_value_kwargs.html#torchrl.objectives.default_value_kwargs" title="torchrl.objectives.utils.default_value_kwargs"><code class="xref py py-func docutils literal notranslate"><span class="pre">default_value_kwargs()</span></code></a> will be
+used.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">DQNLoss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># initialize the DQN loss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">actor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dqn_loss</span> <span class="o">=</span> <span class="n">DQNLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">action_space</span><span class="o">=</span><span class="s2">&quot;one-hot&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># updating the parameters of the default value estimator</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">gamma</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">gamma</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># if we want to change the gamma value</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">make_value_estimator</span><span class="p">(</span><span class="n">dqn_loss</span><span class="o">.</span><span class="n">value_type</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.objectives.SACLoss.state_dict">
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.objectives.SACLoss.state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a dictionary containing references to the whole state of the module.</p>
+<p>Both parameters and persistent buffers (e.g. running averages) are
+included. Keys are corresponding parameter and buffer names.
+Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
+<code class="docutils literal notranslate"><span class="pre">destination</span></code>, <code class="docutils literal notranslate"><span class="pre">prefix</span></code> and <code class="docutils literal notranslate"><span class="pre">keep_vars</span></code> in order. However,
+this is being deprecated and keyword arguments will be enforced in
+future releases.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Please avoid the use of argument <code class="docutils literal notranslate"><span class="pre">destination</span></code> as it is not
+designed for end-users.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>dict</em><em>, </em><em>optional</em>) – If provided, the state of module will
+be updated into the dict and the same object is returned.
+Otherwise, an <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code> will be created and returned.
+Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>prefix</strong> (<em>str</em><em>, </em><em>optional</em>) – a prefix added to parameter and buffer
+names to compose the keys in state_dict. Default: <code class="docutils literal notranslate"><span class="pre">''</span></code>.</p></li>
+<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a> s
+returned in the state dict are detached from autograd. If it’s
+set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, detaching will not be performed.
+Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a dictionary containing a whole state of the module</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># xdoctest: +SKIP(&quot;undefined vars&quot;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<span class="go">[&#39;bias&#39;, &#39;weight&#39;]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="torchrl.objectives.DiscreteSACLoss.html" class="btn btn-neutral float-right" title="DiscreteSACLoss" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="torchrl.objectives.DDPGLoss.html" class="btn btn-neutral" title="DDPGLoss" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">SACLoss</a></li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+         <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+         <script src="../../_static/jquery.js"></script>
+         <script src="../../_static/underscore.js"></script>
+         <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../_static/doctools.js"></script>
+         <script src="../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torcharrow">torcharrow</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/data">TorchData</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchrec">TorchRec</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/torchx/">TorchX</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+           <ul class="resources-mobile-menu-items">
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

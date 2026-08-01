@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl
+
+
+reset_cuda_peak_stats
+=====================
+
+.. autoclass:: reset_cuda_peak_stats
+    :members:
+    :inherited-members:

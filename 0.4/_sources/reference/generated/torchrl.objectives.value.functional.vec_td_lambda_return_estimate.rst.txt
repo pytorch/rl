@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value.functional
+
+
+vec_td_lambda_return_estimate
+=============================
+
+.. autoclass:: vec_td_lambda_return_estimate
+    :members:

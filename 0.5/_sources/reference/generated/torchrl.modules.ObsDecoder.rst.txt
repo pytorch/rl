@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+ObsDecoder
+==========
+
+.. autoclass:: ObsDecoder
+    :members:

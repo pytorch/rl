@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: CQLTrainerConfig

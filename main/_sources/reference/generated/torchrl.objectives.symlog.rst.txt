@@ -1,0 +1,6 @@
+﻿torchrl.objectives.symlog
+=========================
+
+.. currentmodule:: torchrl.objectives
+
+.. autofunction:: symlog

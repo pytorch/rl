@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+NoisyLazyLinear
+===============
+
+.. autoclass:: NoisyLazyLinear
+    :members:

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+add_random_module
+=================
+
+.. autoclass:: add_random_module
+    :members:

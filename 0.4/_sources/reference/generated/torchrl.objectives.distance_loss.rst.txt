@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+distance_loss
+=============
+
+.. autoclass:: distance_loss
+    :members:

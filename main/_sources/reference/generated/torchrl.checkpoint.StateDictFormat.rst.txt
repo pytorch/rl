@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+StateDictFormat
+===============
+
+.. autoclass:: StateDictFormat
+    :members:
+    :inherited-members:

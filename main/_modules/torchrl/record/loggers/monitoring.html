@@ -1,0 +1,2302 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.record.loggers.monitoring &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/record/loggers/monitoring';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.record.loggers.monitoring - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/recurrent_sequence_training.html">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/recurrent_sequence_training.html">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/checkpoint.html">
+                  Checkpointing
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/render.html">
+                  Rendering applications
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services_workflow.html">
+                  Designing Training Applications with Services
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.reco...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.record.loggers.monitoring">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/record/loggers/monitoring</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.record.loggers.monitoring</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.common</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Every&quot;</span><span class="p">,</span> <span class="s2">&quot;LoggerMonitor&quot;</span><span class="p">]</span>
+
+
+<span class="n">_DEFAULT_RATE_NAMES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;frames&quot;</span><span class="p">:</span> <span class="s2">&quot;frames_per_second&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;batches&quot;</span><span class="p">:</span> <span class="s2">&quot;batches_per_second&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;write_count&quot;</span><span class="p">:</span> <span class="s2">&quot;writes_per_second&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;worker_frames&quot;</span><span class="p">:</span> <span class="s2">&quot;worker_frames_per_second&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;sample_calls&quot;</span><span class="p">:</span> <span class="s2">&quot;samples_per_second&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;samples_returned&quot;</span><span class="p">:</span> <span class="s2">&quot;samples_returned_per_second&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="Every">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.monitoring.Every.html#torchrl.record.loggers.monitoring.Every">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">Every</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A logging schedule for :class:`~torchrl.record.loggers.monitoring.LoggerMonitor`.</span>
+
+<span class="sd">    Schedules are built through the two factory methods rather than the</span>
+<span class="sd">    constructor:</span>
+
+<span class="sd">    - :meth:`Every.seconds` triggers on wall-clock time;</span>
+<span class="sd">    - :meth:`Every.counter` triggers whenever a cumulative counter reported</span>
+<span class="sd">      by the watched object&#39;s ``stats()`` snapshot crosses a multiple of</span>
+<span class="sd">      ``interval``.</span>
+
+<span class="sd">    Counter schedules are observed, not executed at the exact operation: if</span>
+<span class="sd">    a counter jumps across several thresholds between two polls, the latest</span>
+<span class="sd">    snapshot is logged once. A counter decrease (after a reset or a state</span>
+<span class="sd">    restoration) re-baselines the schedule instead of producing spurious</span>
+<span class="sd">    logs.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import tempfile</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import LazyTensorStorage, ReplayBuffer</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.record import CSVLogger</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.record.loggers.monitoring import Every, LoggerMonitor</span>
+<span class="sd">        &gt;&gt;&gt; logger = CSVLogger(exp_name=&quot;every_demo&quot;, log_dir=tempfile.mkdtemp())</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(storage=LazyTensorStorage(100))</span>
+<span class="sd">        &gt;&gt;&gt; monitor = LoggerMonitor(logger, background=False)</span>
+<span class="sd">        &gt;&gt;&gt; name = monitor.watch(</span>
+<span class="sd">        ...     rb, name=&quot;rb&quot;, schedule=Every.counter(&quot;write_count&quot;, 50), log_on_start=False</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; logged = monitor.step()  # primes the schedule, nothing logged yet</span>
+<span class="sd">        &gt;&gt;&gt; print(logged)</span>
+<span class="sd">        {}</span>
+<span class="sd">        &gt;&gt;&gt; _ = rb.extend(torch.arange(60))</span>
+<span class="sd">        &gt;&gt;&gt; logged = monitor.step()  # write_count crossed the 50 threshold</span>
+<span class="sd">        &gt;&gt;&gt; print(logged[&quot;rb&quot;][&quot;rb/write_count&quot;])</span>
+<span class="sd">        60.0</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">kind</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;seconds&quot;</span><span class="p">,</span> <span class="s2">&quot;counter&quot;</span><span class="p">]</span>
+    <span class="n">interval</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;seconds&quot;</span><span class="p">,</span> <span class="s2">&quot;counter&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;kind must be &#39;seconds&#39; or &#39;counter&#39;, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">kind</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">interval</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">interval</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;interval must be strictly positive, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">interval</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;counter&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;counter schedules require a non-empty counter key.&quot;</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">seconds</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">interval</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Every</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a wall-clock schedule triggering every ``interval`` seconds.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s2">&quot;seconds&quot;</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">interval</span><span class="p">))</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">counter</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">interval</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Every</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a schedule triggering when the stats entry ``key`` crosses a multiple of ``interval``.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s2">&quot;counter&quot;</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="n">interval</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span> <span class="nc">_Watch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Internal bookkeeping for one monitored target.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">schedule</span><span class="p">:</span> <span class="n">Every</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stats_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">stats_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">rate_keys</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_on_start</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">log_on_close</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target</span> <span class="o">=</span> <span class="n">target</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schedule</span> <span class="o">=</span> <span class="n">schedule</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_key</span> <span class="o">=</span> <span class="n">step_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stats_fn</span> <span class="o">=</span> <span class="n">stats_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stats_kwargs</span> <span class="o">=</span> <span class="n">stats_kwargs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rate_keys</span> <span class="o">=</span> <span class="n">rate_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_on_start</span> <span class="o">=</span> <span class="n">log_on_start</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_on_close</span> <span class="o">=</span> <span class="n">log_on_close</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">baseline_counters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">baseline_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">next_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_counter_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_log_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">has_logged</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">error_warned</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<div class="viewcode-block" id="LoggerMonitor">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.record.loggers.monitoring.LoggerMonitor.html#torchrl.record.loggers.monitoring.LoggerMonitor">[docs]</a>
+<span class="k">class</span> <span class="nc">LoggerMonitor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A pull-based monitor logging operational statistics of collectors and replay buffers.</span>
+
+<span class="sd">    The monitor periodically requests a cheap ``stats()`` snapshot from each</span>
+<span class="sd">    watched object, decides whether the snapshot is due for logging according</span>
+<span class="sd">    to the per-target schedule, derives rates from cumulative counter deltas,</span>
+<span class="sd">    namespaces the metrics as ``&quot;&lt;name&gt;/&lt;metric&gt;&quot;`` and forwards them to a</span>
+<span class="sd">    single :class:`~torchrl.record.loggers.common.Logger`.</span>
+
+<span class="sd">    Because snapshots are pulled from the monitor&#39;s own thread (or from</span>
+<span class="sd">    explicit :meth:`step` calls), no logging work is ever executed on the</span>
+<span class="sd">    collection, write or sampling hot paths of the watched objects, and a</span>
+<span class="sd">    slow logging backend can only delay the next poll, never build an</span>
+<span class="sd">    unbounded backlog. The monitor works with any object exposing a</span>
+<span class="sd">    ``stats()`` method returning a flat mapping of scalars: in particular</span>
+<span class="sd">    local, multiprocessing and Ray collectors and replay buffers share the</span>
+<span class="sd">    same interface.</span>
+
+<span class="sd">    The monitor never takes ownership of the logger or of the watched</span>
+<span class="sd">    objects: stopping the monitor leaves both running, and shutting down the</span>
+<span class="sd">    logger remains the caller&#39;s responsibility.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        logger (Logger): the output sink. Any TorchRL logger works, including</span>
+<span class="sd">            loggers running as a service (``service_backend=&quot;ray&quot;``).</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        poll_interval (float, optional): how often the background thread</span>
+<span class="sd">            polls the watched objects, in seconds. Counter schedules are</span>
+<span class="sd">            evaluated at each poll, so this bounds their resolution.</span>
+<span class="sd">            Defaults to ``1.0``.</span>
+<span class="sd">        background (bool, optional): if ``True`` (default), entering the</span>
+<span class="sd">            monitor context (or calling :meth:`start`) spawns a daemon</span>
+<span class="sd">            thread that polls every ``poll_interval`` seconds. If ``False``,</span>
+<span class="sd">            nothing runs in the background and the user drives the monitor</span>
+<span class="sd">            through explicit :meth:`step` calls, which keeps tests and</span>
+<span class="sd">            deterministic loops reproducible.</span>
+<span class="sd">        on_error (str, optional): behavior when polling or logging a target</span>
+<span class="sd">            fails: ``&quot;warn&quot;`` (default) logs a warning once per failure</span>
+<span class="sd">            streak through the torchrl logger, ``&quot;ignore&quot;`` silently skips,</span>
+<span class="sd">            and ``&quot;raise&quot;`` propagates the exception (in background mode</span>
+<span class="sd">            this terminates the monitor thread).</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import tempfile</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import LazyTensorStorage, ReplayBuffer</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.record import CSVLogger</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.record.loggers.monitoring import Every, LoggerMonitor</span>
+<span class="sd">        &gt;&gt;&gt; logger = CSVLogger(exp_name=&quot;monitor_demo&quot;, log_dir=tempfile.mkdtemp())</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(storage=LazyTensorStorage(100))</span>
+<span class="sd">        &gt;&gt;&gt; monitor = LoggerMonitor(logger, background=False)</span>
+<span class="sd">        &gt;&gt;&gt; handle = monitor.watch(rb, name=&quot;replay_buffer&quot;, step=&quot;write_count&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; _ = rb.extend(torch.arange(10))</span>
+<span class="sd">        &gt;&gt;&gt; logged = monitor.step()</span>
+<span class="sd">        &gt;&gt;&gt; print(logged[&quot;replay_buffer&quot;][&quot;replay_buffer/size&quot;])</span>
+<span class="sd">        10.0</span>
+
+<span class="sd">    The typical background usage mirrors the RFC acceptance example:</span>
+
+<span class="sd">        &gt;&gt;&gt; with LoggerMonitor(logger) as monitor:  # doctest: +SKIP</span>
+<span class="sd">        ...     monitor.watch(collector, name=&quot;collector&quot;, schedule=Every.counter(&quot;frames&quot;, 10_000))</span>
+<span class="sd">        ...     monitor.watch(replay_buffer, name=&quot;replay_buffer&quot;, schedule=Every.seconds(5), step=&quot;write_count&quot;)</span>
+<span class="sd">        ...     collector.start()</span>
+<span class="sd">        ...     run_training()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">background</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">on_error</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;warn&quot;</span><span class="p">,</span> <span class="s2">&quot;raise&quot;</span><span class="p">,</span> <span class="s2">&quot;ignore&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;warn&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">on_error</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;warn&quot;</span><span class="p">,</span> <span class="s2">&quot;raise&quot;</span><span class="p">,</span> <span class="s2">&quot;ignore&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;on_error must be one of &#39;warn&#39;, &#39;raise&#39; or &#39;ignore&#39;, got </span><span class="si">{</span><span class="n">on_error</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">poll_interval</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;poll_interval must be positive, got </span><span class="si">{</span><span class="n">poll_interval</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_poll_interval</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">poll_interval</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_background</span> <span class="o">=</span> <span class="n">background</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_on_error</span> <span class="o">=</span> <span class="n">on_error</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">_Watch</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">watch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">target</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">schedule</span><span class="p">:</span> <span class="n">Every</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">step</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stats_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stats_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rate_keys</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_on_start</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">log_on_close</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers an object to monitor and returns its watch name.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            target: any object exposing a ``stats()`` method returning a flat</span>
+<span class="sd">                mapping of scalars, such as collectors and replay buffers.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            name (str, optional): namespace prefix for this target&#39;s metrics.</span>
+<span class="sd">                Must be unique within the monitor. Defaults to the lowercase</span>
+<span class="sd">                class name, uniquified with a numeric suffix if needed.</span>
+<span class="sd">            schedule (Every, optional): when to log. ``None`` (default) logs</span>
+<span class="sd">                at every poll.</span>
+<span class="sd">            step (str, optional): name of a snapshot entry to use as the</span>
+<span class="sd">                logical logging step (for example ``&quot;write_count&quot;``). For</span>
+<span class="sd">                counter schedules this defaults to the schedule&#39;s counter</span>
+<span class="sd">                key; otherwise the logger&#39;s own step handling applies.</span>
+<span class="sd">            stats_fn (callable, optional): replaces ``target.stats`` as the</span>
+<span class="sd">                snapshot provider. Runs in the monitor&#39;s process and thread.</span>
+<span class="sd">            stats_kwargs (dict, optional): keyword arguments forwarded to the</span>
+<span class="sd">                snapshot provider, for example ``{&quot;workers&quot;: &quot;both&quot;}`` for</span>
+<span class="sd">                distributed collectors. For multiprocessing collectors,</span>
+<span class="sd">                per-worker snapshots travel over the collector control pipes</span>
+<span class="sd">                and must not race with control calls (such as weight updates)</span>
+<span class="sd">                issued from other threads; see</span>
+<span class="sd">                :meth:`~torchrl.collectors.MultiSyncCollector.stats` for the</span>
+<span class="sd">                thread-safety contract before enabling per-worker views on a</span>
+<span class="sd">                background monitor.</span>
+<span class="sd">            rate_keys (tuple of str, optional): snapshot entries to derive</span>
+<span class="sd">                per-second rates from, based on their delta since the last</span>
+<span class="sd">                logged snapshot. Defaults to the entries of the snapshot that</span>
+<span class="sd">                are known cumulative counters (``frames``, ``batches``,</span>
+<span class="sd">                ``write_count``, ...). A counter decrease re-baselines the</span>
+<span class="sd">                rate instead of reporting a negative value.</span>
+<span class="sd">            log_on_start (bool, optional): whether the first poll of this</span>
+<span class="sd">                target logs unconditionally. When ``False``, the first poll</span>
+<span class="sd">                only records baselines, so the first logged snapshot can</span>
+<span class="sd">                carry rates. Defaults to ``True``.</span>
+<span class="sd">            log_on_close (bool, optional): whether :meth:`stop` logs a final</span>
+<span class="sd">                snapshot of this target. Defaults to ``True``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The watch name, usable with :meth:`unwatch`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">stats_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stats_attr</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">&quot;stats&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">stats_attr</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Cannot watch object of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: it does not &quot;</span>
+                    <span class="s2">&quot;expose a callable stats() method and no stats_fn was provided.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">stats_fn</span> <span class="o">=</span> <span class="n">stats_attr</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">base</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">base</span>
+                <span class="n">suffix</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">while</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="p">:</span>
+                    <span class="n">suffix</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;A watch named </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is already registered.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">schedule</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">schedule</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;counter&quot;</span><span class="p">:</span>
+                <span class="n">step</span> <span class="o">=</span> <span class="n">schedule</span><span class="o">.</span><span class="n">key</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_Watch</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="n">target</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">schedule</span><span class="o">=</span><span class="n">schedule</span><span class="p">,</span>
+                <span class="n">step_key</span><span class="o">=</span><span class="n">step</span><span class="p">,</span>
+                <span class="n">stats_fn</span><span class="o">=</span><span class="n">stats_fn</span><span class="p">,</span>
+                <span class="n">stats_kwargs</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">stats_kwargs</span> <span class="ow">or</span> <span class="p">{}),</span>
+                <span class="n">rate_keys</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">rate_keys</span><span class="p">)</span> <span class="k">if</span> <span class="n">rate_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">log_on_start</span><span class="o">=</span><span class="n">log_on_start</span><span class="p">,</span>
+                <span class="n">log_on_close</span><span class="o">=</span><span class="n">log_on_close</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">name</span>
+
+    <span class="k">def</span> <span class="nf">unwatch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stops monitoring the named target without touching the target itself.&quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No watch named </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Polls every watched target once and logs the snapshots that are due.</span>
+
+<span class="sd">        This is the manual-mode entry point; the background thread calls it</span>
+<span class="sd">        on a timer. Returns a mapping from watch name to the logged payload,</span>
+<span class="sd">        containing only the targets that were actually logged during this</span>
+<span class="sd">        step.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logged</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">watches</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">watch</span> <span class="ow">in</span> <span class="n">watches</span><span class="p">:</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_poll</span><span class="p">(</span><span class="n">watch</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">payload</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">logged</span><span class="p">[</span><span class="n">watch</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">payload</span>
+        <span class="k">return</span> <span class="n">logged</span>
+
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LoggerMonitor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts the background polling thread (no-op when ``background=False``).&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_background</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;LoggerMonitor&quot;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">log_final</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stops polling and logs a final snapshot of each target.</span>
+
+<span class="sd">        The watched objects and the logger are left untouched: shutting them</span>
+<span class="sd">        down remains the caller&#39;s responsibility. Calling :meth:`stop` again</span>
+<span class="sd">        without an intervening :meth:`start` is a no-op, so exiting the</span>
+<span class="sd">        context manager after an explicit stop does not log the final</span>
+<span class="sd">        snapshots twice.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            log_final (bool, optional): overrides the per-watch</span>
+<span class="sd">                ``log_on_close`` setting when provided.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="n">thread</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span>
+        <span class="n">polling_thread_stuck</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">thread</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_poll_interval</span><span class="p">))</span>
+            <span class="n">polling_thread_stuck</span> <span class="o">=</span> <span class="n">thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_thread</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">polling_thread_stuck</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;LoggerMonitor could not join its polling thread within the stop &quot;</span>
+                <span class="s2">&quot;timeout (a stats() call is probably hanging); skipping the final &quot;</span>
+                <span class="s2">&quot;snapshots to avoid polling concurrently with the stuck thread.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">watches</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_watches</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">watch</span> <span class="ow">in</span> <span class="n">watches</span><span class="p">:</span>
+            <span class="n">should_log</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">log_on_close</span> <span class="k">if</span> <span class="n">log_final</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">log_final</span>
+            <span class="k">if</span> <span class="n">should_log</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_poll</span><span class="p">(</span><span class="n">watch</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LoggerMonitor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc_val</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_event</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_poll_interval</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_poll</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">watch</span><span class="p">:</span> <span class="n">_Watch</span><span class="p">,</span> <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_poll_impl</span><span class="p">(</span><span class="n">watch</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="n">force</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_error</span> <span class="o">==</span> <span class="s2">&quot;raise&quot;</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_on_error</span> <span class="o">==</span> <span class="s2">&quot;warn&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">watch</span><span class="o">.</span><span class="n">error_warned</span><span class="p">:</span>
+                <span class="n">watch</span><span class="o">.</span><span class="n">error_warned</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;LoggerMonitor failed to poll or log watch </span><span class="si">{</span><span class="n">watch</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">err</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+                    <span class="s2">&quot;Further errors for this watch will be silent until it recovers.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_poll_impl</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">watch</span><span class="p">:</span> <span class="n">_Watch</span><span class="p">,</span> <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">stats_fn</span><span class="p">(</span><span class="o">**</span><span class="n">watch</span><span class="o">.</span><span class="n">stats_kwargs</span><span class="p">)</span>
+        <span class="n">snapshot</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="ow">and</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="n">first_poll</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="n">due</span> <span class="o">=</span> <span class="n">force</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_due</span><span class="p">(</span><span class="n">watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="n">first_poll</span><span class="o">=</span><span class="n">first_poll</span><span class="p">)</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">due</span><span class="p">:</span>
+            <span class="n">rates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_rates</span><span class="p">(</span><span class="n">watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">watch</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">value</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">{</span><span class="o">**</span><span class="n">snapshot</span><span class="p">,</span> <span class="o">**</span><span class="n">rates</span><span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+            <span class="n">step_value</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">watch</span><span class="o">.</span><span class="n">step_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">watch</span><span class="o">.</span><span class="n">step_key</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="p">:</span>
+                <span class="n">step_value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">snapshot</span><span class="p">[</span><span class="n">watch</span><span class="o">.</span><span class="n">step_key</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">log_metrics</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">step_value</span><span class="p">)</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">baseline_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span> <span class="o">=</span> <span class="n">now</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">last_log_time</span> <span class="o">=</span> <span class="n">now</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">has_logged</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">first_poll</span><span class="p">:</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">baseline_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span> <span class="o">=</span> <span class="n">now</span>
+        <span class="n">watch</span><span class="o">.</span><span class="n">error_warned</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">payload</span>
+
+    <span class="k">def</span> <span class="nf">_is_due</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">watch</span><span class="p">:</span> <span class="n">_Watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">now</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">first_poll</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">schedule</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">schedule</span>
+        <span class="k">if</span> <span class="n">first_poll</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">watch</span><span class="o">.</span><span class="n">has_logged</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">watch</span><span class="o">.</span><span class="n">log_on_start</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prime_schedule</span><span class="p">(</span><span class="n">watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="n">schedule</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># log_on_start=False: the first poll only records baselines.</span>
+                <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">schedule</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">schedule</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;seconds&quot;</span><span class="p">:</span>
+            <span class="n">reference</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">last_log_time</span>
+            <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">reference</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span>
+            <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+            <span class="k">return</span> <span class="n">now</span> <span class="o">-</span> <span class="n">reference</span> <span class="o">&gt;=</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">schedule</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">counter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">watch</span><span class="o">.</span><span class="n">next_threshold</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prime_schedule</span><span class="p">(</span><span class="n">watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">watch</span><span class="o">.</span><span class="n">last_counter_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">counter</span> <span class="o">&lt;</span> <span class="n">watch</span><span class="o">.</span><span class="n">last_counter_value</span><span class="p">:</span>
+            <span class="c1"># the counter was reset (empty(), state restore, ...): re-baseline</span>
+            <span class="c1"># both the counters and the clock so the next rate only covers the</span>
+            <span class="c1"># post-reset window.</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">baseline_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span> <span class="o">=</span> <span class="n">now</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">next_threshold</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">counter</span> <span class="o">//</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="p">)</span> <span class="o">*</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">last_counter_value</span> <span class="o">=</span> <span class="n">counter</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="n">watch</span><span class="o">.</span><span class="n">last_counter_value</span> <span class="o">=</span> <span class="n">counter</span>
+        <span class="k">if</span> <span class="n">counter</span> <span class="o">&gt;=</span> <span class="n">watch</span><span class="o">.</span><span class="n">next_threshold</span><span class="p">:</span>
+            <span class="n">watch</span><span class="o">.</span><span class="n">next_threshold</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">counter</span> <span class="o">//</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="p">)</span> <span class="o">*</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">_prime_schedule</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">watch</span><span class="p">:</span> <span class="n">_Watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">schedule</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">schedule</span>
+        <span class="k">if</span> <span class="n">schedule</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">schedule</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;counter&quot;</span><span class="p">:</span>
+            <span class="n">counter</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">schedule</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">counter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">watch</span><span class="o">.</span><span class="n">next_threshold</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">counter</span> <span class="o">//</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="p">)</span> <span class="o">*</span> <span class="n">schedule</span><span class="o">.</span><span class="n">interval</span>
+                <span class="n">watch</span><span class="o">.</span><span class="n">last_counter_value</span> <span class="o">=</span> <span class="n">counter</span>
+
+    <span class="k">def</span> <span class="nf">_compute_rates</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">watch</span><span class="p">:</span> <span class="n">_Watch</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">now</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="n">elapsed</span> <span class="o">=</span> <span class="n">now</span> <span class="o">-</span> <span class="n">watch</span><span class="o">.</span><span class="n">baseline_time</span>
+        <span class="k">if</span> <span class="n">elapsed</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">watch</span><span class="o">.</span><span class="n">rate_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">rate_keys</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">snapshot</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_DEFAULT_RATE_NAMES</span><span class="p">)</span>
+        <span class="n">rates</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">previous</span> <span class="o">=</span> <span class="n">watch</span><span class="o">.</span><span class="n">baseline_counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">previous</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">current</span> <span class="o">-</span> <span class="n">previous</span>
+            <span class="k">if</span> <span class="n">delta</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">rate_name</span> <span class="o">=</span> <span class="n">_DEFAULT_RATE_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">_per_second&quot;</span><span class="p">)</span>
+            <span class="n">rates</span><span class="p">[</span><span class="n">rate_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">delta</span> <span class="o">/</span> <span class="n">elapsed</span>
+        <span class="k">return</span> <span class="n">rates</span></div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.record.loggers.monitoring",
+       "headline": "torchrl.record.loggers.monitoring",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/record/loggers/monitoring.html",
+       "articleBody": "Source code for torchrl.record.loggers.monitoring # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import math import threading import time from collections.abc import Callable, Mapping from dataclasses import dataclass from typing import Any, Literal from torchrl._utils import logger as torchrl_logger from torchrl.record.loggers.common import Logger __all__ = [\"Every\", \"LoggerMonitor\"] _DEFAULT_RATE_NAMES = { \"frames\": \"frames_per_second\", \"batches\": \"batches_per_second\", \"write_count\": \"writes_per_second\", \"worker_frames\": \"worker_frames_per_second\", \"sample_calls\": \"samples_per_second\", \"samples_returned\": \"samples_returned_per_second\", } [docs] @dataclass(frozen=True) class Every: \"\"\"A logging schedule for :class:`~torchrl.record.loggers.monitoring.LoggerMonitor`. Schedules are built through the two factory methods rather than the constructor: - :meth:`Every.seconds` triggers on wall-clock time; - :meth:`Every.counter` triggers whenever a cumulative counter reported by the watched object\u0027s ``stats()`` snapshot crosses a multiple of ``interval``. Counter schedules are observed, not executed at the exact operation: if a counter jumps across several thresholds between two polls, the latest snapshot is logged once. A counter decrease (after a reset or a state restoration) re-baselines the schedule instead of producing spurious logs. Examples: \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data import LazyTensorStorage, ReplayBuffer \u003e\u003e\u003e from torchrl.record import CSVLogger \u003e\u003e\u003e from torchrl.record.loggers.monitoring import Every, LoggerMonitor \u003e\u003e\u003e logger = CSVLogger(exp_name=\"every_demo\", log_dir=tempfile.mkdtemp()) \u003e\u003e\u003e rb = ReplayBuffer(storage=LazyTensorStorage(100)) \u003e\u003e\u003e monitor = LoggerMonitor(logger, background=False) \u003e\u003e\u003e name = monitor.watch( ... rb, name=\"rb\", schedule=Every.counter(\"write_count\", 50), log_on_start=False ... ) \u003e\u003e\u003e logged = monitor.step() # primes the schedule, nothing logged yet \u003e\u003e\u003e print(logged) {} \u003e\u003e\u003e _ = rb.extend(torch.arange(60)) \u003e\u003e\u003e logged = monitor.step() # write_count crossed the 50 threshold \u003e\u003e\u003e print(logged[\"rb\"][\"rb/write_count\"]) 60.0 \"\"\" kind: Literal[\"seconds\", \"counter\"] interval: float key: str | None = None def __post_init__(self) -\u003e None: if self.kind not in (\"seconds\", \"counter\"): raise ValueError(f\"kind must be \u0027seconds\u0027 or \u0027counter\u0027, got {self.kind!r}.\") if not self.interval or self.interval \u003c= 0: raise ValueError( f\"interval must be strictly positive, got {self.interval}.\" ) if self.kind == \"counter\" and not self.key: raise ValueError(\"counter schedules require a non-empty counter key.\") @classmethod def seconds(cls, interval: float) -\u003e Every: \"\"\"Returns a wall-clock schedule triggering every ``interval`` seconds.\"\"\" return cls(kind=\"seconds\", interval=float(interval)) @classmethod def counter(cls, key: str, interval: int) -\u003e Every: \"\"\"Returns a schedule triggering when the stats entry ``key`` crosses a multiple of ``interval``.\"\"\" return cls(kind=\"counter\", interval=interval, key=key) class _Watch: \"\"\"Internal bookkeeping for one monitored target.\"\"\" def __init__( self, *, target: Any, name: str, schedule: Every | None, step_key: str | None, stats_fn: Callable[..., Mapping[str, Any]], stats_kwargs: dict[str, Any], rate_keys: tuple[str, ...] | None, log_on_start: bool, log_on_close: bool, ) -\u003e None: self.target = target self.name = name self.schedule = schedule self.step_key = step_key self.stats_fn = stats_fn self.stats_kwargs = stats_kwargs self.rate_keys = rate_keys self.log_on_start = log_on_start self.log_on_close = log_on_close self.baseline_counters: dict[str, float] = {} self.baseline_time: float | None = None self.next_threshold: float | None = None self.last_counter_value: float | None = None self.last_log_time: float | None = None self.has_logged = False self.error_warned = False [docs] class LoggerMonitor: \"\"\"A pull-based monitor logging operational statistics of collectors and replay buffers. The monitor periodically requests a cheap ``stats()`` snapshot from each watched object, decides whether the snapshot is due for logging according to the per-target schedule, derives rates from cumulative counter deltas, namespaces the metrics as ``\"\u003cname\u003e/\u003cmetric\u003e\"`` and forwards them to a single :class:`~torchrl.record.loggers.common.Logger`. Because snapshots are pulled from the monitor\u0027s own thread (or from explicit :meth:`step` calls), no logging work is ever executed on the collection, write or sampling hot paths of the watched objects, and a slow logging backend can only delay the next poll, never build an unbounded backlog. The monitor works with any object exposing a ``stats()`` method returning a flat mapping of scalars: in particular local, multiprocessing and Ray collectors and replay buffers share the same interface. The monitor never takes ownership of the logger or of the watched objects: stopping the monitor leaves both running, and shutting down the logger remains the caller\u0027s responsibility. Args: logger (Logger): the output sink. Any TorchRL logger works, including loggers running as a service (``service_backend=\"ray\"``). Keyword Args: poll_interval (float, optional): how often the background thread polls the watched objects, in seconds. Counter schedules are evaluated at each poll, so this bounds their resolution. Defaults to ``1.0``. background (bool, optional): if ``True`` (default), entering the monitor context (or calling :meth:`start`) spawns a daemon thread that polls every ``poll_interval`` seconds. If ``False``, nothing runs in the background and the user drives the monitor through explicit :meth:`step` calls, which keeps tests and deterministic loops reproducible. on_error (str, optional): behavior when polling or logging a target fails: ``\"warn\"`` (default) logs a warning once per failure streak through the torchrl logger, ``\"ignore\"`` silently skips, and ``\"raise\"`` propagates the exception (in background mode this terminates the monitor thread). Examples: \u003e\u003e\u003e import tempfile \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data import LazyTensorStorage, ReplayBuffer \u003e\u003e\u003e from torchrl.record import CSVLogger \u003e\u003e\u003e from torchrl.record.loggers.monitoring import Every, LoggerMonitor \u003e\u003e\u003e logger = CSVLogger(exp_name=\"monitor_demo\", log_dir=tempfile.mkdtemp()) \u003e\u003e\u003e rb = ReplayBuffer(storage=LazyTensorStorage(100)) \u003e\u003e\u003e monitor = LoggerMonitor(logger, background=False) \u003e\u003e\u003e handle = monitor.watch(rb, name=\"replay_buffer\", step=\"write_count\") \u003e\u003e\u003e _ = rb.extend(torch.arange(10)) \u003e\u003e\u003e logged = monitor.step() \u003e\u003e\u003e print(logged[\"replay_buffer\"][\"replay_buffer/size\"]) 10.0 The typical background usage mirrors the RFC acceptance example: \u003e\u003e\u003e with LoggerMonitor(logger) as monitor: # doctest: +SKIP ... monitor.watch(collector, name=\"collector\", schedule=Every.counter(\"frames\", 10_000)) ... monitor.watch(replay_buffer, name=\"replay_buffer\", schedule=Every.seconds(5), step=\"write_count\") ... collector.start() ... run_training() \"\"\" def __init__( self, logger: Logger, *, poll_interval: float = 1.0, background: bool = True, on_error: Literal[\"warn\", \"raise\", \"ignore\"] = \"warn\", ) -\u003e None: if on_error not in (\"warn\", \"raise\", \"ignore\"): raise ValueError( f\"on_error must be one of \u0027warn\u0027, \u0027raise\u0027 or \u0027ignore\u0027, got {on_error!r}.\" ) if poll_interval \u003c= 0: raise ValueError(f\"poll_interval must be positive, got {poll_interval}.\") self._logger = logger self._poll_interval = float(poll_interval) self._background = background self._on_error = on_error self._watches: dict[str, _Watch] = {} self._lock = threading.Lock() self._stop_event = threading.Event() self._thread: threading.Thread | None = None self._stopped = False def watch( self, target: Any, *, name: str | None = None, schedule: Every | None = None, step: str | None = None, stats_fn: Callable[..., Mapping[str, Any]] | None = None, stats_kwargs: dict[str, Any] | None = None, rate_keys: tuple[str, ...] | None = None, log_on_start: bool = True, log_on_close: bool = True, ) -\u003e str: \"\"\"Registers an object to monitor and returns its watch name. Args: target: any object exposing a ``stats()`` method returning a flat mapping of scalars, such as collectors and replay buffers. Keyword Args: name (str, optional): namespace prefix for this target\u0027s metrics. Must be unique within the monitor. Defaults to the lowercase class name, uniquified with a numeric suffix if needed. schedule (Every, optional): when to log. ``None`` (default) logs at every poll. step (str, optional): name of a snapshot entry to use as the logical logging step (for example ``\"write_count\"``). For counter schedules this defaults to the schedule\u0027s counter key; otherwise the logger\u0027s own step handling applies. stats_fn (callable, optional): replaces ``target.stats`` as the snapshot provider. Runs in the monitor\u0027s process and thread. stats_kwargs (dict, optional): keyword arguments forwarded to the snapshot provider, for example ``{\"workers\": \"both\"}`` for distributed collectors. For multiprocessing collectors, per-worker snapshots travel over the collector control pipes and must not race with control calls (such as weight updates) issued from other threads; see :meth:`~torchrl.collectors.MultiSyncCollector.stats` for the thread-safety contract before enabling per-worker views on a background monitor. rate_keys (tuple of str, optional): snapshot entries to derive per-second rates from, based on their delta since the last logged snapshot. Defaults to the entries of the snapshot that are known cumulative counters (``frames``, ``batches``, ``write_count``, ...). A counter decrease re-baselines the rate instead of reporting a negative value. log_on_start (bool, optional): whether the first poll of this target logs unconditionally. When ``False``, the first poll only records baselines, so the first logged snapshot can carry rates. Defaults to ``True``. log_on_close (bool, optional): whether :meth:`stop` logs a final snapshot of this target. Defaults to ``True``. Returns: The watch name, usable with :meth:`unwatch`. \"\"\" if stats_fn is None: stats_attr = getattr(target, \"stats\", None) if not callable(stats_attr): raise TypeError( f\"Cannot watch object of type {type(target).__name__}: it does not \" \"expose a callable stats() method and no stats_fn was provided.\" ) stats_fn = stats_attr with self._lock: if name is None: base = type(target).__name__.lower() name = base suffix = 0 while name in self._watches: suffix += 1 name = f\"{base}_{suffix}\" elif name in self._watches: raise ValueError(f\"A watch named {name!r} is already registered.\") if step is None and schedule is not None and schedule.kind == \"counter\": step = schedule.key self._watches[name] = _Watch( target=target, name=name, schedule=schedule, step_key=step, stats_fn=stats_fn, stats_kwargs=dict(stats_kwargs or {}), rate_keys=tuple(rate_keys) if rate_keys is not None else None, log_on_start=log_on_start, log_on_close=log_on_close, ) return name def unwatch(self, name: str) -\u003e None: \"\"\"Stops monitoring the named target without touching the target itself.\"\"\" with self._lock: if name not in self._watches: raise KeyError(f\"No watch named {name!r}.\") del self._watches[name] def step(self) -\u003e dict[str, dict[str, float]]: \"\"\"Polls every watched target once and logs the snapshots that are due. This is the manual-mode entry point; the background thread calls it on a timer. Returns a mapping from watch name to the logged payload, containing only the targets that were actually logged during this step. \"\"\" logged: dict[str, dict[str, float]] = {} with self._lock: watches = list(self._watches.values()) for watch in watches: payload = self._poll(watch) if payload is not None: logged[watch.name] = payload return logged def start(self) -\u003e LoggerMonitor: \"\"\"Starts the background polling thread (no-op when ``background=False``).\"\"\" self._stopped = False if self._background and self._thread is None: self._stop_event.clear() self._thread = threading.Thread( target=self._run, name=\"LoggerMonitor\", daemon=True ) self._thread.start() return self def stop(self, *, log_final: bool | None = None) -\u003e None: \"\"\"Stops polling and logs a final snapshot of each target. The watched objects and the logger are left untouched: shutting them down remains the caller\u0027s responsibility. Calling :meth:`stop` again without an intervening :meth:`start` is a no-op, so exiting the context manager after an explicit stop does not log the final snapshots twice. Keyword Args: log_final (bool, optional): overrides the per-watch ``log_on_close`` setting when provided. \"\"\" self._stop_event.set() thread = self._thread polling_thread_stuck = False if thread is not None: thread.join(timeout=max(5.0, 2 * self._poll_interval)) polling_thread_stuck = thread.is_alive() self._thread = None if self._stopped: return self._stopped = True if polling_thread_stuck: torchrl_logger.warning( \"LoggerMonitor could not join its polling thread within the stop \" \"timeout (a stats() call is probably hanging); skipping the final \" \"snapshots to avoid polling concurrently with the stuck thread.\" ) return with self._lock: watches = list(self._watches.values()) for watch in watches: should_log = watch.log_on_close if log_final is None else log_final if should_log: self._poll(watch, force=True) def __enter__(self) -\u003e LoggerMonitor: return self.start() def __exit__(self, exc_type, exc_val, exc_tb) -\u003e None: self.stop() def _run(self) -\u003e None: while not self._stop_event.wait(self._poll_interval): self.step() def _poll(self, watch: _Watch, force: bool = False) -\u003e dict[str, float] | None: try: return self._poll_impl(watch, force=force) except Exception as err: if self._on_error == \"raise\": raise if self._on_error == \"warn\" and not watch.error_warned: watch.error_warned = True torchrl_logger.warning( f\"LoggerMonitor failed to poll or log watch {watch.name!r}: {err!r}. \" \"Further errors for this watch will be silent until it recovers.\" ) return None def _poll_impl(self, watch: _Watch, force: bool = False) -\u003e dict[str, float] | None: raw = watch.stats_fn(**watch.stats_kwargs) snapshot = { key: float(value) for key, value in raw.items() if isinstance(value, (int, float)) and math.isfinite(value) } now = time.monotonic() first_poll = watch.baseline_time is None due = force or self._is_due(watch, snapshot, now, first_poll=first_poll) payload = None if due: rates = self._compute_rates(watch, snapshot, now) payload = { f\"{watch.name}/{key}\": value for key, value in {**snapshot, **rates}.items() } step_value = None if watch.step_key is not None and watch.step_key in snapshot: step_value = int(snapshot[watch.step_key]) self._logger.log_metrics(payload, step=step_value) watch.baseline_counters = dict(snapshot) watch.baseline_time = now watch.last_log_time = now watch.has_logged = True elif first_poll: watch.baseline_counters = dict(snapshot) watch.baseline_time = now watch.error_warned = False return payload def _is_due( self, watch: _Watch, snapshot: dict[str, float], now: float, *, first_poll: bool ) -\u003e bool: schedule = watch.schedule if first_poll and not watch.has_logged: if watch.log_on_start: self._prime_schedule(watch, snapshot) return True if schedule is None: # log_on_start=False: the first poll only records baselines. return False if schedule is None: return True if schedule.kind == \"seconds\": reference = watch.last_log_time if reference is None: reference = watch.baseline_time if reference is None: return False return now - reference \u003e= schedule.interval counter = snapshot.get(schedule.key) if counter is None: return False if watch.next_threshold is None: self._prime_schedule(watch, snapshot) return False if watch.last_counter_value is not None and counter \u003c watch.last_counter_value: # the counter was reset (empty(), state restore, ...): re-baseline # both the counters and the clock so the next rate only covers the # post-reset window. watch.baseline_counters = dict(snapshot) watch.baseline_time = now watch.next_threshold = ( counter // schedule.interval + 1 ) * schedule.interval watch.last_counter_value = counter return False watch.last_counter_value = counter if counter \u003e= watch.next_threshold: watch.next_threshold = ( counter // schedule.interval + 1 ) * schedule.interval return True return False def _prime_schedule(self, watch: _Watch, snapshot: dict[str, float]) -\u003e None: schedule = watch.schedule if schedule is not None and schedule.kind == \"counter\": counter = snapshot.get(schedule.key) if counter is not None: watch.next_threshold = ( counter // schedule.interval + 1 ) * schedule.interval watch.last_counter_value = counter def _compute_rates( self, watch: _Watch, snapshot: dict[str, float], now: float ) -\u003e dict[str, float]: if watch.baseline_time is None: return {} elapsed = now - watch.baseline_time if elapsed \u003c= 0: return {} if watch.rate_keys is not None: keys = watch.rate_keys else: keys = tuple(key for key in snapshot if key in _DEFAULT_RATE_NAMES) rates = {} for key in keys: current = snapshot.get(key) previous = watch.baseline_counters.get(key) if current is None or previous is None: continue delta = current - previous if delta \u003c 0: continue rate_name = _DEFAULT_RATE_NAMES.get(key, f\"{key}_per_second\") rates[rate_name] = delta / elapsed return rates",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/record/loggers/monitoring.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

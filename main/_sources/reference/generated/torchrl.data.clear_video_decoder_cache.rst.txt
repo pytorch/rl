@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+clear_video_decoder_cache
+=========================
+
+.. autoclass:: clear_video_decoder_cache
+    :members:
+    :inherited-members:

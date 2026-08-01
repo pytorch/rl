@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+DuelingCnnDQNet
+===============
+
+.. autoclass:: DuelingCnnDQNet
+    :members:

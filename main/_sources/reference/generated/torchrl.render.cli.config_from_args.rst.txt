@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.render.cli
+
+
+config_from_args
+================
+
+.. autofunction:: config_from_args

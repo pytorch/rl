@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.trainers
+
+
+ValueEstimatorHook
+==================
+
+.. autoclass:: ValueEstimatorHook
+    :members:
+    :inherited-members:

@@ -1,0 +1,1278 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>CompositeSpec &mdash; torchrl 0.6 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="DiscreteTensorSpec" href="torchrl.data.DiscreteTensorSpec.html" />
+    <link rel="prev" title="BoundedTensorSpec" href="torchrl.data.BoundedTensorSpec.html" />
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','UA-117752657-2');</script>
+    <!-- End Google Tag Manager -->
+  
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="../../_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+
+          <li class="main-menu-item">
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Learn
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/get-started">
+                  <span class=dropdown-title>Get Started</span>
+                  <p>Run PyTorch locally or get started quickly with one of the supported cloud platforms</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials">
+                  <span class="dropdown-title">Tutorials</span>
+                  <p>Whats new in PyTorch tutorials</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/basics/intro.html">
+                  <span class="dropdown-title">Learn the Basics</span>
+                  <p>Familiarize yourself with PyTorch concepts and modules</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/recipes/recipes_index.html">
+                  <span class="dropdown-title">PyTorch Recipes</span>
+                  <p>Bite-size, ready-to-deploy PyTorch code examples</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/tutorials/beginner/introyt.html">
+                  <span class="dropdown-title">Intro to PyTorch - YouTube Series</span>
+                  <p>Master PyTorch basics with our engaging YouTube tutorial series</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Ecosystem
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem">
+                  <span class="dropdown-title">Tools</span>
+                  <p>Learn about the tools and frameworks in the PyTorch Ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class=dropdown-title>Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class=dropdown-title>Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class=dropdown-title>Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/ecosystem/contributor-awards-2023">
+                  <span class="dropdown-title">Contributor Awards - 2023</span>
+                  <p>Award winners announced at this year's PyTorch Conference</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+          <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Edge
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/edge">
+                  <span class="dropdown-title">About PyTorch Edge</span>
+                  <p>Build innovative and privacy-aware AI experiences for edge devices</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/executorch-overview">
+                  <span class="dropdown-title">ExecuTorch</span>
+                  <p>End-to-end solution for enabling on-device inference capabilities across mobile and edge devices</p>
+                </a>
+              </div>
+            </div>  
+          </li>
+
+          <li class="main-menu-item">
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p>Explore the documentation for comprehensive guidance on how to use PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/pytorch-domains">
+                  <span class="dropdown-title">PyTorch Domains</span>
+                  <p>Read the PyTorch Domains documentation to learn more about domain-specific libraries</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                Blogs & News 
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/blog/">
+                  <span class="dropdown-title">PyTorch Blog</span>
+                  <p>Catch up on the latest technical news and happenings</p>
+                </a>
+                 <a class="nav-dropdown-item" href="https://pytorch.org/community-blog">
+                  <span class="dropdown-title">Community Blog</span>
+                  <p>Stories from the PyTorch ecosystem</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/videos">
+                  <span class="dropdown-title">Videos</span>
+                  <p>Learn about the latest PyTorch tutorials, new, and more </p>
+                <a class="nav-dropdown-item" href="https://pytorch.org/community-stories">
+                  <span class="dropdown-title">Community Stories</span>
+                  <p>Learn how our community solves real, everyday machine learning problems with PyTorch</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/events">
+                  <span class="dropdown-title">Events</span>
+                  <p>Find events, webinars, and podcasts</p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="with-down-arrow">
+                About
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/foundation">
+                  <span class="dropdown-title">PyTorch Foundation</span>
+                  <p>Learn more about the PyTorch Foundation</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/governing-board">
+                  <span class="dropdown-title">Governing Board</span>
+                  <p></p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li class="main-menu-item">
+            <div class="no-dropdown">
+              <a href="https://pytorch.org/join" data-cta="join">
+                Become a Member
+              </a>
+            </div>
+          </li>
+          <li>
+           <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="github-icon">
+             </a>
+           </div>
+          </li>
+          <!--- TODO: This block adds the search icon to the nav bar. We will enable it later. 
+          <li>
+            <div class="main-menu-item">
+             <a href="https://github.com/pytorch/pytorch" class="search-icon">
+             </a>
+            </div>
+          </li>
+          --->
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../versions.html"><span style="font-size:110%">0.6 &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../index.html">API Reference</a> &gt;</li>
+        
+          <li><a href="../data.html">torchrl.data package</a> &gt;</li>
+        
+      <li>CompositeSpec</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../../_sources/reference/generated/torchrl.data.CompositeSpec.rst.txt" rel="nofollow"><img src="../../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+    
+    
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2"
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="compositespec">
+<h1>CompositeSpec<a class="headerlink" href="#compositespec" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.</span></span><span class="sig-name descname"><span class="pre">CompositeSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/tensor_specs.html#CompositeSpec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.CompositeSpec" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deprecated version of <a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrl.data.Composite</span></code></a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.assert_is_in">
+<span class="sig-name descname"><span class="pre">assert_is_in</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.assert_is_in" title="Permalink to this definition">¶</a></dt>
+<dd><p>Asserts whether a tensor belongs to the box, and raises an exception otherwise.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a>) – value to be checked.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.clear_device_">
+<span class="sig-name descname"><span class="pre">clear_device_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.clear_device_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clears the device of the Composite.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.clone">
+<span class="sig-name descname"><span class="pre">clone</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.clone" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a copy of the TensorSpec.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.contains">
+<span class="sig-name descname"><span class="pre">contains</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.contains" title="Permalink to this definition">¶</a></dt>
+<dd><p>If the value <code class="docutils literal notranslate"><span class="pre">val</span></code> could have been generated by the <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code>, returns <code class="docutils literal notranslate"><span class="pre">True</span></code>, otherwise <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<p>See <a class="reference internal" href="#torchrl.data.CompositeSpec.is_in" title="torchrl.data.CompositeSpec.is_in"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_in()</span></code></a> for more information.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.cpu">
+<span class="sig-name descname"><span class="pre">cpu</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.cpu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Casts the TensorSpec to ‘cpu’ device.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.cuda">
+<span class="sig-name descname"><span class="pre">cuda</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.cuda" title="Permalink to this definition">¶</a></dt>
+<dd><p>Casts the TensorSpec to ‘cuda’ device.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.device">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.5)"><span class="pre">device</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrl.data.CompositeSpec.device" title="Permalink to this definition">¶</a></dt>
+<dd><p>The device of the spec.</p>
+<p>Only <a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.Composite"><code class="xref py py-class docutils literal notranslate"><span class="pre">Composite</span></code></a> specs can have a <code class="docutils literal notranslate"><span class="pre">None</span></code> device. All leaves must have a non-null device.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.empty">
+<span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.empty" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a spec like self, but with no entries.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.encode">
+<span class="sig-name descname"><span class="pre">encode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vals</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.encode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encodes a value given the specified spec, and return the corresponding tensor.</p>
+<p>This method is to be used in environments that return a value (eg, a numpy array) that can be
+easily mapped to the TorchRL required domain.
+If the value is already a tensor, the spec will not change its value and return it as-is.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>val</strong> (<em>np.ndarray</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a>) – value to be encoded as tensor.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ignore_device</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the spec device will
+be ignored. This is used to group tensor casting within a call
+to <code class="docutils literal notranslate"><span class="pre">TensorDict(...,</span> <span class="pre">device=&quot;cuda&quot;)</span></code> which is faster.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor matching the required tensor specs.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.expand">
+<span class="sig-name descname"><span class="pre">expand</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.expand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new Spec with the expanded shape.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>*shape</strong> (<em>tuple</em><em> or </em><em>iterable of int</em>) – the new shape of the Spec.
+Must be broadcastable with the current shape:
+its length must be at least as long as the current shape length,
+and its last values must be compliant too; ie they can only differ
+from it if the current dimension is a singleton.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.flatten">
+<span class="sig-name descname"><span class="pre">flatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.flatten" title="Permalink to this definition">¶</a></dt>
+<dd><p>Flattens a <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code>.</p>
+<p>Check <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.flatten.html#torch.flatten" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">flatten()</span></code></a> for more information on this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">_NoDefault.ZERO</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets an item from the Composite.</p>
+<p>If the item is absent, a default value can be passed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.implements_for_spec">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">implements_for_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">torch_function</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Callable</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.implements_for_spec" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register a torch function override for TensorSpec.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.index">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor_to_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Indexes the input tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em><em>, </em><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a><em>, </em><em>slice</em><em> or </em><em>list</em>) – index of the tensor</p></li>
+<li><p><strong>tensor_to_index</strong> – tensor to be indexed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>indexed tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.is_empty">
+<span class="sig-name descname"><span class="pre">is_empty</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.is_empty" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether the composite spec contains specs or not.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.is_in">
+<span class="sig-name descname"><span class="pre">is_in</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.is_in" title="Permalink to this definition">¶</a></dt>
+<dd><p>If the value <code class="docutils literal notranslate"><span class="pre">val</span></code> could have been generated by the <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code>, returns <code class="docutils literal notranslate"><span class="pre">True</span></code>, otherwise <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<p>More precisely, the <code class="docutils literal notranslate"><span class="pre">is_in</span></code> methods checks that the value <code class="docutils literal notranslate"><span class="pre">val</span></code> is within the limits defined by the <code class="docutils literal notranslate"><span class="pre">space</span></code>
+attribute (the box), and that the <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, <code class="docutils literal notranslate"><span class="pre">device</span></code>, <code class="docutils literal notranslate"><span class="pre">shape</span></code> potentially other metadata match those
+of the spec. If any of these checks fails, the <code class="docutils literal notranslate"><span class="pre">is_in</span></code> method will return <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>val</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a>) – value to be checked.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>boolean indicating if values belongs to the TensorSpec box.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.items">
+<span class="sig-name descname"><span class="pre">items</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">include_nested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaves_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_leaf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_CompositeSpecItemsView</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.items" title="Permalink to this definition">¶</a></dt>
+<dd><p>Items of the Composite.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>include_nested</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the returned keys will not be nested. They will
+represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite(next=Composite(obs=None))</span></code> will lead to the keys
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">[&quot;next&quot;].</span> <span class="pre">Default</span> <span class="pre">is</span> <span class="pre">``False`</span></code>, i.e. nested keys will not
+be returned.</p></li>
+<li><p><strong>leaves_only</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the values returned
+will contain every level of nesting, i.e. a <code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite(next=Composite(obs=None))</span></code>
+will lead to the keys <code class="xref py py-obj docutils literal notranslate"><span class="pre">[&quot;next&quot;,</span> <span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;obs&quot;)]</span></code>.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – reads a type and returns a boolean indicating if that type
+should be seen as a leaf. By default, all non-Composite nodes are considered as
+leaves.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.keys">
+<span class="sig-name descname"><span class="pre">keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">include_nested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaves_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_leaf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_CompositeSpecKeysView</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Keys of the Composite.</p>
+<p>The keys argument reflect those of <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.TensorDict</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>include_nested</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the returned keys will not be nested. They will
+represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite(next=Composite(obs=None))</span></code> will lead to the keys
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">[&quot;next&quot;].</span> <span class="pre">Default</span> <span class="pre">is</span> <span class="pre">``False`</span></code>, i.e. nested keys will not
+be returned.</p></li>
+<li><p><strong>leaves_only</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the values returned
+will contain every level of nesting, i.e. a <code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite(next=Composite(obs=None))</span></code>
+will lead to the keys <code class="xref py py-obj docutils literal notranslate"><span class="pre">[&quot;next&quot;,</span> <span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;obs&quot;)]</span></code>.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – reads a type and returns a boolean indicating if that type
+should be seen as a leaf. By default, all non-Composite nodes are considered as
+leaves.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.lock_">
+<span class="sig-name descname"><span class="pre">lock_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.lock_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Locks the Composite and prevents modification of its content.</p>
+<p>This is only a first-level lock, unless specified otherwise through the
+<code class="docutils literal notranslate"><span class="pre">recurse</span></code> arg.</p>
+<p>Leaf specs can always be modified in place, but they cannot be replaced
+in their Composite parent.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">shape</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">a</span><span class="o">=</span><span class="n">Composite</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">b</span><span class="o">=</span><span class="n">Composite</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="p">),</span>
+<span class="gp">... </span>    <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">[:</span><span class="mi">1</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">recurse</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span><span class="o">.</span><span class="n">lock_</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="n">recurse</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">try</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">... </span><span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;failed!&quot;</span><span class="p">)</span>
+<span class="go">failed!</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">try</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;succeeded!&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;failed!&quot;</span><span class="p">)</span>
+<span class="go">succeeded!</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">recurse</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">spec</span><span class="o">.</span><span class="n">lock_</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="n">recurse</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">try</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;succeeded!&quot;</span><span class="p">)</span>
+<span class="gp">... </span><span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;failed!&quot;</span><span class="p">)</span>
+<span class="go">failed!</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.make_neg_dim">
+<span class="sig-name descname"><span class="pre">make_neg_dim</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.make_neg_dim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a specific dimension to <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.ndim">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ndim</span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.ndim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of dimensions of the spec shape.</p>
+<p>Shortcut for <code class="docutils literal notranslate"><span class="pre">len(spec.shape)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.ndimension">
+<span class="sig-name descname"><span class="pre">ndimension</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.ndimension" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of dimensions of the spec shape.</p>
+<p>Shortcut for <code class="docutils literal notranslate"><span class="pre">len(spec.shape)</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.one">
+<span class="sig-name descname"><span class="pre">one</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.one" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a one-filled tensor in the box.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Even though there is no guarantee that <code class="docutils literal notranslate"><span class="pre">1</span></code> belongs to the spec domain,
+this method will not raise an exception when this condition is violated.
+The primary use case of <code class="docutils literal notranslate"><span class="pre">one</span></code> is to generate empty data buffers, not meaningful data.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shape</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><em>torch.Size</em></a>) – shape of the one-tensor</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a one-filled tensor sampled in the TensorSpec box.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.ones">
+<span class="sig-name descname"><span class="pre">ones</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.ones" title="Permalink to this definition">¶</a></dt>
+<dd><p>Proxy to <a class="reference internal" href="#torchrl.data.CompositeSpec.one" title="torchrl.data.CompositeSpec.one"><code class="xref py py-meth docutils literal notranslate"><span class="pre">one()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.project">
+<span class="sig-name descname"><span class="pre">project</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDictBase</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.project" title="Permalink to this definition">¶</a></dt>
+<dd><p>If the input tensor is not in the TensorSpec box, it maps it back to it given some defined heuristic.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>val</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a>) – tensor to be mapped to the box.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a torch.Tensor belonging to the TensorSpec box.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.rand">
+<span class="sig-name descname"><span class="pre">rand</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.rand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a random tensor in the space defined by the spec.</p>
+<p>The sampling will be done uniformly over the space, unless the box is unbounded in which case normal values
+will be drawn.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shape</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><em>torch.Size</em></a>) – shape of the random tensor</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a random tensor sampled in the TensorSpec box.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.reshape">
+<span class="sig-name descname"><span class="pre">reshape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.reshape" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reshapes a <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code>.</p>
+<p>Check <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.reshape.html#torch.reshape" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">reshape()</span></code></a> for more information on this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.sample" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a random tensor in the space defined by the spec.</p>
+<p>See <a class="reference internal" href="#torchrl.data.CompositeSpec.rand" title="torchrl.data.CompositeSpec.rand"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rand()</span></code></a> for details.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.squeeze">
+<span class="sig-name descname"><span class="pre">squeeze</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.squeeze" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new Spec with all the dimensions of size <code class="docutils literal notranslate"><span class="pre">1</span></code> removed.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">dim</span></code> is given, a squeeze operation is done only in that dimension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dim</strong> (<em>int</em><em> or </em><em>None</em>) – the dimension to apply the squeeze operation to</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.to">
+<span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.5)"><span class="pre">device</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.Composite.html#torchrl.data.Composite" title="torchrl.data.tensor_specs.Composite"><span class="pre">Composite</span></a></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.to" title="Permalink to this definition">¶</a></dt>
+<dd><p>Casts a TensorSpec to a device or a dtype.</p>
+<p>Returns the same spec if no change is made.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.to_numpy">
+<span class="sig-name descname"><span class="pre">to_numpy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">TensorDict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">safe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.to_numpy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the <code class="docutils literal notranslate"><span class="pre">np.ndarray</span></code> correspondent of an input tensor.</p>
+<p>This is intended to be the inverse operation of <a class="reference internal" href="#torchrl.data.CompositeSpec.encode" title="torchrl.data.CompositeSpec.encode"><code class="xref py py-meth docutils literal notranslate"><span class="pre">encode()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>val</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a>) – tensor to be transformed_in to numpy.</p></li>
+<li><p><strong>safe</strong> (<em>bool</em>) – boolean value indicating whether a check should be
+performed on the value against the domain of the spec.
+Defaults to the value of the <code class="docutils literal notranslate"><span class="pre">CHECK_SPEC_ENCODE</span></code> environment variable.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a np.ndarray.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.type_check">
+<span class="sig-name descname"><span class="pre">type_check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">TensorDictBase</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">selected_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.type_check" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks the input value <code class="docutils literal notranslate"><span class="pre">dtype</span></code> against the <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code> <code class="docutils literal notranslate"><span class="pre">dtype</span></code> and raises an exception if they don’t match.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><em>torch.Tensor</em></a>) – tensor whose dtype has to be checked.</p></li>
+<li><p><strong>key</strong> (<em>str</em><em>, </em><em>optional</em>) – if the TensorSpec has keys, the value
+dtype will be checked against the spec pointed by the
+indicated key.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.unflatten">
+<span class="sig-name descname"><span class="pre">unflatten</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.unflatten" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unflattens a <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code>.</p>
+<p>Check <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.unflatten.html#torch.unflatten" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">unflatten()</span></code></a> for more information on this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.unlock_">
+<span class="sig-name descname"><span class="pre">unlock_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.unlock_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unlocks the Composite and allows modification of its content.</p>
+<p>This is only a first-level lock modification, unless specified
+otherwise through the <code class="docutils literal notranslate"><span class="pre">recurse</span></code> arg.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.unsqueeze">
+<span class="sig-name descname"><span class="pre">unsqueeze</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.CompositeSpec.unsqueeze" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new Spec with one more singleton dimension (at the position indicated by <code class="docutils literal notranslate"><span class="pre">dim</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dim</strong> (<em>int</em><em> or </em><em>None</em>) – the dimension to apply the unsqueeze operation to.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.values">
+<span class="sig-name descname"><span class="pre">values</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">include_nested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaves_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_leaf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_CompositeSpecValuesView</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Values of the Composite.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>include_nested</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the returned keys will not be nested. They will
+represent only the immediate children of the root, and not the whole nested sequence, i.e. a
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite(next=Composite(obs=None))</span></code> will lead to the keys
+<code class="xref py py-obj docutils literal notranslate"><span class="pre">[&quot;next&quot;].</span> <span class="pre">Default</span> <span class="pre">is</span> <span class="pre">``False`</span></code>, i.e. nested keys will not
+be returned.</p></li>
+<li><p><strong>leaves_only</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the values returned
+will contain every level of nesting, i.e. a <code class="xref py py-obj docutils literal notranslate"><span class="pre">Composite(next=Composite(obs=None))</span></code>
+will lead to the keys <code class="xref py py-obj docutils literal notranslate"><span class="pre">[&quot;next&quot;,</span> <span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;obs&quot;)]</span></code>.
+Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>is_leaf</strong> (<em>callable</em><em>, </em><em>optional</em>) – reads a type and returns a boolean indicating if that type
+should be seen as a leaf. By default, all non-Composite nodes are considered as
+leaves.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.view">
+<span class="sig-name descname"><span class="pre">view</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.view" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reshapes a <code class="docutils literal notranslate"><span class="pre">TensorSpec</span></code>.</p>
+<p>Check <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.reshape.html#torch.reshape" title="(in PyTorch v2.5)"><code class="xref py py-func docutils literal notranslate"><span class="pre">reshape()</span></code></a> for more information on this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.zero">
+<span class="sig-name descname"><span class="pre">zero</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.zero" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a zero-filled tensor in the box.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Even though there is no guarantee that <code class="docutils literal notranslate"><span class="pre">0</span></code> belongs to the spec domain,
+this method will not raise an exception when this condition is violated.
+The primary use case of <code class="docutils literal notranslate"><span class="pre">zero</span></code> is to generate empty data buffers, not meaningful data.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shape</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><em>torch.Size</em></a>) – shape of the zero-tensor</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a zero-filled tensor sampled in the TensorSpec box.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.CompositeSpec.zeros">
+<span class="sig-name descname"><span class="pre">zeros</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.5)"><span class="pre">Size</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.5)"><span class="pre">torch.Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">tensordict.base.TensorDictBase</span></span></span><a class="headerlink" href="#torchrl.data.CompositeSpec.zeros" title="Permalink to this definition">¶</a></dt>
+<dd><p>Proxy to <a class="reference internal" href="#torchrl.data.CompositeSpec.zero" title="torchrl.data.CompositeSpec.zero"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zero()</span></code></a>.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="torchrl.data.DiscreteTensorSpec.html" class="btn btn-neutral float-right" title="DiscreteTensorSpec" accesskey="n" rel="next">Next <img src="../../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="torchrl.data.BoundedTensorSpec.html" class="btn btn-neutral" title="BoundedTensorSpec" accesskey="p" rel="prev"><img src="../../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">CompositeSpec</a></li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+         <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+         <script src="../../_static/jquery.js"></script>
+         <script src="../../_static/underscore.js"></script>
+         <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+         <script src="../../_static/doctools.js"></script>
+         <script src="../../_static/design-tabs.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-tutorials/"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">Stay up to date</li>
+            <li><a href="https://www.facebook.com/pytorch" target="_blank">Facebook</a></li>
+            <li><a href="https://twitter.com/pytorch" target="_blank">Twitter</a></li>
+            <li><a href="https://www.youtube.com/pytorch" target="_blank">YouTube</a></li>
+            <li><a href="https://www.linkedin.com/company/pytorch" target="_blank">LinkedIn</a></li>
+          </ul>  
+          </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title">PyTorch Podcasts</li>
+            <li><a href="https://open.spotify.com/show/6UzHKeiy368jKfQMKKvJY5" target="_blank">Spotify</a></li>
+            <li><a href="https://podcasts.apple.com/us/podcast/pytorch-developer-podcast/id1566080008" target="_blank">Apple</a></li>
+            <li><a href="https://www.google.com/podcasts?feed=aHR0cHM6Ly9mZWVkcy5zaW1wbGVjYXN0LmNvbS9PQjVGa0lsOA%3D%3D" target="_blank">Google</a></li>
+            <li><a href="https://music.amazon.com/podcasts/7a4e6f0e-26c2-49e9-a478-41bd244197d0/PyTorch-Developer-Podcast?" target="_blank">Amazon</a></li>
+          </ul>
+         </div>
+        </div>
+        
+        <div class="privacy-policy">
+          <ul>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/terms/" target="_blank">Terms</a></li>
+            <li class="privacy-policy-links">|</li>
+            <li class="privacy-policy-links"><a href="https://www.linuxfoundation.org/privacy-policy/" target="_blank">Privacy</a></li>
+          </ul>
+        </div>
+        <div class="copyright">
+        <p>© Copyright The Linux Foundation. The PyTorch Foundation is a project of The Linux Foundation.
+          For web site terms of use, trademark policy and other policies applicable to The PyTorch Foundation please see
+          <a href="https://www.linuxfoundation.org/policies/">www.linuxfoundation.org/policies/</a>. The PyTorch Foundation supports the PyTorch open source
+          project, which has been established as PyTorch Project a Series of LF Projects, LLC. For policies applicable to the PyTorch Project a Series of LF Projects, LLC,
+          please see <a href="https://www.lfprojects.org/policies/">www.lfprojects.org/policies/</a>.</p>
+      </div>
+     </div>
+
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="../../_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+           <li class="resources-mobile-menu-title">
+             <a>Learn</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/get-started">Get Started</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials">Tutorials</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/basics/intro.html">Learn the Basics</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/recipes/recipes_index.html">PyTorch Recipes</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/tutorials/beginner/introyt.html">Introduction to PyTorch - YouTube Series</a>
+             </li>
+           </ul>
+           <li class="resources-mobile-menu-title">
+             <a>Ecosystem</a>
+           </li>
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/ecosystem">Tools</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/#community-module">Community</a>
+             </li>
+             <li>
+               <a href="https://discuss.pytorch.org/">Forums</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/resources">Developer Resources</a>
+             </li>
+             <li>
+               <a href="https://pytorch.org/ecosystem/contributor-awards-2023">Contributor Awards - 2023</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Edge</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+             <li>
+               <a href="https://pytorch.org/edge">About PyTorch Edge</a>
+             </li>
+             
+             <li>
+               <a href="https://pytorch.org/executorch-overview">ExecuTorch</a>
+             </li>
+           </ul>
+
+           <li class="resources-mobile-menu-title">
+             <a>Docs</a>
+           </li>
+
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/pytorch-domains">PyTorch Domains</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            <a>Blog & News</a>
+          </li>
+            
+           <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/blog/">PyTorch Blog</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/community-blog">Community Blog</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/videos">Videos</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/community-stories">Community Stories</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/events">Events</a>
+            </li>
+          </ul>
+          
+          <li class="resources-mobile-menu-title">
+            <a>About</a>
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/foundation">PyTorch Foundation</a>
+            </li>
+            <li>
+              <a href="https://pytorch.org/governing-board">Governing Board</a>
+            </li>
+          </ul>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>

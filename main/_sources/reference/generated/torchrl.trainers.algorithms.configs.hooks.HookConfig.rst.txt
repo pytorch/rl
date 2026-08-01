@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.hooks.HookConfig
+====================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.hooks
+
+.. autoclass:: HookConfig

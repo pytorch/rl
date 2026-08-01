@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+MultiAgentConvNet
+=================
+
+.. autoclass:: MultiAgentConvNet
+    :members:

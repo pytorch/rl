@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value.functional
+
+
+reward2go
+=========
+
+.. autoclass:: reward2go
+    :members:

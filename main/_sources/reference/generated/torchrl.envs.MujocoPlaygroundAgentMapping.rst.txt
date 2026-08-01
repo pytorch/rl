@@ -1,0 +1,7 @@
+﻿.. currentmodule:: torchrl.envs
+
+
+MujocoPlaygroundAgentMapping
+============================
+
+.. autofunction:: MujocoPlaygroundAgentMapping

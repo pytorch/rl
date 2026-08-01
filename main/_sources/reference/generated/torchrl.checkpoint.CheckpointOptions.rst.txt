@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.checkpoint
+
+
+CheckpointOptions
+=================
+
+.. autoclass:: CheckpointOptions
+    :members:
+    :inherited-members:
