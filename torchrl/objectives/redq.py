@@ -637,11 +637,9 @@ class REDQLoss(LossModule):
         if self.reduction != "none":
             loss_tensordict = tensordict.unsqueeze(0)
             td_out = td_out.named_apply(
-                lambda name, value: (
-                    self._reduce_loss(value, tensordict=loss_tensordict)
-                    if name.startswith("loss_")
-                    else value
-                ),
+                lambda name, value: self._reduce_loss(value, loss_tensordict)
+                if name.startswith("loss_")
+                else value,
             )
         if self.reduction == "none" and self.scalar_output_mode == "non_tensor":
             # Move scalars to non-tensor after creation

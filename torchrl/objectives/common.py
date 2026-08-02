@@ -278,20 +278,17 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         mask: torch.Tensor | None = None,
         reduction: str | None = None,
         weights: torch.Tensor | None = None,
-        preserve_shape: bool | None = None,
     ) -> torch.Tensor:
         if reduction is None:
             reduction = self.reduction
-        infer_preserve_shape = preserve_shape is None
-        if infer_preserve_shape:
-            preserve_shape = mask is None
+        preserve_shape = mask is None
         if mask is not None:
             mask = self._expand_loss_mask(mask, loss)
         if tensordict is not None:
             for mask_key in (("collector", "mask"), "shifted_valid"):
                 tensordict_mask = tensordict.get(mask_key, default=None)
                 if tensordict_mask is not None:
-                    if mask_key == "shifted_valid" and infer_preserve_shape:
+                    if mask_key == "shifted_valid":
                         preserve_shape = False
                     tensordict_mask = self._expand_loss_mask(tensordict_mask, loss)
                     mask = tensordict_mask if mask is None else mask & tensordict_mask
