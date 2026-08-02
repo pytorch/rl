@@ -264,6 +264,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     @staticmethod
     def _expand_loss_mask(mask: torch.Tensor, loss: torch.Tensor) -> torch.Tensor:
+        while mask.ndim > loss.ndim and mask.shape[-1] == 1:
+            mask = mask.squeeze(-1)
         if mask.ndim < loss.ndim:
             mask = mask.reshape(mask.shape + (1,) * (loss.ndim - mask.ndim))
         return mask.expand_as(loss)
@@ -276,15 +278,35 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         mask: torch.Tensor | None = None,
         reduction: str | None = None,
         weights: torch.Tensor | None = None,
+        preserve_shape: bool | None = None,
     ) -> torch.Tensor:
         if reduction is None:
             reduction = self.reduction
-        if mask is None and tensordict is not None:
-            mask = tensordict.get("shifted_valid", default=None)
+        infer_preserve_shape = preserve_shape is None
+        if infer_preserve_shape:
+            preserve_shape = mask is None
         if mask is not None:
             mask = self._expand_loss_mask(mask, loss)
+        if tensordict is not None:
+            for mask_key in (("collector", "mask"), "shifted_valid"):
+                tensordict_mask = tensordict.get(mask_key, default=None)
+                if tensordict_mask is not None:
+                    if mask_key == "shifted_valid" and infer_preserve_shape:
+                        preserve_shape = False
+                    tensordict_mask = self._expand_loss_mask(tensordict_mask, loss)
+                    mask = tensordict_mask if mask is None else mask & tensordict_mask
+        if mask is not None:
             if weights is not None and weights.shape != loss.shape:
                 weights = self._expand_loss_mask(weights, loss)
+            if reduction == "none" and preserve_shape:
+                if weights is not None:
+                    loss = loss * weights
+                return torch.where(mask, loss, torch.zeros_like(loss))
+            if weights is not None and reduction == "mean":
+                masked_weights = weights * mask.to(weights.dtype)
+                denominator = masked_weights.sum()
+                denominator = denominator.masked_fill(denominator == 0, 1)
+                return (loss * masked_weights).sum() / denominator
             if weights is None and reduction == "mean":
                 return (loss * mask.to(loss.dtype)).sum() / mask.sum().clamp_min(1)
             if weights is None and reduction == "sum":

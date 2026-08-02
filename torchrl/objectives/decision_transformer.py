@@ -255,24 +255,26 @@ class OnlineDTLoss(LossModule):
             "loss_alpha": loss_alpha,
         }
 
-        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        # Handle batch_size and scalar values based on reduction mode
         if self.reduction == "none":
             batch_size = tensordict.batch_size
             td_out = TensorDict(out, batch_size=batch_size)
-            if self.scalar_output_mode == "non_tensor":
-                td_out.set_non_tensor("alpha", self.alpha.detach())
-                td_out.set_non_tensor("entropy", entropy.detach().mean())
         else:
             out["entropy"] = entropy.detach().mean()
             out["alpha"] = self.alpha.detach()
             td_out = TensorDict(out, [])
-            td_out = td_out.named_apply(
-                lambda name, value: self._reduce_loss(
-                    value, tensordict=tensordict
-                ).squeeze(-1)
-                if name.startswith("loss_")
-                else value,
-            )
+        td_out = td_out.named_apply(
+            lambda name, value: self._reduce_loss(
+                value,
+                tensordict,
+                preserve_shape=self.reduction == "none",
+            ).squeeze(-1)
+            if name.startswith("loss_")
+            else value,
+        )
+        if self.reduction == "none" and self.scalar_output_mode == "non_tensor":
+            td_out.set_non_tensor("alpha", self.alpha.detach())
+            td_out.set_non_tensor("entropy", entropy.detach().mean())
         self._clear_weakrefs(
             tensordict,
             td_out,
