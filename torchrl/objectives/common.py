@@ -302,11 +302,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 if weights is not None:
                     loss = loss * weights
                 return torch.where(mask, loss, torch.zeros_like(loss))
-            if weights is not None and reduction == "mean":
-                masked_weights = weights * mask.to(weights.dtype)
-                denominator = masked_weights.sum()
-                denominator = denominator.masked_fill(denominator == 0, 1)
-                return (loss * masked_weights).sum() / denominator
             if weights is None and reduction == "mean":
                 return (loss * mask.to(loss.dtype)).sum() / mask.sum().clamp_min(1)
             if weights is None and reduction == "sum":
