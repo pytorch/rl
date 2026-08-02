@@ -268,7 +268,7 @@ class OnlineDTLoss(LossModule):
                 value,
                 tensordict,
                 preserve_shape=self.reduction == "none",
-            ).squeeze(-1)
+            )
             if name.startswith("loss_")
             else value,
         )
