@@ -264,8 +264,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     @staticmethod
     def _expand_loss_mask(mask: torch.Tensor, loss: torch.Tensor) -> torch.Tensor:
-        while mask.ndim > loss.ndim and mask.shape[-1] == 1:
-            mask = mask.squeeze(-1)
         if mask.ndim < loss.ndim:
             mask = mask.reshape(mask.shape + (1,) * (loss.ndim - mask.ndim))
         return mask.expand_as(loss)
@@ -288,8 +286,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             for mask_key in (("collector", "mask"), "shifted_valid"):
                 tensordict_mask = tensordict.get(mask_key, default=None)
                 if tensordict_mask is not None:
-                    if mask_key == "shifted_valid":
-                        preserve_shape = False
                     tensordict_mask = self._expand_loss_mask(tensordict_mask, loss)
                     mask = tensordict_mask if mask is None else mask & tensordict_mask
         if mask is not None:
