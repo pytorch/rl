@@ -23,10 +23,15 @@ class LocalLearner(Learner):
     unmodified under sharded training.
 
     Args:
-        model (torch.nn.Module): the trainable module. Also the source for
-            :meth:`get_weights`.
-        optimizer (torch.optim.Optimizer): the optimizer stepping ``model``'s
-            parameters.
+        model (torch.nn.Module): the module :meth:`get_weights` reports and
+            that gradient sync is driven from. Note that it is ``optimizer``,
+            not this argument, that determines which parameters are trained --
+            see the warning on
+            :class:`~torchrl.trainers.learners.Learner`.
+        optimizer (torch.optim.Optimizer): the optimizer whose param groups are
+            clipped and stepped. For losses that own or expand their networks,
+            build it over ``loss_module.parameters()`` rather than
+            ``model.parameters()``.
 
     Keyword Args:
         clip_grad_norm (float, optional): if set, gradients are clipped to
