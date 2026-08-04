@@ -109,6 +109,8 @@ logging:
   checkpoint_frequency: 10
 
 hydra:
+  job:
+    chdir: true
   run:
     dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
