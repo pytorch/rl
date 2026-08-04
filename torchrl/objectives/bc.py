@@ -325,8 +325,6 @@ class BCLoss(LossModule):
                         "distribution-based (NLL) or cross-entropy loss."
                     )
         loss = self._reduce_loss(loss, tensordict=tensordict, mask=mask)
-        if mask is not None and self.reduction == "mean":
-            loss = loss.masked_fill(~mask.any(), torch.nan)
 
         td_out = TensorDict({"loss_bc": loss})
         self._clear_weakrefs(
