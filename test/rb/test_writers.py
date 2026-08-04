@@ -469,12 +469,20 @@ class TestWriterGeneration:
         # not one (row, col) coordinate: guessing wrong silently returns one
         # generation where the caller asked for two
         rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(4, ndim=2),
+            storage=LazyTensorStorage(12, ndim=2),
             writer=TensorDictRoundRobinWriter(track_generations=True),
         )
-        rb.extend(TensorDict({"a": torch.zeros(4, 3)}, [4, 3]))
+        index = rb.extend(TensorDict({"a": torch.zeros(4, 3)}, [4, 3]))
         assert rb._storage.ndim == 2
-        gen = rb._writer.generations_of(torch.tensor([1, 3]))
+        # extend returns a [N, ndim] coordinate batch: read as coordinates
+        assert index.ndim == 2 and index.shape[-1] == 2
+        torch.testing.assert_close(
+            rb._writer.generations_of(index),
+            torch.zeros(index.shape[0], dtype=torch.int64),
+        )
+        # a 1-D tensor of length ndim is two slot indices, not one coordinate:
+        # the old heuristic collapsed this to a single 0-dim stamp
+        gen = rb._writer.generations_of(torch.tensor([1, 2]))
         assert gen.shape == (2,)
         torch.testing.assert_close(gen, torch.zeros(2, dtype=torch.int64))
         # the tuple form still addresses a single cell by its dim-0 slot
