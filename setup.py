@@ -185,8 +185,8 @@ def get_extensions():
 
     This function configures the C++ extension build process with appropriate
     compiler flags for different platforms:
-    - Windows (MSVC): Uses /O2, /std:c++17, /EHsc flags
-    - Unix-like (GCC/Clang): Uses -O3, -std=c++17, -fdiagnostics-color=always flags
+    - Windows (MSVC): Uses /O2, /std:c++20, /EHsc flags
+    - Unix-like (GCC/Clang): Uses -O3, -std=c++20, -fdiagnostics-color=always flags
 
     Returns:
         list: List of CppExtension objects to be built
@@ -235,7 +235,7 @@ def get_extensions():
         extra_compile_args = {
             "cxx": [
                 "-O3",
-                "-std=c++17",
+                "-std=c++20",
                 "-fdiagnostics-color=always",
             ]
         }
@@ -243,7 +243,7 @@ def get_extensions():
             extra_compile_args["cxx"].append("-DWITH_CUDA")
             extra_compile_args["nvcc"] = [
                 "-O3",
-                "-std=c++17",
+                "-std=c++20",
                 "-DWITH_CUDA",
             ]
         debug_mode = os.getenv("DEBUG", "0") == "1"
@@ -254,7 +254,7 @@ def get_extensions():
                     "-O0",
                     "-fno-inline",
                     "-g",
-                    "-std=c++17",
+                    "-std=c++20",
                     "-fdiagnostics-color=always",
                 ]
             }
@@ -263,7 +263,7 @@ def get_extensions():
                 extra_compile_args["nvcc"] = [
                     "-O0",
                     "-G",
-                    "-std=c++17",
+                    "-std=c++20",
                     "-DWITH_CUDA",
                 ]
             extra_link_args = ["-O0", "-g"]
