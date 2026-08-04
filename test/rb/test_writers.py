@@ -404,8 +404,33 @@ class TestWriterStateDict:
 
 
 class TestWriterGeneration:
-    def test_default_writer_tracks_generations(self):
+    def test_tracking_is_opt_in(self):
+        # generation tracking allocates one int64 per slot and adds a key to the
+        # sampler output, so an unconfigured buffer must be untouched by it
         rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        assert rb._writer.tracks_generations is False
+        index = rb.extend(torch.arange(10))
+        torch.testing.assert_close(
+            rb._writer.generations_of(index),
+            torch.full((10,), -1, dtype=torch.int64),
+        )
+        assert getattr(rb._storage, "_slot_generations", None) is None
+        _, info = rb.sample(4, return_info=True)
+        assert "index_generation" not in info
+
+    def test_default_sample_is_unchanged_by_the_feature(self):
+        # the regression this guards: a buffer that never asked for generations
+        # must keep its exact sample() key set
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+        rb.extend(TensorDict({"a": torch.arange(10)}, [10]))
+        sample = rb.sample(4)
+        assert "index_generation" not in sample.keys()
+
+    def test_enabled_writer_tracks_generations(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         assert rb._writer.tracks_generations is True
         index = rb.extend(torch.arange(10))
         gen = rb._writer.generations_of(index)
@@ -413,15 +438,55 @@ class TestWriterGeneration:
         assert gen.shape == index.shape
         assert (gen == 0).all()
 
+    def test_generations_live_on_the_storage(self):
+        # two buffers sharing a storage overwrite each other's slots, so they
+        # must observe the same stamps -- a per-writer counter would let one
+        # buffer's handles look live after the other overwrote the slot
+        storage = LazyTensorStorage(4)
+        rb_a = ReplayBuffer(
+            storage=storage, writer=RoundRobinWriter(track_generations=True)
+        )
+        rb_b = ReplayBuffer(
+            storage=storage, writer=RoundRobinWriter(track_generations=True)
+        )
+        index = rb_a.extend(torch.arange(4))
+        gen = rb_a._writer.generations_of(index)
+        # rb_b overwrites slots 0 and 1; rb_a must see them go stale
+        rb_b.extend(torch.arange(10, 12))
+        after = rb_a._writer.generations_of(index)
+        torch.testing.assert_close(
+            after != gen, torch.tensor([True, True, False, False])
+        )
+
     def test_non_tracking_writer_reports_minus_one(self):
         writer = TensorDictMaxValueWriter(rank_key="key")
         assert writer.tracks_generations is False
         gen = writer.generations_of(torch.arange(4))
         torch.testing.assert_close(gen, torch.full((4,), -1, dtype=torch.int64))
 
+    def test_multidim_storage_1d_index_is_a_batch_of_slots(self):
+        # with storage.ndim == 2, a 1-D tensor of length 2 is two slot indices,
+        # not one (row, col) coordinate: guessing wrong silently returns one
+        # generation where the caller asked for two
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4, ndim=2),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
+        rb.extend(TensorDict({"a": torch.zeros(4, 3)}, [4, 3]))
+        assert rb._storage.ndim == 2
+        gen = rb._writer.generations_of(torch.tensor([1, 3]))
+        assert gen.shape == (2,)
+        torch.testing.assert_close(gen, torch.zeros(2, dtype=torch.int64))
+        # the tuple form still addresses a single cell by its dim-0 slot
+        single = rb._writer.generations_of((torch.tensor(1), torch.tensor(2)))
+        torch.testing.assert_close(single, torch.zeros((), dtype=torch.int64))
+
     def test_generation_increments_on_reuse(self):
         size = 4
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size))
         torch.testing.assert_close(
             rb._writer.generations_of(torch.arange(size)),
@@ -434,7 +499,10 @@ class TestWriterGeneration:
 
     def test_generation_wraparound(self):
         size = 5
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(2 * size))
         torch.testing.assert_close(
             rb._writer.generations_of(torch.arange(size)),
@@ -443,7 +511,10 @@ class TestWriterGeneration:
 
     def test_generation_extend_wrapping_twice(self):
         size = 4
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         # slots 0 and 1 are written three times, slots 2 and 3 twice
         rb.extend(torch.arange(2 * size + 2))
         torch.testing.assert_close(
@@ -452,7 +523,10 @@ class TestWriterGeneration:
 
     def test_generation_add(self):
         size = 3
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         for i in range(size + 1):
             rb.add(torch.tensor(i))
         torch.testing.assert_close(
@@ -460,14 +534,20 @@ class TestWriterGeneration:
         )
 
     def test_generations_of_unwritten_reports_minus_one(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(4))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(4),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(2))
         gen = rb._writer.generations_of(torch.arange(4))
         torch.testing.assert_close(gen, torch.tensor([0, 0, -1, -1]))
 
     def test_generation_tensordict_writer(self):
         size = 4
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size))
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(TensorDict({"a": torch.arange(2 * size)}, [2 * size]))
         torch.testing.assert_close(
             rb._writer.generations_of(torch.arange(size)),
@@ -476,7 +556,7 @@ class TestWriterGeneration:
 
     def test_generation_write_at(self):
         storage = LazyTensorStorage(4)
-        writer = RoundRobinWriter()
+        writer = RoundRobinWriter(track_generations=True)
         writer.register_storage(storage)
         writer.extend(torch.arange(4))
         writer.write_at(torch.tensor([0, 1]), torch.tensor([10, 11]))
@@ -485,7 +565,10 @@ class TestWriterGeneration:
         )
 
     def test_empty_is_monotonic(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         index = rb.extend(torch.arange(10))
         before = rb._writer.generations_of(index)
         rb.empty()
@@ -494,14 +577,20 @@ class TestWriterGeneration:
         assert (after > before).all()
 
     def test_empty_invalidates_handles_immediately(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         index = rb.extend(torch.arange(10))
         gen = rb._writer.generations_of(index)
         rb.empty()
         assert (rb._writer.generations_of(index) != gen).all()
 
     def test_empty_preserves_unwritten_sentinel(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(4))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(4),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(2))
         rb.empty()
         torch.testing.assert_close(
@@ -510,10 +599,16 @@ class TestWriterGeneration:
 
     def test_generation_state_dict_roundtrip(self):
         size = 4
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size + 1))
         sd = rb.state_dict()
-        rb2 = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb2 = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb2.load_state_dict(sd)
         torch.testing.assert_close(
             rb2._writer.generations_of(torch.arange(size)),
@@ -521,21 +616,27 @@ class TestWriterGeneration:
         )
 
     def test_legacy_state_dict_without_generation_loads(self):
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(5))
         sd = rb.state_dict()
         del sd["_writer"]["_generation"]
-        rb2 = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb2 = ReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb2.load_state_dict(sd)
         assert rb2._writer._cursor == 5
 
     def test_generation_dumps_loads(self, tmp_path):
-        writer = RoundRobinWriter()
+        writer = RoundRobinWriter(track_generations=True)
         writer._cursor = 2
         writer._write_count = 9
         writer._generation = torch.tensor([3, 2, 2, 1])
         writer.dumps(tmp_path)
-        writer2 = RoundRobinWriter()
+        writer2 = RoundRobinWriter(track_generations=True)
         writer2.loads(tmp_path)
         assert writer2._cursor == 2
         assert writer2._write_count == 9
@@ -545,7 +646,10 @@ class TestWriterGeneration:
 
     def test_sample_returns_generation(self):
         size = 8
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size))
         _, info = rb.sample(4, return_info=True)
         assert "index_generation" in info
@@ -565,7 +669,10 @@ class TestWriterGeneration:
 
     def test_tensordict_sample_has_generation_key(self):
         size = 8
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size))
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(TensorDict({"a": torch.arange(size)}, [size]))
         sample = rb.sample(4)
         assert "index_generation" in sample.keys()
@@ -573,7 +680,10 @@ class TestWriterGeneration:
 
     def test_wraparound_race_detectable(self):
         size = 8
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size))
         _, info = rb.sample(4, return_info=True)
         sampled_index = torch.as_tensor(info["index"])
@@ -584,7 +694,10 @@ class TestWriterGeneration:
 
     def test_partial_reuse_detectable(self):
         size = 8
-        rb = ReplayBuffer(storage=LazyTensorStorage(size))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size))
         _, info = rb.sample(size, return_info=True)
         idx = torch.as_tensor(info["index"])
@@ -596,7 +709,10 @@ class TestWriterGeneration:
     @pytest.mark.parametrize("device", get_default_devices())
     def test_generation_on_storage_device(self, device):
         size = 8
-        rb = ReplayBuffer(storage=LazyTensorStorage(size, device=device))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size, device=device),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size, device=device))
         assert rb._writer._generation.device.type == device.type
         _, info = rb.sample(4, return_info=True)
@@ -613,7 +729,10 @@ class TestWriterGeneration:
     @pytest.mark.parametrize("device", get_default_devices())
     def test_generation_add_on_storage_device(self, device):
         size = 3
-        rb = ReplayBuffer(storage=LazyTensorStorage(size, device=device))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size, device=device),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         for i in range(size + 1):
             rb.add(torch.tensor(i, device=device))
         torch.testing.assert_close(
