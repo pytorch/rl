@@ -329,6 +329,20 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     @staticmethod
     def _expand_loss_mask(mask: torch.Tensor, loss: torch.Tensor) -> torch.Tensor:
+        # Validity masks conventionally carry a trailing singleton dimension, to
+        # broadcast against the [..., 1]-shaped rewards they accompany --
+        # ``("collector", "mask")`` is [B, T, 1] where a per-timestep loss is
+        # [B, T]. Drop those before broadcasting the other way.
+        while mask.ndim > loss.ndim and mask.shape[-1] == 1:
+            mask = mask.squeeze(-1)
+        if mask.ndim > loss.ndim:
+            raise ValueError(
+                f"A mask of shape {tuple(mask.shape)} cannot be applied to a "
+                f"loss of shape {tuple(loss.shape)}: the mask has more "
+                "non-singleton dimensions than the loss. Per-element masking "
+                "requires an elementwise loss, not one whose event dimensions "
+                "have already been reduced (e.g. a log-prob)."
+            )
         if mask.ndim < loss.ndim:
             mask = mask.reshape(mask.shape + (1,) * (loss.ndim - mask.ndim))
         return mask.expand_as(loss)

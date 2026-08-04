@@ -789,9 +789,7 @@ class TestLossMaskReduction:
         shifted = torch.tensor([True, False, True, False])
         td = self._td(x, collector_mask=collector, shifted_valid=shifted)
         # only position 0 is valid under both masks
-        torch.testing.assert_close(
-            self._make("sum")(td).get("loss_x"), torch.ones(())
-        )
+        torch.testing.assert_close(self._make("sum")(td).get("loss_x"), torch.ones(()))
 
     @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
     @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
@@ -799,9 +797,9 @@ class TestLossMaskReduction:
         base = torch.ones(4, requires_grad=True)
         elementwise = base + torch.tensor([0.0, 0.0, bad, bad])
         valid = torch.tensor([True, True, False, False])
-        out = self._make(reduction)(
-            self._td(elementwise, collector_mask=valid)
-        ).get("loss_x")
+        out = self._make(reduction)(self._td(elementwise, collector_mask=valid)).get(
+            "loss_x"
+        )
         assert torch.isfinite(out).all(), f"{reduction} reduction returned {out}"
         out.sum().backward()
         assert torch.isfinite(base.grad).all()
@@ -856,10 +854,30 @@ class TestLossMaskReduction:
         caller = torch.tensor([True, True, False, False])
         collector = torch.tensor([True, False, True, False])
         loss = self._make("sum")
-        out = loss._reduce_loss(
-            x, self._td(x, collector_mask=collector), mask=caller
-        )
+        out = loss._reduce_loss(x, self._td(x, collector_mask=collector), mask=caller)
         torch.testing.assert_close(out, torch.ones(()))
+
+    @pytest.mark.parametrize("mask_entry", ["collector_mask", "shifted_valid"])
+    def test_mask_with_trailing_singleton_dim(self, mask_entry):
+        # ("collector", "mask") is [B, T, 1] -- masks carry a trailing singleton
+        # to broadcast against [..., 1]-shaped rewards -- while a per-timestep
+        # loss is [B, T]. Expanding [B, T, 1] to [B, T] used to raise.
+        x = torch.ones(2, 3)
+        valid = torch.tensor([[True, True, False], [True, False, False]])
+        td = TensorDict({"elementwise": x}, [2])
+        key = (
+            ("collector", "mask") if mask_entry == "collector_mask" else "shifted_valid"
+        )
+        td.set(key, valid.unsqueeze(-1))
+        out = self._make("sum")(td).get("loss_x")
+        torch.testing.assert_close(out, torch.full((), 3.0))
+
+    def test_mask_with_extra_non_singleton_dim_raises(self):
+        x = torch.ones(2, 3)
+        td = TensorDict({"elementwise": x}, [2])
+        td.set(("collector", "mask"), torch.ones(2, 3, 4, dtype=torch.bool))
+        with pytest.raises(ValueError, match="more non-singleton dimensions"):
+            self._make("sum")(td)
 
     def test_mask_broadcasts_over_trailing_dims(self):
         x = torch.ones(3, 2)
