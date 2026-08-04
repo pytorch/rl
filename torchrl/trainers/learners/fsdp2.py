@@ -4,23 +4,29 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
+
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
 from torchrl.trainers.learners.common import Learner, LearnerCapabilities
 
-try:
-    from torch.distributed.checkpoint.state_dict import (
-        get_model_state_dict,
-        get_state_dict,
-        set_state_dict,
-        StateDictOptions,
-    )
 
-    _has_dist_checkpoint = True
-except ImportError:  # pragma: no cover - torch without distributed.checkpoint
-    _has_dist_checkpoint = False
+@functools.lru_cache(maxsize=None)
+def _dist_state_dict():
+    """Return ``torch.distributed.checkpoint.state_dict``, imported on demand.
+
+    Deliberately lazy rather than a module-top import guarded by
+    ``importlib.util.find_spec``: this is a *torch submodule* whose presence
+    depends on the local torch build, and ``find_spec`` on a dotted name
+    eagerly imports the parent packages (and raises, rather than returning
+    ``None``, when a parent is missing). Importing it on first use keeps
+    ``import torchrl`` free of ``torch.distributed.checkpoint``.
+    """
+    from torch.distributed.checkpoint import state_dict
+
+    return state_dict
 
 
 class FSDP2Learner(Learner):
@@ -42,18 +48,25 @@ class FSDP2Learner(Learner):
     :class:`~torchrl.trainers.learners.LocalLearner`: how the model arrives
     (already sharded, by the caller) and how :meth:`get_weights` reports it.
 
-    :meth:`get_weights` gathers every sharded leaf into a plain tensor via
+    :meth:`get_weights` reassembles the sharded parameters into plain tensors
+    with
     :func:`torch.distributed.checkpoint.state_dict.get_model_state_dict`, so
     the returned tensordict holds regular tensors and is consumable by
     :meth:`~torchrl.weight_update.WeightSyncScheme.send` exactly like
     :class:`~torchrl.trainers.learners.LocalLearner`'s, with no changes needed
     on the receiving (inference) side. This gather is the seam between
     sharded training and (typically replicated) inference, and is the one
-    place sharding is not transparent. By default the gather targets rank 0
-    only (other ranks receive an empty tensordict): gathering the full model
-    to *every* rank, as a naive per-leaf ``DTensor.full_tensor()`` would,
-    replicates the whole model in every rank's memory for no benefit, which
-    does not scale to large sharded models.
+    place sharding is not transparent.
+
+    .. warning::
+        With the default ``cpu_offload=True``, :meth:`get_weights` returns the
+        full weights **on rank 0 only**; every other rank gets an *empty*
+        tensordict. That is deliberate -- gathering the full model onto every
+        rank replicates it in every rank's memory for no benefit and does not
+        scale -- but it means ``scheme.send(learner.get_weights())`` called
+        unconditionally on all ranks sends nothing from the non-zero ones.
+        Either send from rank 0 only, or pass ``cpu_offload=False`` to gather
+        full copies everywhere.
 
     Args:
         model (torch.nn.Module): a model already wrapped with ``fully_shard``.
@@ -117,11 +130,13 @@ class FSDP2Learner(Learner):
         clip_grad_norm: float | None = None,
         grad_accum_steps: int = 1,
     ) -> None:
-        if not _has_dist_checkpoint:
+        try:
+            _dist_state_dict()
+        except ImportError as err:
             raise RuntimeError(
                 "FSDP2Learner requires torch.distributed.checkpoint.state_dict, "
                 "which is not available in this torch build."
-            )
+            ) from err
         super().__init__()
         self.model = model
         self.optimizer = optimizer
@@ -133,28 +148,34 @@ class FSDP2Learner(Learner):
         self.capabilities = LearnerCapabilities(sharded=True, remote=False)
 
     def get_weights(self, *, cpu_offload: bool = True) -> TensorDictBase:
-        """Gather the sharded model into a plain-tensor tensordict.
+        """Reassemble the sharded model into a plain-tensor tensordict.
 
         Keyword Args:
             cpu_offload (bool, optional): if ``True`` (the default), the
-                gathered weights are returned only on rank 0 (other ranks get
-                an empty tensordict) and moved to CPU, avoiding an all-rank
-                replication of the full model. Set to ``False`` to instead
-                gather full GPU-resident copies onto every rank.
+                gathered weights are returned **only on rank 0** (every other
+                rank gets an empty tensordict) and moved to CPU, avoiding an
+                all-rank replication of the full model -- see the class-level
+                warning. Set to ``False`` to gather full device-resident copies
+                onto every rank instead.
         """
-        options = StateDictOptions(full_state_dict=True, cpu_offload=cpu_offload)
-        state_dict = get_model_state_dict(self.model, options=options)
+        dsd = _dist_state_dict()
+        options = dsd.StateDictOptions(full_state_dict=True, cpu_offload=cpu_offload)
+        state_dict = dsd.get_model_state_dict(self.model, options=options)
         return TensorDict(state_dict).unflatten_keys(".")
 
-    def state_dict(self, *args, **kwargs) -> dict:
+    def checkpoint(self) -> dict:
         """DTensor-aware checkpoint: gathers model + optimizer state to rank 0.
 
-        Overrides :meth:`~torchrl.trainers.learners.Learner.state_dict`, which
-        uses plain (non-distributed) ``state_dict()`` calls that would return
-        raw, per-rank ``DTensor`` shards rather than a portable checkpoint.
+        Overrides :meth:`~torchrl.trainers.learners.Learner.checkpoint`, whose
+        plain (non-distributed) ``state_dict()`` calls would return raw,
+        per-rank ``DTensor`` shards rather than a portable checkpoint. No
+        explicit cloning is needed here (unlike the base implementation):
+        ``get_state_dict`` with ``full_state_dict=True`` already materializes
+        new, gathered tensors rather than views onto the live shards.
         """
-        options = StateDictOptions(full_state_dict=True, cpu_offload=True)
-        model_state_dict, optim_state_dict = get_state_dict(
+        dsd = _dist_state_dict()
+        options = dsd.StateDictOptions(full_state_dict=True, cpu_offload=True)
+        model_state_dict, optim_state_dict = dsd.get_state_dict(
             self.model, self.optimizer, options=options
         )
         return {
@@ -163,20 +184,24 @@ class FSDP2Learner(Learner):
             "accum_step": self._accum_step,
         }
 
-    def load_state_dict(self, state_dict: dict, *args, **kwargs) -> None:
-        """Restore a checkpoint produced by :meth:`state_dict`.
+    def load_checkpoint(self, checkpoint: dict) -> None:
+        """Restore a checkpoint produced by :meth:`checkpoint`.
 
         ``broadcast_from_rank0=True`` lets rank 0 hold the full checkpoint
-        (as produced by :meth:`state_dict`) while every rank reshards it
+        (as produced by :meth:`checkpoint`) while every rank reshards it
         according to its local shards -- the counterpart of the
         ``cpu_offload``-gathered save.
+
+        Args:
+            checkpoint (dict): as returned by :meth:`checkpoint`.
         """
-        options = StateDictOptions(full_state_dict=True, broadcast_from_rank0=True)
-        set_state_dict(
+        dsd = _dist_state_dict()
+        options = dsd.StateDictOptions(full_state_dict=True, broadcast_from_rank0=True)
+        dsd.set_state_dict(
             self.model,
             self.optimizer,
-            model_state_dict=state_dict["model"],
-            optim_state_dict=state_dict["optimizer"],
+            model_state_dict=checkpoint["model"],
+            optim_state_dict=checkpoint["optimizer"],
             options=options,
         )
-        self._accum_step = state_dict.get("accum_step", 0)
+        self._restore_accum_step(checkpoint.get("accum_step", 0))

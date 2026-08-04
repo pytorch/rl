@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.util
 import inspect
 import os
@@ -2517,6 +2518,45 @@ class _NoLossKeyModule(LossModule):
         return TensorDict({"mse": (pred - batch["y"]).pow(2).mean()})
 
 
+class _UnreducedLoss(LossModule):
+    """A LossModule returning a per-sample loss, as ``reduction="none"`` does."""
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, batch: TensorDict) -> TensorDict:
+        pred = self.model(batch["x"])
+        return TensorDict(
+            {"loss_mse": (pred - batch["y"]).pow(2).squeeze(-1)},
+            batch_size=batch.batch_size,
+        )
+
+
+class _TwoNetworkLoss(LossModule):
+    """A LossModule that owns a second trainable network, as real losses do.
+
+    Stands in for the SAC/REDQ shape where the loss module -- not the model
+    handed to the learner -- owns (or expands) some of the trainable
+    parameters.
+    """
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+        self.critic = nn.Linear(4, 1)
+
+    def forward(self, batch: TensorDict) -> TensorDict:
+        pred = self.model(batch["x"])
+        value = self.critic(batch["x"])
+        return TensorDict(
+            {
+                "loss_actor": (pred - batch["y"]).pow(2).mean(),
+                "loss_critic": (value - batch["y"]).pow(2).mean(),
+            }
+        )
+
+
 class TestLocalLearner:
     @staticmethod
     def _make(clip_grad_norm=None, grad_accum_steps=1, lr=0.1):
@@ -2604,7 +2644,7 @@ class TestLocalLearner:
         with pytest.raises(NotImplementedError):
             Learner().get_weights()
 
-    def test_state_dict_round_trip_includes_optimizer(self):
+    def test_checkpoint_round_trip_includes_optimizer(self):
         # plain nn.Module.state_dict() would silently drop the optimizer's
         # state (Optimizer is not an nn.Module) -- this is the regression test
         # for that gap. Momentum must be nonzero, or SGD never populates a
@@ -2617,7 +2657,7 @@ class TestLocalLearner:
         torch.manual_seed(2)
         for _ in range(3):
             learner.update(self._batch(), loss_module)
-        checkpoint = learner.state_dict()
+        checkpoint = learner.checkpoint()
         saved_weight = model.weight.clone()
         saved_momentum = next(iter(learner.optimizer.state.values()))[
             "momentum_buffer"
@@ -2628,12 +2668,93 @@ class TestLocalLearner:
         for state in learner.optimizer.state.values():
             state["momentum_buffer"].zero_()
 
-        learner.load_state_dict(checkpoint)
+        learner.load_checkpoint(checkpoint)
         torch.testing.assert_close(model.weight, saved_weight)
         restored_momentum = next(iter(learner.optimizer.state.values()))[
             "momentum_buffer"
         ]
         torch.testing.assert_close(restored_momentum, saved_momentum)
+
+    def test_state_dict_keeps_the_nn_module_contract(self):
+        # checkpoint()/load_checkpoint() carry the optimizer; state_dict() must
+        # stay a plain nn.Module state_dict, or nesting a Learner inside another
+        # module silently drops all of the learner's state (the parent calls
+        # child.state_dict(destination=...) and discards the return value).
+        model = nn.Linear(4, 1)
+        learner = LocalLearner(model, torch.optim.SGD(model.parameters(), lr=0.1))
+
+        parent = nn.Module()
+        parent.learner = learner
+        nested = parent.state_dict()
+        assert "learner.model.weight" in nested
+        assert "learner.model.bias" in nested
+        # round-trips through the standard contract, destination= included
+        destination = {}
+        learner.state_dict(destination=destination, prefix="p.", keep_vars=False)
+        assert "p.model.weight" in destination
+        parent.load_state_dict(nested)
+
+    def test_accum_window_is_not_resumed_mid_window(self):
+        # gradients are not part of the checkpoint, so resuming at accum_step=1
+        # with empty gradients would step after a single micro-batch
+        learner, loss_module, _ = self._make(grad_accum_steps=2)
+        learner.update(self._batch(), loss_module)
+        checkpoint = learner.checkpoint()
+        assert checkpoint["accum_step"] == 1
+        with pytest.warns(UserWarning, match="partial window is discarded"):
+            learner.load_checkpoint(checkpoint)
+        assert learner._accum_step == 0
+
+    def test_unreduced_loss_raises(self):
+        learner, _, model = self._make()
+        with pytest.raises(ValueError, match="must be a scalar"):
+            learner.update(self._batch(), _UnreducedLoss(model))
+
+    def test_optimizer_missing_loss_parameters_raises(self):
+        # the silent-failure mode this guards: the loss module owns a critic,
+        # the optimizer was built from the bare model, so the critic is
+        # differentiated on every step but never updated
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        learner = LocalLearner(model, optimizer)
+        with pytest.raises(RuntimeError, match="does not cover"):
+            learner.update(self._batch(), _TwoNetworkLoss(model))
+
+    def test_optimizer_over_loss_parameters_is_accepted(self):
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        loss_module = _TwoNetworkLoss(model)
+        optimizer = torch.optim.SGD(loss_module.parameters(), lr=0.1)
+        learner = LocalLearner(model, optimizer)
+        critic_before = loss_module.critic.weight.clone()
+        out = learner.update(self._batch(), loss_module)
+        assert "loss_actor" in out.keys()
+        # the loss module's own network is actually trained
+        assert not torch.equal(critic_before, loss_module.critic.weight)
+
+    def test_grad_norm_clips_the_optimized_parameters(self):
+        # clipping must cover what is stepped, not self.model.parameters():
+        # with the loss module owning a critic, clipping only the model would
+        # leave the critic's gradient unclipped.
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        loss_module = _TwoNetworkLoss(model)
+        optimizer = torch.optim.SGD(loss_module.parameters(), lr=0.0)
+        learner = LocalLearner(model, optimizer, clip_grad_norm=1e-6)
+        learner.update(self._batch(), loss_module)
+        grads = [p.grad for p in loss_module.parameters() if p.grad is not None]
+        total = torch.linalg.vector_norm(torch.cat([g.reshape(-1) for g in grads]))
+        assert total <= 1e-5
+
+    def test_capabilities_default_is_immutable(self):
+        # LearnerCapabilities is frozen, so the shared class-level default
+        # cannot be mutated into every other Learner instance
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            Learner.capabilities.sharded = True
+        learner, _, _ = self._make()
+        assert not learner.capabilities.sharded
+        assert not learner.capabilities.remote
 
 
 @pytest.mark.skipif(
@@ -2776,7 +2897,7 @@ class TestFSDP2Learner:
         accumulated_grad = model.weight.grad.full_tensor()
         torch.testing.assert_close(accumulated_grad, ref_grad)
 
-    def test_state_dict_round_trip_includes_optimizer(self):
+    def test_checkpoint_round_trip_includes_optimizer(self):
         from torch.distributed._composable.fsdp import fully_shard
         from torch.distributed.device_mesh import init_device_mesh
 
@@ -2793,7 +2914,7 @@ class TestFSDP2Learner:
         torch.manual_seed(3)
         for _ in range(3):
             learner.update(self._batch(), loss_module)
-        checkpoint = learner.state_dict()
+        checkpoint = learner.checkpoint()
         saved_weight = model.weight.full_tensor().clone()
         saved_momentum = (
             next(iter(optimizer.state.values()))["momentum_buffer"]
@@ -2806,7 +2927,7 @@ class TestFSDP2Learner:
         for state in optimizer.state.values():
             state["momentum_buffer"].to_local().zero_()
 
-        learner.load_state_dict(checkpoint)
+        learner.load_checkpoint(checkpoint)
         torch.testing.assert_close(model.weight.full_tensor(), saved_weight)
         restored_momentum = next(iter(optimizer.state.values()))[
             "momentum_buffer"
