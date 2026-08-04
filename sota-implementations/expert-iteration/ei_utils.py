@@ -25,7 +25,7 @@ from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
-# Tracks which legacy EI metric keys have already fired a DeprecationWarning
+# Tracks which legacy EI metric keys have already fired a FutureWarning
 # so that long training runs don't spam the user with repeat warnings.
 _EI_WARNED: set[str] = set()
 
@@ -662,7 +662,7 @@ def log_training_metrics(
     .. deprecated::
         The legacy flat metric keys (``"reward from buffer"``,
         ``"loss_sft, from loss"``, etc.) are deprecated and will be removed
-        in v0.15.0.  The new ``namespace/metric`` keys are already being
+        in v0.16.0.  The new ``namespace/metric`` keys are already being
         emitted in parallel — update any dashboards to use those.
 
     Args:
@@ -693,7 +693,7 @@ def log_training_metrics(
         step=global_step,
     )
 
-    # Legacy flat keys emitted in parallel until v0.15.0 (see CLAUDE.md §12).
+    # Legacy flat keys emitted in parallel until v0.16.0 (see CLAUDE.md §12).
     # Each key here maps to the new namespace/metric equivalent listed in the
     # deprecation warning string below.
     _LEGACY_KEY_MAP = {
@@ -712,9 +712,9 @@ def log_training_metrics(
     for old_key, new_key in _LEGACY_KEY_MAP.items():
         if old_key not in _EI_WARNED:
             warnings.warn(
-                f'EI metric key "{old_key}" is deprecated and will be removed in v0.15.0. '
+                f'EI metric key "{old_key}" is deprecated and will be removed in v0.16.0. '
                 f'Use "{new_key}" instead.',
-                DeprecationWarning,
+                FutureWarning,
                 stacklevel=2,
             )
             _EI_WARNED.add(old_key)
@@ -739,9 +739,7 @@ def log_training_metrics(
         except Exception:  # noqa: BLE001
             pass
         try:
-            legacy_metrics["reward from batch"] = float(
-                batch["next", "reward"].mean()
-            )
+            legacy_metrics["reward from batch"] = float(batch["next", "reward"].mean())
             legacy_metrics["loss_sft, from loss"] = float(loss.loss_sft)
             kl_to_ref = getattr(loss, "loss_kl_to_ref", None)
             if kl_to_ref is not None:

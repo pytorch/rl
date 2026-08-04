@@ -1636,6 +1636,55 @@ class TestPostTrainingLogger:
         assert "training/loss_entropy" not in metrics
         assert "training/kl_to_ref" not in metrics
 
+    def test_log_training_step_discovers_new_fields(self, csv_logger):
+        """Fields are discovered by iterating the tensorclass, not from a
+        hardcoded list: a loss subclass gaining a new term is logged without
+        touching the logger."""
+        from tensordict import TensorClass
+
+        class MyLossOutput(TensorClass["nocast"]):
+            loss_sft: torch.Tensor
+            loss_my_new_term: torch.Tensor | None = None
+
+        loss = MyLossOutput(
+            loss_sft=torch.tensor(0.5), loss_my_new_term=torch.tensor(0.25)
+        )
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=1)
+        assert metrics["training/loss_my_new_term"] == 0.25
+
+    def test_log_collection_step_single_reward_no_std(self, csv_logger):
+        """std of a single element is NaN; the key is omitted instead."""
+        from tensordict import TensorDict
+
+        batch = TensorDict({("next", "reward"): torch.tensor([[1.0]])}, batch_size=[1])
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_collection_step(batch)
+        assert metrics["batch/reward_mean"] == 1.0
+        assert "batch/reward_std" not in metrics
+
+    def test_metric_failure_warns_once(self, csv_logger, caplog):
+        """A metric that cannot be computed warns at WARNING level on the first
+        failure and stays quiet afterwards -- never a silent empty emit."""
+        import logging
+
+        from tensordict import TensorDict
+
+        class BadBuffer:
+            @property
+            def write_count(self):
+                raise RuntimeError("boom")
+
+        batch = TensorDict({}, batch_size=[1])
+        pt = PostTrainingLogger(logger=csv_logger)
+        with caplog.at_level(logging.WARNING, logger="torchrl"):
+            pt.log_collection_step(batch, replay_buffer=BadBuffer())
+            pt.log_collection_step(batch, replay_buffer=BadBuffer())
+        warnings_seen = [
+            rec for rec in caplog.records if "could not compute 'buffer'" in rec.message
+        ]
+        assert len(warnings_seen) == 1
+
     def test_log_training_step_custom_duck_type(self, csv_logger):
         """Arbitrary object exposing only loss_sft — duck-typing must not crash."""
         from types import SimpleNamespace
@@ -1649,17 +1698,21 @@ class TestPostTrainingLogger:
         assert "training/loss_objective" not in metrics
 
     def test_log_training_step_gradient_accumulation(self, csv_logger):
-        """grad_norm is 0.0 on accumulation steps, real value on optimizer steps."""
+        """grad_norm is only emitted on optimizer steps.
+
+        On accumulation steps the key is absent -- logging a literal 0.0 there
+        would pollute any aggregate (mean, min, histogram) over the series.
+        """
         from torchrl.objectives.llm.sft import SFTLossOutput
 
         loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
         pt = PostTrainingLogger(logger=csv_logger)
 
-        # step=3, accumulation=4: not an optimizer step -> grad_norm = 0.0
+        # step=3, accumulation=4: not an optimizer step -> no grad_norm key
         m = pt.log_training_step(
             loss=loss, step=3, grad_norm=1.0, gradient_accumulation_steps=4
         )
-        assert m["training/grad_norm"] == 0.0
+        assert "training/grad_norm" not in m
         assert m["training/optim_steps"] == 0
 
         # step=4, accumulation=4: optimizer step -> grad_norm = 1.0

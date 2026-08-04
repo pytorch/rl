@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import functools
 
+import time
 import warnings
 from typing import Any, Literal
 
@@ -24,7 +25,7 @@ from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncSche
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
-# Tracks which legacy GRPO metric keys have already fired a DeprecationWarning.
+# Tracks which one-time deprecation warnings have already fired.
 _GRPO_WARNED: set[str] = set()
 
 
@@ -966,40 +967,75 @@ def log_training_metrics(
         step=global_step,
     )
 
-    # Keys renamed by this PR: emit one-time DeprecationWarnings so downstream
-    # dashboards that still reference the old names get a clear migration signal.
-    _GRPO_LEGACY_KEY_MAP = {
-        "buffer/reward_mean": "batch/reward_mean",
-        "buffer/reward_std": "batch/reward_std",
-        "buffer/reward_min": "batch/reward_min",
-        "buffer/reward_max": "batch/reward_max",
-        "buffer/seq_length_mean": "batch/seq_length_mean",
-    }
-    for old_key, new_key in _GRPO_LEGACY_KEY_MAP.items():
-        if old_key not in _GRPO_WARNED:
-            warnings.warn(
-                f'GRPO metric key "{old_key}" has been renamed to "{new_key}". '
-                f'The old key will be removed in v0.15.0.',
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            _GRPO_WARNED.add(old_key)
+    # Legacy keys superseded by PostTrainingLogger's batch/* metrics (computed
+    # over the sampled batch, where these are computed over the whole buffer or
+    # from recipe-local state). Per the deprecation policy they stay emitted,
+    # under their old names and with their old semantics, for two minor
+    # releases: deprecated in v0.14, removed in v0.16.0.
+    if "grpo-legacy-keys" not in _GRPO_WARNED:
+        _GRPO_WARNED.add("grpo-legacy-keys")
+        warnings.warn(
+            "The GRPO metric keys 'buffer/reward_mean', 'buffer/seq_length_mean', "
+            "'inference/batch_policy_version', 'inference/batch_policy_age', "
+            "'throughput/optim_steps_per_second', 'training/entropy_loss' and "
+            "'training/kl_approx_to_inference' are deprecated and will be removed "
+            "in v0.16.0. Use the batch/* keys emitted by PostTrainingLogger "
+            "(computed over the sampled batch rather than the whole buffer), "
+            "'training/loss_entropy' and 'training/kl_approx'. Note that "
+            "'inference/staleness_mean'/'_max' keep their names but are now "
+            "computed over the sampled batch instead of the whole buffer.",
+            FutureWarning,
+            stacklevel=2,
+        )
 
-    # GRPO-specific extras: step_count and kl_penalty live in the buffer
-    # but are not part of the standard PostTrainingLogger interface.
+    # GRPO-specific extras (step_count, kl_penalty, read counts) plus the
+    # deprecated legacy keys above, all of which need recipe-local state
+    # (whole-buffer contents, the collector, the wall clock) that is not part
+    # of the standard PostTrainingLogger interface.
     with torch.no_grad():
         extra_metrics = {"buffer/data_read_count": data_read_count}
+        loss_entropy = getattr(loss, "loss_entropy", None)
+        if loss_entropy is not None:
+            extra_metrics["training/entropy_loss"] = float(loss_entropy.mean())
+        kl_approx = getattr(loss, "kl_approx", None)
+        if kl_approx is not None:
+            extra_metrics["training/kl_approx_to_inference"] = float(kl_approx.mean())
+        try:
+            batch_policy_version = int(batch["next", "policy_version"].view(-1).min())
+            extra_metrics["inference/batch_policy_version"] = batch_policy_version
+            extra_metrics["inference/batch_policy_age"] = (
+                int(collector.policy_version) - batch_policy_version
+            )
+        except (AttributeError, KeyError, RuntimeError, TypeError):
+            pass
+        elapsed = time.time() - start_time
+        if elapsed > 0:
+            extra_metrics["throughput/optim_steps_per_second"] = float(
+                (global_step // gradient_accumulation_steps) / elapsed
+            )
         try:
             rb_content = replay_buffer[:]
             step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
             extra_metrics["buffer/step_count_mean"] = float(step_count)
+            extra_metrics["buffer/reward_mean"] = float(
+                torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
+            )
+            extra_metrics["buffer/seq_length_mean"] = float(
+                torch.tensor(
+                    [
+                        t.numel()
+                        for t in rb_content.get(("tokens", "response"), as_list=True)
+                    ],
+                    dtype=torch.float,
+                ).mean()
+            )
             if use_kl_to_ref:
                 extra_metrics["buffer/kl_penalty_to_ref_mean"] = float(
                     torch.cat(
                         rb_content.get(("next", "kl_penalty"), as_list=True)
                     ).mean()
                 )
-        except Exception:  # noqa: BLE001
+        except (AttributeError, KeyError, RuntimeError, TypeError):
             pass
         wandb_logger.log_metrics(extra_metrics, step=global_step)
 
