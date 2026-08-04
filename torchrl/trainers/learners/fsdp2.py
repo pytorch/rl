@@ -10,7 +10,11 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.trainers.learners.common import Learner, LearnerCapabilities
+from torchrl.trainers.learners.common import (
+    _clone_tensors,
+    Learner,
+    LearnerCapabilities,
+)
 
 
 @functools.lru_cache(maxsize=None)
@@ -168,10 +172,13 @@ class FSDP2Learner(Learner):
 
         Overrides :meth:`~torchrl.trainers.learners.Learner.checkpoint`, whose
         plain (non-distributed) ``state_dict()`` calls would return raw,
-        per-rank ``DTensor`` shards rather than a portable checkpoint. No
-        explicit cloning is needed here (unlike the base implementation):
-        ``get_state_dict`` with ``full_state_dict=True`` already materializes
-        new, gathered tensors rather than views onto the live shards.
+        per-rank ``DTensor`` shards rather than a portable checkpoint.
+
+        Like the base implementation, the returned tensors are independent
+        clones. ``get_state_dict`` does *not* guarantee that: with
+        ``cpu_offload=True`` it only copies when the shards are off-CPU, so on a
+        CPU mesh (or a single-rank one) the "gathered" tensors alias the live
+        shards, and training on would silently mutate the checkpoint.
         """
         dsd = _dist_state_dict()
         options = dsd.StateDictOptions(full_state_dict=True, cpu_offload=True)
@@ -179,8 +186,8 @@ class FSDP2Learner(Learner):
             self.model, self.optimizer, options=options
         )
         return {
-            "model": model_state_dict,
-            "optimizer": optim_state_dict,
+            "model": _clone_tensors(model_state_dict),
+            "optimizer": _clone_tensors(optim_state_dict),
             "accum_step": self._accum_step,
         }
 
