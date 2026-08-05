@@ -471,6 +471,28 @@ class TestDataConfigs:
         assert isinstance(sampler, RandomSampler)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_sample_unit_configs(self):
+        """Test TransitionConfig and SequenceConfig."""
+        from hydra.utils import instantiate
+        from torchrl.data.replay_buffers import Sequence, Transition
+        from torchrl.trainers.algorithms.configs.data import (
+            SequenceConfig,
+            TransitionConfig,
+        )
+
+        cfg = TransitionConfig()
+        assert cfg._target_ == "torchrl.data.replay_buffers.Transition"
+        assert isinstance(instantiate(cfg), Transition)
+
+        cfg = SequenceConfig(length=8, episode_boundary="stop")
+        assert cfg._target_ == "torchrl.data.replay_buffers.Sequence"
+        unit = instantiate(cfg)
+        assert isinstance(unit, Sequence)
+        assert unit.length == 8
+        assert unit.episode_boundary == "stop"
+        assert unit.done_key == ("next", "done")
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensor_storage_config(self):
         """Test TensorStorageConfig."""
         from hydra.utils import instantiate
