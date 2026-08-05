@@ -41,6 +41,31 @@ buffer.shutdown()
 | [`RayReplayBuffer`](generated/torchrl.data.RayReplayBuffer.html#torchrl.data.RayReplayBuffer)(*args[, use_ray_service, ...]) | A Ray implementation of the Replay Buffer that can be extended and sampled remotely. |
 | [`RemoteTensorDictReplayBuffer`](generated/torchrl.data.RemoteTensorDictReplayBuffer.html#torchrl.data.RemoteTensorDictReplayBuffer)(*args[, ...]) | A remote invocation friendly ReplayBuffer class. |
 
+## Sample units
+
+Replay sampling combines two orthogonal decisions: which anchors are selected
+(the sampler's probability distribution) and what each anchor expands into.
+A `SampleUnit` passed through the
+`sample_unit` argument owns the second decision. The default behavior,
+equivalent to `Transition`, keeps every
+anchor as a single transition; future units expand anchors into fixed-length
+sequences or complete trajectories with explicit boundary policies.
+
+```
+from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data.replay_buffers import Transition
+
+rb = ReplayBuffer(
+ storage=LazyTensorStorage(1000),
+ batch_size=32,
+ sample_unit=Transition(),
+)
+```
+
+| [`SampleUnit`](generated/torchrl.data.SampleUnit.html#torchrl.data.SampleUnit)() | Expands sampled anchors into the records a batch is made of. |
+| --- | --- |
+| [`Transition`](generated/torchrl.data.Transition.html#torchrl.data.Transition)() | The identity sample unit: every anchor is one transition. |
+
 ## Offline-to-online helpers
 
 | [`prefill_replay_buffer`](generated/torchrl.data.prefill_replay_buffer.html#torchrl.data.prefill_replay_buffer)(rb, dataset[, ...]) | Copy samples from an offline dataset into a mutable replay buffer. |

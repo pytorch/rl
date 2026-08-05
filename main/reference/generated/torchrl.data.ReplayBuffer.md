@@ -16,6 +16,12 @@ If none is provided a default [`ListStorage`](torchrl.data.replay_buffers.ListSt
 If a callable is passed, it is used as constructor for the sampler.
 If none is provided, a default [`RandomSampler`](torchrl.data.replay_buffers.RandomSampler.html#torchrl.data.replay_buffers.RandomSampler)
 will be used.
+- **sample_unit** ([*SampleUnit*](torchrl.data.SampleUnit.html#torchrl.data.SampleUnit)*,**optional*) - expands the anchors selected by
+the sampler into the records of the batch (see
+`SampleUnit`). `None`
+(default) is equivalent to
+`Transition`: every anchor is
+one transition and classic behavior is preserved.
 - **writer** ([*Writer*](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*,**Callable**[**[**]**,*[*Writer*](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*]**,**optional*) - the writer to be used.
 If a callable is passed, it is used as constructor for the writer.
 If none is provided a default [`RoundRobinWriter`](torchrl.data.replay_buffers.RoundRobinWriter.html#torchrl.data.replay_buffers.RoundRobinWriter)
