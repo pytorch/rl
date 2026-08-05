@@ -1629,9 +1629,8 @@ class TestSequenceBurnInBootstrap:
     """
 
     def _sequence_cls(self):
-        from torchrl.data.replay_buffers import sample_units
-
-        return sample_units.Sequence
+        # Sequence is part of the public API: use the public import path.
+        return Sequence
 
     def _make_storage(self, capacity=10, done_at=(5, 9)):
         rb = TensorDictReplayBuffer(storage=LazyTensorStorage(capacity), batch_size=4)
@@ -1763,6 +1762,31 @@ class TestSequenceBurnInBootstrap:
         with pytest.raises(ValueError):
             Sequence(length=3, stride=0)
 
+    def test_include_reset_burn_in_respects_write_cursor(self):
+        # Burn-in walks backward from the anchor: on a full ring buffer it
+        # must clamp at the oldest record instead of wrapping past the write
+        # seam into the newest data.
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
+        size = 14
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(size, dtype=torch.float32),
+                    ("next", "done"): torch.zeros(size, 1, dtype=torch.bool),
+                },
+                batch_size=[size],
+            )
+        )
+        # physical slots 0..3 hold obs 10..13 (newest at slot 3),
+        # slots 4..9 hold obs 4..9 (oldest at slot 4)
+        unit = Sequence(length=2, burn_in=2, episode_boundary="include_reset")
+        index, info = unit.expand(torch.tensor([5]), {}, rb._storage)
+        assert index.tolist() == [4, 4, 5, 6]
+        assert info["validity_mask"].tolist() == [False, True, True, True]
+        obs = rb[:]["obs"][index]
+        assert obs.tolist() == [4.0, 4.0, 5.0, 6.0]
+
 
 class TestSequencePrioritySemantics:
     """Executable spec for sequence priority semantics and distribution
@@ -1787,9 +1811,8 @@ class TestSequencePrioritySemantics:
     """
 
     def _sequence_cls(self):
-        from torchrl.data.replay_buffers import sample_units
-
-        return sample_units.Sequence
+        # Sequence is part of the public API: use the public import path.
+        return Sequence
 
     def _make_rb(self, sampler=None, unit=None, capacity=20, batch_size=4):
         rb = ReplayBuffer(
@@ -1882,6 +1905,61 @@ class TestSequencePrioritySemantics:
             freqs = self._anchor_counts(rb, unit_length)
             high_share = freqs[10:].sum().item()
             assert 0.8 < high_share < 0.98
+
+    def test_update_tensordict_priority_routes_to_anchors(self):
+        # update_tensordict_priority on an expanded sample must write to the
+        # anchor slots only, reducing per-record priorities with a max over
+        # each anchor's valid records: padded records never pollute the
+        # priorities of unrelated storage slots, and duplicate anchors are
+        # reduced before writing (well-defined, last-write-wins-free).
+        Sequence = self._sequence_cls()
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=1.0,
+            beta=1.0,
+            storage=LazyTensorStorage(20),
+            batch_size=2,
+            sample_unit=Sequence(length=4),
+        )
+        done = torch.zeros(20, 1, dtype=torch.bool)
+        done[9] = done[19] = True
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(20, dtype=torch.float32),
+                    ("next", "done"): done,
+                },
+                batch_size=[20],
+            )
+        )
+        rb.update_priority(index=torch.arange(20), priority=torch.ones(20))
+        # deterministic "sample": two windows sharing anchor 7, crossing the
+        # episode end at 9 (last record padded and invalid)
+        unit = Sequence(length=4, episode_boundary="pad")
+        index, info = unit.expand(torch.tensor([7, 7]), {}, rb._storage)
+        data = rb._storage.get(index)
+        data.set("index", index)
+        data.set("anchor_index", info["anchor_index"])
+        data.set("validity_mask", info["validity_mask"])
+        assert info["validity_mask"].tolist() == [True, True, True, False] * 2
+        # huge errors on the padded (invalid) records must be ignored
+        data.set("td_error", torch.tensor([1.0, 2.0, 3.0, 50.0, 4.0, 5.0, 6.0, 60.0]))
+        before = torch.tensor([float(rb.sampler._sum_tree[i]) for i in range(20)])
+        rb.update_tensordict_priority(data)
+        after = torch.tensor([float(rb.sampler._sum_tree[i]) for i in range(20)])
+        changed = (before != after).nonzero().squeeze(-1)
+        assert changed.tolist() == [7]
+        # max over the valid records of both duplicate windows
+        assert after[7].item() == pytest.approx(6.0, rel=1e-4)
+        # end-to-end: a sampled batch carries the metadata automatically and
+        # only anchor slots are touched
+        sample = rb.sample()
+        sample.set("td_error", torch.rand(sample.shape[0]) + 0.5)
+        before = torch.tensor([float(rb.sampler._sum_tree[i]) for i in range(20)])
+        rb.update_tensordict_priority(sample)
+        after = torch.tensor([float(rb.sampler._sum_tree[i]) for i in range(20)])
+        changed = set((before != after).nonzero().squeeze(-1).tolist())
+        anchors = set(sample.get("anchor_index").reshape(-1).tolist())
+        assert changed.issubset(anchors)
 
     def test_update_priority_via_anchor_index(self):
         Sequence = self._sequence_cls()

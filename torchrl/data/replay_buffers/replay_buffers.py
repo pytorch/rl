@@ -2499,12 +2499,53 @@ class TensorDictReplayBuffer(ReplayBuffer):
             return
         tensordict.set("index", expand_as_right(index, tensordict))
 
+    def _anchor_reduced_priority(
+        self, data: TensorDictBase, priority: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Reduces per-record priorities of a sample-unit expansion to anchors.
+
+        When a sample unit expanded the sampled anchors into windows of
+        records (e.g. :class:`~torchrl.data.replay_buffers.Sequence`), the
+        sample carries a per-record ``"anchor_index"`` entry while
+        ``"index"`` holds the expanded per-record storage indices. Priorities
+        are per-anchor quantities: this reduces the per-record priorities
+        with a max over each anchor's valid records (``"validity_mask"``)
+        and returns the unique anchors with their reduced priorities, making
+        the update well-defined when the same anchor appears in several
+        windows. Returns ``None`` when no expansion metadata is present.
+        """
+        anchor = data.get("anchor_index", None)
+        if anchor is None or self._storage.ndim > 1:
+            return None
+        validity = data.get("validity_mask", None)
+        while anchor.shape != priority.shape and anchor.ndim > priority.ndim:
+            anchor = anchor[..., 0]
+            if validity is not None:
+                validity = validity[..., 0]
+        if anchor.shape != priority.shape:
+            return None
+        anchor = anchor.reshape(-1)
+        priority = priority.reshape(-1)
+        if validity is not None:
+            validity = validity.reshape(-1)
+            # every anchor's own record is always valid, so masking cannot
+            # drop an anchor from the update
+            anchor = anchor[validity]
+            priority = priority[validity]
+        unique, inverse = torch.unique(anchor, return_inverse=True)
+        reduced = torch.zeros_like(unique, dtype=priority.dtype)
+        reduced.scatter_reduce_(0, inverse, priority, reduce="amax", include_self=False)
+        return unique, reduced
+
     @_maybe_delay_init
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
             return
         if data.ndim:
             priority = self._get_priority_vector(data)
+            anchored = self._anchor_reduced_priority(data, priority)
+            if anchored is not None:
+                return self.update_priority(*anchored)
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
@@ -2986,6 +3027,9 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             return super().update_tensordict_priority(data)
         if data.ndim:
             priority = self._get_priority_vector(data)
+            anchored = self._anchor_reduced_priority(data, priority)
+            if anchored is not None:
+                return self.update_priority(*anchored)
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")

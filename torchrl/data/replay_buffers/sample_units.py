@@ -151,9 +151,12 @@ class Sequence(SampleUnit):
         stride (int, optional): spacing between the records of the window.
             Defaults to 1.
 
-    The unit also reports a per-record ``"anchor_index"`` info entry holding
-    the storage index of each record's sampled anchor, so priorities of
-    sampled sequences can be updated per anchor through ``update_priority``.
+    After expansion, ``info["index"]`` (and the ``"index"`` entry of
+    TensorDict samples) holds the expanded per-record storage indices of the
+    window records, not the anchors. The unit additionally reports a
+    per-record ``"anchor_index"`` info entry holding the storage index of
+    each record's sampled anchor, so priorities of sampled sequences can be
+    updated per anchor through ``update_priority``.
     :meth:`TensorDictReplayBuffer.update_tensordict_priority
     <torchrl.data.TensorDictReplayBuffer.update_tensordict_priority>` uses it
     automatically: per-record priorities are reduced (max over the valid
@@ -333,7 +336,9 @@ class Sequence(SampleUnit):
             a_exp = anchor.unsqueeze(1)
 
             cond1 = (start_exp <= stop_exp) & (start_exp <= a_exp) & (a_exp <= stop_exp)
-            cond2 = (start_exp > stop_exp) & ((a_exp >= start_exp) | (a_exp <= stop_exp))
+            cond2 = (start_exp > stop_exp) & (
+                (a_exp >= start_exp) | (a_exp <= stop_exp)
+            )
             mask = cond1 | cond2
 
             traj_idx = mask.float().argmax(dim=1)
@@ -357,7 +362,9 @@ class Sequence(SampleUnit):
                 offset >= -dist_from_start.unsqueeze(1)
             )
             clamped_offset = torch.minimum(offset, dist_to_stop.unsqueeze(1))
-            clamped_offset = torch.maximum(clamped_offset, -dist_from_start.unsqueeze(1))
+            clamped_offset = torch.maximum(
+                clamped_offset, -dist_from_start.unsqueeze(1)
+            )
             indices = (anchor_eff.unsqueeze(1) + clamped_offset) % max_len
         else:
             # "include_reset": cross episode boundaries, but never cross the
