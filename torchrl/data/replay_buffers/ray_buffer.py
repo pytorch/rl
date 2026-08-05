@@ -77,10 +77,24 @@ class _RayReplayBufferClient:
     def stats(self):
         return ray.get(self._actor.stats.remote())
 
-    def update_if_present(self, *, index, generation, patch):
+    def update_if_present(
+        self,
+        *,
+        index,
+        generation,
+        patch,
+        version_key=None,
+        version=None,
+        require_newer=False,
+    ):
         return ray.get(
             self._actor.update_if_present.remote(
-                index=index, generation=generation, patch=patch
+                index=index,
+                generation=generation,
+                patch=patch,
+                version_key=version_key,
+                version=version,
+                require_newer=require_newer,
             )
         )
 
@@ -194,7 +208,16 @@ class _LazyDistributedReplayClient:
         snapshot = self._stats(timeout=timeout)
         return {key: value.item() for key, value in snapshot.items()}
 
-    def update_if_present(self, *, index, generation, patch):
+    def update_if_present(
+        self,
+        *,
+        index,
+        generation,
+        patch,
+        version_key=None,
+        version=None,
+        require_newer=False,
+    ):
         raise RuntimeError(
             "Conditional updates are not supported by the distributed replay "
             "transport. Use transport='ray' for update_if_present."
@@ -569,15 +592,29 @@ class RayReplayBuffer(ReplayBuffer):
         """
         return self._client.stats()
 
-    def update_if_present(self, *, index, generation, patch):
+    def update_if_present(
+        self,
+        *,
+        index,
+        generation,
+        patch,
+        version_key=None,
+        version=None,
+        require_newer=False,
+    ):
         """Conditionally updates live records through a single actor round-trip.
 
-        Validation, the generation comparison and the patch write all run
-        inside the replay-buffer actor under its own lock.
+        Validation, the generation and version comparisons and the patch write
+        all run inside the replay-buffer actor under its own lock.
         See :meth:`~torchrl.data.ReplayBuffer.update_if_present`.
         """
         return self._client.update_if_present(
-            index=index, generation=generation, patch=patch
+            index=index,
+            generation=generation,
+            patch=patch,
+            version_key=version_key,
+            version=version,
+            require_newer=require_newer,
         )
 
     @property

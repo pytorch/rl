@@ -134,6 +134,45 @@ writer does not track generations.
     )
     print(f"updated {result.updated_count}, skipped {result.stale_count} stale records")
 
+Version-compared updates
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Generation stamps answer "is this still my record?"; they say nothing about
+*which* of several concurrent writers holds the freshest result. When
+multiple asynchronous workers write back to the same records, pass
+``version_key`` and ``version`` to
+:meth:`~torchrl.data.ReplayBuffer.update_if_present`: a generation-live
+record is then only patched when the incoming version compares favorably
+against the value stored under ``version_key`` (strictly greater with
+``require_newer=True``, greater-or-equal otherwise), and the accepted
+version is written back atomically with the patch. Outdated writers lose
+deterministically -- retrying an outdated update mutates nothing and returns
+the same result. When one call addresses the same slot several times, only
+the row carrying the highest incoming version is applied and the others are
+rejected, so the reported result always reflects what was written.
+
+.. code-block:: python
+
+    result = buffer.update_if_present(
+        index=sample["index"],
+        generation=sample["index_generation"],
+        patch={"recurrent_state": refreshed},
+        version_key="state_version",
+        version=worker_step,
+        require_newer=True,
+    )
+    print(
+        f"updated {result.updated_count}, "
+        f"outdated {result.version_rejected_count}, "
+        f"stale {result.stale_count}"
+    )
+
+``version_key`` must name a stored per-record scalar field (nested keys in
+tuple form), may not appear in ``patch``, and ``version`` can be a scalar or
+one entry per record. The result's ``version_rejected`` mask marks
+generation-live records that lost the comparison; ``stale_count`` keeps
+counting only generation-stale handles.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
