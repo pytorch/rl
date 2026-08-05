@@ -1062,6 +1062,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         handle keeps working until the slot is rewritten by ``add``,
         ``extend`` or ``empty``.
 
+        Generation tracking is opt-in: the buffer must be constructed with a
+        writer that tracks slot generations, e.g.
+        ``RoundRobinWriter(track_generations=True)`` (see
+        :ref:`ref_buffers_generations`). Calling this method on a buffer whose
+        writer does not track generations raises a ``RuntimeError``.
+
         Keyword Args:
             index (torch.Tensor): storage indices, as returned by
                 :meth:`extend` or found in the sample under ``"index"``.
@@ -1077,16 +1083,25 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             ``stale_count`` conveniences.
 
         Raises:
-            RuntimeError: if the storage or writer does not support
-                conditional updates (for example :class:`ListStorage`).
+            RuntimeError: if the storage does not support conditional updates
+                (for example :class:`ListStorage`) or the writer does not
+                track slot generations.
             KeyError: if a patch key does not exist in the storage.
             ValueError: if a patch entry has an incompatible shape or dtype.
 
         Examples:
             >>> import torch
             >>> from tensordict import TensorDict
-            >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-            >>> rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+            >>> from torchrl.data import (
+            ...     LazyTensorStorage,
+            ...     TensorDictReplayBuffer,
+            ...     TensorDictRoundRobinWriter,
+            ... )
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(10),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ...     batch_size=4,
+            ... )
             >>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
             >>> sample = rb.sample()
             >>> result = rb.update_if_present(
@@ -1120,12 +1135,19 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             patch = dict(patch)
         normalized = storage._validate_conditional_patch(index, patch)
         with self._replay_lock, self._write_lock:
-            live = self._writer.generations_of(dim0) == generation
+            # ``generations_of`` returns on the index device; align the captured
+            # generations with it so the comparison never crosses devices
+            # (index/generation/storage may live on CPU, CUDA or MPS).
+            current = self._writer.generations_of(dim0)
+            live = current == generation.to(current.device)
             if live.any():
-                live_index = index[live]
+                live_index = index[live.to(index.device)]
                 storage._apply_conditional_patch(
                     live_index,
-                    {key: value[live] for key, value in normalized.items()},
+                    {
+                        key: value[live.to(value.device)]
+                        for key, value in normalized.items()
+                    },
                 )
         return ConditionalUpdateResult(updated=live, batch_size=live.shape)
 

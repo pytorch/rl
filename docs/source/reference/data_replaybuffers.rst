@@ -104,17 +104,27 @@ Conditional record updates
 
 Round-robin writers recycle storage slots, so a physical index captured at
 sampling time can point to a different record by the time an asynchronous
-computation writes back. Replay slots therefore carry a generation counter:
-samples expose it as an ``"index_generation"`` entry next to ``"index"``, and
+computation writes back. Writers constructed with ``track_generations=True``
+stamp every slot with a generation counter (see
+:ref:`ref_buffers_generations`): samples then expose it as an
+``"index_generation"`` entry next to ``"index"``, and
 :meth:`~torchrl.data.ReplayBuffer.update_if_present` applies a patch only to
 records whose ``(index, generation)`` pair is still live, skipping recycled
 slots instead of corrupting them. This supports algorithms that refresh
 stored fields after sampling, such as recurrent-state refreshes or
 asynchronously computed labels, without pinning the buffer or racing against
-collection.
+collection. Generation tracking is opt-in, and
+:meth:`~torchrl.data.ReplayBuffer.update_if_present` raises when the buffer's
+writer does not track generations.
 
 .. code-block:: python
 
+    buffer = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(1000),
+        writer=TensorDictRoundRobinWriter(track_generations=True),
+        batch_size=32,
+    )
+    ...
     sample = buffer.sample()
     refreshed = compute_refreshed_state(sample)
     result = buffer.update_if_present(

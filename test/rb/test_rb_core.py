@@ -39,7 +39,11 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     TensorStorage,
 )
-from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    ImmutableDatasetWriter,
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+)
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.objectives.llm import MCAdvantage
 
@@ -2041,12 +2045,18 @@ class TestUpdateIfPresent:
       ``KeyError``, a shape or dtype mismatch raises ``ValueError``, and in
       both cases storage is left byte-for-byte untouched, even when other
       keys of the same patch were valid.
-    - Storages that cannot validate generations raise a capability error
-      mentioning "conditional" instead of writing through raw indices.
+    - Storages that cannot validate generations, and writers that were not
+      constructed with ``track_generations=True`` (tracking is opt-in), raise
+      a capability error mentioning "conditional" instead of writing through
+      raw indices.
     """
 
     def _make_rb(self, size=10):
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size), batch_size=4)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
         data = TensorDict(
             {
                 "obs": torch.arange(size, dtype=torch.float32)
@@ -2175,6 +2185,17 @@ class TestUpdateIfPresent:
                 patch={"obs": torch.zeros(5, 3)},
             )
 
+    def test_capability_error_without_generation_tracking(self):
+        # Generation tracking is opt-in; the default writer does not track.
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        index = rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+        with pytest.raises(RuntimeError, match="(?i)conditional"):
+            rb.update_if_present(
+                index=index,
+                generation=torch.zeros(10, dtype=torch.int64),
+                patch={"obs": torch.ones(10, 3)},
+            )
+
     def test_empty_invalidates_handles(self):
         rb, _, index, generation = self._make_rb()
         rb.empty()
@@ -2210,7 +2231,11 @@ class TestUpdateIfPresent:
         torch.testing.assert_close(rb[:]["obs"][index], marker)
 
     def test_multidim_storage_roundtrip(self):
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(6, ndim=2), batch_size=4)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(6, ndim=2),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
         data = TensorDict(
             {"obs": torch.arange(6, dtype=torch.float32).reshape(2, 3)},
             batch_size=[2, 3],
@@ -2226,7 +2251,11 @@ class TestUpdateIfPresent:
         assert (rb[:]["obs"] == 42.0).all()
 
     def test_concurrent_updates_do_not_tear_records(self):
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(64), batch_size=8)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(64),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=8,
+        )
         rb.extend(
             TensorDict({"a": torch.zeros(64), "b": torch.zeros(64)}, batch_size=[64])
         )

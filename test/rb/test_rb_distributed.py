@@ -19,14 +19,17 @@ from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl import service_backend, transport_backend
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import RayReplayBuffer, ReplayBuffer
+from torchrl.data import RayReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+)
 from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
@@ -216,16 +219,16 @@ class TestRayRB:
     def test_ray_rb_update_if_present(self):
         """Spec: update_if_present is delegated to the actor in one RPC.
 
-        The remote buffer is a TensorDictReplayBuffer so samples carry the
-        index and index_generation keys; the conditional update validates
-        and writes inside the actor, and stale handles created by a
-        wraparound are skipped exactly as in the local contract.
+        The remote buffer is a TensorDictReplayBuffer with a generation
+        tracking writer (tracking is opt-in), so samples carry the index and
+        index_generation keys; the conditional update validates and writes
+        inside the actor, and stale handles created by a wraparound are
+        skipped exactly as in the local contract.
         """
-        from torchrl.data import TensorDictReplayBuffer
-
         rb = RayReplayBuffer(
             replay_buffer_cls=TensorDictReplayBuffer,
             storage=partial(LazyTensorStorage, 10),
+            writer=partial(TensorDictRoundRobinWriter, track_generations=True),
             batch_size=4,
             ray_init_config={"num_cpus": 1},
         )
