@@ -3,6 +3,17 @@
 # Usage:
 #  - Comment `/assign` on an issue to assign it to yourself
 #  - Comment `/unassign` to remove yourself from an issue
+#
+# Matching is case-insensitive and tolerates surrounding whitespace
+# (the exact check happens in the script below); any other comment is
+# ignored. Bot comments are ignored. A thumbs-up reaction on the
+# comment confirms the command was processed. If the issue already has
+# the maximum of 10 assignees, the workflow replies with a short notice
+# instead of assigning.
+#
+# Note: the comment body is never interpolated into a shell command or
+# a `${{ }}` expression inside the script, so comment content cannot
+# inject code into this workflow. Keep it that way when editing.
 #------------------------------------------------------------
 
 name: Issue Self-Assign
@@ -13,12 +24,12 @@ on:
 
 jobs:
   assign:
-    # Only trigger on issue comments (not PR comments), and only for
-    # exact `/assign` or `/unassign` commands (optionally surrounded by
-    # whitespace).
+    # Cheap prefilter only: skip PR comments and comments that cannot
+    # contain a command. `contains` here is a substring check; the
+    # exact, whitespace/case-tolerant match happens in the script.
     if: >-
       github.event.issue.pull_request == null &&
-      contains(fromJSON('["/assign", "/unassign"]'), github.event.comment.body)
+      contains(github.event.comment.body, 'assign')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -27,30 +38,76 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const command = context.payload.comment.body.trim();
+            // Ignore bot comments.
+            if (context.payload.comment.user.type === 'Bot') {
+              return;
+            }
+
+            const command = context.payload.comment.body.trim().toLowerCase();
             const login = context.payload.comment.user.login;
             const { owner, repo } = context.repo;
             const issue_number = context.payload.issue.number;
 
+            const react = () =>
+              github.rest.reactions.createForIssueComment({
+                owner,
+                repo,
+                comment_id: context.payload.comment.id,
+                content: '+1',
+              });
+
             if (command === '/assign') {
+              const { data: issue } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number,
+              });
+              const assignees = (issue.assignees || []).map((a) => a.login);
+
+              if (assignees.includes(login)) {
+                // Already assigned; nothing to do.
+                await react();
+                return;
+              }
+
+              if (assignees.length >= 10) {
+                // GitHub caps issues at 10 assignees; addAssignees would
+                // silently no-op, so explain instead.
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body:
+                    'This issue already has the maximum number of ' +
+                    'assignees (10), so it cannot be self-assigned. ' +
+                    'Feel free to coordinate with the current assignees.',
+                });
+                return;
+              }
+
               await github.rest.issues.addAssignees({
                 owner,
                 repo,
                 issue_number,
                 assignees: [login],
               });
-            } else {
-              await github.rest.issues.removeAssignees({
+              await react();
+            } else if (command === '/unassign') {
+              const { data: issue } = await github.rest.issues.get({
                 owner,
                 repo,
                 issue_number,
-                assignees: [login],
               });
-            }
+              const assignees = (issue.assignees || []).map((a) => a.login);
 
-            await github.rest.reactions.createForIssueComment({
-              owner,
-              repo,
-              comment_id: context.payload.comment.id,
-              content: '+1',
-            });
+              if (assignees.includes(login)) {
+                await github.rest.issues.removeAssignees({
+                  owner,
+                  repo,
+                  issue_number,
+                  assignees: [login],
+                });
+              }
+              await react();
+            }
+            // Anything else: not a command, ignore silently.
