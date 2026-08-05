@@ -568,6 +568,9 @@ Backend selector:
 Pass `prefix=<dir>` in *kwargs*.
 - `"h5"` - HDF5 via `PersistentTensorDict`.
 Pass `filename=<path>` in *kwargs*.
+- `"zarr"` - zarr (requires `zarr>=3.0`) via
+`PersistentTensorDict`. Pass `filename=<path or store>`
+in *kwargs*.
 - `"shared"` - CPU shared-memory tensors.
 - `"redis"` / `"dragonfly"` - delegates to
 `TensorDictStore.from_schema()`.
@@ -700,6 +703,47 @@ TensorDict(
  0: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
  1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
  2: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+ batch_size=torch.Size([]),
+ device=None,
+ is_shared=False)
+```
+
+from_zarr(***, *mode: str = 'r'*, *auto_batch_size: bool = False*, *batch_dims: int | None = None*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*)
+
+Creates a PersistentTensorDict from a zarr store.
+
+Requires `zarr>=3.0` to be installed.
+
+Parameters:
+
+**filename** (*str**,**path**or**zarr store*) - The path to the zarr store (a
+directory), or a `zarr.abc.store.Store` instance (e.g. a
+`zarr.storage.ZipStore`).
+
+Keyword Arguments:
+
+- **mode** (*str**,**optional*) - Reading mode. Defaults to `"r"`.
+- **auto_batch_size** (*bool**,**optional*) - If `True`, the batch size will be computed automatically.
+Defaults to `False`.
+- **batch_dims** (*int**,**optional*) - If auto_batch_size is `True`, defines how many dimensions the output
+tensordict should have. Defaults to `None` (full batch-size at each level).
+- **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - The batch size of the TensorDict. Defaults to `None`
+(read from the metadata written by `to_zarr()`, or automatically determined
+for stores written by other tools).
+
+Returns:
+
+A PersistentTensorDict representation of the input zarr store.
+
+Examples
+
+```
+>>> td = TensorDict.from_zarr("path/to/store.zarr")
+>>> print(td)
+PersistentTensorDict(
+ fields={
+ key1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+ key2: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
  batch_size=torch.Size([]),
  device=None,
  is_shared=False)
