@@ -252,18 +252,9 @@ else
   uv_pip_install -e . --no-build-isolation --no-deps
 fi
 
-# install torchcodec (from source for nightly, from the PyTorch wheel index for stable)
+# install torchcodec from the PyTorch wheel index (nightly wheels for torch nightly)
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  # torchcodec builds with scikit-build-core; --no-build-isolation requires the
-  # build backend to be present in the environment (pybind11/ninja/cmake already are).
-  uv_pip_install "scikit-build-core>=0.10"
-  torchcodec_dir=$(mktemp -d)
-  git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
-  python_base="$(python -c 'import sys; print(sys.base_prefix)')"
-  CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
-    I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
-    uv_pip_install --no-build-isolation "$torchcodec_dir"
-  rm -rf "$torchcodec_dir"
+  uv_pip_install --pre --index-url "https://download.pytorch.org/whl/nightly/${CU_VERSION}" torchcodec
 else
   uv_pip_install --index-url "https://download.pytorch.org/whl/${CU_VERSION}" torchcodec
 fi
