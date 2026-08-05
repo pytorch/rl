@@ -126,7 +126,7 @@ uv_pip_install \
   pyyaml \
   scipy \
   psutil \
-  hydra-core \
+  "hydra-core<1.4" \
   tensorboard \
   "imageio==2.26.0" \
   "huggingface-hub>=1.5.0,<2.0" \

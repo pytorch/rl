@@ -134,7 +134,7 @@ uv pip install \
     expecttest \
     pyyaml \
     scipy \
-    hydra-core \
+    "hydra-core<1.4" \
     patchelf \
     pyopengl==3.1.0 \
     coverage \

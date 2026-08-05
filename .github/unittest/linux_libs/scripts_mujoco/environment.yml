@@ -19,7 +19,7 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
-    - hydra-core
+    - hydra-core<1.4
     - psutil
     # MuJoCo backends are installed after PyTorch in install.sh so packages
     # with a torch dependency cannot pull a stable PyPI torch wheel first.

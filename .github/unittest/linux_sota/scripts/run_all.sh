@@ -86,7 +86,7 @@ uv pip install \
   pyyaml \
   scipy \
   psutil \
-  hydra-core \
+  "hydra-core<1.4" \
   "imageio==2.26.0" \
   dm_control \
   "mujoco<3.3.6" \
