@@ -271,8 +271,22 @@ class TestConfigClassParity:
     user setting that kwarg through Hydra has no effect and the failure is
     silent. This walks every concrete Config dataclass reachable from
     ``torchrl.trainers.algorithms.configs``, resolves the class or factory named
-    by its ``_target_``, and asserts every required constructor parameter has a
-    same-named Config field.
+    by its ``_target_``, and asserts every named constructor parameter --
+    required or optional -- has a same-named Config field.
+
+    Two deliberate limitations, left as follow-ups:
+
+    - Only field-name presence is checked; default-value *equality* between a
+      Config field and the corresponding ``__init__`` kwarg is NOT enforced, so
+      a Config default that drifts from the constructor's default still passes.
+    - Wrapped ``__init__`` signatures made up purely of ``*args``/``**kwargs``
+      expose no named parameters to diff, so their configs pass vacuously, and
+      a ``**kwargs`` catch-all next to named parameters hides any kwarg that is
+      only reachable through it.
+
+    Resolving a ``_target_`` can import optional-dependency modules; when such
+    an import fails the case is skipped rather than failed, so the test stays
+    green on minimal installs.
 
     A handful of configs cannot be checked this way (composite or polymorphic
     factories with no single wrapped class, or a ``_target_`` that references a
@@ -288,9 +302,19 @@ class TestConfigClassParity:
         cfg_cls = _discover_leaf_configs()[config_name]
         fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
         target_path = fields["_target_"].default
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            wrapped_cls = _resolve_wrapped_class(target_path)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                wrapped_cls = _resolve_wrapped_class(target_path)
+        except ImportError as err:
+            # Resolving a _target_ may import modules that require optional
+            # dependencies (e.g. the vLLM weight-sync schemes pull in modules
+            # that need `requests`); on a minimal install that is a skip, not
+            # a parity failure.
+            pytest.skip(
+                f"optional dependency missing while resolving "
+                f"{config_name}._target_ = {target_path!r}: {err}"
+            )
         assert wrapped_cls is not None, (
             f"{config_name}._target_ = {target_path!r} could not be resolved to "
             "a class (not a class itself, and not a function with a class "
