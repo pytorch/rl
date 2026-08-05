@@ -58,6 +58,7 @@ from torchrl._utils import (
     rl_warnings,
 )
 from torchrl.data.replay_buffers.query import _query_source, Trajectory
+from torchrl.data.replay_buffers.sample_units import SampleUnit
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -137,6 +138,12 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             If a callable is passed, it is used as constructor for the sampler.
             If none is provided, a default :class:`~torchrl.data.replay_buffers.RandomSampler`
             will be used.
+        sample_unit (SampleUnit, optional): expands the anchors selected by
+            the sampler into the records of the batch (see
+            :class:`~torchrl.data.replay_buffers.SampleUnit`). ``None``
+            (default) is equivalent to
+            :class:`~torchrl.data.replay_buffers.Transition`: every anchor is
+            one transition and classic behavior is preserved.
         writer (Writer, Callable[[], Writer], optional): the writer to be used.
             If a callable is passed, it is used as constructor for the writer.
             If none is provided a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`
@@ -339,6 +346,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         *,
         storage: Storage | Callable[[], Storage] | None = None,
         sampler: Sampler | Callable[[], Sampler] | None = None,
+        sample_unit: SampleUnit | None = None,
         writer: Writer | Callable[[], Writer] | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
@@ -411,6 +419,11 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         # Update _delayed_init after auto-detection
         self._delayed_init = delayed_init
 
+        if sample_unit is not None and not isinstance(sample_unit, SampleUnit):
+            raise TypeError(
+                f"sample_unit must be a SampleUnit instance, got {type(sample_unit).__name__}."
+            )
+        self._sample_unit = sample_unit
         self._pin_memory = pin_memory
         self._prefetch = bool(prefetch)
         self._prefetch_cap = prefetch or 0
@@ -1515,6 +1528,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         nc = contextlib.nullcontext()
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
@@ -2040,6 +2055,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         dtype: torch.dtype = torch.float,
         storage: Storage | None = None,
         sampler: Sampler | None = None,
+        sample_unit: SampleUnit | None = None,
         sampler_device: DEVICE_TYPING | None = None,
         sync: bool = True,
         collate_fn: Callable | None = None,
@@ -2078,6 +2094,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         super().__init__(
             storage=storage,
             sampler=sampler,
+            sample_unit=sample_unit,
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
@@ -2134,6 +2151,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._write_lock if not is_comp else nc,
         ):
             index, info = self.prioritized_sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
@@ -2563,6 +2582,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
         nc = contextlib.nullcontext()
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
@@ -2752,6 +2773,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         priority_key: NestedKey = "td_error",
         eps: float = 1e-8,
         storage: Storage | None = None,
+        sample_unit: SampleUnit | None = None,
         sampler_device: DEVICE_TYPING | None = None,
         sync: bool = True,
         collate_fn: Callable | None = None,
@@ -2793,6 +2815,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             priority_key=priority_key,
             storage=storage,
             sampler=sampler,
+            sample_unit=sample_unit,
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
@@ -2928,6 +2951,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             self._write_lock if not is_comp else nc,
         ):
             index, info = self.prioritized_sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
