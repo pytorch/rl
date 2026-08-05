@@ -21,10 +21,10 @@ from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
 from torchrl.objectives.llm.distillation import (
-    distillation_loss,
+    _distillation_loss,
     DistillationLoss,
     DistillationLossOutput,
-    reverse_kl_token_estimate,
+    k3_kl_token_estimate,
 )
 from torchrl.objectives.llm.grpo import (
     CISPOLoss,
@@ -1170,43 +1170,41 @@ class TestDistillation:
             transform(td)
         return td
 
-    def test_reverse_kl_token_estimate(self):
+    def test_k3_kl_token_estimate(self):
         log_prob = torch.full((4,), -1.0)
         torch.testing.assert_close(
-            reverse_kl_token_estimate(log_prob, log_prob), torch.zeros(4)
+            k3_kl_token_estimate(log_prob, log_prob), torch.zeros(4)
         )
         target = torch.randn(64)
         other = torch.randn(64)
-        kl = reverse_kl_token_estimate(target, other)
+        kl = k3_kl_token_estimate(target, other)
         assert kl.shape == (64,)
         assert (kl >= 0).all()
         with pytest.raises(ValueError, match="same shape"):
-            reverse_kl_token_estimate(torch.zeros(3), torch.zeros(4))
+            k3_kl_token_estimate(torch.zeros(3), torch.zeros(4))
 
-    def test_reverse_kl_matches_closed_form(self):
+    def test_k3_kl_matches_closed_form(self):
         student = torch.tensor([-1.0, -2.0, -0.3])
         teacher = torch.tensor([-0.5, -2.5, -0.1])
         diff = teacher - student
         expected = diff.expm1() - diff
-        torch.testing.assert_close(
-            reverse_kl_token_estimate(teacher, student), expected
-        )
+        torch.testing.assert_close(k3_kl_token_estimate(teacher, student), expected)
 
     def test_gradient_descends_toward_teacher(self):
         torch.manual_seed(0)
         teacher = torch.randn(64)
         student = torch.randn(64, requires_grad=True)
-        kl_before = reverse_kl_token_estimate(teacher, student).sum()
+        kl_before = k3_kl_token_estimate(teacher, student).sum()
         kl_before.backward()
         with torch.no_grad():
             stepped = student - 0.1 * student.grad
-        kl_after = reverse_kl_token_estimate(teacher, stepped).sum()
+        kl_after = k3_kl_token_estimate(teacher, stepped).sum()
         assert kl_after < kl_before
 
     @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
     def test_distillation_loss_reduction_unit(self, reduction):
         summed_kl = torch.tensor([1.0, 2.0, 3.0])
-        out = distillation_loss(summed_kl, reduction)
+        out = _distillation_loss(summed_kl, reduction)
         if reduction == "mean":
             torch.testing.assert_close(out, summed_kl.mean())
         elif reduction == "sum":
@@ -1214,7 +1212,7 @@ class TestDistillation:
         else:
             torch.testing.assert_close(out, summed_kl)
         with pytest.raises(ValueError, match="Invalid reduction"):
-            distillation_loss(summed_kl, "not-a-reduction")
+            _distillation_loss(summed_kl, "not-a-reduction")
 
     def test_distillation_invalid_direction(self):
         with pytest.raises(ValueError, match="kl_direction"):
@@ -1323,6 +1321,28 @@ class TestDistillation:
         loss_fn.set_keys(teacher_log_prob=("next", "kd_log_probs", "full"))
         loss_vals = loss_fn(td)
         assert torch.isfinite(loss_vals.loss_distill)
+
+    @pytest.mark.skipif(
+        not _has_transformers, reason="transformers lib required to test distillation"
+    )
+    def test_distillation_loss_assistant_only_mismatch_raises(self, data):
+        # RetrieveLogProb(assistant_only=True) zero-fills the teacher log-probs
+        # of non-assistant tokens; pairing it with
+        # DistillationLoss(assistant_only=False) must be rejected.
+        from transformers import OPTConfig, OPTForCausalLM
+
+        student, tokenizer = self._make_student()
+        teacher_model = OPTForCausalLM(OPTConfig()).eval()
+        td = data.clone()
+        self._write_teacher_log_probs(td, teacher_model, tokenizer)
+        loss_fn = DistillationLoss(
+            actor_network=student,
+            tokenizer=tokenizer,
+            assistant_only=False,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+        )
+        with pytest.raises(RuntimeError, match="assistant_only"):
+            loss_fn(td)
 
     @pytest.mark.skipif(
         not _has_transformers, reason="transformers lib required to test distillation"

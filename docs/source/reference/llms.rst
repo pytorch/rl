@@ -555,7 +555,7 @@ Distillation
 
     DistillationLoss
     DistillationLossOutput
-    reverse_kl_token_estimate
+    k3_kl_token_estimate
 
 .. currentmodule:: torchrl.data.llm
 
