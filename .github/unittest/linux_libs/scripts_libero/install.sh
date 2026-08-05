@@ -28,7 +28,7 @@ uv_pip_install \
   coverage \
   expecttest \
   future \
-  hydra-core \
+  "hydra-core<1.4" \
   hypothesis \
   importlib_metadata \
   orjson \

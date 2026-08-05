@@ -19,7 +19,7 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
-    - hydra-core
+    - hydra-core<1.4
     - jax[cuda12]>=0.7.0
     # NOTE: import name is `mujoco_playground` but the PyPI distribution is `playground`.
     - playground

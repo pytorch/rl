@@ -8,7 +8,7 @@ dependencies:
     - expecttest
     - future
     - hypothesis
-    - hydra-core
+    - hydra-core<1.4
     - psutil
     - pybind11[global]
     - pytest
