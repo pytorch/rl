@@ -139,7 +139,9 @@ class Sequence(SampleUnit):
 
             Defaults to ``"pad"``.
         done_key (NestedKey, optional): the key for the end-of-episode flag.
-            Defaults to ``("next", "done")``.
+            If ``None``, the written storage span is treated as one trajectory,
+            bounded only by the replay buffer's write seam. Defaults to
+            ``("next", "done")``.
         burn_in (int, optional): number of records preceding the anchor,
             marked False in the ``"learning_mask"`` info entry. Burn-in never
             shifts the anchor: entries before the anchor's episode start (or
@@ -317,7 +319,11 @@ class Sequence(SampleUnit):
         offset = ((steps - self.burn_in) * self.stride).unsqueeze(0).expand(B, total)
 
         if self.episode_boundary in ("pad", "stop"):
-            done = storage.get(self.done_key) if self.done_key is not None else None
+            done = (
+                storage.get(self.done_key)
+                if self.done_key is not None
+                else torch.zeros(len(storage), dtype=torch.bool, device=device)
+            )
             end, max_len = _derive_end_flags(
                 end=done,
                 at_capacity=storage._is_full,
@@ -350,7 +356,9 @@ class Sequence(SampleUnit):
 
             anchor_eff = anchor
             if self.episode_boundary == "stop":
-                shortfall = self.stride * (self.length - 1) - dist_to_stop
+                shortfall = (
+                    self.stride * (self.length + self.bootstrap - 1) - dist_to_stop
+                )
                 shift = torch.clamp(
                     shortfall, min=torch.zeros_like(shortfall), max=dist_from_start
                 )

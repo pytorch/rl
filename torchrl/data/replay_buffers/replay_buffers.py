@@ -58,7 +58,10 @@ from torchrl._utils import (
     rl_warnings,
 )
 from torchrl.data.replay_buffers.query import _query_source, Trajectory
-from torchrl.data.replay_buffers.sample_units import SampleUnit
+from torchrl.data.replay_buffers.sample_units import (
+    SampleUnit,
+    Sequence as SequenceSampleUnit,
+)
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -2514,8 +2517,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
         the update well-defined when the same anchor appears in several
         windows. Returns ``None`` when no expansion metadata is present.
         """
+        if (
+            not isinstance(self._sample_unit, SequenceSampleUnit)
+            or self._storage.ndim > 1
+        ):
+            return None
         anchor = data.get("anchor_index", None)
-        if anchor is None or self._storage.ndim > 1:
+        if anchor is None:
             return None
         validity = data.get("validity_mask", None)
         while anchor.shape != priority.shape and anchor.ndim > priority.ndim:

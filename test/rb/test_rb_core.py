@@ -1570,6 +1570,27 @@ class TestSequenceUnit:
         assert index.tolist() == [4, 5, 5, 5]
         assert info["validity_mask"].tolist() == [True, True, False, False]
 
+    @pytest.mark.parametrize(
+        ("boundary", "expected_index", "expected_validity"),
+        [
+            ("pad", [3, 4, 4], [True, True, False]),
+            ("stop", [2, 3, 4], [True, True, True]),
+        ],
+    )
+    def test_none_done_key_uses_storage_boundary(
+        self, boundary, expected_index, expected_validity
+    ):
+        Sequence = self._sequence_cls()
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=2)
+        rb.extend(TensorDict({"obs": torch.arange(5)}, batch_size=[5]))
+        index, info = self._expand(
+            rb,
+            Sequence(length=3, episode_boundary=boundary, done_key=None),
+            [3],
+        )
+        assert index.tolist() == expected_index
+        assert info["validity_mask"].tolist() == expected_validity
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.is_available() and not torch.backends.mps.is_available(),
@@ -1688,6 +1709,17 @@ class TestSequenceBurnInBootstrap:
         assert index.tolist() == [8, 9, 9]
         assert info["validity_mask"].tolist() == [True, True, False]
         assert info["learning_mask"].tolist() == [True, True, False]
+
+    def test_stop_shifts_bootstrap_inside_episode(self):
+        Sequence = self._sequence_cls()
+        rb = self._make_storage()
+        index, info = self._expand(
+            rb, Sequence(length=2, bootstrap=1, episode_boundary="stop"), [4]
+        )
+        assert index.tolist() == [3, 4, 5]
+        assert info["validity_mask"].tolist() == [True, True, True]
+        assert info["learning_mask"].tolist() == [True, True, False]
+        assert info["anchor_index"].tolist() == [4, 4, 4]
 
     def test_stride_spaces_the_window(self):
         Sequence = self._sequence_cls()
@@ -1851,6 +1883,18 @@ class TestSequencePrioritySemantics:
         rb = self._make_rb()
         index, info = Sequence(length=3).expand(torch.tensor([1, 6]), {}, rb._storage)
         assert info["anchor_index"].tolist() == [1, 1, 1, 6, 6, 6]
+
+    def test_user_anchor_index_ignored_without_sequence_unit(self):
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(4))
+        data = TensorDict(
+            {
+                "index": torch.tensor([0, 1]),
+                "anchor_index": torch.tensor([3, 3]),
+                "td_error": torch.tensor([1.0, 2.0]),
+            },
+            batch_size=[2],
+        )
+        assert rb._anchor_reduced_priority(data, data["td_error"]) is None
 
     def test_weights_are_block_constant(self):
         Sequence = self._sequence_cls()
