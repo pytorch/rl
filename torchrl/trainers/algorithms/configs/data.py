@@ -240,7 +240,7 @@ class SequenceConfig(SampleUnitConfig):
     done_key: Any = ("next", "done")
     burn_in: int = 0
     bootstrap: int = 0
-    stride: int = 1
+    dilation: int = 1
 
 
 @dataclass

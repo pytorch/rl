@@ -115,7 +115,20 @@ class Sequence(SampleUnit):
     Each anchor expands into ``burn_in + length + bootstrap`` records:
     ``burn_in`` records preceding the anchor, the learning region of
     ``length`` records starting at the anchor, then ``bootstrap`` records
-    following it. ``stride`` spaces the records of the window uniformly.
+    following it. ``dilation`` spaces the records of the window uniformly.
+
+    This is useful when a learner needs temporal context around the records
+    that contribute to its loss. For example, a recurrent Q-learning learner
+    can replay the burn-in prefix to reconstruct its hidden state, compute
+    losses only over the learning region, and use the bootstrap suffix as
+    future context for a multi-step target. The unit only selects stored
+    records and reports masks: it does not run the recurrent model or compute
+    bootstrap targets.
+
+    The configuration is fixed when the unit is constructed. If the replay
+    buffer samples ``B`` anchors, the returned flat batch contains
+    ``B * (burn_in + length + bootstrap)`` records. The corresponding storage
+    span is ``1 + dilation * (burn_in + length + bootstrap - 1)`` records.
 
     This unit requires a :class:`~torchrl.data.replay_buffers.TensorStorage`
     backed by a TensorDict (e.g. :class:`~torchrl.data.LazyTensorStorage`
@@ -146,12 +159,19 @@ class Sequence(SampleUnit):
             marked False in the ``"learning_mask"`` info entry. Burn-in never
             shifts the anchor: entries before the anchor's episode start (or
             before the oldest written record) are invalid and clamp to that
-            boundary. Defaults to 0.
+            boundary. A recurrent learner can process these records to
+            reconstruct its hidden state while excluding them from the loss.
+            Defaults to 0.
         bootstrap (int, optional): number of records following the learning
             region, marked False in ``"learning_mask"`` and subject to the
-            ``episode_boundary`` policy at episode ends. Defaults to 0.
-        stride (int, optional): spacing between the records of the window.
-            Defaults to 1.
+            ``episode_boundary`` policy at episode ends. These records provide
+            future context to a target estimator; this unit does not compute a
+            bootstrap value. Defaults to 0.
+        dilation (int, optional): distance in storage records between
+            consecutive records of the returned window. For example,
+            ``dilation=2`` selects every other stored record. Dilation does not
+            aggregate skipped transitions and does not control the spacing or
+            overlap between independently sampled windows. Defaults to 1.
 
     After expansion, ``info["index"]`` (and the ``"index"`` entry of
     TensorDict samples) holds the expanded per-record storage indices of the
@@ -167,9 +187,9 @@ class Sequence(SampleUnit):
 
     .. note:: ``"anchor_index"`` always reports the anchor the sampler drew.
         With ``episode_boundary="stop"`` the window may be shifted backward,
-        and with ``stride > 1`` the shifted window is laid out on the stride
-        grid of the shifted anchor: the reported (pre-shift) anchor is then
-        not necessarily one of the window's records.
+        and with ``dilation > 1`` the shifted window is laid out on the
+        dilation grid of the shifted anchor: the reported (pre-shift) anchor
+        is then not necessarily one of the window's records.
 
     .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SequenceConfig`
         for the Hydra configuration companion.
@@ -198,7 +218,10 @@ class Sequence(SampleUnit):
         torch.Size([6])
         >>> sorted(info.keys())
         ['anchor_index', 'index', 'learning_mask', 'sequence_id', 'step_in_sequence', 'validity_mask']
-        >>> # burn-in and bootstrap extend the window around the anchor:
+        >>> # A recurrent learner could use one record to warm up its hidden
+        >>> # state, learn on two records, and keep one future record for its
+        >>> # target. It runs over the full window and applies the loss only
+        >>> # where learning_mask and validity_mask are both true.
         >>> unit = Sequence(length=2, burn_in=1, bootstrap=1)
         >>> index, info = unit.expand(torch.tensor([5]), {}, rb.storage)
         >>> index.tolist()  # burn-in clamps at the episode start (5)
@@ -207,8 +230,8 @@ class Sequence(SampleUnit):
         [False, True, True, False]
         >>> info["validity_mask"].tolist()
         [False, True, True, True]
-        >>> # stride spaces the window records uniformly:
-        >>> index, _ = Sequence(length=3, stride=2).expand(
+        >>> # Dilation temporally subsamples records inside the window:
+        >>> index, _ = Sequence(length=3, dilation=2).expand(
         ...     torch.tensor([0]), {}, rb.storage
         ... )
         >>> index.tolist()
@@ -222,7 +245,7 @@ class Sequence(SampleUnit):
         done_key: NestedKey | None = ("next", "done"),
         burn_in: int = 0,
         bootstrap: int = 0,
-        stride: int = 1,
+        dilation: int = 1,
     ):
         if length <= 0:
             raise ValueError(f"length must be strictly positive, got {length}.")
@@ -232,8 +255,8 @@ class Sequence(SampleUnit):
             raise ValueError(f"burn_in must be non-negative, got {burn_in}.")
         if bootstrap < 0:
             raise ValueError(f"bootstrap must be non-negative, got {bootstrap}.")
-        if stride < 1:
-            raise ValueError(f"stride must be strictly positive, got {stride}.")
+        if dilation < 1:
+            raise ValueError(f"dilation must be strictly positive, got {dilation}.")
         if done_key is not None and not isinstance(done_key, str):
             # normalize sequence-form nested keys (e.g. lists or omegaconf
             # containers coming from Hydra configs) to plain tuples
@@ -243,7 +266,7 @@ class Sequence(SampleUnit):
         self.done_key = done_key
         self.burn_in = burn_in
         self.bootstrap = bootstrap
-        self.stride = stride
+        self.dilation = dilation
 
     @staticmethod
     def _newest_index(storage: Storage, written: int) -> int:
@@ -316,7 +339,7 @@ class Sequence(SampleUnit):
         expanded_info["learning_mask"] = learning.repeat(B)
         expanded_info["anchor_index"] = anchor.repeat_interleave(total)
 
-        offset = ((steps - self.burn_in) * self.stride).unsqueeze(0).expand(B, total)
+        offset = ((steps - self.burn_in) * self.dilation).unsqueeze(0).expand(B, total)
 
         if self.episode_boundary in ("pad", "stop"):
             done = (
@@ -357,7 +380,7 @@ class Sequence(SampleUnit):
             anchor_eff = anchor
             if self.episode_boundary == "stop":
                 shortfall = (
-                    self.stride * (self.length + self.bootstrap - 1) - dist_to_stop
+                    self.dilation * (self.length + self.bootstrap - 1) - dist_to_stop
                 )
                 shift = torch.clamp(
                     shortfall, min=torch.zeros_like(shortfall), max=dist_from_start

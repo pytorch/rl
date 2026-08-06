@@ -1628,11 +1628,11 @@ class TestSequenceUnit:
 
 
 class TestSequenceBurnInBootstrap:
-    """Executable spec for Sequence burn-in, bootstrap and stride (#4039, piece 3).
+    """Executable spec for Sequence burn-in, bootstrap and dilation (#4039, piece 3).
 
     Contract pinned by this class:
 
-    - ``Sequence(..., burn_in=0, bootstrap=0, stride=1)`` extends the window
+    - ``Sequence(..., burn_in=0, bootstrap=0, dilation=1)`` extends the window
       around each anchor: ``burn_in`` records before the anchor, the learning
       region of ``length`` records starting at the anchor, then ``bootstrap``
       records after it. Total records per anchor:
@@ -1644,9 +1644,9 @@ class TestSequenceBurnInBootstrap:
       start are invalid and clamped to the episode start, whatever the
       boundary policy. Bootstrap entries follow ``episode_boundary`` at the
       episode end like any tail entry.
-    - ``stride`` spaces the records of the window uniformly.
+    - ``dilation`` spaces the records of the window uniformly.
     - Defaults reproduce the base Sequence behavior exactly.
-    - ``burn_in < 0``, ``bootstrap < 0`` or ``stride < 1`` raise ``ValueError``.
+    - ``burn_in < 0``, ``bootstrap < 0`` or ``dilation < 1`` raise ``ValueError``.
     """
 
     def _sequence_cls(self):
@@ -1721,10 +1721,10 @@ class TestSequenceBurnInBootstrap:
         assert info["learning_mask"].tolist() == [True, True, False]
         assert info["anchor_index"].tolist() == [4, 4, 4]
 
-    def test_stride_spaces_the_window(self):
+    def test_dilation_spaces_the_window(self):
         Sequence = self._sequence_cls()
         rb = self._make_storage(done_at=(9,))
-        index, info = self._expand(rb, Sequence(length=3, stride=2), [0])
+        index, info = self._expand(rb, Sequence(length=3, dilation=2), [0])
         assert index.tolist() == [0, 2, 4]
         assert info["step_in_sequence"].tolist() == [0, 1, 2]
         assert info["validity_mask"].all()
@@ -1734,7 +1734,7 @@ class TestSequenceBurnInBootstrap:
         rb = self._make_storage()
         base_index, base_info = self._expand(rb, Sequence(length=3), [1, 6])
         ext_index, ext_info = self._expand(
-            rb, Sequence(length=3, burn_in=0, bootstrap=0, stride=1), [1, 6]
+            rb, Sequence(length=3, burn_in=0, bootstrap=0, dilation=1), [1, 6]
         )
         assert base_index.tolist() == ext_index.tolist()
         torch.testing.assert_close(
@@ -1791,8 +1791,8 @@ class TestSequenceBurnInBootstrap:
             Sequence(length=3, burn_in=-1)
         with pytest.raises(ValueError):
             Sequence(length=3, bootstrap=-1)
-        with pytest.raises(ValueError):
-            Sequence(length=3, stride=0)
+        with pytest.raises(ValueError, match="dilation"):
+            Sequence(length=3, dilation=0)
 
     def test_include_reset_burn_in_respects_write_cursor(self):
         # Burn-in walks backward from the anchor: on a full ring buffer it
