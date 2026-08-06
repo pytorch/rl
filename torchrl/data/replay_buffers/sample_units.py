@@ -200,7 +200,7 @@ class Sequence(SampleUnit):
         ['anchor_index', 'index', 'learning_mask', 'sequence_id', 'step_in_sequence', 'validity_mask']
         >>> # burn-in and bootstrap extend the window around the anchor:
         >>> unit = Sequence(length=2, burn_in=1, bootstrap=1)
-        >>> index, info = unit.expand(torch.tensor([5]), {}, rb._storage)
+        >>> index, info = unit.expand(torch.tensor([5]), {}, rb.storage)
         >>> index.tolist()  # burn-in clamps at the episode start (5)
         [5, 5, 6, 7]
         >>> info["learning_mask"].tolist()
@@ -209,7 +209,7 @@ class Sequence(SampleUnit):
         [False, True, True, True]
         >>> # stride spaces the window records uniformly:
         >>> index, _ = Sequence(length=3, stride=2).expand(
-        ...     torch.tensor([0]), {}, rb._storage
+        ...     torch.tensor([0]), {}, rb.storage
         ... )
         >>> index.tolist()
         [0, 2, 4]
