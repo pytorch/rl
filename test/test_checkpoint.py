@@ -106,6 +106,15 @@ def migrate_v0_manifest(manifest):
     return manifest
 
 
+def _record_checkpoint_warnings(monkeypatch):
+    warnings = []
+    monkeypatch.setattr(
+        "torchrl.checkpoint._checkpoint.torchrl_logger.warning",
+        lambda message, *args: warnings.append(message % args),
+    )
+    return warnings
+
+
 @pytest.mark.parametrize("format", ["directory", "archive"])
 def test_state_dict_json_and_manifest_roundtrip(tmp_path, format):
     source = torch.nn.Linear(3, 2)
@@ -371,6 +380,76 @@ def test_strict_modes(tmp_path, caplog):
     result = checkpoint.load(path, strict="warn")
     assert result.missing == {"optimizer"}
     assert "Checkpoint restore issues" in caplog.text
+
+
+def test_matching_manifest_versions_are_reported(tmp_path, monkeypatch):
+    warnings = _record_checkpoint_warnings(monkeypatch)
+    path = tmp_path / "checkpoint"
+    Checkpoint(value={"version": 1}).save(path)
+
+    result = Checkpoint(value={}).load(path)
+
+    assert result.loaded == {"value"}
+    assert result.comparison["version_skew"] is False
+    assert result.comparison["versions"] == {
+        name: {
+            "checkpoint": version,
+            "runtime": version,
+            "matches": True,
+        }
+        for name, version in result.manifest["versions"].items()
+    }
+    assert not warnings
+
+
+@pytest.mark.parametrize("package", ["torchrl", "tensordict", "torch"])
+def test_manifest_version_skew_warns_without_blocking_load(
+    tmp_path, monkeypatch, package
+):
+    warnings = _record_checkpoint_warnings(monkeypatch)
+    path = tmp_path / "checkpoint"
+    Checkpoint(value={"version": 1}).save(path)
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    runtime_version = manifest["versions"][package]
+    manifest["versions"][package] = "checkpoint-version"
+    manifest_path.write_text(json.dumps(manifest))
+    target = {}
+
+    result = Checkpoint(value=target).load(path)
+
+    assert result.loaded == {"value"}
+    assert target == {"version": 1}
+    assert result.comparison["version_skew"] is True
+    assert result.comparison["versions"][package] == {
+        "checkpoint": "checkpoint-version",
+        "runtime": runtime_version,
+        "matches": False,
+    }
+    assert all(
+        comparison["matches"] is (name != package)
+        for name, comparison in result.comparison["versions"].items()
+    )
+    assert len(warnings) == 1
+    assert "Checkpoint dependency version skew detected" in warnings[0]
+    assert package in warnings[0]
+    assert "Loading will continue" in warnings[0]
+
+
+def test_manifest_without_versions_loads_silently(tmp_path, monkeypatch):
+    warnings = _record_checkpoint_warnings(monkeypatch)
+    path = tmp_path / "checkpoint"
+    Checkpoint(value={"version": 1}).save(path)
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["versions"]
+    manifest_path.write_text(json.dumps(manifest))
+
+    result = Checkpoint(value={}).load(path)
+
+    assert result.loaded == {"value"}
+    assert result.comparison == {}
+    assert not warnings
 
 
 def test_incompatible_adapter(tmp_path):
