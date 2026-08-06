@@ -57,8 +57,10 @@ Replay sampling combines two orthogonal decisions: which anchors are selected
 A :class:`~torchrl.data.replay_buffers.SampleUnit` passed through the
 ``sample_unit`` argument owns the second decision. The default behavior,
 equivalent to :class:`~torchrl.data.replay_buffers.Transition`, keeps every
-anchor as a single transition; future units expand anchors into fixed-length
-sequences or complete trajectories with explicit boundary policies.
+anchor as a single transition;
+:class:`~torchrl.data.replay_buffers.Sequence` expands each anchor into a
+fixed-length sequence of records with explicit episode-boundary policies
+(``"pad"``, ``"stop"`` or ``"include_reset"``).
 
 .. code-block:: python
 
@@ -76,6 +78,7 @@ sequences or complete trajectories with explicit boundary policies.
     :template: rl_template.rst
 
     SampleUnit
+    Sequence
     Transition
 
 Offline-to-online helpers

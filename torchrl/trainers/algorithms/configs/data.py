@@ -203,6 +203,44 @@ class SamplerWithoutReplacementConfig(SamplerConfig):
 
 
 @dataclass
+class SampleUnitConfig(ConfigBase):
+    """Base configuration class for replay buffer sample units.
+
+    See also :class:`~torchrl.data.replay_buffers.SampleUnit`.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.SampleUnit"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for sample unit configurations."""
+
+
+@dataclass
+class TransitionConfig(SampleUnitConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.Transition`.
+
+    ``Transition.__init__`` takes no arguments, so this config only carries
+    the instantiation target.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.Transition"
+
+
+@dataclass
+class SequenceConfig(SampleUnitConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.Sequence`.
+
+    Every kwarg accepted by ``Sequence.__init__`` is exposed as a field here
+    with the same default.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.Sequence"
+    length: int = MISSING
+    episode_boundary: str = "pad"
+    done_key: Any = ("next", "done")
+
+
+@dataclass
 class StorageConfig(ConfigBase):
     """Base configuration class for replay buffer storage."""
 

@@ -41,12 +41,15 @@ from torchrl.trainers.algorithms.configs.data import (
     ReplayBufferConfig,
     RoundRobinWriterConfig,
     SamplerWithoutReplacementConfig,
+    SampleUnitConfig,
+    SequenceConfig,
     SliceSamplerConfig,
     SliceSamplerWithoutReplacementConfig,
     StorageEnsembleConfig,
     StorageEnsembleWriterConfig,
     TensorDictReplayBufferConfig,
     TensorStorageConfig,
+    TransitionConfig,
 )
 from torchrl.trainers.algorithms.configs.envs import (
     BatchedEnvConfig,
@@ -383,6 +386,10 @@ __all__ = [
     "StorageEnsembleWriterConfig",
     "TensorDictReplayBufferConfig",
     "TensorStorageConfig",
+    # Sample units
+    "SampleUnitConfig",
+    "SequenceConfig",
+    "TransitionConfig",
     # Samplers
     "ConsumingSamplerConfig",
     "PrioritizedSamplerConfig",
@@ -672,6 +679,8 @@ def _register_configs():
     cs.store(group="storage", name="lazy_tensor", node=LazyTensorStorageConfig)
     cs.store(group="storage", name="lazy_memmap", node=LazyMemmapStorageConfig)
     cs.store(group="writer", name="round_robin", node=RoundRobinWriterConfig)
+    cs.store(group="sample_unit", name="transition", node=TransitionConfig)
+    cs.store(group="sample_unit", name="sequence", node=SequenceConfig)
 
     # =============================================================================
     # Collector Configurations
