@@ -16,3 +16,10 @@ Specialized loss functions for LLM training.
 | [`SFTLoss`](generated/torchrl.objectives.llm.SFTLoss.html#torchrl.objectives.llm.SFTLoss)(*args, **kwargs) | Supervised fine-tuning loss. |
 | --- | --- |
 | [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | |
+
+## Distillation
+
+| [`DistillationLoss`](generated/torchrl.objectives.llm.DistillationLoss.html#torchrl.objectives.llm.DistillationLoss)(*args, **kwargs) | Token-level knowledge-distillation loss for LLM policies. |
+| --- | --- |
+| [`DistillationLossOutput`](generated/torchrl.objectives.llm.DistillationLossOutput.html#torchrl.objectives.llm.DistillationLossOutput)(loss_distill, ...[, ...]) | |
+| [`k3_kl_token_estimate`](generated/torchrl.objectives.llm.k3_kl_token_estimate.html#torchrl.objectives.llm.k3_kl_token_estimate)(target_log_prob, log_prob) | Per-token k3 estimate of the KL divergence to a target distribution. |

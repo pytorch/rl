@@ -1518,6 +1518,23 @@ document.write(`
 </table>
 </div>
 </section>
+<section id="distillation">
+<h2>Distillation<a class="headerlink" href="#distillation" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.DistillationLoss.html#torchrl.objectives.llm.DistillationLoss" title="torchrl.objectives.llm.DistillationLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistillationLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Token-level knowledge-distillation loss for LLM policies.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.DistillationLossOutput.html#torchrl.objectives.llm.DistillationLossOutput" title="torchrl.objectives.llm.DistillationLossOutput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistillationLossOutput</span></code></a>(loss_distill, ...[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.llm.k3_kl_token_estimate.html#torchrl.objectives.llm.k3_kl_token_estimate" title="torchrl.objectives.llm.k3_kl_token_estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">k3_kl_token_estimate</span></code></a>(target_log_prob, log_prob)</p></td>
+<td><p>Per-token k3 estimate of the KL divergence to a target distribution.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -1603,6 +1620,7 @@ document.write(`
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#grpo">GRPO</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sft">SFT</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#distillation">Distillation</a></li>
 </ul>
   </nav></div>
     
@@ -1855,7 +1873,7 @@ document.write(`
        "headline": "LLM Objectives",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/llms_objectives.html",
-       "articleBody": "LLM Objectives# Specialized loss functions for LLM training. GRPO# GRPOLoss(*args, **kwargs) GRPO loss. GRPOLossOutput(loss_objective, ...[, ...]) MCAdvantage(grpo_size[, prompt_key, ...]) Monte-Carlo advantage computation engine. MCAdvantageSelector([strategy, ...]) Select trajectories from an oversampled Monte-Carlo advantage group. RayMCAdvantage(grpo_size[, prompt_key, ...]) Ray actor-backed MCAdvantage. SFT# SFTLoss(*args, **kwargs) Supervised fine-tuning loss. SFTLossOutput(loss_sft[, loss_kl_to_ref, ...])",
+       "articleBody": "LLM Objectives# Specialized loss functions for LLM training. GRPO# GRPOLoss(*args, **kwargs) GRPO loss. GRPOLossOutput(loss_objective, ...[, ...]) MCAdvantage(grpo_size[, prompt_key, ...]) Monte-Carlo advantage computation engine. MCAdvantageSelector([strategy, ...]) Select trajectories from an oversampled Monte-Carlo advantage group. RayMCAdvantage(grpo_size[, prompt_key, ...]) Ray actor-backed MCAdvantage. SFT# SFTLoss(*args, **kwargs) Supervised fine-tuning loss. SFTLossOutput(loss_sft[, loss_kl_to_ref, ...]) Distillation# DistillationLoss(*args, **kwargs) Token-level knowledge-distillation loss for LLM policies. DistillationLossOutput(loss_distill, ...[, ...]) k3_kl_token_estimate(target_log_prob, log_prob) Per-token k3 estimate of the KL divergence to a target distribution.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

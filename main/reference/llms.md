@@ -493,5 +493,12 @@ LLM post-training requires specialized loss functions that are adapted to the un
 | --- | --- |
 | [`SFTLossOutput`](generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput)(loss_sft[, loss_kl_to_ref, ...]) | |
 
+### Distillation
+
+| [`DistillationLoss`](generated/torchrl.objectives.llm.DistillationLoss.html#torchrl.objectives.llm.DistillationLoss)(*args, **kwargs) | Token-level knowledge-distillation loss for LLM policies. |
+| --- | --- |
+| [`DistillationLossOutput`](generated/torchrl.objectives.llm.DistillationLossOutput.html#torchrl.objectives.llm.DistillationLossOutput)(loss_distill, ...[, ...]) | |
+| [`k3_kl_token_estimate`](generated/torchrl.objectives.llm.k3_kl_token_estimate.html#torchrl.objectives.llm.k3_kl_token_estimate)(target_log_prob, log_prob) | Per-token k3 estimate of the KL divergence to a target distribution. |
+
 | [`TopKRewardSelector`](generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector)(total_dialog_turns, topk_size) | A replay-buffer transform that selects the top-k rewards for each prompt. |
 | --- | --- |
