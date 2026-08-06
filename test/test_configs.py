@@ -6,18 +6,21 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.util
+import inspect
 import os
+import pkgutil
 import subprocess
 import sys
+import typing
+import warnings
 
 import pytest
 import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
-
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
-
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -83,6 +86,268 @@ _python_version_compatible = sys.version_info >= (3, 10)
 _has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
 pytestmark = pytest.mark.filterwarnings("error")
+
+
+def _discover_leaf_configs() -> dict[str, type]:
+    """Collects every concrete ``*Config`` dataclass defined under the configs package.
+
+    A class is "concrete" here if it declares its own ``_target_`` field (as
+    opposed to an abstract base like ``TransformConfig`` that subclasses share).
+    """
+    from torchrl.trainers.algorithms.configs.common import ConfigBase
+
+    configs = {}
+    for modinfo in pkgutil.iter_modules(
+        algorithm_configs.__path__, algorithm_configs.__name__ + "."
+    ):
+        module = importlib.import_module(modinfo.name)
+        for name, obj in vars(module).items():
+            if (
+                isinstance(obj, type)
+                and dataclasses.is_dataclass(obj)
+                and issubclass(obj, ConfigBase)
+                and obj.__module__ == module.__name__
+            ):
+                configs[name] = obj
+    return configs
+
+
+def _resolve_wrapped_class(target_path: str) -> type | None:
+    """Resolves a ``_target_`` dotted path to the class it ultimately constructs.
+
+    ``_target_`` either names a class directly (most transforms, storages,
+    samplers, ...) or a ``_make_*``/``make_*`` factory function (trainers and a
+    few composite modules). For the factory case, the wrapped class is read off
+    the factory's return-type annotation rather than parsed out of its body.
+    Returns ``None`` if neither resolution path yields a class.
+    """
+    module_path, _, attr = target_path.rpartition(".")
+    target = getattr(importlib.import_module(module_path), attr)
+    if inspect.isclass(target):
+        return target
+    if inspect.isfunction(target):
+        return_type = typing.get_type_hints(target).get("return")
+        if inspect.isclass(return_type):
+            return return_type
+    return None
+
+
+_CONFIG_PARITY_UNRESOLVED = {
+    "BatchedEnvConfig": "make_batched_env dispatches to ParallelEnv, SerialEnv or "
+    "AsyncEnvPool based on batched_env_type, and per-backend kwargs pass through "
+    "the create_env_kwargs dict rather than individual fields; there is no single "
+    "wrapped class to diff kwargs against.",
+    "TanhNormalModelConfig": "_make_tanh_normal_model composes a TensorDictModule "
+    "and a ProbabilisticTensorDictModule into a ProbabilisticTensorDictSequential; "
+    "there is no single wrapped class whose __init__ the Config fields mirror.",
+    "StorageEnsembleWriterConfig": "_target_ references torchrl.data.replay_buffers."
+    "StorageEnsembleWriter, which does not exist in the current codebase.",
+    "KLRewardTransformConfig": "_target_ references torchrl.envs.transforms.llm, "
+    "which does not exist; KLRewardTransform now lives in "
+    "torchrl.envs.llm.transforms.kl.",
+    "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
+    "the torch versions TorchRL currently supports.",
+}
+
+_CONFIG_PARITY_KNOWN_GAPS = frozenset(
+    {
+        "ActionMaskConfig",
+        "AggregatorConfig",
+        "BurnInTransformConfig",
+        "CatTensorsConfig",
+        "CenterCropConfig",
+        "CropConfig",
+        "DTypeCastTransformConfig",
+        "DeviceCastTransformConfig",
+        "DiscreteActionProjectionConfig",
+        "ExcludeTransformConfig",
+        "FlattenObservationConfig",
+        "FlattenTensorDictConfig",
+        "HashConfig",
+        "ImmutableDatasetWriterConfig",
+        "IsaacGymEnvConfig",
+        "LayerConfig",
+        "LazyStackStorageConfig",
+        "MeltingpotEnvConfig",
+        "ModuleTransformConfig",
+        "MultiStepTransformConfig",
+        "MultiSyncCollectorConfig",
+        "MultiThreadedEnvConfig",
+        "NormConfig",
+        "ObservationNormConfig",
+        "OpenMLEnvConfig",
+        "OpenSpielEnvConfig",
+        "PermuteTransformConfig",
+        "PettingZooEnvConfig",
+        "PrioritizedSamplerConfig",
+        "PrioritizedSliceSamplerConfig",
+        "QValueModelConfig",
+        "R3MTransformConfig",
+        "RandomCropTensorDictConfig",
+        "RemoveEmptySpecsConfig",
+        "RenameTransformConfig",
+        "ReplayBufferConfig",
+        "Reward2GoTransformConfig",
+        "RewardSumConfig",
+        "SMACv2EnvConfig",
+        "SamplerEnsembleConfig",
+        "SelectTransformConfig",
+        "SignTransformConfig",
+        "SliceSamplerConfig",
+        "SliceSamplerWithoutReplacementConfig",
+        "SqueezeTransformConfig",
+        "StackConfig",
+        "StorageConfig",
+        "TensorDictModuleConfig",
+        "TensorDictPrimerConfig",
+        "TimeMaxPoolConfig",
+        "TokenizerConfig",
+        "UnaryTransformConfig",
+        "UnityMLAgentsEnvConfig",
+        "UnsqueezeTransformConfig",
+        "VC1TransformConfig",
+        "VIPRewardTransformConfig",
+        "VIPTransformConfig",
+        "ValueModelConfig",
+        "VecGymEnvTransformConfig",
+        "VecNormConfig",
+        "VecNormV2Config",
+        "WriterConfig",
+    }
+)
+
+
+def _has_concrete_target(cfg_cls: type) -> bool:
+    target_field = next(
+        (f for f in dataclasses.fields(cfg_cls) if f.name == "_target_"), None
+    )
+    return target_field is not None and target_field.default not in (
+        dataclasses.MISSING,
+        None,
+    )
+
+
+def _config_parity_cases() -> list:
+    if not _configs_available:
+        return []
+    cases = []
+    for name, cfg_cls in sorted(_discover_leaf_configs().items()):
+        if not _has_concrete_target(cfg_cls):
+            continue
+        if name in _CONFIG_PARITY_UNRESOLVED:
+            cases.append(
+                pytest.param(
+                    name,
+                    marks=pytest.mark.skip(reason=_CONFIG_PARITY_UNRESOLVED[name]),
+                )
+            )
+        elif name in _CONFIG_PARITY_KNOWN_GAPS:
+            cases.append(
+                pytest.param(
+                    name,
+                    marks=pytest.mark.xfail(
+                        reason="pre-existing config/class kwarg-parity gap; see "
+                        "CLAUDE.md section 14 (run with -rx for the missing kwargs)",
+                        strict=True,
+                    ),
+                )
+            )
+        else:
+            cases.append(name)
+    return cases
+
+
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
+class TestConfigClassParity:
+    """Checks that every leaf ``*Config`` dataclass stays in sync with the class it wraps.
+
+    CLAUDE.md section 14 requires every kwarg accepted by a wrapped class's
+    ``__init__`` to appear as a Config field with the same default; otherwise a
+    user setting that kwarg through Hydra has no effect and the failure is
+    silent. This walks every concrete Config dataclass reachable from
+    ``torchrl.trainers.algorithms.configs``, resolves the class or factory named
+    by its ``_target_``, and asserts every named constructor parameter --
+    required or optional -- has a same-named Config field.
+
+    Two deliberate limitations, left as follow-ups:
+
+    - Only field-name presence is checked; default-value *equality* between a
+      Config field and the corresponding ``__init__`` kwarg is NOT enforced, so
+      a Config default that drifts from the constructor's default still passes.
+    - Wrapped ``__init__`` signatures made up purely of ``*args``/``**kwargs``
+      expose no named parameters to diff, so their configs pass vacuously, and
+      a ``**kwargs`` catch-all next to named parameters hides any kwarg that is
+      only reachable through it.
+
+    Resolving a ``_target_`` can import optional-dependency modules; when such
+    an import fails the case is skipped rather than failed, so the test stays
+    green on minimal installs.
+
+    A handful of configs cannot be checked this way (composite or polymorphic
+    factories with no single wrapped class, or a ``_target_`` that references a
+    class which no longer exists) and are skipped with an explicit reason
+    instead of silently passing. A further set of configs have a known,
+    pre-existing gap and are marked ``xfail(strict=True)``: fixing one of them
+    without removing it from ``_CONFIG_PARITY_KNOWN_GAPS`` turns CI red, which
+    is the point -- the allowlist should only shrink.
+    """
+
+    @pytest.mark.parametrize("config_name", _config_parity_cases())
+    def test_wrapped_class_kwargs_have_config_fields(self, config_name):
+        cfg_cls = _discover_leaf_configs()[config_name]
+        fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
+        target_path = fields["_target_"].default
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                wrapped_cls = _resolve_wrapped_class(target_path)
+        except ImportError as err:
+            # Resolving a _target_ may import modules that require optional
+            # dependencies (e.g. the vLLM weight-sync schemes pull in modules
+            # that need `requests`); on a minimal install that is a skip, not
+            # a parity failure.
+            pytest.skip(
+                f"optional dependency missing while resolving "
+                f"{config_name}._target_ = {target_path!r}: {err}"
+            )
+        assert wrapped_cls is not None, (
+            f"{config_name}._target_ = {target_path!r} could not be resolved to "
+            "a class (not a class itself, and not a function with a class "
+            "return annotation)."
+        )
+
+        params = [
+            (pname, param)
+            for pname, param in inspect.signature(
+                wrapped_cls.__init__
+            ).parameters.items()
+            if pname != "self"
+        ]
+        if (
+            fields.get("_partial_") is not None
+            and fields["_partial_"].default is True
+            and params
+        ):
+            params = params[1:]
+
+        missing = [
+            pname
+            for pname, param in params
+            if param.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            and pname not in fields
+        ]
+        assert not missing, (
+            f"{config_name} is missing Config field(s) for "
+            f"{wrapped_cls.__name__}.__init__ kwarg(s) {missing}: these can be "
+            f"set on {wrapped_cls.__name__} directly but are silently "
+            f"unreachable through Hydra. See CLAUDE.md section 14."
+        )
 
 
 @pytest.mark.skipif(

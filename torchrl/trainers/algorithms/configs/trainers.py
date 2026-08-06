@@ -10,7 +10,6 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 from tensordict.nn import TensorDictModuleBase
-
 from torchrl.collectors import BaseCollector
 from torchrl.data import Categorical, Composite, OneHot
 from torchrl.objectives.common import LossModule
@@ -752,7 +751,6 @@ class DQNTrainerConfig(TrainerConfig):
 
 def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     from tensordict.nn import TensorDictSequential
-
     from torchrl.modules import EGreedyModule
     from torchrl.trainers.trainers import Logger
 
@@ -1416,9 +1414,8 @@ class TD3TrainerConfig(TrainerConfig):
         super().__post_init__()
 
 
-def _make_td3_trainer(*args, **kwargs):
+def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
     from tensordict.nn import TensorDictSequential
-
     from torchrl.objectives.utils import TargetNetUpdater
     from torchrl.trainers.algorithms.td3 import TD3OptimizationStepper
     from torchrl.trainers.trainers import Logger
