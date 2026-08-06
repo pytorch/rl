@@ -238,6 +238,9 @@ class SequenceConfig(SampleUnitConfig):
     length: int = MISSING
     episode_boundary: str = "pad"
     done_key: Any = ("next", "done")
+    burn_in: int = 0
+    bootstrap: int = 0
+    dilation: int = 1
 
 
 @dataclass

@@ -62,16 +62,42 @@ anchor as a single transition;
 fixed-length sequence of records with explicit episode-boundary policies
 (``"pad"``, ``"stop"`` or ``"include_reset"``).
 
+A sequence can include context outside its loss-bearing region. For example,
+in a recurrent Q-learning learner, a ``burn_in`` prefix reconstructs the
+model's hidden state, ``length`` records contribute to the loss, and a
+``bootstrap`` suffix supplies future records required by the target estimator.
+The learner runs over the complete window and applies its loss only where both
+the returned ``learning_mask`` and ``validity_mask`` are true. The sampling unit
+selects records and produces these masks; it does not run the model or compute
+bootstrap targets.
+
+``dilation`` controls temporal subsampling *inside* a window. For example,
+``dilation=2`` selects every other stored record. It neither aggregates the
+skipped transitions nor controls spacing or overlap between sampled windows.
+With ``B`` sampled anchors, the flat output contains
+``B * (burn_in + length + bootstrap)`` records.
+
 .. code-block:: python
 
     from torchrl.data import LazyTensorStorage, ReplayBuffer
-    from torchrl.data.replay_buffers import Transition
+    from torchrl.data.replay_buffers import Sequence
 
     rb = ReplayBuffer(
         storage=LazyTensorStorage(1000),
-        batch_size=32,
-        sample_unit=Transition(),
+        batch_size=64,
+        sample_unit=Sequence(
+            length=32,
+            burn_in=8,
+            bootstrap=5,  # future records needed by this target estimator
+            dilation=1,
+            episode_boundary="pad",
+        ),
     )
+
+    # After filling the buffer, run the recurrent model over the entire sample
+    # and restrict the loss to real records in the learning region.
+    sample, info = rb.sample(return_info=True)
+    loss_mask = info["learning_mask"] & info["validity_mask"]
 
 .. autosummary::
     :toctree: generated/
