@@ -23,7 +23,7 @@ that takes `"action"` and `"observation"` entries and produces
 `("next_observation", "mean")` and `("next_observation", "var")`.
 - **base_env** ([*EnvBase*](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)) - The real environment whose specs (observation, action,
 reward, done) are copied into this imagined environment.
-- **batch_size** (*int**,**Sequence**[**int**]**,*[*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - Override batch size.
+- **batch_size** (*int**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]**,*[*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - Override batch size.
 If `None`, inferred from `base_env` (with a minimum of `[1]`).
 - **next_observation_key** (*str**or**tuple**of**str**,**optional*) - The key where the world
 model writes the predicted next observation. Defaults to `("next", "observation")`.

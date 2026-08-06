@@ -1454,6 +1454,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RayReplayBuffer.html">RayReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RemoteTensorDictReplayBuffer.html">RemoteTensorDictReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.SampleUnit.html">SampleUnit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.Sequence.html">Sequence</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Transition.html">Transition</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.prefill_replay_buffer.html">prefill_replay_buffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Trajectory.html">Trajectory</a></li>
@@ -2475,7 +2476,7 @@ document.write(`
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> (<em>optim.Optimizer</em>) – An optimizer to apply to the loss_components.</p></li>
-<li><p><strong>loss_components</strong> (<em>Sequence</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – The keys in the loss TensorDict
+<li><p><strong>loss_components</strong> (<a class="reference internal" href="torchrl.data.Sequence.html#torchrl.data.Sequence" title="torchrl.data.Sequence"><em>Sequence</em></a><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – The keys in the loss TensorDict
 for which the optimizer should be appled to the respective values.
 If omitted, the optimizer is applied to all components with the
 names starting with <cite>loss_</cite>.</p></li>

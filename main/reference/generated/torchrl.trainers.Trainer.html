@@ -1454,6 +1454,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RayReplayBuffer.html">RayReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RemoteTensorDictReplayBuffer.html">RemoteTensorDictReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.SampleUnit.html">SampleUnit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.Sequence.html">Sequence</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Transition.html">Transition</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.prefill_replay_buffer.html">prefill_replay_buffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Trajectory.html">Trajectory</a></li>
@@ -2476,7 +2477,7 @@ loss module and an optimizer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>collector</strong> (<em>Sequence</em><em>[</em><em>TensorDictBase</em><em>]</em>) – An iterable returning batches of
+<li><p><strong>collector</strong> (<a class="reference internal" href="torchrl.data.Sequence.html#torchrl.data.Sequence" title="torchrl.data.Sequence"><em>Sequence</em></a><em>[</em><em>TensorDictBase</em><em>]</em>) – An iterable returning batches of
 data in a TensorDict form of shape [batch x time steps].</p></li>
 <li><p><strong>total_frames</strong> (<em>int</em>) – Total number of frames to be collected during
 training.</p></li>

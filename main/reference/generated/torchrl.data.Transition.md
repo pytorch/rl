@@ -9,6 +9,11 @@ the implicit default when no `sample_unit` is passed to the buffer:
 anchors selected by the sampler are the records of the batch, and the
 info dictionary is returned untouched.
 
+See also
+
+`TransitionConfig`
+for the Hydra configuration companion.
+
 Examples
 
 ```

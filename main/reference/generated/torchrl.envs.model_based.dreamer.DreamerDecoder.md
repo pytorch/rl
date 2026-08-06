@@ -1,6 +1,6 @@
 # DreamerDecoder
 
-torchrl.envs.model_based.dreamer.DreamerDecoder(*in_keys: Sequence[NestedKey] | None = None*, *out_keys: Sequence[NestedKey] | None = None*, *in_keys_inv: Sequence[NestedKey] | None = None*, *out_keys_inv: Sequence[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/model_based/dreamer.html#DreamerDecoder)
+torchrl.envs.model_based.dreamer.DreamerDecoder(*in_keys: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[NestedKey] | None = None*, *out_keys: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[NestedKey] | None = None*, *in_keys_inv: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[NestedKey] | None = None*, *out_keys_inv: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[NestedKey] | None = None*)[[source]](../../_modules/torchrl/envs/model_based/dreamer.html#DreamerDecoder)
 
 A transform to record the decoded observations in Dreamer.
 

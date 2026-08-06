@@ -1454,6 +1454,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RayReplayBuffer.html">RayReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RemoteTensorDictReplayBuffer.html">RemoteTensorDictReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.SampleUnit.html">SampleUnit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.Sequence.html">Sequence</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Transition.html">Transition</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.prefill_replay_buffer.html">prefill_replay_buffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Trajectory.html">Trajectory</a></li>
@@ -2480,7 +2481,7 @@ If no depth is indicated, the depth information should be contained
 in the <code class="docutils literal notranslate"><span class="pre">num_cells</span></code> argument (see below).
 If <code class="docutils literal notranslate"><span class="pre">num_cells</span></code> is an iterable and <code class="docutils literal notranslate"><span class="pre">depth</span></code> is indicated, both
 should match: <code class="docutils literal notranslate"><span class="pre">len(num_cells)</span></code> must be equal to the <code class="docutils literal notranslate"><span class="pre">depth</span></code>.</p></li>
-<li><p><strong>num_cells</strong> (<em>int</em><em> or </em><em>Sequence</em><em> of </em><em>int</em><em>, </em><em>optional</em>) – number of cells of
+<li><p><strong>num_cells</strong> (<em>int</em><em> or </em><a class="reference internal" href="torchrl.data.Sequence.html#torchrl.data.Sequence" title="torchrl.data.Sequence"><em>Sequence</em></a><em> of </em><em>int</em><em>, </em><em>optional</em>) – number of cells of
 every layer in between the input and output. If an integer is
 provided, every layer will have the same number of cells. If an
 iterable is provided, the linear layers <code class="docutils literal notranslate"><span class="pre">out_features</span></code> will match

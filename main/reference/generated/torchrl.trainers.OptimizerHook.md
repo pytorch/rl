@@ -10,7 +10,7 @@ Deprecated since version ``OptimizerHook``: will be replaced by
 Parameters:
 
 - **optimizer** (*optim.Optimizer*) - An optimizer to apply to the loss_components.
-- **loss_components** (*Sequence**[**str**]**,**optional*) - The keys in the loss TensorDict
+- **loss_components** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**str**]**,**optional*) - The keys in the loss TensorDict
 for which the optimizer should be appled to the respective values.
 If omitted, the optimizer is applied to all components with the
 names starting with loss_.

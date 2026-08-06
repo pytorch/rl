@@ -14,7 +14,7 @@ loss module and an optimizer.
 
 Parameters:
 
-- **collector** (*Sequence**[**TensorDictBase**]*) - An iterable returning batches of
+- **collector** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**TensorDictBase**]*) - An iterable returning batches of
 data in a TensorDict form of shape [batch x time steps].
 - **total_frames** (*int*) - Total number of frames to be collected during
 training.

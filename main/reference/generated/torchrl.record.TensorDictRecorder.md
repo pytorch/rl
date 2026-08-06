@@ -1,6 +1,6 @@
 # TensorDictRecorder
 
-torchrl.record.TensorDictRecorder(*out_file_base: str*, *skip_reset: bool = True*, *skip: int = 4*, *in_keys: Sequence[str] | None = None*) → None[[source]](../../_modules/torchrl/record/recorder.html#TensorDictRecorder)
+torchrl.record.TensorDictRecorder(*out_file_base: str*, *skip_reset: bool = True*, *skip: int = 4*, *in_keys: [Sequence](torchrl.data.Sequence.html#torchrl.data.Sequence)[str] | None = None*) → None[[source]](../../_modules/torchrl/record/recorder.html#TensorDictRecorder)
 
 TensorDict recorder.
 

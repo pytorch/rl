@@ -98,6 +98,7 @@
 - [ReplayBuffer](reference/generated/torchrl.data.ReplayBuffer.md)
 - [ReplayBufferEnsemble](reference/generated/torchrl.data.ReplayBufferEnsemble.md)
 - [SampleUnit](reference/generated/torchrl.data.SampleUnit.md)
+- [Sequence](reference/generated/torchrl.data.Sequence.md)
 - [Stacked](reference/generated/torchrl.data.Stacked.md)
 - [StackedComposite](reference/generated/torchrl.data.StackedComposite.md)
 - [TED2Flat](reference/generated/torchrl.data.TED2Flat.md)

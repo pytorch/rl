@@ -74,7 +74,7 @@ policy_factory is currently not compatible with multiprocessed data
 collectors.
 - **num_workers** (*int**,**optional*) - number of workers to use. If create_env_fn is a list, this will be ignored.
 Defaults to None (workers determined by the create_env_fn length).
-- **frames_per_batch** (*int**,**Sequence**[**int**]*) - A keyword-only argument representing the
+- **frames_per_batch** (*int**,*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**int**]*) - A keyword-only argument representing the
 total number of elements in a batch. If a sequence is provided, represents the number of elements in a
 batch per worker. Total number of elements in a batch is then the sum over the sequence.
 - **total_frames** (*int**,**optional*) - A keyword-only argument representing the

@@ -33,8 +33,8 @@ Stateless Mode (stateful=False):
 
 Parameters:
 
-- **in_keys** (*Sequence**[**NestedKey**]*) - The input keys for the data to be normalized.
-- **out_keys** (*Sequence**[**NestedKey**]**|**None*) - The output keys for the normalized data. Defaults to in_keys if
+- **in_keys** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**NestedKey**]*) - The input keys for the data to be normalized.
+- **out_keys** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[**NestedKey**]**|**None*) - The output keys for the normalized data. Defaults to in_keys if
 not provided.
 - **lock** (*mp.Lock**,**optional*) - A lock for thread safety.
 - **stateful** (*bool**,**optional*) - Whether the VecNorm is stateful. Stateless versions of this

@@ -16,7 +16,7 @@ If no depth is indicated, the depth information should be contained
 in the `num_cells` argument (see below).
 If `num_cells` is an iterable and `depth` is indicated, both
 should match: `len(num_cells)` must be equal to the `depth`.
-- **num_cells** (*int**or**Sequence**of**int**,**optional*) - number of cells of
+- **num_cells** (*int**or*[*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*of**int**,**optional*) - number of cells of
 every layer in between the input and output. If an integer is
 provided, every layer will have the same number of cells. If an
 iterable is provided, the linear layers `out_features` will match

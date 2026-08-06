@@ -52,7 +52,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="prefill_replay_buffer" href="torchrl.data.prefill_replay_buffer.html" />
-    <link rel="prev" title="SampleUnit" href="torchrl.data.SampleUnit.html" />
+    <link rel="prev" title="Sequence" href="torchrl.data.Sequence.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -1454,6 +1454,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RayReplayBuffer.html">RayReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RemoteTensorDictReplayBuffer.html">RemoteTensorDictReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.SampleUnit.html">SampleUnit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.Sequence.html">Sequence</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Transition</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.prefill_replay_buffer.html">prefill_replay_buffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Trajectory.html">Trajectory</a></li>
@@ -2471,6 +2472,11 @@ document.write(`
 the implicit default when no <code class="docutils literal notranslate"><span class="pre">sample_unit</span></code> is passed to the buffer:
 anchors selected by the sampler are the records of the batch, and the
 info dictionary is returned untouched.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">TransitionConfig</span></code>
+for the Hydra configuration companion.</p>
+</div>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span>
@@ -2554,12 +2560,12 @@ selected by the sampler.</p></li>
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.data.SampleUnit.html"
+       href="torchrl.data.Sequence.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">SampleUnit</p>
+        <p class="prev-next-title">Sequence</p>
       </div>
     </a>
     <a class="right-next"
@@ -2593,12 +2599,12 @@ selected by the sampler.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="torchrl.data.SampleUnit.html"
+       href="torchrl.data.Sequence.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">SampleUnit</p>
+        <p class="prev-next-title">Sequence</p>
       </div>
     </a>
     <a class="right-next"
@@ -2884,7 +2890,7 @@ selected by the sampler.</p></li>
        "headline": "Transition",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.Transition.html",
-       "articleBody": "Transition# class torchrl.data.Transition[source]# The identity sample unit: every anchor is one transition. This unit reproduces the classic replay-buffer behavior exactly and is the implicit default when no sample_unit is passed to the buffer: anchors selected by the sampler are the records of the batch, and the info dictionary is returned untouched. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data import LazyTensorStorage, ReplayBuffer \u003e\u003e\u003e from torchrl.data.replay_buffers import Transition \u003e\u003e\u003e rb = ReplayBuffer( ... storage=LazyTensorStorage(10), ... batch_size=4, ... sample_unit=Transition(), ... ) \u003e\u003e\u003e rb.extend(torch.arange(10)) tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) \u003e\u003e\u003e sample = rb.sample() \u003e\u003e\u003e sample.shape torch.Size([4]) expand(index: torch.Tensor | tuple, info: dict[str, Any], storage: Storage) \u2192 tuple[torch.Tensor | tuple, dict[str, Any]][source]# Expands anchor indices into the final record indices of the batch. Parameters: index (torch.Tensor or tuple of torch.Tensor) \u2013 the anchor indices selected by the sampler. info (dict) \u2013 the sampler\u2019s info dictionary. storage (Storage) \u2013 the storage the batch will be read from. Returns: A tuple (index, info) with the expanded indices and the (possibly augmented) info dictionary.",
+       "articleBody": "Transition# class torchrl.data.Transition[source]# The identity sample unit: every anchor is one transition. This unit reproduces the classic replay-buffer behavior exactly and is the implicit default when no sample_unit is passed to the buffer: anchors selected by the sampler are the records of the batch, and the info dictionary is returned untouched. See also TransitionConfig for the Hydra configuration companion. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data import LazyTensorStorage, ReplayBuffer \u003e\u003e\u003e from torchrl.data.replay_buffers import Transition \u003e\u003e\u003e rb = ReplayBuffer( ... storage=LazyTensorStorage(10), ... batch_size=4, ... sample_unit=Transition(), ... ) \u003e\u003e\u003e rb.extend(torch.arange(10)) tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) \u003e\u003e\u003e sample = rb.sample() \u003e\u003e\u003e sample.shape torch.Size([4]) expand(index: torch.Tensor | tuple, info: dict[str, Any], storage: Storage) \u2192 tuple[torch.Tensor | tuple, dict[str, Any]][source]# Expands anchor indices into the final record indices of the batch. Parameters: index (torch.Tensor or tuple of torch.Tensor) \u2013 the anchor indices selected by the sampler. info (dict) \u2013 the sampler\u2019s info dictionary. storage (Storage) \u2013 the storage the batch will be read from. Returns: A tuple (index, info) with the expanded indices and the (possibly augmented) info dictionary.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

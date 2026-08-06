@@ -48,8 +48,10 @@ Replay sampling combines two orthogonal decisions: which anchors are selected
 A `SampleUnit` passed through the
 `sample_unit` argument owns the second decision. The default behavior,
 equivalent to `Transition`, keeps every
-anchor as a single transition; future units expand anchors into fixed-length
-sequences or complete trajectories with explicit boundary policies.
+anchor as a single transition;
+`Sequence` expands each anchor into a
+fixed-length sequence of records with explicit episode-boundary policies
+(`"pad"`, `"stop"` or `"include_reset"`).
 
 ```
 from torchrl.data import LazyTensorStorage, ReplayBuffer
@@ -64,6 +66,7 @@ rb = ReplayBuffer(
 
 | [`SampleUnit`](generated/torchrl.data.SampleUnit.html#torchrl.data.SampleUnit)() | Expands sampled anchors into the records a batch is made of. |
 | --- | --- |
+| [`Sequence`](generated/torchrl.data.Sequence.html#torchrl.data.Sequence)(length[, episode_boundary, done_key]) | Expands anchors into a fixed-length sequence of records. |
 | [`Transition`](generated/torchrl.data.Transition.html#torchrl.data.Transition)() | The identity sample unit: every anchor is one transition. |
 
 ## Offline-to-online helpers

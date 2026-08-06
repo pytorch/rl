@@ -1454,6 +1454,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RayReplayBuffer.html">RayReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.RemoteTensorDictReplayBuffer.html">RemoteTensorDictReplayBuffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.SampleUnit.html">SampleUnit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.Sequence.html">Sequence</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Transition.html">Transition</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.prefill_replay_buffer.html">prefill_replay_buffer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.Trajectory.html">Trajectory</a></li>
@@ -2501,8 +2502,8 @@ transform will be switched to the new api by default.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>in_keys</strong> (<em>Sequence</em><em>[</em><em>NestedKey</em><em>]</em>) – The input keys for the data to be normalized.</p></li>
-<li><p><strong>out_keys</strong> (<em>Sequence</em><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>None</em>) – The output keys for the normalized data. Defaults to <cite>in_keys</cite> if
+<li><p><strong>in_keys</strong> (<a class="reference internal" href="torchrl.data.Sequence.html#torchrl.data.Sequence" title="torchrl.data.Sequence"><em>Sequence</em></a><em>[</em><em>NestedKey</em><em>]</em>) – The input keys for the data to be normalized.</p></li>
+<li><p><strong>out_keys</strong> (<a class="reference internal" href="torchrl.data.Sequence.html#torchrl.data.Sequence" title="torchrl.data.Sequence"><em>Sequence</em></a><em>[</em><em>NestedKey</em><em>] </em><em>| </em><em>None</em>) – The output keys for the normalized data. Defaults to <cite>in_keys</cite> if
 not provided.</p></li>
 <li><p><strong>lock</strong> (<em>mp.Lock</em><em>, </em><em>optional</em>) – A lock for thread safety.</p></li>
 <li><p><strong>stateful</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether the <cite>VecNorm</cite> is stateful. Stateless versions of this

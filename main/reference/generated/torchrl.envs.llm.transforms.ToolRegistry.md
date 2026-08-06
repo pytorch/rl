@@ -9,7 +9,7 @@ by name for execution.
 
 Parameters:
 
-**services** (*Sequence**[*[*ToolService*](torchrl.envs.llm.transforms.ToolService.html#torchrl.envs.llm.transforms.ToolService)*]**,**optional*) - Initial services to register.
+**services** ([*Sequence*](torchrl.data.Sequence.html#torchrl.data.Sequence)*[*[*ToolService*](torchrl.envs.llm.transforms.ToolService.html#torchrl.envs.llm.transforms.ToolService)*]**,**optional*) - Initial services to register.
 Defaults to an empty sequence.
 
 Examples
