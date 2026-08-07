@@ -62,7 +62,7 @@ from torchrl.objectives import (
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
 )
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 
 _has_matplotlib = importlib.util.find_spec("matplotlib") is not None
 
@@ -337,7 +337,9 @@ def main(cfg: DictConfig):
         value_loss="two_hot",
         num_value_bins=cfg.networks.num_value_bins,
         actor_loss=actor_loss,
+        slow_critic_regularization=cfg.optimization.slow_critic_regularization,
     )
+    value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
 
     opt_model = torch.optim.Adam(model_loss.parameters(), lr=cfg.optimization.lr)
     opt_actor = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.lr)
@@ -471,6 +473,7 @@ def main(cfg: DictConfig):
                 value_loss.parameters(), cfg.optimization.grad_clip
             )
             opt_value.step()
+            value_target_updater.step()
 
             loss_hist["kl"].append(m_td["loss_model_kl"].detach())
             loss_hist["reco"].append(m_td["loss_model_reco"].detach())

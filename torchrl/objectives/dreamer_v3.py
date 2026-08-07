@@ -21,7 +21,7 @@ import warnings
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey, unravel_key
 
@@ -747,6 +747,10 @@ class DreamerV3ValueLoss(LossModule):
     call. The legacy ``gamma=`` kwarg + :meth:`sync_gamma_with_actor_loss`
     pattern is still supported.
 
+    Setting ``slow_critic_regularization`` to a positive value creates a
+    checkpointed target critic. Associate a :class:`~torchrl.objectives.SoftUpdate`
+    and step it after each critic optimizer step.
+
     Reference: https://arxiv.org/abs/2301.04104
 
     Args:
@@ -762,6 +766,9 @@ class DreamerV3ValueLoss(LossModule):
         actor_loss (DreamerV3ActorLoss, optional): If provided, ``gamma`` is
             read from this actor loss's value estimator on every forward call,
             avoiding any chance of a mismatch. Default: ``None``.
+        slow_critic_regularization (float, optional): Weight of the auxiliary
+            loss that trains the online critic toward decoded target-critic
+            predictions. Default: ``0.0``.
 
     Examples:
         >>> import torch
@@ -802,6 +809,8 @@ class DreamerV3ValueLoss(LossModule):
     default_keys = _AcceptedKeys
 
     value_model: TensorDictModule
+    value_model_params: TensorDictParams
+    target_value_model_params: TensorDictParams
 
     def __init__(
         self,
@@ -811,9 +820,17 @@ class DreamerV3ValueLoss(LossModule):
         gamma: float = 0.99,
         num_value_bins: int = _DEFAULT_NUM_BINS,
         actor_loss: DreamerV3ActorLoss | None = None,
+        slow_critic_regularization: float = 0.0,
     ):
         super().__init__()
-        self.value_model = value_model
+        if slow_critic_regularization < 0:
+            raise ValueError("slow_critic_regularization must be non-negative.")
+        self.slow_critic_regularization = slow_critic_regularization
+        self.convert_to_functional(
+            value_model,
+            "value_model",
+            create_target_params=bool(slow_critic_regularization),
+        )
         self.value_loss = value_loss
         self.gamma = gamma
         self.discount_loss = discount_loss
@@ -853,7 +870,10 @@ class DreamerV3ValueLoss(LossModule):
         lambda_target = fake_data.get("lambda_target")
 
         tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
-        self.value_model(tensordict_select)
+        with self.value_model_params.to_module(
+            self.value_model, preserve_module_state=False
+        ):
+            self.value_model(tensordict_select)
         # lambda_target shape: [N, 1] (flat) or [B, T, 1] (batch x time)
         # Squeeze the trailing 1 for loss computation
         target_sq = lambda_target.squeeze(-1)  # [N] or [B, T]
@@ -890,8 +910,40 @@ class DreamerV3ValueLoss(LossModule):
             value_pred = tensordict_select.get(self.tensor_keys.value)
             loss = (symlog(value_pred.squeeze(-1)) - symlog(target_sq)).pow(2)
 
+        if self.slow_critic_regularization:
+            target_tensordict = fake_data.select(
+                *self.value_model.in_keys, strict=False
+            )
+            with torch.no_grad(), self.target_value_model_params.to_module(
+                self.value_model, preserve_module_state=False
+            ):
+                self.value_model(target_tensordict)
+            target_value = target_tensordict.get(self.tensor_keys.value)
+            if self.value_loss == "two_hot" and (
+                target_value.shape[-1] == self.value_bins.shape[0]
+            ):
+                target_value = two_hot_decode(target_value, self.value_bins).unsqueeze(
+                    -1
+                )
+            if self.value_loss == "two_hot":
+                slow_loss = two_hot_cross_entropy(
+                    value_pred, target_value.squeeze(-1), self.value_bins
+                )
+            else:
+                slow_loss = (
+                    symlog(value_pred.squeeze(-1)) - symlog(target_value.squeeze(-1))
+                ).pow(2)
+            loss = loss + self.slow_critic_regularization * slow_loss
+        else:
+            slow_loss = torch.zeros_like(loss)
+
         value_loss = (discount * loss).mean()
 
-        loss_tensordict = TensorDict({"loss_value": value_loss})
+        loss_tensordict = TensorDict(
+            {
+                "loss_value": value_loss,
+                "value_slow_loss": (discount * slow_loss).mean().detach(),
+            }
+        )
         self._clear_weakrefs(fake_data, loss_tensordict)
         return loss_tensordict, fake_data.data
