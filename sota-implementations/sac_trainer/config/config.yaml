@@ -154,3 +154,7 @@ trainer:
   save_trainer_file: null
   optim_steps_per_batch: 64  # Match SOTA utd_ratio
   async_collection: false
+
+hydra:
+  job:
+    chdir: true
