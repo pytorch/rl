@@ -110,3 +110,7 @@ logger:
 checkpoint:
   save_iter: 25 # save every N iterations (0 disables)
   resume: null # path to a checkpoint_latest TensorDict directory to resume from
+
+hydra:
+  job:
+    chdir: true

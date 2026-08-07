@@ -2372,7 +2372,7 @@ class TestHydraParsing:
         # Register the configs manually for testing
         _register_configs()
         initialize_config_module(
-            "torchrl.trainers.algorithms.configs", version_base="1.1"
+            "torchrl.trainers.algorithms.configs", version_base="1.3"
         )
 
     def _run_hydra_test(
@@ -2387,7 +2387,7 @@ import hydra
 import torchrl
 from torchrl.trainers.algorithms.configs.common import Config
 
-@hydra.main(config_path="config", config_name="config", version_base="1.1")
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg):
 {test_script_content}
     print("{success_message}")
