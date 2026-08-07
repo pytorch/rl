@@ -17,9 +17,9 @@ from pathlib import Path
 import torch
 from setuptools import setup
 from torch.utils.cpp_extension import (
-    CUDA_HOME,
     BuildExtension,
     CppExtension,
+    CUDA_HOME,
     CUDAExtension,
 )
 
