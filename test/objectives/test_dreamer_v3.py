@@ -23,7 +23,7 @@ from torch import nn
 from torchrl.data import Unbounded
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
-from torchrl.modules import SafeSequential, WorldModelWrapper
+from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
 from torchrl.modules.models.model_based import DreamerActor
 from torchrl.modules.models.model_based_v3 import (
@@ -42,6 +42,7 @@ from torchrl.objectives.dreamer_v3 import (
     categorical_kl_balanced,
     symexp,
     symlog,
+    two_hot_cross_entropy,
     two_hot_decode,
     two_hot_encode,
 )
@@ -297,6 +298,72 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert torch.allclose(
             decoded, vals, atol=0.5
         ), f"two_hot round-trip error too large: {(decoded - vals).abs().max()}"
+
+    def test_dreamer_v3_two_hot_official_support(self, device):
+        bins = _default_bins(5, device=device)
+        expected = torch.tensor(
+            [-485165184.0, -22025.4648, 0.0, 22025.4648, 485165184.0],
+            device=device,
+        )
+        torch.testing.assert_close(bins, expected, rtol=1e-6, atol=1e-4)
+        assert torch.equal(bins, -bins.flip(0))
+
+        even_bins = _default_bins(4, device=device)
+        assert torch.equal(even_bins, -even_bins.flip(0))
+        expected_even = symexp(torch.linspace(-20, 20, 4, device=device))
+        torch.testing.assert_close(even_bins, expected_even)
+
+    def test_dreamer_v3_two_hot_golden_encode_loss(self, device):
+        two_hot = SymExpTwoHot(5).to(device)
+        midpoint = (two_hot.bins[1] + two_hot.bins[2]) / 2
+        target = torch.stack(
+            (
+                two_hot.bins[0] - 1,
+                midpoint,
+                two_hot.bins[-1] + 1,
+            )
+        )
+        encoded = two_hot.encode(target)
+        expected = torch.tensor(
+            [
+                [1.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.5, 0.5, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 1.0],
+            ],
+            device=device,
+        )
+        torch.testing.assert_close(encoded, expected)
+
+        logits = torch.tensor([[0.0, 1.0, -1.0, 2.0, -2.0]], device=device)
+        loss = two_hot_cross_entropy(logits, midpoint.reshape(1), two_hot.bins)
+        torch.testing.assert_close(
+            loss, torch.tensor([2.4519143], device=device), rtol=1e-6, atol=1e-6
+        )
+
+    def test_dreamer_v3_two_hot_golden_decode(self, device):
+        two_hot = SymExpTwoHot(5).to(device)
+        uniform = torch.zeros(3, 5, device=device)
+        assert torch.equal(two_hot.decode(uniform), torch.zeros(3, device=device))
+
+        logits = torch.tensor([[0.0, 1.0, -1.0, 2.0, -2.0]], device=device)
+        decoded = two_hot.decode(logits)
+        torch.testing.assert_close(
+            decoded,
+            torch.tensor([-36122512.0], device=device),
+            rtol=2e-6,
+            atol=2.0,
+        )
+
+    def test_dreamer_v3_two_hot_module_state_and_compile(self, device):
+        two_hot = SymExpTwoHot(5).to(device)
+        logits = torch.randn(4, 5, device=device)
+        expected = two_hot(logits)
+        restored = SymExpTwoHot(5).to(device)
+        restored.load_state_dict(two_hot.state_dict())
+        torch.testing.assert_close(restored(logits), expected)
+
+        compiled = torch.compile(restored, fullgraph=True)
+        torch.testing.assert_close(compiled(logits), expected)
 
     # ------------------------------------------------------------------ #
     # World model loss tests
