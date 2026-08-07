@@ -458,6 +458,36 @@ class TestWriterGeneration:
             after != gen, torch.tensor([True, True, False, False])
         )
 
+    def test_non_tracking_writer_updates_shared_generations(self):
+        storage = LazyTensorStorage(4)
+        tracking_rb = ReplayBuffer(
+            storage=storage, writer=RoundRobinWriter(track_generations=True)
+        )
+        non_tracking_rb = ReplayBuffer(storage=storage)
+        index = tracking_rb.extend(torch.arange(4))
+        generation = tracking_rb.writer.generations_of(index)
+
+        non_tracking_rb.extend(torch.arange(10, 12))
+
+        torch.testing.assert_close(
+            tracking_rb.writer.generations_of(index) != generation,
+            torch.tensor([True, True, False, False]),
+        )
+        assert non_tracking_rb.writer.tracks_generations is False
+
+    def test_non_tracking_writer_empty_invalidates_shared_generations(self):
+        storage = LazyTensorStorage(4)
+        tracking_rb = ReplayBuffer(
+            storage=storage, writer=RoundRobinWriter(track_generations=True)
+        )
+        non_tracking_rb = ReplayBuffer(storage=storage)
+        index = tracking_rb.extend(torch.arange(4))
+        generation = tracking_rb.writer.generations_of(index)
+
+        non_tracking_rb.empty()
+
+        assert (tracking_rb.writer.generations_of(index) != generation).all()
+
     def test_non_tracking_writer_reports_minus_one(self):
         writer = TensorDictMaxValueWriter(rank_key="key")
         assert writer.tracks_generations is False
@@ -549,6 +579,15 @@ class TestWriterGeneration:
         rb.extend(torch.arange(2))
         gen = rb._writer.generations_of(torch.arange(4))
         torch.testing.assert_close(gen, torch.tensor([0, 0, -1, -1]))
+
+    def test_generations_of_out_of_range_reports_minus_one(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(4),
+            writer=RoundRobinWriter(track_generations=True),
+        )
+        rb.extend(torch.arange(4))
+        gen = rb.writer.generations_of(torch.tensor([-5, -1, 4, 100]))
+        torch.testing.assert_close(gen, torch.full((4,), -1, dtype=torch.int64))
 
     def test_generation_tensordict_writer(self):
         size = 4
@@ -752,7 +791,10 @@ class TestWriterGeneration:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     def test_generation_cuda_data_into_cuda_storage(self):
         size = 8
-        rb = ReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size, device="cuda"),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size, device="cuda"))
         assert rb._writer._generation.device.type == "cuda"
         _, info = rb.sample(4, return_info=True)
@@ -768,7 +810,10 @@ class TestWriterGeneration:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     def test_generation_cpu_data_into_cuda_storage(self):
         size = 4
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size, device="cuda"),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+        )
         rb.extend(TensorDict({"a": torch.arange(2 * size)}, [2 * size]))
         assert rb._writer._generation.device.type == "cuda"
         torch.testing.assert_close(
@@ -780,9 +825,15 @@ class TestWriterGeneration:
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     def test_generation_state_dict_roundtrip_cuda(self):
         size = 4
-        rb = ReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(size, device="cuda"),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb.extend(torch.arange(size + 1, device="cuda"))
-        rb2 = ReplayBuffer(storage=LazyTensorStorage(size, device="cuda"))
+        rb2 = ReplayBuffer(
+            storage=LazyTensorStorage(size, device="cuda"),
+            writer=RoundRobinWriter(track_generations=True),
+        )
         rb2.load_state_dict(rb.state_dict())
         index = torch.arange(size, device="cuda")
         assert rb2._writer._generation.device.type == "cuda"
@@ -793,11 +844,11 @@ class TestWriterGeneration:
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
     def test_generation_dumps_loads_cuda(self, tmp_path):
-        writer = RoundRobinWriter()
+        writer = RoundRobinWriter(track_generations=True)
         writer.register_storage(LazyTensorStorage(4, device="cuda"))
         writer._generation = torch.tensor([3, 2, 2, 1], device="cuda")
         writer.dumps(tmp_path)
-        writer2 = RoundRobinWriter()
+        writer2 = RoundRobinWriter(track_generations=True)
         writer2.register_storage(LazyTensorStorage(4, device="cuda"))
         writer2.loads(tmp_path)
         assert writer2._generation.device.type == "cuda"

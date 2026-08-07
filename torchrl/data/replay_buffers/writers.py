@@ -197,6 +197,8 @@ class ImmutableDatasetWriter(Writer):
 class RoundRobinWriter(Writer):
     """A RoundRobin Writer class for composable replay buffers.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.RoundRobinWriterConfig`.
+
     Args:
         compilable (bool, optional): whether the writer is compilable.
             If ``True``, the writer cannot be shared between multiple processes.
@@ -317,7 +319,10 @@ class RoundRobinWriter(Writer):
         self._generation = new_generation
 
     def _bump_generation(self, index: int | torch.Tensor, data: Any) -> None:
-        if not self._track_generations:
+        # A writer that did not opt into generation tracking must still update a
+        # buffer installed on a shared storage by another writer. It does not
+        # allocate the buffer itself or expose generations in its samples.
+        if not self._track_generations and self._generation is None:
             return
         device = self._generation_device(index)
         if _is_int(index):
@@ -363,8 +368,11 @@ class RoundRobinWriter(Writer):
             return torch.full(index.shape, -1, dtype=torch.int64, device=index.device)
         idx = index.to(self._generation.device)
         n = self._generation.numel()
-        gen = self._generation[idx.clamp(max=n - 1)]
-        gen = torch.where(idx < n, gen, torch.full_like(gen, -1))
+        if not n:
+            return torch.full(index.shape, -1, dtype=torch.int64, device=index.device)
+        gen = self._generation[idx.clamp(min=0, max=n - 1)]
+        valid = (idx >= 0) & (idx < n)
+        gen = torch.where(valid, gen, torch.full_like(gen, -1))
         return gen.to(index.device)
 
     def dumps(self, path):
@@ -508,7 +516,9 @@ class RoundRobinWriter(Writer):
 
     def _empty(self, empty_write_count: bool = True) -> None:
         self._cursor = 0
-        generation = self._generation if self._track_generations else None
+        # Emptying through any writer invalidates handles held by tracking
+        # writers that share this storage.
+        generation = self._generation
         if generation is not None:
             # Emptying invalidates every handle, so stamps advance rather than
             # reset -- a reset would make pre-empty handles look live again.
@@ -603,6 +613,9 @@ class RoundRobinWriter(Writer):
 
 class TensorDictRoundRobinWriter(RoundRobinWriter):
     """A RoundRobin Writer class for composable, tensordict-based replay buffers.
+
+    See also
+    :class:`~torchrl.trainers.algorithms.configs.TensorDictRoundRobinWriterConfig`.
 
     Takes the same arguments as :class:`RoundRobinWriter`, including
     ``track_generations``. When enabled, ``"index_generation"`` is written into

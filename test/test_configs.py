@@ -441,14 +441,16 @@ class TestDataConfigs:
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import RoundRobinWriterConfig
 
-        cfg = RoundRobinWriterConfig(compilable=True)
+        cfg = RoundRobinWriterConfig(compilable=True, track_generations=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.RoundRobinWriter"
         assert cfg.compilable is True
+        assert cfg.track_generations is True
 
         # Test instantiation
         writer = instantiate(cfg)
         assert isinstance(writer, RoundRobinWriter)
         assert writer._compilable is True
+        assert writer.tracks_generations is True
 
     def test_sampler_config(self):
         """Test basic SamplerConfig."""
@@ -652,14 +654,18 @@ class TestDataConfigs:
             TensorDictRoundRobinWriterConfig,
         )
 
-        cfg = TensorDictRoundRobinWriterConfig(compilable=True)
+        cfg = TensorDictRoundRobinWriterConfig(
+            compilable=True, track_generations=True
+        )
         assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
         assert cfg.compilable is True
+        assert cfg.track_generations is True
 
         # Test instantiation
         writer = instantiate(cfg)
         assert isinstance(writer, TensorDictRoundRobinWriter)
         assert writer._compilable is True
+        assert writer.tracks_generations is True
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_immutable_dataset_writer_config(self):

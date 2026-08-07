@@ -243,7 +243,7 @@ random sampling. Prefetching, prioritized replay and multidimensional storages
 are rejected explicitly.
 
 Detecting overwritten slots: generation stamps
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. _ref_buffers_generations:
 
