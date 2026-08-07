@@ -654,9 +654,7 @@ class TestDataConfigs:
             TensorDictRoundRobinWriterConfig,
         )
 
-        cfg = TensorDictRoundRobinWriterConfig(
-            compilable=True, track_generations=True
-        )
+        cfg = TensorDictRoundRobinWriterConfig(compilable=True, track_generations=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
         assert cfg.compilable is True
         assert cfg.track_generations is True
