@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from functools import partial
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -19,8 +20,11 @@ from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl import service_backend, transport_backend
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import RayReplayBuffer, ReplayBuffer
-from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
+from torchrl.data import RayReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
+from torchrl.data.replay_buffers import (
+    ray_buffer as ray_buffer_module,
+    RemoteTensorDictReplayBuffer,
+)
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
@@ -43,6 +47,19 @@ class ReplayBufferNode(RemoteTensorDictReplayBuffer):
             writer=RoundRobinWriter(),
             collate_fn=lambda x: x,
         )
+
+
+class _RemoteResult:
+    def __init__(self, result):
+        self.result = result
+
+    def remote(self, *args, **kwargs):
+        return self.result
+
+
+class _RejectingRemoteResult:
+    def remote(self, *args, **kwargs):
+        raise AssertionError("A pre-bound transport used payload bootstrap.")
 
 
 def construct_buffer_test(rank, name, world_size):
@@ -316,6 +333,74 @@ class TestRayRB:
             assert not hasattr(client, "shutdown")
         finally:
             rb.shutdown()
+
+    def test_prebound_distributed_replay_skips_payload_bootstrap(self, monkeypatch):
+        extend_data = TensorDict({"value": torch.arange(8).reshape(8, 1)}, [8])
+        sample = TensorDict(
+            {
+                "value": torch.zeros(4, 1, dtype=torch.int64),
+                "index": torch.zeros(4, dtype=torch.int64),
+            },
+            [4],
+        )
+
+        def extend_endpoint(data, *, timeout=None):
+            assert data is extend_data
+            assert timeout == 30.0
+            return TensorDict({"result": torch.arange(8)}, [])
+
+        def sample_endpoint(request, *, timeout=None):
+            assert request["batch_size"].item() == 4
+            assert timeout == 30.0
+            return sample
+
+        actor = SimpleNamespace(
+            _distributed_control_client=_RemoteResult(object()),
+            _distributed_bound_extend_client=_RemoteResult(extend_endpoint),
+            _distributed_bound_sample_client=_RemoteResult((sample_endpoint, 4)),
+            _bootstrap_distributed_extend=_RejectingRemoteResult(),
+            _bootstrap_distributed_sample=_RejectingRemoteResult(),
+        )
+        monkeypatch.setattr(ray_buffer_module.ray, "get", lambda result: result)
+        monkeypatch.setattr(
+            ray_buffer_module,
+            "_set_ray_client_liveness",
+            lambda client, actor: None,
+        )
+        client = ray_buffer_module._LazyDistributedReplayClient(actor, batch_size=4)
+        assert client.extend(extend_data, timeout=30.0).shape == (8,)
+        assert client.sample(timeout=30.0) is sample
+
+    def test_ray_replay_with_prebound_gloo_transport(self):
+        extend_data = TensorDict({"value": torch.arange(8).reshape(8, 1)}, [8])
+        sample_spec = TensorDict(
+            {
+                "value": torch.zeros(4, 1, dtype=torch.int64),
+                "index": torch.zeros(4, dtype=torch.int64),
+            },
+            [4],
+        )
+        replay = TensorDictReplayBuffer(
+            storage=partial(LazyTensorStorage, 64),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_cpus": 0}},
+            transport="distributed",
+            transport_options={
+                "backend": "gloo",
+                "timeout": 30.0,
+                "extend_spec": extend_data.clone().zero_(),
+                "sample_spec": sample_spec,
+            },
+        )
+        try:
+            writer = replay.client()
+            reader = replay.client()
+            assert writer.extend(extend_data).shape == (8,)
+            assert writer.write_count == 8
+            assert reader.sample().shape == (4,)
+        finally:
+            replay.shutdown()
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")

@@ -1370,15 +1370,24 @@ class RayCollector(BaseCollector):
     def _async_iterator(self) -> Iterator[TensorDictBase]:
         """Collects a data batch from a single remote collector in each iteration."""
         pending_tasks = {}
+
+        def can_schedule() -> bool:
+            return self.total_frames < 0 or (
+                self.collected_frames + len(pending_tasks) * self.frames_per_batch
+                < self.total_frames
+            )
+
         for index, collector in enumerate(self.remote_collectors):
+            if not can_schedule():
+                break
             future = collector.next.remote()
             pending_tasks[future] = index
 
         while (
-            self.collected_frames < self.total_frames and not self._stop_event.is_set()
-        ):
-            if not len(list(pending_tasks.keys())) == len(self.remote_collectors):
-                raise RuntimeError("Missing pending tasks, something went wrong")
+            self.total_frames < 0 or self.collected_frames < self.total_frames
+        ) and not self._stop_event.is_set():
+            if not pending_tasks:
+                raise RuntimeError("No pending Ray collector tasks remain.")
 
             # Wait for first worker to finish
             wait_results = ray.wait(list(pending_tasks.keys()))
@@ -1402,13 +1411,17 @@ class RayCollector(BaseCollector):
                 torchrl_logger.debug(f"Updating weights on worker {collector_index}")
                 self.update_policy_weights_(worker_ids=collector_index)
 
-            # Schedule a new collection task
-            future = collector.next.remote()
-            pending_tasks[future] = collector_index
+            # Reserve in-flight batches against total_frames. Without this guard,
+            # every worker writes one extra direct-replay batch while the iterator
+            # drains pending actor calls after reaching the collection target.
+            if can_schedule():
+                future = collector.next.remote()
+                pending_tasks[future] = collector_index
 
         # Wait for the in-process collections tasks to finish.
         refs = list(pending_tasks.keys())
-        ray.wait(refs, num_returns=len(refs))
+        if refs:
+            ray.wait(refs, num_returns=len(refs))
 
         # Cancel the in-process collections tasks
         # for ref in refs:
