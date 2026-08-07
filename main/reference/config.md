@@ -410,7 +410,7 @@ cs.store(group="model", name="tanh_normal", node=TanhNormalModelConfig)
 | [`LazyMemmapStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.LazyMemmapStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyMemmapStorageConfig)([_partial_, ...]) | Hydra configuration for [`LazyMemmapStorage`](generated/torchrl.data.replay_buffers.LazyMemmapStorage.html#torchrl.data.replay_buffers.LazyMemmapStorage). |
 | [`LazyStackStorageConfig`](generated/torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig.html#torchrl.trainers.algorithms.configs.data.LazyStackStorageConfig)([_partial_, ...]) | Configuration for lazy stack storage. |
 | [`StorageEnsembleConfig`](generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleConfig)([_partial_, _target_, ...]) | Configuration for storage ensemble. |
-| [`RoundRobinWriterConfig`](generated/torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html#torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig)([_target_, compilable]) | Configuration for round-robin writer that distributes data across multiple storages. |
+| [`RoundRobinWriterConfig`](generated/torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig.html#torchrl.trainers.algorithms.configs.data.RoundRobinWriterConfig)([_target_, ...]) | Hydra configuration for `RoundRobinWriter`. |
 | [`StorageEnsembleWriterConfig`](generated/torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig.html#torchrl.trainers.algorithms.configs.data.StorageEnsembleWriterConfig)([_partial_, ...]) | Configuration for storage ensemble writer. |
 
 ### Training and Optimization Configurations

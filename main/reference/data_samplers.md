@@ -25,11 +25,14 @@ wraparound and the write cursor -- are documented in
 
 ## Writers
 
-Writers control how data is written to the storage.
+Writers control how data is written to the storage. Writers that reuse
+storage slots can stamp each slot with a reuse counter so consumers holding
+an index can detect that it was overwritten - see
+[Detecting overwritten slots](data_replaybuffers.html#ref-buffers-generations).
 
-| [`RoundRobinWriter`](generated/torchrl.data.replay_buffers.RoundRobinWriter.html#torchrl.data.replay_buffers.RoundRobinWriter)([compilable]) | A RoundRobin Writer class for composable replay buffers. |
+| [`RoundRobinWriter`](generated/torchrl.data.replay_buffers.RoundRobinWriter.html#torchrl.data.replay_buffers.RoundRobinWriter)([compilable, track_generations]) | A RoundRobin Writer class for composable replay buffers. |
 | --- | --- |
 | [`TensorDictMaxValueWriter`](generated/torchrl.data.replay_buffers.TensorDictMaxValueWriter.html#torchrl.data.replay_buffers.TensorDictMaxValueWriter)([rank_key, reduction]) | A Writer class for composable replay buffers that keeps the top elements based on some ranking key. |
-| [`TensorDictRoundRobinWriter`](generated/torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html#torchrl.data.replay_buffers.TensorDictRoundRobinWriter)([compilable]) | A RoundRobin Writer class for composable, tensordict-based replay buffers. |
+| [`TensorDictRoundRobinWriter`](generated/torchrl.data.replay_buffers.TensorDictRoundRobinWriter.html#torchrl.data.replay_buffers.TensorDictRoundRobinWriter)([compilable, ...]) | A RoundRobin Writer class for composable, tensordict-based replay buffers. |
 | [`Writer`](generated/torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)([compilable]) | A ReplayBuffer base Writer class. |
 | [`WriterEnsemble`](generated/torchrl.data.replay_buffers.WriterEnsemble.html#torchrl.data.replay_buffers.WriterEnsemble)(*writers) | An ensemble of writers. |

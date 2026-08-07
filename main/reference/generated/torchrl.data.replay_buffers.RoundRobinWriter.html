@@ -2467,15 +2467,49 @@ document.write(`
 <h1>RoundRobinWriter<a class="headerlink" href="#roundrobinwriter" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.RoundRobinWriter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">RoundRobinWriter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compilable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RoundRobinWriter" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">RoundRobinWriter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compilable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">track_generations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RoundRobinWriter" title="Link to this definition">#</a></dt>
 <dd><p>A RoundRobin Writer class for composable replay buffers.</p>
+<p>See also <code class="xref py py-class docutils literal notranslate"><span class="pre">RoundRobinWriterConfig</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>compilable</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether the writer is compilable.
 If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the writer cannot be shared between multiple processes.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>track_generations</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, stamp every storage
+slot with a counter that advances each time the slot is written, so
+a consumer holding an index can tell whether the slot still holds
+the data it sampled. Reads are exposed through
+<a class="reference internal" href="#torchrl.data.replay_buffers.RoundRobinWriter.generations_of" title="torchrl.data.replay_buffers.RoundRobinWriter.generations_of"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generations_of()</span></code></a>, and <a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.sample" title="torchrl.data.ReplayBuffer.sample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">sample()</span></code></a>
+adds an <code class="docutils literal notranslate"><span class="pre">&quot;index_generation&quot;</span></code> entry to its <code class="docutils literal notranslate"><span class="pre">info</span></code> (and, for
+tensordict buffers, to the sample). Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>: enabling
+it allocates one <code class="docutils literal notranslate"><span class="pre">int64</span></code> slot per storage slot and adds a key to
+the sampler output, so it is opt-in.</p>
+</dd>
 </dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The generation buffer lives on the <em>storage</em>, not on the writer, so two
+buffers sharing one storage observe each other’s writes. It is
+process-local: a slot overwritten in another process is not reflected
+here. See <span class="xref std std-ref">ref_buffers_generations</span>.</p>
+</div>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBuffer</span><span class="p">,</span> <span class="n">RoundRobinWriter</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">writer</span><span class="o">=</span><span class="n">RoundRobinWriter</span><span class="p">(</span><span class="n">track_generations</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">index</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">generations_of</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+<span class="go">tensor([0, 0, 0, 0])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>  <span class="c1"># overwrites slots 0 and 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">generations_of</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+<span class="go">tensor([1, 1, 0, 0])</span>
+</pre></div>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.RoundRobinWriter.add">
 <span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RoundRobinWriter.add" title="Link to this definition">#</a></dt>
@@ -2489,9 +2523,51 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.RoundRobinWriter.generations_of">
+<span class="sig-name descname"><span class="pre">generations_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.generations_of"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RoundRobinWriter.generations_of" title="Link to this definition">#</a></dt>
+<dd><p>Returns the generation stamp for each physical slot in <code class="docutils literal notranslate"><span class="pre">index</span></code>.</p>
+<p>A slot’s stamp advances once per write it receives, so a single
+<code class="docutils literal notranslate"><span class="pre">extend</span></code> that wraps the storage advances a reused slot once per write.
+Comparing a stamp captured at sampling time against the current stamp
+tells you whether the slot still holds the data you sampled.</p>
+<p>Writers that do not track slot reuse – and writers constructed with
+<code class="docutils literal notranslate"><span class="pre">track_generations=False</span></code>, which is the default – report <code class="docutils literal notranslate"><span class="pre">-1</span></code>
+everywhere. Never-written slots also report <code class="docutils literal notranslate"><span class="pre">-1</span></code>, so <code class="docutils literal notranslate"><span class="pre">-1</span></code> means
+“no usable stamp” rather than “generation zero”.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – dim-0 slot indices. A 1-D tensor is
+always read as a batch of slot indices; for a storage with
+<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, pass a <code class="docutils literal notranslate"><span class="pre">tuple</span></code> of per-dimension indices (as
+<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend" title="torchrl.data.ReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a> returns) to identify
+a single cell – only its dim-0 component is used, since a
+generation stamps a whole dim-0 slot.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">int64</span></code> stamps shaped like the dim-0 component of
+<code class="docutils literal notranslate"><span class="pre">index</span></code>, on <code class="docutils literal notranslate"><span class="pre">index</span></code>’s device.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)">torch.Tensor</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.RoundRobinWriter.tracks_generations">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tracks_generations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrl.data.replay_buffers.RoundRobinWriter.tracks_generations" title="Link to this definition">#</a></dt>
+<dd><p>bool(x) -&gt; bool</p>
+<p>Returns True when the argument x is true, False otherwise.
+The builtins True and False are the only two instances of the class bool.
+The class bool is a subclass of the class int, and cannot be subclassed.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.RoundRobinWriter.write_at">
 <span class="sig-name descname"><span class="pre">write_at</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.write_at"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RoundRobinWriter.write_at" title="Link to this definition">#</a></dt>
 <dd><p>Writes data at explicit storage indices without moving the cursor.</p>
+<p>The generation of every written slot is bumped, so handles previously
+handed out for those slots are stale once this returns.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2618,6 +2694,8 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.RoundRobinWriter"><code class="docutils literal notranslate"><span class="pre">RoundRobinWriter</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.RoundRobinWriter.add"><code class="docutils literal notranslate"><span class="pre">RoundRobinWriter.add()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.RoundRobinWriter.extend"><code class="docutils literal notranslate"><span class="pre">RoundRobinWriter.extend()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.RoundRobinWriter.generations_of"><code class="docutils literal notranslate"><span class="pre">RoundRobinWriter.generations_of()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.RoundRobinWriter.tracks_generations"><code class="docutils literal notranslate"><span class="pre">RoundRobinWriter.tracks_generations</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.RoundRobinWriter.write_at"><code class="docutils literal notranslate"><span class="pre">RoundRobinWriter.write_at()</span></code></a></li>
 </ul>
 </li>
@@ -2873,7 +2951,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
        "headline": "RoundRobinWriter",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.RoundRobinWriter.html",
-       "articleBody": "RoundRobinWriter# class torchrl.data.replay_buffers.RoundRobinWriter(compilable: bool = False)[source]# A RoundRobin Writer class for composable replay buffers. Parameters: compilable (bool, optional) \u2013 whether the writer is compilable. If True, the writer cannot be shared between multiple processes. Defaults to False. add(data: Any) \u2192 int | Tensor[source]# Inserts one piece of data at an appropriate index, and returns that index. extend(data: Sequence) \u2192 Tensor[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. write_at(index: int | Tensor, data: Any) \u2192 int | Tensor[source]# Writes data at explicit storage indices without moving the cursor.",
+       "articleBody": "RoundRobinWriter# class torchrl.data.replay_buffers.RoundRobinWriter(compilable: bool = False, *, track_generations: bool = False)[source]# A RoundRobin Writer class for composable replay buffers. See also RoundRobinWriterConfig. Parameters: compilable (bool, optional) \u2013 whether the writer is compilable. If True, the writer cannot be shared between multiple processes. Defaults to False. Keyword Arguments: track_generations (bool, optional) \u2013 if True, stamp every storage slot with a counter that advances each time the slot is written, so a consumer holding an index can tell whether the slot still holds the data it sampled. Reads are exposed through generations_of(), and sample() adds an \"index_generation\" entry to its info (and, for tensordict buffers, to the sample). Defaults to False: enabling it allocates one int64 slot per storage slot and adds a key to the sampler output, so it is opt-in. Note The generation buffer lives on the storage, not on the writer, so two buffers sharing one storage observe each other\u2019s writes. It is process-local: a slot overwritten in another process is not reflected here. See ref_buffers_generations. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data import LazyTensorStorage, ReplayBuffer, RoundRobinWriter \u003e\u003e\u003e rb = ReplayBuffer( ... storage=LazyTensorStorage(4), ... writer=RoundRobinWriter(track_generations=True), ... ) \u003e\u003e\u003e index = rb.extend(torch.arange(4)) \u003e\u003e\u003e rb.writer.generations_of(index) tensor([0, 0, 0, 0]) \u003e\u003e\u003e _ = rb.extend(torch.arange(4, 6)) # overwrites slots 0 and 1 \u003e\u003e\u003e rb.writer.generations_of(index) tensor([1, 1, 0, 0]) add(data: Any) \u2192 int | Tensor[source]# Inserts one piece of data at an appropriate index, and returns that index. extend(data: Sequence) \u2192 Tensor[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. generations_of(index: int | Tensor) \u2192 Tensor[source]# Returns the generation stamp for each physical slot in index. A slot\u2019s stamp advances once per write it receives, so a single extend that wraps the storage advances a reused slot once per write. Comparing a stamp captured at sampling time against the current stamp tells you whether the slot still holds the data you sampled. Writers that do not track slot reuse \u2013 and writers constructed with track_generations=False, which is the default \u2013 report -1 everywhere. Never-written slots also report -1, so -1 means \u201cno usable stamp\u201d rather than \u201cgeneration zero\u201d. Parameters: index (int or torch.Tensor) \u2013 dim-0 slot indices. A 1-D tensor is always read as a batch of slot indices; for a storage with ndim \u003e 1, pass a tuple of per-dimension indices (as extend() returns) to identify a single cell \u2013 only its dim-0 component is used, since a generation stamps a whole dim-0 slot. Returns: int64 stamps shaped like the dim-0 component of index, on index\u2019s device. Return type: torch.Tensor property tracks_generations: bool# bool(x) -\u003e bool Returns True when the argument x is true, False otherwise. The builtins True and False are the only two instances of the class bool. The class bool is a subclass of the class int, and cannot be subclassed. write_at(index: int | Tensor, data: Any) \u2192 int | Tensor[source]# Writes data at explicit storage indices without moving the cursor. The generation of every written slot is bumped, so handles previously handed out for those slots are stale once this returns.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

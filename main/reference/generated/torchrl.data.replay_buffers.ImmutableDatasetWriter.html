@@ -2481,6 +2481,46 @@ document.write(`
 <dd><p>Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.</p>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.ImmutableDatasetWriter.generations_of">
+<span class="sig-name descname"><span class="pre">generations_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter.generations_of" title="Link to this definition">#</a></dt>
+<dd><p>Returns the generation stamp for each physical slot in <code class="docutils literal notranslate"><span class="pre">index</span></code>.</p>
+<p>A slot’s stamp advances once per write it receives, so a single
+<code class="docutils literal notranslate"><span class="pre">extend</span></code> that wraps the storage advances a reused slot once per write.
+Comparing a stamp captured at sampling time against the current stamp
+tells you whether the slot still holds the data you sampled.</p>
+<p>Writers that do not track slot reuse – and writers constructed with
+<code class="docutils literal notranslate"><span class="pre">track_generations=False</span></code>, which is the default – report <code class="docutils literal notranslate"><span class="pre">-1</span></code>
+everywhere. Never-written slots also report <code class="docutils literal notranslate"><span class="pre">-1</span></code>, so <code class="docutils literal notranslate"><span class="pre">-1</span></code> means
+“no usable stamp” rather than “generation zero”.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – dim-0 slot indices. A 1-D tensor is
+always read as a batch of slot indices; for a storage with
+<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>, pass a <code class="docutils literal notranslate"><span class="pre">tuple</span></code> of per-dimension indices (as
+<a class="reference internal" href="torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend" title="torchrl.data.ReplayBuffer.extend"><code class="xref py py-meth docutils literal notranslate"><span class="pre">extend()</span></code></a> returns) to identify
+a single cell – only its dim-0 component is used, since a
+generation stamps a whole dim-0 slot.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">int64</span></code> stamps shaped like the dim-0 component of
+<code class="docutils literal notranslate"><span class="pre">index</span></code>, on <code class="docutils literal notranslate"><span class="pre">index</span></code>’s device.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)">torch.Tensor</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrl.data.replay_buffers.ImmutableDatasetWriter.tracks_generations">
+<span class="sig-name descname"><span class="pre">tracks_generations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter.tracks_generations" title="Link to this definition">#</a></dt>
+<dd><p>Whether this writer stamps storage slots with a reuse generation. Always
+<code class="docutils literal notranslate"><span class="pre">False</span></code> unless the writer both supports generation tracking and was
+constructed with it enabled (see
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RoundRobinWriter</span></code>).</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -2605,6 +2645,8 @@ document.write(`
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter"><code class="docutils literal notranslate"><span class="pre">ImmutableDatasetWriter</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter.add"><code class="docutils literal notranslate"><span class="pre">ImmutableDatasetWriter.add()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter.extend"><code class="docutils literal notranslate"><span class="pre">ImmutableDatasetWriter.extend()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter.generations_of"><code class="docutils literal notranslate"><span class="pre">ImmutableDatasetWriter.generations_of()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.ImmutableDatasetWriter.tracks_generations"><code class="docutils literal notranslate"><span class="pre">ImmutableDatasetWriter.tracks_generations</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -2859,7 +2901,7 @@ document.write(`
        "headline": "ImmutableDatasetWriter",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.ImmutableDatasetWriter.html",
-       "articleBody": "ImmutableDatasetWriter# class torchrl.data.replay_buffers.ImmutableDatasetWriter(compilable: bool = False)[source]# A blocking writer for immutable datasets. add(data: Any) \u2192 int[source]# Inserts one piece of data at an appropriate index, and returns that index. extend(data: Sequence) \u2192 Tensor[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.",
+       "articleBody": "ImmutableDatasetWriter# class torchrl.data.replay_buffers.ImmutableDatasetWriter(compilable: bool = False)[source]# A blocking writer for immutable datasets. add(data: Any) \u2192 int[source]# Inserts one piece of data at an appropriate index, and returns that index. extend(data: Sequence) \u2192 Tensor[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. generations_of(index: int | Tensor) \u2192 Tensor# Returns the generation stamp for each physical slot in index. A slot\u2019s stamp advances once per write it receives, so a single extend that wraps the storage advances a reused slot once per write. Comparing a stamp captured at sampling time against the current stamp tells you whether the slot still holds the data you sampled. Writers that do not track slot reuse \u2013 and writers constructed with track_generations=False, which is the default \u2013 report -1 everywhere. Never-written slots also report -1, so -1 means \u201cno usable stamp\u201d rather than \u201cgeneration zero\u201d. Parameters: index (int or torch.Tensor) \u2013 dim-0 slot indices. A 1-D tensor is always read as a batch of slot indices; for a storage with ndim \u003e 1, pass a tuple of per-dimension indices (as extend() returns) to identify a single cell \u2013 only its dim-0 component is used, since a generation stamps a whole dim-0 slot. Returns: int64 stamps shaped like the dim-0 component of index, on index\u2019s device. Return type: torch.Tensor tracks_generations: bool = False# Whether this writer stamps storage slots with a reuse generation. Always False unless the writer both supports generation tracking and was constructed with it enabled (see RoundRobinWriter).",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
