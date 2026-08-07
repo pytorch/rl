@@ -420,6 +420,14 @@ class DreamerV3ActorLoss(LossModule):
             * stop-gradient advantage). If ``False``, uses the straight
             reparameterization gradient (suitable for continuous Gaussian
             actors). Default: ``False``.
+        return_normalization (bool, optional): Normalize detached REINFORCE
+            advantages by an EMA return-percentile span. Default: ``True``.
+        return_normalization_rate (float, optional): EMA update rate for the
+            return statistics. Default: ``0.01``.
+        return_normalization_quantiles (tuple of float, optional): Lower and
+            upper return quantiles. Default: ``(0.05, 0.95)``.
+        return_normalization_min_scale (float, optional): Minimum divisor for
+            REINFORCE advantages. Default: ``1.0``.
 
     Examples:
         >>> import torch
@@ -543,6 +551,10 @@ class DreamerV3ActorLoss(LossModule):
         discount_loss: bool = True,
         entropy_bonus: float = 3e-4,
         use_reinforce: bool = False,
+        return_normalization: bool = True,
+        return_normalization_rate: float = 0.01,
+        return_normalization_quantiles: tuple[float, float] = (0.05, 0.95),
+        return_normalization_min_scale: float = 1.0,
         gamma: float | None = None,
         lmbda: float | None = None,
     ):
@@ -554,6 +566,22 @@ class DreamerV3ActorLoss(LossModule):
         self.discount_loss = discount_loss
         self.entropy_bonus = entropy_bonus
         self.use_reinforce = use_reinforce
+        self.return_normalization = return_normalization
+        if not 0 <= return_normalization_rate <= 1:
+            raise ValueError("return_normalization_rate must be in [0, 1].")
+        lower_quantile, upper_quantile = return_normalization_quantiles
+        if not 0 <= lower_quantile < upper_quantile <= 1:
+            raise ValueError(
+                "return_normalization_quantiles must satisfy "
+                "0 <= lower < upper <= 1."
+            )
+        if return_normalization_min_scale <= 0:
+            raise ValueError("return_normalization_min_scale must be positive.")
+        self.return_normalization_rate = return_normalization_rate
+        self.return_normalization_quantiles = return_normalization_quantiles
+        self.return_normalization_min_scale = return_normalization_min_scale
+        self.register_buffer("return_low", torch.tensor(0.0))
+        self.register_buffer("return_high", torch.tensor(0.0))
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
@@ -605,9 +633,14 @@ class DreamerV3ActorLoss(LossModule):
                 self.value_model(baseline_td)
             baseline = baseline_td.get(self.tensor_keys.value)
             advantage = (lambda_target - baseline).detach()
+            return_scale = self._return_scale(lambda_target)
+            advantage = advantage / return_scale
             actor_loss = -(discount * log_prob * advantage).sum((-2, -1)).mean()
         else:
             # Reparameterization gradient
+            return_scale = torch.ones(
+                (), dtype=lambda_target.dtype, device=lambda_target.device
+            )
             actor_loss = -(discount * lambda_target).sum((-2, -1)).mean()
 
         # Entropy bonus (if actor provides log_prob)
@@ -617,9 +650,36 @@ class DreamerV3ActorLoss(LossModule):
             entropy = -(discount * log_prob_for_entropy).sum((-2, -1)).mean()
             actor_loss = actor_loss - self.entropy_bonus * entropy
 
-        loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
+        loss_tensordict = TensorDict(
+            {
+                "loss_actor": actor_loss,
+                "return_low": self.return_low.detach().clone(),
+                "return_high": self.return_high.detach().clone(),
+                "return_scale": return_scale.detach().clone(),
+            },
+            [],
+        )
         self._clear_weakrefs(tensordict, loss_tensordict)
         return loss_tensordict, fake_data.data
+
+    def _return_scale(self, returns: torch.Tensor) -> torch.Tensor:
+        if not self.return_normalization:
+            return torch.ones((), dtype=returns.dtype, device=returns.device)
+        if self.training:
+            quantiles = torch.tensor(
+                self.return_normalization_quantiles,
+                dtype=self.return_low.dtype,
+                device=self.return_low.device,
+            )
+            current_low, current_high = torch.quantile(
+                returns.detach().to(self.return_low), quantiles
+            )
+            with torch.no_grad():
+                self.return_low.lerp_(current_low, self.return_normalization_rate)
+                self.return_high.lerp_(current_high, self.return_normalization_rate)
+        return (self.return_high - self.return_low).clamp_min(
+            self.return_normalization_min_scale
+        )
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)

@@ -44,6 +44,7 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.dreamer_v3 import (
     _default_bins,
+    _match_trailing_dim,
     categorical_kl_balanced,
     symexp,
     symlog,
@@ -942,6 +943,90 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             if p.grad is not None
         )
         assert actor_grad > 0, "REINFORCE path produced no actor gradients"
+
+    def test_dreamer_v3_reinforce_return_normalization(self, device):
+        actor_model = self._create_actor_model_with_log_prob().to(device)
+        value_model = self._create_value_model().to(device)
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            value_model,
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            discount_loss=False,
+            entropy_bonus=0.0,
+            use_reinforce=True,
+        ).to(device)
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_module.return_low.fill_(-2.0)
+        loss_module.return_high.fill_(8.0)
+        loss_module.eval()
+
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        baseline_td = fake_data.select(*value_model.in_keys, strict=False)
+        value_model(baseline_td)
+        advantage = (fake_data["lambda_target"] - baseline_td["state_value"]).detach()
+        log_prob = _match_trailing_dim(
+            fake_data["action_log_prob"], fake_data["lambda_target"]
+        )
+        expected = -(log_prob * advantage / 10.0).sum((-2, -1)).mean()
+        torch.testing.assert_close(loss_td["loss_actor"], expected)
+        torch.testing.assert_close(
+            loss_td["return_scale"], torch.tensor(10.0, device=device)
+        )
+
+        compiled_scale = torch.compile(loss_module._return_scale, fullgraph=True)
+        torch.testing.assert_close(
+            compiled_scale(fake_data["lambda_target"]),
+            torch.tensor(10.0, device=device),
+        )
+
+    def test_dreamer_v3_return_statistics_checkpoint(self, device):
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model_with_log_prob().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            entropy_bonus=0.0,
+            use_reinforce=True,
+            return_normalization_rate=0.01,
+        ).to(device)
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        expected_low, expected_high = torch.quantile(
+            fake_data["lambda_target"].detach(),
+            torch.tensor([0.05, 0.95], device=device),
+        )
+        torch.testing.assert_close(loss_module.return_low, 0.01 * expected_low)
+        torch.testing.assert_close(loss_module.return_high, 0.01 * expected_high)
+        torch.testing.assert_close(loss_td["return_low"], loss_module.return_low)
+        torch.testing.assert_close(loss_td["return_high"], loss_module.return_high)
+        torch.testing.assert_close(
+            loss_td["return_scale"],
+            (loss_module.return_high - loss_module.return_low).clamp_min(1.0),
+        )
+
+        checkpoint = {
+            key: value.detach().clone()
+            for key, value in loss_module.state_dict().items()
+        }
+        expected_statistics = (
+            loss_module.return_low.clone(),
+            loss_module.return_high.clone(),
+        )
+        loss_module.return_low.zero_()
+        loss_module.return_high.zero_()
+        loss_module.load_state_dict(checkpoint)
+        torch.testing.assert_close(loss_module.return_low, expected_statistics[0])
+        torch.testing.assert_close(loss_module.return_high, expected_statistics[1])
+
+        loss_module.eval()
+        loss_module(self._create_actor_data().to(device).reshape(-1))
+        torch.testing.assert_close(loss_module.return_low, expected_statistics[0])
+        torch.testing.assert_close(loss_module.return_high, expected_statistics[1])
 
     def test_dreamer_v3_value_loss_sync_gamma(self, device):
         """sync_gamma_with_actor_loss must pull gamma from the actor's value estimator."""
