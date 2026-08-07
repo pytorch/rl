@@ -164,8 +164,6 @@ logging:
   checkpoint_frequency: 10  # Save checkpoint every N batches
 
 hydra:
-  job:
-    chdir: true
   run:
     dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
