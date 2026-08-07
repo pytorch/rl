@@ -184,9 +184,9 @@ def get_extensions():
     """Build C++ extensions with platform-specific compiler flags.
 
     This function configures the C++ extension build process with appropriate
-    compiler flags for different platforms:
-    - Windows (MSVC): Uses /O2, /std:c++20, /EHsc flags
-    - Unix-like (GCC/Clang): Uses -O3, -std=c++20, -fdiagnostics-color=always flags
+    compiler flags for different platforms. The C++ language standard is left
+    to PyTorch's BuildExtension, which selects the standard required by the
+    installed PyTorch release for both the host compiler and nvcc.
 
     Returns:
         list: List of CppExtension objects to be built
@@ -201,7 +201,6 @@ def get_extensions():
         extra_compile_args = {
             "cxx": [
                 "/O2",  # Optimization level 2 (equivalent to -O3)
-                "/std:c++20",  # C++20 standard
                 "/EHsc",  # Exception handling model
             ]
         }
@@ -218,7 +217,6 @@ def get_extensions():
                 "cxx": [
                     "/Od",  # No optimization (equivalent to -O0)
                     "/Zi",  # Generate debug info
-                    "/std:c++20",  # C++20 standard
                     "/EHsc",  # Exception handling model
                 ]
             }
@@ -235,7 +233,6 @@ def get_extensions():
         extra_compile_args = {
             "cxx": [
                 "-O3",
-                "-std=c++20",
                 "-fdiagnostics-color=always",
             ]
         }
@@ -243,7 +240,6 @@ def get_extensions():
             extra_compile_args["cxx"].append("-DWITH_CUDA")
             extra_compile_args["nvcc"] = [
                 "-O3",
-                "-std=c++20",
                 "-DWITH_CUDA",
             ]
         debug_mode = os.getenv("DEBUG", "0") == "1"
@@ -254,7 +250,6 @@ def get_extensions():
                     "-O0",
                     "-fno-inline",
                     "-g",
-                    "-std=c++20",
                     "-fdiagnostics-color=always",
                 ]
             }
@@ -263,7 +258,6 @@ def get_extensions():
                 extra_compile_args["nvcc"] = [
                     "-O0",
                     "-G",
-                    "-std=c++20",
                     "-DWITH_CUDA",
                 ]
             extra_link_args = ["-O0", "-g"]

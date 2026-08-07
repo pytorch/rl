@@ -90,6 +90,16 @@ def _expected_dist_version(base_version: str) -> str:
     return f"{base_version}+g{_git(['rev-parse', '--short', 'HEAD'])}"
 
 
+def test_build_extension_owns_cxx_standard():
+    spec = importlib.util.spec_from_file_location("torchrl_setup", _ROOT / "setup.py")
+    setup_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup_module)
+
+    for extension in setup_module.get_extensions():
+        for flags in extension.extra_compile_args.values():
+            assert not any("std=" in flag or "std:" in flag for flag in flags)
+
+
 @pytest.mark.parametrize(
     "editable",
     [
