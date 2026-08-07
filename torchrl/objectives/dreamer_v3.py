@@ -17,12 +17,13 @@ use in custom models.
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 
 from torchrl._utils import _maybe_record_function_decorator
 from torchrl.envs.model_based.dreamer import DreamerEnv
@@ -30,11 +31,11 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.modules.models.model_based_v3 import (
     _default_bins,
     _DEFAULT_NUM_BINS,
-    symexp as symexp,
+    symexp as _symexp,
     symlog as symlog,
     two_hot_cross_entropy as two_hot_cross_entropy,
-    two_hot_decode as two_hot_decode,
-    two_hot_encode as two_hot_encode,
+    two_hot_decode as _two_hot_decode,
+    two_hot_encode as _two_hot_encode,
 )
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -44,6 +45,10 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import ValueEstimatorBase
+
+symexp = _symexp
+two_hot_decode = _two_hot_decode
+two_hot_encode = _two_hot_encode
 
 # ---------------------------------------------------------------------------
 # KL balancing for categorical distributions (DreamerV3 §3)
@@ -177,23 +182,26 @@ class DreamerV3ModelLoss(LossModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torch import nn
+        >>> from torchrl.modules import SymExpTwoHot
         >>> from torchrl.objectives import DreamerV3ModelLoss
         >>> class StubWorldModel(nn.Module):
         ...     def __init__(self):
         ...         super().__init__()
         ...         self.head = nn.LazyLinear(4 * 4)
         ...         self.reward_head = nn.LazyLinear(16)
+        ...         self.reward_decoder = SymExpTwoHot(16)
         ...         self.decoder = nn.LazyLinear(3 * 8 * 8)
         ...     def forward(self, td):
         ...         B, T = td.shape
         ...         x = torch.cat([td["state"], td["belief"]], dim=-1)
         ...         logits = self.head(x).view(B, T, 4, 4)
         ...         reco = self.decoder(x).view(B, T, 3, 8, 8)
-        ...         reward = self.reward_head(x)
+        ...         reward_logits = self.reward_head(x)
         ...         td.set(("next", "prior_logits"), logits)
         ...         td.set(("next", "posterior_logits"), logits)
         ...         td.set(("next", "reco_pixels"), reco)
-        ...         td.set(("next", "reward"), reward)
+        ...         td.set(("next", "reward_logits"), reward_logits)
+        ...         td.set(("next", "reward"), self.reward_decoder(reward_logits))
         ...         return td
         >>> wm = StubWorldModel()
         >>> td = TensorDict({
@@ -220,7 +228,10 @@ class DreamerV3ModelLoss(LossModule):
         """Configurable tensordict keys.
 
         Attributes:
-            reward (NestedKey): Predicted reward. Defaults to ``"reward"``.
+            reward (NestedKey): Decoded predicted reward. Defaults to
+                ``"reward"``.
+            reward_logits (NestedKey): Categorical reward logits. Defaults to
+                ``"reward_logits"``.
             true_reward (NestedKey): Ground-truth reward (stored temporarily).
                 Defaults to ``"true_reward"``.
             prior_logits (NestedKey): Prior categorical logits from the prior
@@ -238,6 +249,7 @@ class DreamerV3ModelLoss(LossModule):
         """
 
         reward: NestedKey = "reward"
+        reward_logits: NestedKey = "reward_logits"
         true_reward: NestedKey = "true_reward"
         prior_logits: NestedKey = "prior_logits"
         posterior_logits: NestedKey = "posterior_logits"
@@ -320,9 +332,19 @@ class DreamerV3ModelLoss(LossModule):
 
         # ---- Reward loss ----
         true_reward = tensordict.get(("next", self.tensor_keys.true_reward))
-        pred_reward = tensordict.get(("next", self.tensor_keys.reward))
-
         if self.reward_two_hot:
+            reward_logits_key = unravel_key(("next", self.tensor_keys.reward_logits))
+            pred_reward = tensordict.get(reward_logits_key, None)
+            if pred_reward is None:
+                legacy_key = unravel_key(("next", self.tensor_keys.reward))
+                pred_reward = tensordict.get(legacy_key)
+                warnings.warn(
+                    "Storing DreamerV3 categorical reward logits under the decoded "
+                    f"reward key {legacy_key!r} is deprecated and will be removed in "
+                    "v0.16. Write logits to the configured reward_logits key instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             if pred_reward.shape[-1] != self.num_reward_bins:
                 raise ValueError(
                     f"reward_two_hot=True expects the reward head to output "
@@ -333,6 +355,7 @@ class DreamerV3ModelLoss(LossModule):
                 pred_reward, true_reward, self.reward_bins
             )
         else:
+            pred_reward = tensordict.get(("next", self.tensor_keys.reward))
             reward_loss = (symlog(true_reward) - symlog(pred_reward)).pow(2).squeeze(-1)
         reward_loss = reward_loss.mean().unsqueeze(-1)
 
@@ -706,10 +729,14 @@ class DreamerV3ValueLoss(LossModule):
         """Configurable tensordict keys.
 
         Attributes:
-            value (NestedKey): Predicted value key. Defaults to ``"state_value"``.
+            value (NestedKey): Decoded predicted value key. Defaults to
+                ``"state_value"``.
+            value_logits (NestedKey): Categorical value logits key. Defaults to
+                ``"state_value_logits"``.
         """
 
         value: NestedKey = "state_value"
+        value_logits: NestedKey = "state_value_logits"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -767,8 +794,6 @@ class DreamerV3ValueLoss(LossModule):
 
         tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
         self.value_model(tensordict_select)
-        value_pred = tensordict_select.get(self.tensor_keys.value)
-
         # lambda_target shape: [N, 1] (flat) or [B, T, 1] (batch x time)
         # Squeeze the trailing 1 for loss computation
         target_sq = lambda_target.squeeze(-1)  # [N] or [B, T]
@@ -782,6 +807,17 @@ class DreamerV3ValueLoss(LossModule):
             discount = torch.ones_like(target_sq)
 
         if self.value_loss == "two_hot":
+            value_pred = tensordict_select.get(self.tensor_keys.value_logits, None)
+            if value_pred is None:
+                value_pred = tensordict_select.get(self.tensor_keys.value)
+                warnings.warn(
+                    "Storing DreamerV3 categorical value logits under the decoded "
+                    f"value key {unravel_key(self.tensor_keys.value)!r} is deprecated "
+                    "and will be removed in v0.16. Write logits to the configured "
+                    "value_logits key instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             if value_pred.shape[-1] != self.value_bins.shape[0]:
                 raise ValueError(
                     f"value_loss='two_hot' expects the value head to output "
@@ -791,6 +827,7 @@ class DreamerV3ValueLoss(LossModule):
             loss = two_hot_cross_entropy(value_pred, target_sq, self.value_bins)
         else:
             # symlog MSE
+            value_pred = tensordict_select.get(self.tensor_keys.value)
             loss = (symlog(value_pred.squeeze(-1)) - symlog(target_sq)).pow(2)
 
         value_loss = (discount * loss).mean()

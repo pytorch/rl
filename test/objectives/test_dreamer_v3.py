@@ -8,15 +8,20 @@ Reference: https://arxiv.org/abs/2301.04104
 """
 from __future__ import annotations
 
+import runpy
+from pathlib import Path
+
 import pytest
 import torch
 from _objectives_common import LossModuleTestBase
+from omegaconf import OmegaConf
 from tensordict import TensorDict
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
+    TensorDictSequential,
 )
 from torch import nn
 
@@ -127,6 +132,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 # reward head
                 out_r = num_reward_bins if reward_two_hot else 1
                 self_.reward_net = nn.LazyLinear(out_r)
+                self_.reward_decoder = SymExpTwoHot(num_reward_bins)
                 self_.num_cats = num_cats
                 self_.num_classes = num_classes
                 self_.reward_two_hot = reward_two_hot
@@ -162,6 +168,9 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 tensordict.set(("next", "prior_logits"), prior_logits)
                 tensordict.set(("next", "posterior_logits"), posterior_logits)
                 tensordict.set(("next", "reco_pixels"), reco_pixels)
+                if self_.reward_two_hot:
+                    tensordict.set(("next", "reward_logits"), reward_pred)
+                    reward_pred = self_.reward_decoder(reward_pred)
                 tensordict.set(("next", "reward"), reward_pred)
                 return tensordict
 
@@ -252,11 +261,22 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         return actor_model
 
     def _create_value_model(self, out_features=1):
-        value_model = TensorDictModule(
+        value_head = TensorDictModule(
             MLP(out_features=out_features, depth=1, num_cells=8),
             in_keys=["state", "belief"],
-            out_keys=["state_value"],
+            out_keys=["state_value" if out_features == 1 else "state_value_logits"],
         )
+        if out_features == 1:
+            value_model = value_head
+        else:
+            value_model = TensorDictSequential(
+                value_head,
+                TensorDictModule(
+                    SymExpTwoHot(out_features),
+                    in_keys=["state_value_logits"],
+                    out_keys=["state_value"],
+                ),
+            )
         with torch.no_grad():
             td = TensorDict(
                 {
@@ -465,6 +485,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         loss_fn = DreamerV3ModelLoss(world_model, num_reward_bins=self.num_reward_bins)
         default_keys = {
             "reward": "reward",
+            "reward_logits": "reward_logits",
             "true_reward": "true_reward",
             "prior_logits": "prior_logits",
             "posterior_logits": "posterior_logits",
@@ -557,6 +578,141 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             if p.grad is not None
         )
         assert grad_total > 0, "All gradients are zero after value (two_hot) backward"
+
+    def test_dreamer_v3_categorical_value_exposes_decoded_value(self, device):
+        value_model = self._create_value_model(out_features=self.num_reward_bins).to(
+            device
+        )
+        tensordict = self._create_value_data().to(device)
+        value_model(tensordict)
+        assert tensordict["state_value_logits"].shape[-1] == self.num_reward_bins
+        assert tensordict["state_value"].shape[-1] == 1
+
+        actor_loss = DreamerV3ActorLoss(
+            self._create_actor_model().to(device),
+            value_model,
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+        )
+        actor_loss.make_value_estimator(ValueEstimators.TDLambda)
+        loss_td, fake_data = actor_loss(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        assert loss_td["loss_actor"].ndim == 0
+        assert fake_data["lambda_target"].shape[-1] == 1
+
+    def test_dreamer_v3_legacy_logits_keys_warn(self, device):
+        class LegacyWorldModel(nn.Module):
+            def __init__(self_, world_model):
+                super().__init__()
+                self_.world_model = world_model
+
+            def forward(self_, tensordict):
+                tensordict = self_.world_model(tensordict)
+                logits = tensordict.pop(("next", "reward_logits"))
+                tensordict.set(("next", "reward"), logits)
+                return tensordict
+
+        world_model = LegacyWorldModel(self._create_world_model()).to(device)
+        model_loss = DreamerV3ModelLoss(
+            world_model, num_reward_bins=self.num_reward_bins
+        )
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            model_loss(self._create_world_model_data().to(device))
+
+        legacy_value = TensorDictModule(
+            MLP(out_features=self.num_reward_bins, depth=1, num_cells=8),
+            in_keys=["state", "belief"],
+            out_keys=["state_value"],
+        ).to(device)
+        value_loss = DreamerV3ValueLoss(
+            legacy_value,
+            value_loss="two_hot",
+            num_value_bins=self.num_reward_bins,
+        )
+        with pytest.warns(DeprecationWarning, match="removed in v0.16"):
+            value_loss(self._create_value_data().to(device))
+
+    def test_dreamer_v3_nested_logits_keys(self, device):
+        class NestedWorldModel(nn.Module):
+            def __init__(self_, world_model):
+                super().__init__()
+                self_.world_model = world_model
+
+            def forward(self_, tensordict):
+                tensordict = self_.world_model(tensordict)
+                tensordict.rename_key_(
+                    ("next", "reward_logits"),
+                    ("next", "predictions", "reward_logits"),
+                )
+                return tensordict
+
+        model_loss = DreamerV3ModelLoss(
+            NestedWorldModel(self._create_world_model()).to(device),
+            num_reward_bins=self.num_reward_bins,
+        )
+        model_loss.set_keys(reward_logits=("predictions", "reward_logits"))
+        model_loss(self._create_world_model_data().to(device))
+
+        value_model = TensorDictSequential(
+            TensorDictModule(
+                MLP(out_features=self.num_reward_bins, depth=1, num_cells=8),
+                in_keys=["state", "belief"],
+                out_keys=[("predictions", "value_logits")],
+            ),
+            TensorDictModule(
+                SymExpTwoHot(self.num_reward_bins),
+                in_keys=[("predictions", "value_logits")],
+                out_keys=[("predictions", "value")],
+            ),
+        ).to(device)
+        value_loss = DreamerV3ValueLoss(
+            value_model,
+            value_loss="two_hot",
+            num_value_bins=self.num_reward_bins,
+        )
+        value_loss.set_keys(
+            value=("predictions", "value"),
+            value_logits=("predictions", "value_logits"),
+        )
+        value_loss(self._create_value_data().to(device))
+
+    def test_dreamer_v3_sota_shares_imagination_parameters(self, device):
+        repo_root = Path(__file__).parents[2]
+        example = runpy.run_path(
+            repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
+            run_name="dreamer_v3_test",
+        )
+        cfg = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
+        cfg.networks.num_reward_bins = self.num_reward_bins
+        world_model, prior, reward_head, reward_decoder = example["build_world_model"](
+            cfg=cfg, obs_dim=3, action_dim=self.action_dim
+        )
+        imagination_model = example["build_imagination_model"](
+            prior_net=prior,
+            reward_net=reward_head,
+            reward_decoder=reward_decoder,
+        ).to(device)
+        world_model = world_model.to(device)
+        shared_parameters = tuple(prior.parameters()) + tuple(reward_head.parameters())
+        world_parameters = tuple(world_model.parameters())
+        imagination_parameters = tuple(imagination_model.parameters())
+        assert all(
+            any(parameter is candidate for candidate in world_parameters)
+            and any(parameter is candidate for candidate in imagination_parameters)
+            for parameter in shared_parameters
+        )
+
+        reward_td = TensorDict(
+            {
+                "state": torch.randn(2, self.state_dim, device=device),
+                "belief": torch.randn(2, cfg.networks.rnn_hidden_dim, device=device),
+            },
+            [2],
+        )
+        imagination_model.get_reward_operator()(reward_td)
+        assert reward_td["reward_logits"].shape == (2, self.num_reward_bins)
+        assert reward_td["reward"].shape == (2, 1)
 
     def test_dreamer_v3_value_invalid_loss_type(self, device):
         value_model = self._create_value_model()
@@ -839,6 +995,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                     nn.Unflatten(-1, (3, 64, 64)),
                 )
                 self_.reward_head = nn.LazyLinear(self.num_reward_bins)
+                self_.reward_decoder = SymExpTwoHot(self.num_reward_bins)
                 self_.prior = prior_net
                 self_.posterior = posterior_net
                 self_.num_cats = self.num_cats
@@ -879,7 +1036,8 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 td.set(("next", "prior_logits"), prior_logits)
                 td.set(("next", "posterior_logits"), post_logits)
                 td.set(("next", "reco_pixels"), reco_pixels)
-                td.set(("next", "reward"), reward_pred)
+                td.set(("next", "reward_logits"), reward_pred)
+                td.set(("next", "reward"), self_.reward_decoder(reward_pred))
                 return td
 
         world_model = _EndToEndWorldModel().to(device)
