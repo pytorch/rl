@@ -433,7 +433,7 @@ def test_manifest_version_skew_warns_without_blocking_load(
     assert len(warnings) == 1
     assert "Checkpoint dependency version skew detected" in warnings[0]
     assert package in warnings[0]
-    assert "Loading will continue" in warnings[0]
+    assert "The mismatch is non-fatal" in warnings[0]
 
 
 def test_manifest_without_versions_loads_silently(tmp_path, monkeypatch):

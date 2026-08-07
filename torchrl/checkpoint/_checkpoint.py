@@ -973,7 +973,7 @@ class Checkpoint:
             )
             torchrl_logger.warning(
                 "Checkpoint dependency version skew detected: %s. "
-                "Loading will continue, but restored state may be incompatible.",
+                "The mismatch is non-fatal, but restored state may be incompatible.",
                 version_skew,
             )
         options = component_options or {}
