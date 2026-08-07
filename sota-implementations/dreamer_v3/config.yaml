@@ -20,7 +20,8 @@ networks:
   num_categoricals: 4
   num_classes: 4
   obs_embed_dim: 32
-  num_reward_bins: 41
+  num_reward_bins: 255
+  num_value_bins: 255
   hidden_dim: 64
   depth: 2
 
@@ -30,6 +31,8 @@ optimization:
   updates_per_batch: 8
   imagination_horizon: 10
   use_reinforce: true
+  return_normalization_rate: 0.01
+  return_normalization_min_scale: 1.0
   free_bits: 1.0
   kl_alpha: 0.8
   gamma: 0.99

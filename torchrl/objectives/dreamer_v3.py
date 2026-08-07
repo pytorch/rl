@@ -11,21 +11,32 @@ World Models, Hafner et al. 2023, https://arxiv.org/abs/2301.04104):
 - :class:`DreamerV3ActorLoss` — actor (REINFORCE + entropy bonus)
 - :class:`DreamerV3ValueLoss` — value function (symlog MSE or two-hot CE)
 
-Utility functions :func:`symlog`, :func:`symexp`, :func:`two_hot_encode` and
-:func:`two_hot_decode` are also exported for use in custom models.
+Utility functions :func:`symlog`, :func:`symexp`, :func:`two_hot_encode`,
+:func:`two_hot_decode`, and :func:`two_hot_cross_entropy` are also exported for
+use in custom models.
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 
 from torchrl._utils import _maybe_record_function_decorator
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.modules.models.model_based_v3 import (
+    _default_bins,
+    _DEFAULT_NUM_BINS,
+    symexp as _symexp,
+    symlog as symlog,
+    two_hot_cross_entropy as two_hot_cross_entropy,
+    two_hot_decode as _two_hot_decode,
+    two_hot_encode as _two_hot_encode,
+)
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -35,144 +46,9 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import ValueEstimatorBase
 
-# ---------------------------------------------------------------------------
-# Symlog / symexp transforms
-# ---------------------------------------------------------------------------
-
-
-def symlog(x: torch.Tensor) -> torch.Tensor:
-    """Symmetric logarithm: ``sign(x) * log(|x| + 1)``.
-
-    Used by DreamerV3 to compress the dynamic range of targets and
-    predictions before computing reconstruction losses.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        x: Input tensor.
-
-    Returns:
-        Tensor of the same shape as ``x``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import symlog
-        >>> x = torch.tensor([-100.0, 0.0, 100.0])
-        >>> symlog(x)
-        tensor([-4.6151,  0.0000,  4.6151])
-    """
-    return x.sign() * (x.abs() + 1).log()
-
-
-def symexp(x: torch.Tensor) -> torch.Tensor:
-    """Symmetric exponential: ``sign(x) * (exp(|x|) - 1)``.
-
-    Inverse of :func:`symlog`.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        x: Input tensor.
-
-    Returns:
-        Tensor of the same shape as ``x``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import symexp, symlog
-        >>> x = torch.tensor([-1000.0, -1.0, 0.0, 1.0, 1000.0])
-        >>> torch.allclose(symexp(symlog(x)), x, atol=1e-4)
-        True
-    """
-    return x.sign() * (x.abs().exp() - 1)
-
-
-# ---------------------------------------------------------------------------
-# Two-hot encoding (for reward / value distributions)
-# ---------------------------------------------------------------------------
-
-# Default 255-bin linspace in symlog space: roughly covers [-20, 20] raw scale
-_DEFAULT_NUM_BINS: int = 255
-_DEFAULT_BIN_RANGE: float = 20.0
-
-
-def _default_bins(num_bins: int = _DEFAULT_NUM_BINS, device=None) -> torch.Tensor:
-    return torch.linspace(
-        -_DEFAULT_BIN_RANGE, _DEFAULT_BIN_RANGE, num_bins, device=device
-    )
-
-
-def two_hot_encode(
-    x: torch.Tensor,
-    bins: torch.Tensor,
-) -> torch.Tensor:
-    """Encode a scalar tensor as a two-hot distribution over ``bins``.
-
-    The scalar is split between the two nearest bin centers proportionally so
-    that ``E[bins] = x``.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        x: Values to encode, shape ``[...]``.
-        bins: Sorted bin centers, shape ``[num_bins]``.
-
-    Returns:
-        Two-hot vectors, shape ``[..., num_bins]``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import two_hot_encode
-        >>> bins = torch.linspace(-1.0, 1.0, 5)
-        >>> two_hot_encode(torch.tensor([0.25]), bins)
-        tensor([[0.0000, 0.0000, 0.5000, 0.5000, 0.0000]])
-    """
-    bins = bins.to(x.device)
-    x_clamped = x.clamp(bins[0], bins[-1])
-
-    # Index of the lower bin
-    lower_idx = (x_clamped.unsqueeze(-1) >= bins).sum(-1) - 1
-    lower_idx = lower_idx.clamp(0, bins.shape[0] - 2)
-    upper_idx = lower_idx + 1
-
-    lower_val = bins[lower_idx]
-    upper_val = bins[upper_idx]
-    span = upper_val - lower_val
-    upper_weight = torch.where(
-        span > 0, (x_clamped - lower_val) / span, torch.zeros_like(x_clamped)
-    )
-    lower_weight = 1.0 - upper_weight
-
-    two_hot = torch.zeros(*x.shape, bins.shape[0], device=x.device, dtype=x.dtype)
-    two_hot.scatter_(-1, lower_idx.unsqueeze(-1), lower_weight.unsqueeze(-1))
-    two_hot.scatter_(-1, upper_idx.unsqueeze(-1), upper_weight.unsqueeze(-1))
-    return two_hot
-
-
-def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
-    """Decode a distribution over ``bins`` to a scalar expectation.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        logits: Raw logits, shape ``[..., num_bins]``.
-        bins: Sorted bin centers, shape ``[num_bins]``.
-
-    Returns:
-        Scalar expected values, shape ``[...]``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import two_hot_decode, two_hot_encode
-        >>> bins = torch.linspace(-1.0, 1.0, 5)
-        >>> probs = two_hot_encode(torch.tensor([0.25]), bins)
-        >>> two_hot_decode((probs + 1e-8).log(), bins)
-        tensor([0.2500])
-    """
-    bins = bins.to(logits.device)
-    probs = torch.softmax(logits, dim=-1)
-    return (probs * bins).sum(-1)
-
+symexp = _symexp
+two_hot_decode = _two_hot_decode
+two_hot_encode = _two_hot_encode
 
 # ---------------------------------------------------------------------------
 # KL balancing for categorical distributions (DreamerV3 §3)
@@ -306,23 +182,26 @@ class DreamerV3ModelLoss(LossModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torch import nn
+        >>> from torchrl.modules import SymExpTwoHot
         >>> from torchrl.objectives import DreamerV3ModelLoss
         >>> class StubWorldModel(nn.Module):
         ...     def __init__(self):
         ...         super().__init__()
         ...         self.head = nn.LazyLinear(4 * 4)
         ...         self.reward_head = nn.LazyLinear(16)
+        ...         self.reward_decoder = SymExpTwoHot(16)
         ...         self.decoder = nn.LazyLinear(3 * 8 * 8)
         ...     def forward(self, td):
         ...         B, T = td.shape
         ...         x = torch.cat([td["state"], td["belief"]], dim=-1)
         ...         logits = self.head(x).view(B, T, 4, 4)
         ...         reco = self.decoder(x).view(B, T, 3, 8, 8)
-        ...         reward = self.reward_head(x)
+        ...         reward_logits = self.reward_head(x)
         ...         td.set(("next", "prior_logits"), logits)
         ...         td.set(("next", "posterior_logits"), logits)
         ...         td.set(("next", "reco_pixels"), reco)
-        ...         td.set(("next", "reward"), reward)
+        ...         td.set(("next", "reward_logits"), reward_logits)
+        ...         td.set(("next", "reward"), self.reward_decoder(reward_logits))
         ...         return td
         >>> wm = StubWorldModel()
         >>> td = TensorDict({
@@ -349,7 +228,10 @@ class DreamerV3ModelLoss(LossModule):
         """Configurable tensordict keys.
 
         Attributes:
-            reward (NestedKey): Predicted reward. Defaults to ``"reward"``.
+            reward (NestedKey): Decoded predicted reward. Defaults to
+                ``"reward"``.
+            reward_logits (NestedKey): Categorical reward logits. Defaults to
+                ``"reward_logits"``.
             true_reward (NestedKey): Ground-truth reward (stored temporarily).
                 Defaults to ``"true_reward"``.
             prior_logits (NestedKey): Prior categorical logits from the prior
@@ -367,6 +249,7 @@ class DreamerV3ModelLoss(LossModule):
         """
 
         reward: NestedKey = "reward"
+        reward_logits: NestedKey = "reward_logits"
         true_reward: NestedKey = "true_reward"
         prior_logits: NestedKey = "prior_logits"
         posterior_logits: NestedKey = "posterior_logits"
@@ -449,18 +332,30 @@ class DreamerV3ModelLoss(LossModule):
 
         # ---- Reward loss ----
         true_reward = tensordict.get(("next", self.tensor_keys.true_reward))
-        pred_reward = tensordict.get(("next", self.tensor_keys.reward))
-
         if self.reward_two_hot:
+            reward_logits_key = unravel_key(("next", self.tensor_keys.reward_logits))
+            pred_reward = tensordict.get(reward_logits_key, None)
+            if pred_reward is None:
+                legacy_key = unravel_key(("next", self.tensor_keys.reward))
+                pred_reward = tensordict.get(legacy_key)
+                warnings.warn(
+                    "Storing DreamerV3 categorical reward logits under the decoded "
+                    f"reward key {legacy_key!r} is deprecated and will be removed in "
+                    "v0.16. Write logits to the configured reward_logits key instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             if pred_reward.shape[-1] != self.num_reward_bins:
                 raise ValueError(
                     f"reward_two_hot=True expects the reward head to output "
                     f"logits over {self.num_reward_bins} bins, got trailing "
                     f"dim {pred_reward.shape[-1]}."
                 )
-            targets = two_hot_encode(symlog(true_reward.squeeze(-1)), self.reward_bins)
-            reward_loss = -(targets * torch.log_softmax(pred_reward, dim=-1)).sum(-1)
+            reward_loss = two_hot_cross_entropy(
+                pred_reward, true_reward, self.reward_bins
+            )
         else:
+            pred_reward = tensordict.get(("next", self.tensor_keys.reward))
             reward_loss = (symlog(true_reward) - symlog(pred_reward)).pow(2).squeeze(-1)
         reward_loss = reward_loss.mean().unsqueeze(-1)
 
@@ -525,6 +420,14 @@ class DreamerV3ActorLoss(LossModule):
             * stop-gradient advantage). If ``False``, uses the straight
             reparameterization gradient (suitable for continuous Gaussian
             actors). Default: ``False``.
+        return_normalization (bool, optional): Normalize detached REINFORCE
+            advantages by an EMA return-percentile span. Default: ``True``.
+        return_normalization_rate (float, optional): EMA update rate for the
+            return statistics. Default: ``0.01``.
+        return_normalization_quantiles (tuple of float, optional): Lower and
+            upper return quantiles. Default: ``(0.05, 0.95)``.
+        return_normalization_min_scale (float, optional): Minimum divisor for
+            REINFORCE advantages. Default: ``1.0``.
 
     Examples:
         >>> import torch
@@ -648,6 +551,10 @@ class DreamerV3ActorLoss(LossModule):
         discount_loss: bool = True,
         entropy_bonus: float = 3e-4,
         use_reinforce: bool = False,
+        return_normalization: bool = True,
+        return_normalization_rate: float = 0.01,
+        return_normalization_quantiles: tuple[float, float] = (0.05, 0.95),
+        return_normalization_min_scale: float = 1.0,
         gamma: float | None = None,
         lmbda: float | None = None,
     ):
@@ -659,6 +566,22 @@ class DreamerV3ActorLoss(LossModule):
         self.discount_loss = discount_loss
         self.entropy_bonus = entropy_bonus
         self.use_reinforce = use_reinforce
+        self.return_normalization = return_normalization
+        if not 0 <= return_normalization_rate <= 1:
+            raise ValueError("return_normalization_rate must be in [0, 1].")
+        lower_quantile, upper_quantile = return_normalization_quantiles
+        if not 0 <= lower_quantile < upper_quantile <= 1:
+            raise ValueError(
+                "return_normalization_quantiles must satisfy "
+                "0 <= lower < upper <= 1."
+            )
+        if return_normalization_min_scale <= 0:
+            raise ValueError("return_normalization_min_scale must be positive.")
+        self.return_normalization_rate = return_normalization_rate
+        self.return_normalization_quantiles = return_normalization_quantiles
+        self.return_normalization_min_scale = return_normalization_min_scale
+        self.register_buffer("return_low", torch.tensor(0.0))
+        self.register_buffer("return_high", torch.tensor(0.0))
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
@@ -710,9 +633,14 @@ class DreamerV3ActorLoss(LossModule):
                 self.value_model(baseline_td)
             baseline = baseline_td.get(self.tensor_keys.value)
             advantage = (lambda_target - baseline).detach()
+            return_scale = self._return_scale(lambda_target)
+            advantage = advantage / return_scale
             actor_loss = -(discount * log_prob * advantage).sum((-2, -1)).mean()
         else:
             # Reparameterization gradient
+            return_scale = torch.ones(
+                (), dtype=lambda_target.dtype, device=lambda_target.device
+            )
             actor_loss = -(discount * lambda_target).sum((-2, -1)).mean()
 
         # Entropy bonus (if actor provides log_prob)
@@ -722,9 +650,36 @@ class DreamerV3ActorLoss(LossModule):
             entropy = -(discount * log_prob_for_entropy).sum((-2, -1)).mean()
             actor_loss = actor_loss - self.entropy_bonus * entropy
 
-        loss_tensordict = TensorDict({"loss_actor": actor_loss}, [])
+        loss_tensordict = TensorDict(
+            {
+                "loss_actor": actor_loss,
+                "return_low": self.return_low.detach().clone(),
+                "return_high": self.return_high.detach().clone(),
+                "return_scale": return_scale.detach().clone(),
+            },
+            [],
+        )
         self._clear_weakrefs(tensordict, loss_tensordict)
         return loss_tensordict, fake_data.data
+
+    def _return_scale(self, returns: torch.Tensor) -> torch.Tensor:
+        if not self.return_normalization:
+            return torch.ones((), dtype=returns.dtype, device=returns.device)
+        if self.training:
+            quantiles = torch.tensor(
+                self.return_normalization_quantiles,
+                dtype=self.return_low.dtype,
+                device=self.return_low.device,
+            )
+            current_low, current_high = torch.quantile(
+                returns.detach().to(self.return_low), quantiles
+            )
+            with torch.no_grad():
+                self.return_low.lerp_(current_low, self.return_normalization_rate)
+                self.return_high.lerp_(current_high, self.return_normalization_rate)
+        return (self.return_high - self.return_low).clamp_min(
+            self.return_normalization_min_scale
+        )
 
     def lambda_target(self, reward: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
@@ -834,10 +789,14 @@ class DreamerV3ValueLoss(LossModule):
         """Configurable tensordict keys.
 
         Attributes:
-            value (NestedKey): Predicted value key. Defaults to ``"state_value"``.
+            value (NestedKey): Decoded predicted value key. Defaults to
+                ``"state_value"``.
+            value_logits (NestedKey): Categorical value logits key. Defaults to
+                ``"state_value_logits"``.
         """
 
         value: NestedKey = "state_value"
+        value_logits: NestedKey = "state_value_logits"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -895,8 +854,6 @@ class DreamerV3ValueLoss(LossModule):
 
         tensordict_select = fake_data.select(*self.value_model.in_keys, strict=False)
         self.value_model(tensordict_select)
-        value_pred = tensordict_select.get(self.tensor_keys.value)
-
         # lambda_target shape: [N, 1] (flat) or [B, T, 1] (batch x time)
         # Squeeze the trailing 1 for loss computation
         target_sq = lambda_target.squeeze(-1)  # [N] or [B, T]
@@ -910,16 +867,27 @@ class DreamerV3ValueLoss(LossModule):
             discount = torch.ones_like(target_sq)
 
         if self.value_loss == "two_hot":
+            value_pred = tensordict_select.get(self.tensor_keys.value_logits, None)
+            if value_pred is None:
+                value_pred = tensordict_select.get(self.tensor_keys.value)
+                warnings.warn(
+                    "Storing DreamerV3 categorical value logits under the decoded "
+                    f"value key {unravel_key(self.tensor_keys.value)!r} is deprecated "
+                    "and will be removed in v0.16. Write logits to the configured "
+                    "value_logits key instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             if value_pred.shape[-1] != self.value_bins.shape[0]:
                 raise ValueError(
                     f"value_loss='two_hot' expects the value head to output "
                     f"logits over {self.value_bins.shape[0]} bins, got trailing "
                     f"dim {value_pred.shape[-1]}."
                 )
-            targets = two_hot_encode(symlog(target_sq), self.value_bins)
-            loss = -(targets * torch.log_softmax(value_pred, dim=-1)).sum(-1)
+            loss = two_hot_cross_entropy(value_pred, target_sq, self.value_bins)
         else:
             # symlog MSE
+            value_pred = tensordict_select.get(self.tensor_keys.value)
             loss = (symlog(value_pred.squeeze(-1)) - symlog(target_sq)).pow(2)
 
         value_loss = (discount * loss).mean()

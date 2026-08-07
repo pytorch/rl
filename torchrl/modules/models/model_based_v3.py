@@ -14,6 +14,241 @@ from torch import nn
 from torch.nn import GRUCell
 
 
+_DEFAULT_NUM_BINS = 255
+_DEFAULT_BIN_RANGE = 20.0
+
+
+def symlog(x: torch.Tensor) -> torch.Tensor:
+    """Apply the element-wise symmetric logarithm transform.
+
+    Args:
+        x (torch.Tensor): Input tensor.
+
+    Returns:
+        A tensor with the same shape, dtype, and device as ``x``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import symlog
+        >>> symlog(torch.tensor([-100.0, 0.0, 100.0]))
+        tensor([-4.6151,  0.0000,  4.6151])
+    """
+    return x.sign() * (x.abs() + 1).log()
+
+
+def symexp(x: torch.Tensor) -> torch.Tensor:
+    """Apply the inverse of :func:`symlog` element-wise.
+
+    Args:
+        x (torch.Tensor): Input tensor.
+
+    Returns:
+        A tensor with the same shape, dtype, and device as ``x``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import symexp, symlog
+        >>> x = torch.tensor([-1000.0, 0.0, 1000.0])
+        >>> torch.allclose(symexp(symlog(x)), x, atol=1e-4)
+        True
+    """
+    return x.sign() * x.abs().expm1()
+
+
+def _default_bins(
+    num_bins: int = _DEFAULT_NUM_BINS,
+    *,
+    device: torch.device | str | None = None,
+    dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Build the symmetric raw-value support used by DreamerV3."""
+    if num_bins < 2:
+        raise ValueError(f"num_bins must be at least 2, got {num_bins}.")
+    dtype = dtype or torch.get_default_dtype()
+    half_size = num_bins // 2
+    if num_bins % 2:
+        half = torch.linspace(
+            -_DEFAULT_BIN_RANGE,
+            0,
+            half_size + 1,
+            device=device,
+            dtype=dtype,
+        )
+        half = symexp(half)
+        return torch.cat((half, -half[:-1].flip(0)))
+    step = 2 * _DEFAULT_BIN_RANGE / (num_bins - 1)
+    half = -_DEFAULT_BIN_RANGE + step * torch.arange(
+        half_size, device=device, dtype=dtype
+    )
+    half = symexp(half)
+    return torch.cat((half, -half.flip(0)))
+
+
+def two_hot_encode(x: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
+    """Encode raw scalar values on a sorted two-hot support.
+
+    Values between adjacent support points are represented by linear
+    interpolation in raw value space. Values outside the support saturate at
+    its endpoints.
+
+    Args:
+        x (torch.Tensor): Raw scalar targets.
+        bins (torch.Tensor): One-dimensional, ascending support.
+
+    Returns:
+        A tensor with shape ``(*x.shape, bins.numel())`` on the dtype and
+        device of ``x``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import two_hot_encode
+        >>> bins = torch.tensor([-1.0, 0.0, 1.0])
+        >>> two_hot_encode(torch.tensor([0.25]), bins)
+        tensor([[0.0000, 0.7500, 0.2500]])
+    """
+    if bins.ndim != 1 or bins.numel() < 2:
+        raise ValueError(
+            "bins must be a one-dimensional tensor with at least 2 values."
+        )
+    bins = bins.to(device=x.device, dtype=x.dtype)
+    x = x.clamp(bins[0], bins[-1])
+    lower = (x.unsqueeze(-1) >= bins).sum(-1) - 1
+    lower = lower.clamp(0, bins.numel() - 2)
+    upper = lower + 1
+    lower_value = bins[lower]
+    upper_value = bins[upper]
+    upper_weight = (x - lower_value) / (upper_value - lower_value)
+    lower_weight = 1 - upper_weight
+    target = torch.zeros((*x.shape, bins.numel()), device=x.device, dtype=x.dtype)
+    target.scatter_(-1, lower.unsqueeze(-1), lower_weight.unsqueeze(-1))
+    target.scatter_(-1, upper.unsqueeze(-1), upper_weight.unsqueeze(-1))
+    return target
+
+
+def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
+    """Decode logits over a raw-value support to their scalar expectation.
+
+    Args:
+        logits (torch.Tensor): Categorical logits whose trailing dimension
+            matches the support size.
+        bins (torch.Tensor): One-dimensional support in raw value space.
+
+    Returns:
+        The softmax-weighted expectation with the trailing category dimension
+        removed, preserving the dtype and device of ``logits``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import two_hot_decode, two_hot_encode
+        >>> bins = torch.tensor([-1.0, 0.0, 1.0])
+        >>> encoded = two_hot_encode(torch.tensor([0.25]), bins)
+        >>> two_hot_decode((encoded + 1e-8).log(), bins)
+        tensor([0.2500])
+    """
+    if bins.ndim != 1 or logits.shape[-1] != bins.numel():
+        raise ValueError(
+            "The trailing logits dimension must match the one-dimensional support."
+        )
+    bins = bins.to(device=logits.device, dtype=logits.dtype)
+    probs = torch.softmax(logits, dim=-1)
+    size = logits.shape[-1]
+    if size % 2:
+        midpoint = (size - 1) // 2
+        center = probs[..., midpoint] * bins[midpoint]
+        paired = (
+            (probs[..., :midpoint] * bins[:midpoint]).flip(-1)
+            + probs[..., midpoint + 1 :] * bins[midpoint + 1 :]
+        ).sum(-1)
+        return center + paired
+    midpoint = size // 2
+    return (
+        (probs[..., :midpoint] * bins[:midpoint]).flip(-1)
+        + probs[..., midpoint:] * bins[midpoint:]
+    ).sum(-1)
+
+
+def two_hot_cross_entropy(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    bins: torch.Tensor,
+) -> torch.Tensor:
+    """Return two-hot cross entropy for raw scalar targets.
+
+    Args:
+        logits (torch.Tensor): Categorical logits with bins in the trailing
+            dimension.
+        target (torch.Tensor): Raw scalar targets, optionally with a trailing
+            singleton dimension.
+        bins (torch.Tensor): One-dimensional support in raw value space.
+
+    Returns:
+        The unreduced cross entropy with the trailing category dimension
+        removed.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import two_hot_cross_entropy
+        >>> logits = torch.zeros(2, 3)
+        >>> target = torch.tensor([-0.5, 0.5])
+        >>> two_hot_cross_entropy(logits, target, torch.tensor([-1.0, 0.0, 1.0]))
+        tensor([1.0986, 1.0986])
+    """
+    if target.shape == (*logits.shape[:-1], 1):
+        target = target.squeeze(-1)
+    if target.shape != logits.shape[:-1]:
+        raise ValueError(
+            f"target shape must be {logits.shape[:-1]} or "
+            f"{(*logits.shape[:-1], 1)}, got {target.shape}."
+        )
+    encoded = two_hot_encode(target, bins)
+    return -(encoded * torch.log_softmax(logits, dim=-1)).sum(-1)
+
+
+class SymExpTwoHot(nn.Module):
+    """DreamerV3 categorical scalar representation.
+
+    The support contains ``num_bins`` raw scalar values obtained by applying
+    ``symexp`` to an evenly spaced grid from -20 to 20. Targets are interpolated
+    between adjacent raw support values, while predictions are decoded as the
+    softmax-weighted raw-value expectation.
+
+    Args:
+        num_bins (int, optional): Number of categorical support values.
+            Defaults to 255.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import SymExpTwoHot
+        >>> two_hot = SymExpTwoHot(num_bins=5)
+        >>> target = torch.tensor([-10.0, 0.0, 10.0])
+        >>> encoded = two_hot.encode(target)
+        >>> decoded = two_hot.decode(encoded.log())
+        >>> torch.allclose(decoded, target, atol=1e-3)
+        True
+    """
+
+    def __init__(self, num_bins: int = _DEFAULT_NUM_BINS):
+        super().__init__()
+        self.num_bins = num_bins
+        self.register_buffer("bins", _default_bins(num_bins))
+
+    def encode(self, target: torch.Tensor) -> torch.Tensor:
+        """Encode raw scalar targets as two-hot categorical targets."""
+        return two_hot_encode(target, self.bins)
+
+    def decode(self, logits: torch.Tensor) -> torch.Tensor:
+        """Decode categorical logits to raw scalar values."""
+        return two_hot_decode(logits, self.bins)
+
+    def loss(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Compute two-hot cross entropy against raw scalar targets."""
+        return two_hot_cross_entropy(logits, target, self.bins)
+
+    def forward(self, logits: torch.Tensor) -> torch.Tensor:
+        """Decode logits and retain a trailing scalar event dimension."""
+        return self.decode(logits).unsqueeze(-1)
+
+
 class RSSMPriorV3(nn.Module):
     """DreamerV3 prior network with discrete categorical latent state.
 
