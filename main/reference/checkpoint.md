@@ -84,9 +84,15 @@ the baseline tuple.
 
 The manifest records the checkpoint format version, adapter versions, component
 files, and TorchRL, TensorDict, and PyTorch versions. Newer unsupported formats
-and incompatible adapters fail clearly. Partial restoration reports loaded,
-missing, incompatible, and unrequested components through
-[`CheckpointLoadResult`](generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult).
+and incompatible adapters fail clearly. A dependency-version mismatch does not
+block restoration, but emits a warning and is reported by
+`CheckpointLoadResult.comparison`. This lets long-running off-policy jobs
+resume across environment changes while retaining an explicit compatibility
+signal. Manifests created before dependency provenance was recorded continue to
+load silently.
+
+Partial restoration reports loaded, missing, incompatible, and unrequested
+components through [`CheckpointLoadResult`](generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult).
 
 Trainer's legacy `CKPT_BACKEND` path remains available during the migration
 window. Passing `checkpoint=Checkpoint(...)` to a trainer opts into the
