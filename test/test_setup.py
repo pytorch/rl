@@ -90,14 +90,70 @@ def _expected_dist_version(base_version: str) -> str:
     return f"{base_version}+g{_git(['rev-parse', '--short', 'HEAD'])}"
 
 
-def test_build_extension_owns_cxx_standard():
+def test_build_extension_owns_cxx_standard_or_uses_alias():
     spec = importlib.util.spec_from_file_location("torchrl_setup", _ROOT / "setup.py")
     setup_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(setup_module)
 
+    compatibility_flag = setup_module._get_cxx20_compatibility_flag()
     for extension in setup_module.get_extensions():
-        for flags in extension.extra_compile_args.values():
-            assert not any("std=" in flag or "std:" in flag for flag in flags)
+        for compiler, flags in extension.extra_compile_args.items():
+            standard_flags = [
+                flag for flag in flags if "std=" in flag or "std:" in flag
+            ]
+            expected = (
+                [compatibility_flag]
+                if compiler == "cxx" and compatibility_flag is not None
+                else []
+            )
+            assert standard_flags == expected
+
+
+def test_detect_torch_extension_cxx20(monkeypatch):
+    spec = importlib.util.spec_from_file_location("torchrl_setup", _ROOT / "setup.py")
+    setup_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup_module)
+
+    monkeypatch.setattr(
+        setup_module.inspect,
+        "getsource",
+        lambda _: "cpp_flag = cpp_flag_prefix + 'c++20'",
+    )
+
+    assert setup_module._torch_extension_requires_cxx20()
+
+
+def test_legacy_cxx20_spelling_fallback(monkeypatch):
+    spec = importlib.util.spec_from_file_location("torchrl_setup", _ROOT / "setup.py")
+    setup_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup_module)
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0 if "-std=c++2a" in command else 1)
+
+    monkeypatch.setattr(setup_module.subprocess, "run", run)
+    monkeypatch.setattr(setup_module.sys, "platform", "linux")
+    monkeypatch.setattr(setup_module, "_torch_extension_requires_cxx20", lambda: True)
+
+    assert setup_module._get_cxx20_compatibility_flag() == "-std=c++2a"
+    assert [command[-5] for command in calls] == ["-std=c++20", "-std=c++2a"]
+
+
+def test_no_cxx20_fallback_for_older_torch(monkeypatch):
+    spec = importlib.util.spec_from_file_location("torchrl_setup", _ROOT / "setup.py")
+    setup_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(setup_module)
+
+    monkeypatch.setattr(setup_module, "_torch_extension_requires_cxx20", lambda: False)
+
+    def run(*args, **kwargs):
+        raise AssertionError("The compiler should not be probed for a C++17 build")
+
+    monkeypatch.setattr(setup_module.subprocess, "run", run)
+
+    assert setup_module._get_cxx20_compatibility_flag() is None
 
 
 @pytest.mark.parametrize(

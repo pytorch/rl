@@ -3,20 +3,23 @@ from __future__ import annotations
 import contextlib
 import glob
 import importlib.util
+import inspect
 import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 import torch
 from setuptools import setup
 from torch.utils.cpp_extension import (
+    CUDA_HOME,
     BuildExtension,
     CppExtension,
-    CUDA_HOME,
     CUDAExtension,
 )
 
@@ -96,6 +99,47 @@ def _get_build_cuda_version() -> str | None:
     if not _should_build_cuda():
         return None
     return _get_nvcc_cuda_version() or getattr(torch.version, "cuda", None)
+
+
+def _get_cxx20_compatibility_flag() -> str | None:
+    """Return the provisional C++20 spelling for older Unix compilers."""
+    if sys.platform == "win32" or not _torch_extension_requires_cxx20():
+        return None
+
+    compiler = os.getenv("CXX") or sysconfig.get_config_var("CXX") or "c++"
+    compiler_command = shlex.split(compiler)
+    source = "int main() { return 0; }\n"
+
+    def accepts(flag: str) -> bool:
+        try:
+            result = subprocess.run(
+                [*compiler_command, flag, "-x", "c++", "-fsyntax-only", "-"],
+                input=source,
+                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            return False
+        return result.returncode == 0
+
+    if accepts("-std=c++20"):
+        return None
+    if accepts("-std=c++2a"):
+        return "-std=c++2a"
+    return None
+
+
+def _torch_extension_requires_cxx20() -> bool:
+    """Detect the language standard selected by the installed BuildExtension."""
+    try:
+        source = inspect.getsource(BuildExtension.build_extensions)
+    except (OSError, TypeError):
+        source = ""
+    if re.search(r"cpp_flag\s*=.*['\"]c\+\+20['\"]", source):
+        return True
+    return "-std=c++20" in torch.__config__.show()
 
 
 def _check_and_clean_stale_builds():
@@ -230,9 +274,14 @@ def get_extensions():
             extra_link_args = ["/DEBUG"]
     else:
         # GCC/Clang flags for Unix-like systems
+        cxx20_compatibility_flag = _get_cxx20_compatibility_flag()
+        cxx_standard_args = (
+            [cxx20_compatibility_flag] if cxx20_compatibility_flag is not None else []
+        )
         extra_compile_args = {
             "cxx": [
                 "-O3",
+                *cxx_standard_args,
                 "-fdiagnostics-color=always",
             ]
         }
@@ -250,6 +299,7 @@ def get_extensions():
                     "-O0",
                     "-fno-inline",
                     "-g",
+                    *cxx_standard_args,
                     "-fdiagnostics-color=always",
                 ]
             }
