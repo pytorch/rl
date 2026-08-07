@@ -14,13 +14,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import torch
-from tensordict import (
-    is_tensor_collection,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-    unravel_key,
-)
+from tensordict import is_tensor_collection, NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from tensordict.utils import Buffer
 from torch import nn
@@ -310,12 +304,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         error = ValueError(
             f"loss_mask_key must be 'auto', None or a NestedKey, got {value!r}."
         )
-        if not isinstance(value, (str, tuple)):
+        if not isinstance(value, NestedKey):
             raise error
-        try:
-            unravel_key(value)
-        except Exception as err:
-            raise error from err
         self._loss_mask_key = value
 
     def _loss_mask_keys(self) -> tuple[NestedKey, ...]:

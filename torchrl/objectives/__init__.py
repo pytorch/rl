@@ -6,11 +6,7 @@
 from torchrl.objectives.a2c import A2CLoss
 from torchrl.objectives.act import ACTLoss
 from torchrl.objectives.bc import BCLoss
-from torchrl.objectives.common import (
-    add_random_module,
-    AUTO_LOSS_MASK_KEYS,
-    LossModule,
-)
+from torchrl.objectives.common import add_random_module, AUTO_LOSS_MASK_KEYS, LossModule
 from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
 from torchrl.objectives.ddpg import DDPGLoss

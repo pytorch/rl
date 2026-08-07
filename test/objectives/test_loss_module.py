@@ -46,11 +46,7 @@ from torchrl.objectives import (
     SACLoss,
     TD3Loss,
 )
-from torchrl.objectives.common import (
-    add_random_module,
-    AUTO_LOSS_MASK_KEYS,
-    LossModule,
-)
+from torchrl.objectives.common import add_random_module, AUTO_LOSS_MASK_KEYS, LossModule
 from torchrl.objectives.utils import (
     _VALUE_ESTIMATOR_REGISTRY,
     _vmap_func,
@@ -888,7 +884,7 @@ class TestLossMaskReduction:
             self._make("sum")(td).get("loss_x"), torch.full((), 4.0)
         )
 
-    @pytest.mark.parametrize("bad", [0, 1.5, object()])
+    @pytest.mark.parametrize("bad", [0, 1.5, object(), (), ("mask", 0), ("mask", None)])
     def test_invalid_loss_mask_key_raises(self, bad):
         loss = _MaskedToyLoss()
         with pytest.raises(ValueError, match="loss_mask_key"):
