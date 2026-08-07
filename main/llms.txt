@@ -500,6 +500,7 @@
 - [VLAWrapperBase](reference/generated/torchrl.modules.vla.VLAWrapperBase.md)
 - [A2CLoss](reference/generated/torchrl.objectives.A2CLoss.md)
 - [ACTLoss](reference/generated/torchrl.objectives.ACTLoss.md)
+- [torchrl.objectives.AUTO_LOSS_MASK_KEYS](reference/generated/torchrl.objectives.AUTO_LOSS_MASK_KEYS.md)
 - [BCLoss](reference/generated/torchrl.objectives.BCLoss.md)
 - [CQLLoss](reference/generated/torchrl.objectives.CQLLoss.md)
 - [ClipPPOLoss](reference/generated/torchrl.objectives.ClipPPOLoss.md)

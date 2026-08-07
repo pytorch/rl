@@ -6,6 +6,34 @@ Base classes and common utilities for all loss modules.
 | --- | --- |
 | [`add_random_module`](generated/torchrl.objectives.add_random_module.html#torchrl.objectives.add_random_module)(module) | Adds a random module to the list of modules that will be detected by [`vmap_randomness()`](generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.vmap_randomness) as random. |
 
+## Masked reduction
+
+Batches of padded sequences carry a per-position validity mask, and positions
+marked invalid must not contribute to the loss. Every loss reduces through
+`LossModule._reduce_loss()`, which reads that mask from the input according
+to [`LossModule.loss_mask_key`](generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.loss_mask_key):
+
+- `"auto"` (the default) looks for each entry of
+`AUTO_LOSS_MASK_KEYS` and ANDs the ones it
+finds, so a batch from `SliceSampler` with
+`pad_output=True` is handled without any configuration. On data carrying
+none of those entries the reduction is unchanged.
+- a `NestedKey` restricts masking to that single entry.
+- `None` disables masking.
+
+```
+loss = PPOLoss(actor, critic)
+loss.loss_mask_key = ("my_masks", "valid") # use this entry only
+loss.loss_mask_key = None # reduce over every position
+```
+
+Masked positions are selected out rather than multiplied by zero, so a
+non-finite value at a masked position affects neither the loss nor the
+gradients.
+
+| [`AUTO_LOSS_MASK_KEYS`](generated/torchrl.objectives.AUTO_LOSS_MASK_KEYS.html#torchrl.objectives.AUTO_LOSS_MASK_KEYS) | Built-in immutable sequence. |
+| --- | --- |
+
 ## Value Estimators
 
 | [`ValueEstimatorBase`](generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase)(*args, **kwargs) | An abstract parent class for value function modules. |

@@ -36,6 +36,19 @@ scalar assignment (e.g. `loss.entropy_coeff = 0.003`) for registered
 buffers that are commonly scheduled during training. The assignment performs
 an in-place update, preserving the buffer's device and dtype.
 
+Padded or otherwise invalid positions are excluded from the reduction
+through `loss_mask_key`. It defaults to `"auto"`, which discovers
+the validity masks TorchRL itself writes (`("collector", "mask")` from
+`SliceSampler` with `pad_output=True`, and
+`"shifted_valid"` from the value estimators); set it to a
+`NestedKey` to name a single mask entry, or to `None`
+to reduce over every position:
+
+```
+>>> loss.loss_mask_key = ("my_masks", "valid") # use this entry only
+>>> loss.loss_mask_key = None # no masking at all
+```
+
 Examples
 
 ```
@@ -159,6 +172,16 @@ Defaults to `True`.
 Note
 
 if the module is not functional, no copy is made.
+
+*property*loss_mask_key*: NestedKey | Literal['auto'] | None*
+
+Which input entry marks the positions that contribute to the loss.
+
+`"auto"` (the default) discovers the validity masks TorchRL writes
+itself - see [`AUTO_LOSS_MASK_KEYS`](torchrl.objectives.AUTO_LOSS_MASK_KEYS.html#torchrl.objectives.AUTO_LOSS_MASK_KEYS). A
+`NestedKey` restricts masking to that single entry;
+`None` disables it. To use an entry literally named `"auto"`, pass
+the one-element tuple `("auto",)`.
 
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)[[source]](../../_modules/torchrl/objectives/common.html#LossModule.make_value_estimator)
 

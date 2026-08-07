@@ -1917,6 +1917,7 @@ document.write(`
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Common Components</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.LossModule.html">LossModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.add_random_module.html">add_random_module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.AUTO_LOSS_MASK_KEYS.html">torchrl.objectives.AUTO_LOSS_MASK_KEYS</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.ValueEstimatorBase.html">ValueEstimatorBase</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.TD0Estimator.html">TD0Estimator</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.value.TD1Estimator.html">TD1Estimator</a></li>
@@ -2466,6 +2467,38 @@ document.write(`
 </tbody>
 </table>
 </div>
+<section id="masked-reduction">
+<h2>Masked reduction<a class="headerlink" href="#masked-reduction" title="Link to this heading">#</a></h2>
+<p>Batches of padded sequences carry a per-position validity mask, and positions
+marked invalid must not contribute to the loss. Every loss reduces through
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">LossModule._reduce_loss()</span></code>, which reads that mask from the input according
+to <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.loss_mask_key" title="torchrl.objectives.LossModule.loss_mask_key"><code class="xref py py-attr docutils literal notranslate"><span class="pre">LossModule.loss_mask_key</span></code></a>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code> (the default) looks for each entry of
+<code class="xref py py-data docutils literal notranslate"><span class="pre">AUTO_LOSS_MASK_KEYS</span></code> and ANDs the ones it
+finds, so a batch from <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> with
+<code class="docutils literal notranslate"><span class="pre">pad_output=True</span></code> is handled without any configuration. On data carrying
+none of those entries the reduction is unchanged.</p></li>
+<li><p>a <code class="xref py py-class docutils literal notranslate"><span class="pre">NestedKey</span></code> restricts masking to that single entry.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> disables masking.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">loss</span> <span class="o">=</span> <span class="n">PPOLoss</span><span class="p">(</span><span class="n">actor</span><span class="p">,</span> <span class="n">critic</span><span class="p">)</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">loss_mask_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;my_masks&quot;</span><span class="p">,</span> <span class="s2">&quot;valid&quot;</span><span class="p">)</span>  <span class="c1"># use this entry only</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">loss_mask_key</span> <span class="o">=</span> <span class="kc">None</span>                   <span class="c1"># reduce over every position</span>
+</pre></div>
+</div>
+<p>Masked positions are selected out rather than multiplied by zero, so a
+non-finite value at a masked position affects neither the loss nor the
+gradients.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.AUTO_LOSS_MASK_KEYS.html#torchrl.objectives.AUTO_LOSS_MASK_KEYS" title="torchrl.objectives.AUTO_LOSS_MASK_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AUTO_LOSS_MASK_KEYS</span></code></a></p></td>
+<td><p>Built-in immutable sequence.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="value-estimators">
 <span id="ref-returns"></span><h2>Value Estimators<a class="headerlink" href="#value-estimators" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
@@ -2622,6 +2655,7 @@ document.write(`
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#masked-reduction">Masked reduction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#value-estimators">Value Estimators</a><ul class="nav section-nav flex-column">
 </ul>
 </li>
@@ -2877,7 +2911,7 @@ document.write(`
        "headline": "Common Components",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_common.html",
-       "articleBody": "Common Components# Base classes and common utilities for all loss modules. LossModule(*args, **kwargs) A parent class for RL losses. add_random_module(module) Adds a random module to the list of modules that will be detected by vmap_randomness() as random. Value Estimators# ValueEstimatorBase(*args, **kwargs) An abstract parent class for value function modules. TD0Estimator(*args, **kwargs) Temporal Difference (TD(0)) estimate of advantage function. TD1Estimator(*args, **kwargs) \\(\\infty\\)-Temporal Difference (TD(1)) estimate of advantage function. TDLambdaEstimator(*args, **kwargs) TD(\\(\\lambda\\)) estimate of advantage function. GAE(*args, **kwargs) A class wrapper around the generalized advantage estimate functional. VTrace(*args, **kwargs) A class wrapper around V-Trace estimate functional. MultiAgentGAE(*args, **kwargs) Multi-agent Generalized Advantage Estimator. ValueEstimators(value[, names, module, ...]) Value function enumerator for custom-built estimators.",
+       "articleBody": "Common Components# Base classes and common utilities for all loss modules. LossModule(*args, **kwargs) A parent class for RL losses. add_random_module(module) Adds a random module to the list of modules that will be detected by vmap_randomness() as random. Masked reduction# Batches of padded sequences carry a per-position validity mask, and positions marked invalid must not contribute to the loss. Every loss reduces through LossModule._reduce_loss(), which reads that mask from the input according to LossModule.loss_mask_key: \"auto\" (the default) looks for each entry of AUTO_LOSS_MASK_KEYS and ANDs the ones it finds, so a batch from SliceSampler with pad_output=True is handled without any configuration. On data carrying none of those entries the reduction is unchanged. a NestedKey restricts masking to that single entry. None disables masking. loss = PPOLoss(actor, critic) loss.loss_mask_key = (\"my_masks\", \"valid\") # use this entry only loss.loss_mask_key = None # reduce over every position Masked positions are selected out rather than multiplied by zero, so a non-finite value at a masked position affects neither the loss nor the gradients. AUTO_LOSS_MASK_KEYS Built-in immutable sequence. Value Estimators# ValueEstimatorBase(*args, **kwargs) An abstract parent class for value function modules. TD0Estimator(*args, **kwargs) Temporal Difference (TD(0)) estimate of advantage function. TD1Estimator(*args, **kwargs) \\(\\infty\\)-Temporal Difference (TD(1)) estimate of advantage function. TDLambdaEstimator(*args, **kwargs) TD(\\(\\lambda\\)) estimate of advantage function. GAE(*args, **kwargs) A class wrapper around the generalized advantage estimate functional. VTrace(*args, **kwargs) A class wrapper around V-Trace estimate functional. MultiAgentGAE(*args, **kwargs) Multi-agent Generalized Advantage Estimator. ValueEstimators(value[, names, module, ...]) Value function enumerator for custom-built estimators.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

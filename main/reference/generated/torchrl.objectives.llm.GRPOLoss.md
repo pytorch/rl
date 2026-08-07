@@ -635,6 +635,16 @@ If a parameter or buffer is registered as `None` and its corresponding key
 exists in `state_dict`, `load_state_dict()` will raise a
 `RuntimeError`.
 
+*property*loss_mask_key*: NestedKey | Literal['auto'] | None*
+
+Which input entry marks the positions that contribute to the loss.
+
+`"auto"` (the default) discovers the validity masks TorchRL writes
+itself - see `AUTO_LOSS_MASK_KEYS`. A
+`NestedKey` restricts masking to that single entry;
+`None` disables it. To use an entry literally named `"auto"`, pass
+the one-element tuple `("auto",)`.
+
 make_value_estimator(*value_type: [ValueEstimators](torchrl.objectives.ValueEstimators.html#torchrl.objectives.ValueEstimators) = None*, ***hyperparams*)
 
 Value-function constructor.
