@@ -572,26 +572,42 @@ TRL Interoperability
 
 .. currentmodule:: torchrl.modules.llm
 
-TorchRL provides native adapters for interoperating with Hugging Face ``trl``.
-No loop rewrite is needed: pull in a single component and plug it into an
-existing ``trl`` or TorchRL training loop.
+TorchRL provides adapters for interoperating with Hugging Face ``trl`` while
+keeping replay storage and reward evaluation in TorchRL.
 
 **TorchRL -> TRL** (feed a ``trl.GRPOTrainer`` from a TorchRL buffer):
 
 .. code-block:: python
 
-    from torchrl.data import ReplayBuffer, LazyTensorStorage
+    from tensordict import TensorDict
+    from torchrl.data import ReplayBuffer, ListStorage
     from torchrl.modules.llm import TorchRLBufferDataset
-    from torch.utils.data import DataLoader
+    from trl import GRPOConfig, GRPOTrainer
 
-    rb = ReplayBuffer(storage=LazyTensorStorage(10_000), batch_size=32)
-    # ... fill rb with trajectories from an LLMCollector ...
+    rb = ReplayBuffer(storage=ListStorage(10_000), batch_size=32)
+    rb.add(TensorDict({"prompt": "Explain policy gradients."}, batch_size=[]))
 
-    dataset = TorchRLBufferDataset(rb, batch_size=32)
-    loader = DataLoader(dataset, batch_size=None)   # already batched
-    for batch in loader:
-        # batch is a dict[str, Tensor] ready for trl trainers
-        ...
+    torch_dataset = TorchRLBufferDataset(
+        rb,
+        batch_size=32,
+        keys=["prompt"],
+        num_batches=None,
+    )
+    train_dataset = torch_dataset.as_hf_dataset()
+
+    trainer = GRPOTrainer(
+        model="model-name",
+        reward_funcs=lambda completions, **kwargs: [0.0] * len(completions),
+        train_dataset=train_dataset,
+        args=GRPOConfig(max_steps=1_000),
+    )
+
+Current ``trl`` trainers require a :mod:`datasets` ``Dataset`` or
+``IterableDataset`` rather than a PyTorch ``IterableDataset``. Call
+:meth:`TorchRLBufferDataset.as_hf_dataset` for that bridge. The sampled data
+must contain the schema expected by the selected trainer: for example,
+``GRPOTrainer`` requires a top-level ``"prompt"`` field. An unbounded stream
+also requires a finite ``max_steps`` in the trainer configuration.
 
 **TRL -> TorchRL** (use an HF reward model inside a TorchRL GRPO step):
 
@@ -616,7 +632,7 @@ existing ``trl`` or TorchRL training loop.
     # Inside your GRPO / PPO rollout loop:
     rollout_td = ...  # TensorDict from LLMCollector
     reward_fn(rollout_td)  # writes "reward" key in-place
-    print(rollout_td["reward"].shape)  # [B]
+    assert rollout_td["reward"].shape == rollout_td.batch_size
 
 .. seealso::
 

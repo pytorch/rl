@@ -27,6 +27,7 @@ from torchrl.data.replay_buffers import (
     SliceSampler,
 )
 from torchrl.envs.transforms import ActionChunkTransform, CatFrames
+from torchrl.modules.llm import TorchRLBufferDataset
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
     TensorDictPrioritizedReplayBuffer, alpha=1, beta=0.9
@@ -101,6 +102,10 @@ def iterate(rb):
     next(rb)
 
 
+def consume_buffer_dataset(dataset):
+    return list(dataset)
+
+
 class StorageView:
     ndim = 1
     shape = None
@@ -112,6 +117,24 @@ class StorageView:
 
     def __len__(self):
         return self.size
+
+
+def test_torchrl_buffer_dataset(benchmark):
+    replay_buffer = ReplayBuffer(storage=LazyTensorStorage(1024))
+    replay_buffer.extend(
+        TensorDict(
+            {
+                "input_ids": torch.randint(0, 1024, (1024, 128)),
+                ("metadata", "score"): torch.randn(1024),
+            },
+            batch_size=[1024],
+        )
+    )
+    dataset = TorchRLBufferDataset(replay_buffer, batch_size=256)
+
+    samples = benchmark(consume_buffer_dataset, dataset)
+
+    assert len(samples) == 256
 
 
 def _skip_or_fail_unavailable(message):

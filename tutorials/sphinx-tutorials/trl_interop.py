@@ -10,8 +10,8 @@ This tutorial demonstrates how to bridge TorchRL and Hugging Face ``trl``
 using the two adapter classes introduced in Workstream 2 of the post-training
 RFC (:ref:`trl_interop_section`):
 
-* :class:`~torchrl.modules.llm.TorchRLBufferDataset`: feed a ``trl`` trainer
-  directly from a TorchRL :class:`~torchrl.data.ReplayBuffer`.
+* :class:`~torchrl.modules.llm.TorchRLBufferDataset`: expose replay samples as
+  PyTorch or Hugging Face iterable datasets.
 * :class:`~torchrl.modules.llm.HFRewardModelWrapper`: consume a Hugging Face
   reward model inside any TorchRL training loop.
 
@@ -19,7 +19,7 @@ What you will learn
 -------------------
 
 * How to wrap a TorchRL replay buffer as a ``torch.utils.data.IterableDataset``
-  so ``trl`` trainers can sample from it with zero boilerplate.
+  and bridge it to the Hugging Face ``datasets`` interface required by ``trl``.
 * How to key-filter the yielded samples and move tensors to a target device.
 * How to wrap an HF reward model as a ``TensorDictModuleBase`` and plug it
   directly into a TorchRL GRPO / PPO rollout.
@@ -35,6 +35,7 @@ What you will learn
 
 import torch
 from tensordict import TensorDict
+
 from torchrl.data import ListStorage, ReplayBuffer
 
 # %%
@@ -42,8 +43,9 @@ from torchrl.data import ListStorage, ReplayBuffer
 # ================================================
 #
 # We start with the ``TorchRL -> TRL`` direction.  The goal is to produce a
-# :class:`torch.utils.data.IterableDataset` that a ``trl`` ``GRPOTrainer``
-# (or any HuggingFace ``Trainer``) can consume directly.
+# :class:`torch.utils.data.IterableDataset`. Current ``trl`` trainers require
+# a Hugging Face ``datasets.IterableDataset``; the adapter exposes that form
+# through ``as_hf_dataset()`` when the optional dependency is installed.
 
 # %%
 # Step 1: build and populate a replay buffer
@@ -62,6 +64,7 @@ for _ in range(N_SAMPLES):
     rb.add(
         TensorDict(
             {
+                "prompt": "Explain one reinforcement-learning concept.",
                 "input_ids": torch.randint(0, 1000, (SEQ_LEN,)),
                 "attention_mask": torch.ones(SEQ_LEN, dtype=torch.long),
                 "labels": torch.randint(0, 2, (SEQ_LEN,)),
@@ -80,16 +83,28 @@ for _ in range(N_SAMPLES):
 
 from torchrl.modules.llm import TorchRLBufferDataset
 
-dataset = TorchRLBufferDataset(rb, batch_size=BATCH_SIZE)
+dataset = TorchRLBufferDataset(rb, batch_size=BATCH_SIZE, num_batches=1)
 
 # %%
 # Iterate and inspect
 samples = list(dataset)
 # Each yielded item is a single sample (no batch dimension)
 sample = samples[0]
-print(f"Keys in sample: {sorted(sample.keys())}")
-print(f"input_ids shape: {sample['input_ids'].shape}")  # [SEQ_LEN]
-print(f"Number of samples per __iter__ call: {len(samples)}")  # BATCH_SIZE
+assert "input_ids" in sample
+assert sample["input_ids"].shape == torch.Size([SEQ_LEN])
+assert len(samples) == BATCH_SIZE
+
+# %%
+# ``trl.GRPOTrainer`` requires a Hugging Face ``datasets.IterableDataset``
+# with a top-level ``"prompt"`` field. With ``datasets`` installed, create an
+# unbounded stream and set a finite ``max_steps`` on the trainer::
+#
+#     trl_dataset = TorchRLBufferDataset(
+#         rb,
+#         batch_size=BATCH_SIZE,
+#         keys=["prompt"],
+#         num_batches=None,
+#     ).as_hf_dataset()
 
 # %%
 # Step 3: key filtering
@@ -105,7 +120,6 @@ dataset_filtered = TorchRLBufferDataset(
 )
 filtered_sample = next(iter(dataset_filtered))
 assert set(filtered_sample.keys()) == {"input_ids", "attention_mask"}
-print(f"Filtered keys: {sorted(filtered_sample.keys())}")
 
 # %%
 # Step 4: device placement
@@ -119,7 +133,6 @@ for s in dataset_cpu:
     for v in s.values():
         if isinstance(v, torch.Tensor):
             assert v.device == torch.device("cpu")
-print("All tensors on cpu: True")
 
 # %%
 # Step 5: nested keys
@@ -152,7 +165,6 @@ dataset_nested = TorchRLBufferDataset(
     keys=[("tokens", "full"), ("masks", "all_attention_mask")],
 )
 nested_sample = next(iter(dataset_nested))
-print(f"Nested keys after serialisation: {sorted(nested_sample.keys())}")
 assert "tokens.full" in nested_sample
 assert "masks.all_attention_mask" in nested_sample
 
@@ -216,8 +228,8 @@ reward_fn = HFRewardModelWrapper(
     inference_mode=True,  # disable grad for pure reward inference
 )
 
-print(f"in_keys : {reward_fn.in_keys}")
-print(f"out_keys: {reward_fn.out_keys}")
+assert ("tokens", "full") in reward_fn.in_keys
+assert "reward" in reward_fn.out_keys
 
 # %%
 # Step 3: run a batch through the wrapper
@@ -238,8 +250,8 @@ td = TensorDict(
 )
 
 result = reward_fn(td)
-print(f"reward shape: {result['reward'].shape}")  # [B]
-print(f"reward dtype: {result['reward'].dtype}")  # torch.float32
+assert result["reward"].shape == torch.Size([B])
+assert result["reward"].dtype == torch.float32
 
 # %%
 # Step 4: custom keys and nested reward key
@@ -264,7 +276,7 @@ td2 = TensorDict(
     batch_size=[B],
 )
 result2 = reward_fn_custom(td2)
-print(f"nested reward shape: {result2.get(('reward', 'value')).shape}")  # [B]
+assert result2.get(("reward", "value")).shape == torch.Size([B])
 
 # %%
 # Part 3 -- Round-trip: buffer -> dataset -> reward wrapper
@@ -321,7 +333,7 @@ td_rt = TensorDict(
 # Score with reward wrapper
 reward_fn_rt = HFRewardModelWrapper(ToyRewardModel(), inference_mode=True)
 result_rt = reward_fn_rt(td_rt)
-print(f"Round-trip reward shape: {result_rt['reward'].shape}")  # [8]
+assert result_rt["reward"].shape == torch.Size([8])
 
 # %%
 # Conclusion
