@@ -607,7 +607,8 @@ Current ``trl`` trainers require a :mod:`datasets` ``Dataset`` or
 :meth:`TorchRLBufferDataset.as_hf_dataset` for that bridge. The sampled data
 must contain the schema expected by the selected trainer: for example,
 ``GRPOTrainer`` requires a top-level ``"prompt"`` field. An unbounded stream
-also requires a finite ``max_steps`` in the trainer configuration.
+also requires a finite ``max_steps`` in the trainer configuration. Install the
+integration dependencies with ``pip install torchrl[llm] trl``.
 
 **TRL -> TorchRL** (use an HF reward model inside a TorchRL GRPO step):
 

@@ -53,6 +53,7 @@ from torchrl.modules.llm.trl_interop import (
 
 _has_datasets = importlib.util.find_spec("datasets") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
+_has_trl = importlib.util.find_spec("trl") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
 # _has_datasets = importlib.util.find_spec("datasets") is not None
@@ -4049,6 +4050,71 @@ class TestTRLInterop:
         assert isinstance(dataset, IterableDataset)
         sample = next(iter(dataset))
         assert isinstance(sample["prompt"], str)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_transformers and _has_trl),
+        reason="trl integration dependencies not available",
+    )
+    def test_torchrl_buffer_dataset_grpo_trainer(self, tmp_path):
+        """A real GRPOTrainer can read prompts from the replay-buffer stream."""
+        from tokenizers import Tokenizer, models, pre_tokenizers
+        from transformers import (
+            GPT2Config,
+            GPT2LMHeadModel,
+            PreTrainedTokenizerFast,
+        )
+        from trl import GRPOConfig, GRPOTrainer
+
+        raw_tokenizer = Tokenizer(
+            models.WordLevel(
+                {"[PAD]": 0, "[UNK]": 1, "[EOS]": 2, "Question": 3},
+                unk_token="[UNK]",
+            )
+        )
+        raw_tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=raw_tokenizer,
+            pad_token="[PAD]",
+            eos_token="[EOS]",
+            unk_token="[UNK]",
+        )
+        model = GPT2LMHeadModel(
+            GPT2Config(
+                vocab_size=4,
+                n_embd=16,
+                n_layer=1,
+                n_head=2,
+                bos_token_id=2,
+                eos_token_id=2,
+                pad_token_id=0,
+            )
+        )
+        dataset = TorchRLBufferDataset(
+            self._make_rb(),
+            batch_size=4,
+            keys=["prompt"],
+            num_batches=None,
+        ).as_hf_dataset()
+        args = GRPOConfig(
+            output_dir=str(tmp_path),
+            max_steps=1,
+            per_device_train_batch_size=2,
+            num_generations=2,
+            max_completion_length=2,
+            use_cpu=True,
+            report_to="none",
+        )
+        trainer = GRPOTrainer(
+            model=model,
+            reward_funcs=lambda completions, **kwargs: [0.0] * len(completions),
+            args=args,
+            train_dataset=dataset,
+            processing_class=tokenizer,
+        )
+
+        batch = next(iter(trainer.get_train_dataloader()))
+        assert len(batch) == 2
+        assert all(isinstance(sample["prompt"], str) for sample in batch)
 
     def test_torchrl_buffer_dataset_repr(self):
         """Repr should be a non-empty string without raising."""

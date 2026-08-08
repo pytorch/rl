@@ -23,6 +23,7 @@ dependencies:
     - scipy
     - hydra-core<1.4
     - transformers
+    - trl
     - accelerate
     - datasets
     - vllm==0.22.0
