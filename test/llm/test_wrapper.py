@@ -3886,6 +3886,442 @@ class TestRequestOutputConversion:
         assert result.prompt_logprobs[0].numel() == 0
 
 
+class TestTRLInterop:
+    """Tests for TorchRLBufferDataset and HFRewardModelWrapper (Issue #4058)."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_rb(n: int = 10, seq_len: int = 8):
+        """Create a small in-memory ReplayBuffer filled with token TensorDicts."""
+        from tensordict import TensorDict
+        from torchrl.data import ListStorage, ReplayBuffer
+
+        rb = ReplayBuffer(storage=ListStorage(max_size=100), batch_size=4)
+        for _ in range(n):
+            rb.add(
+                TensorDict(
+                    {
+                        "input_ids": torch.randint(0, 100, (seq_len,)),
+                        "attention_mask": torch.ones(seq_len, dtype=torch.long),
+                        "reward": torch.tensor(float(torch.randn(1).item())),
+                    },
+                    batch_size=[],
+                )
+            )
+        return rb
+
+    @staticmethod
+    def _make_nested_rb(n: int = 10, seq_len: int = 8):
+        """Create a buffer where tokens live under a nested key (tokens, full)."""
+        from tensordict import TensorDict
+        from torchrl.data import ListStorage, ReplayBuffer
+
+        rb = ReplayBuffer(storage=ListStorage(max_size=100), batch_size=4)
+        for _ in range(n):
+            rb.add(
+                TensorDict(
+                    {
+                        "tokens": TensorDict(
+                            {"full": torch.randint(0, 100, (seq_len,))},
+                            batch_size=[],
+                        ),
+                        "masks": TensorDict(
+                            {
+                                "all_attention_mask": torch.ones(
+                                    seq_len, dtype=torch.long
+                                )
+                            },
+                            batch_size=[],
+                        ),
+                    },
+                    batch_size=[],
+                )
+            )
+        return rb
+
+    @staticmethod
+    def _make_dummy_reward_model(batch_logits_shape: tuple = (1,)):
+        """Return a stand-in HF reward model with a .logits attribute."""
+
+        class _DummyRewardModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                B = input_ids.shape[0]
+
+                class _Out:
+                    pass
+
+                out = _Out()
+                out.logits = torch.randn(B, *batch_logits_shape)
+                return out
+
+        return _DummyRewardModel()
+
+    # ------------------------------------------------------------------
+    # TorchRLBufferDataset
+    # ------------------------------------------------------------------
+
+    def test_torchrl_buffer_dataset_yields_dicts(self):
+        """Each item yielded by the dataset must be a dict with the expected keys."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4)
+        samples = list(dataset)
+        assert len(samples) == 4, "Expected 4 samples (one per batch element)"
+        for sample in samples:
+            assert isinstance(sample, dict)
+            assert "input_ids" in sample
+            assert "attention_mask" in sample
+            assert isinstance(sample["input_ids"], torch.Tensor)
+            assert sample["input_ids"].shape == (8,)
+
+    def test_torchrl_buffer_dataset_key_filter(self):
+        """The ``keys`` argument should restrict which keys appear in each dict."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4, keys=["input_ids"])
+        for sample in dataset:
+            assert set(sample.keys()) == {"input_ids"}
+
+    def test_torchrl_buffer_dataset_device(self):
+        """The ``device`` argument should move tensors to the requested device."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4, device="cpu")
+        for sample in dataset:
+            for v in sample.values():
+                if isinstance(v, torch.Tensor):
+                    assert v.device == torch.device("cpu")
+
+    def test_torchrl_buffer_dataset_nested_key(self):
+        """Nested NestedKey inputs should be yielded under a 'key0.key1' string key."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        rb = self._make_nested_rb(n=10)
+        # Pass a nested key tuple to the keys filter
+        dataset = TorchRLBufferDataset(
+            rb,
+            batch_size=4,
+            keys=[("tokens", "full"), ("masks", "all_attention_mask")],
+        )
+        for sample in dataset:
+            assert "tokens.full" in sample
+            assert "masks.all_attention_mask" in sample
+            assert isinstance(sample["tokens.full"], torch.Tensor)
+
+    def test_torchrl_buffer_dataset_repr(self):
+        """Repr should be a non-empty string without raising."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4)
+        r = repr(dataset)
+        assert "TorchRLBufferDataset" in r
+
+    def test_torchrl_buffer_dataset_type_error(self):
+        """Passing a non-ReplayBuffer should raise TypeError."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        with pytest.raises(TypeError, match="ReplayBuffer"):
+            TorchRLBufferDataset("not_a_buffer", batch_size=4)
+
+    def test_torchrl_buffer_dataset_bad_batch_size(self):
+        """A non-positive batch_size should raise ValueError."""
+        from torchrl.modules.llm.trl_interop import TorchRLBufferDataset
+
+        rb = self._make_rb()
+        with pytest.raises(ValueError, match="positive integer"):
+            TorchRLBufferDataset(rb, batch_size=0)
+
+    # ------------------------------------------------------------------
+    # HFRewardModelWrapper
+    # ------------------------------------------------------------------
+
+    def test_hf_reward_model_wrapper_forward(self):
+        """HFRewardModelWrapper should write a [B] reward tensor to the output TD."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        model = self._make_dummy_reward_model(batch_logits_shape=(1,))
+        wrapper = HFRewardModelWrapper(model)
+
+        td = TensorDict(
+            {
+                "tokens": TensorDict(
+                    {"full": torch.randint(0, 1000, (2, 16))}, batch_size=[2]
+                ),
+                "masks": TensorDict(
+                    {"all_attention_mask": torch.ones(2, 16, dtype=torch.long)},
+                    batch_size=[2],
+                ),
+            },
+            batch_size=[2],
+        )
+        result = wrapper(td)
+
+        assert "reward" in result.keys()
+        assert result["reward"].shape == torch.Size([2])
+        assert result["reward"].dtype == torch.float32
+
+    def test_hf_reward_model_wrapper_logits_shape_scalar(self):
+        """Model returning logits of shape [B] (already scalar) should work."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        model = self._make_dummy_reward_model(batch_logits_shape=())
+        wrapper = HFRewardModelWrapper(model)
+
+        td = TensorDict(
+            {
+                "tokens": TensorDict(
+                    {"full": torch.randint(0, 1000, (3, 12))}, batch_size=[3]
+                ),
+            },
+            batch_size=[3],
+        )
+        result = wrapper(td)
+        assert result["reward"].shape == torch.Size([3])
+
+    def test_hf_reward_model_wrapper_in_keys(self):
+        """Custom token_key and attention_mask_key should be read correctly."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        model = self._make_dummy_reward_model()
+        wrapper = HFRewardModelWrapper(
+            model,
+            token_key="input_ids",
+            attention_mask_key="attention_mask",
+            reward_key="score",
+        )
+
+        assert "input_ids" in wrapper.in_keys
+        assert "attention_mask" in wrapper.in_keys
+        assert "score" in wrapper.out_keys
+
+        td = TensorDict(
+            {
+                "input_ids": torch.randint(0, 1000, (2, 10)),
+                "attention_mask": torch.ones(2, 10, dtype=torch.long),
+            },
+            batch_size=[2],
+        )
+        result = wrapper(td)
+        assert "score" in result.keys()
+        assert result["score"].shape == torch.Size([2])
+
+    def test_hf_reward_model_wrapper_nested_reward_key(self):
+        """Nested reward_key (a NestedKey tuple) must be written correctly."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        model = self._make_dummy_reward_model()
+        wrapper = HFRewardModelWrapper(
+            model,
+            token_key="input_ids",
+            attention_mask_key=None,  # omit mask
+            reward_key=("reward", "value"),
+        )
+
+        assert ("reward", "value") in wrapper.out_keys
+
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 1000, (2, 10))},
+            batch_size=[2],
+        )
+        result = wrapper(td)
+        # Nested access: result["reward"]["value"] should be shape [2]
+        assert result.get(("reward", "value")).shape == torch.Size([2])
+
+    def test_hf_reward_model_wrapper_no_attention_mask(self):
+        """attention_mask_key=None should call model without mask argument."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        call_log = []
+
+        class _NomaskModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                call_log.append(attention_mask)
+
+                class _Out:
+                    logits = torch.randn(input_ids.shape[0], 1)
+
+                return _Out()
+
+        wrapper = HFRewardModelWrapper(
+            _NomaskModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+        wrapper(td)
+        assert call_log[-1] is None, "attention_mask should be None when key is None"
+
+    def test_hf_reward_model_wrapper_inference_mode(self):
+        """inference_mode=True should disable grad for model forward."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        grad_states = []
+
+        class _GradCheckModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                grad_states.append(torch.is_grad_enabled())
+
+                class _Out:
+                    logits = torch.randn(input_ids.shape[0], 1)
+
+                return _Out()
+
+        wrapper = HFRewardModelWrapper(
+            _GradCheckModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+            inference_mode=True,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+        wrapper(td)
+        assert not grad_states[-1], "Grad should be disabled with inference_mode=True"
+
+    def test_hf_reward_model_wrapper_missing_token_key(self):
+        """Missing token_key in TensorDict should raise KeyError."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        wrapper = HFRewardModelWrapper(
+            self._make_dummy_reward_model(),
+            token_key="input_ids",
+            attention_mask_key=None,
+        )
+        # Do NOT include 'input_ids'
+        td = TensorDict({"something_else": torch.zeros(2, 8)}, batch_size=[2])
+        with pytest.raises(KeyError, match="input_ids"):
+            wrapper(td)
+
+    def test_hf_reward_model_wrapper_bad_output(self):
+        """Model returning an unrecognised output type should raise RuntimeError."""
+        from tensordict import TensorDict
+        from torchrl.modules.llm.trl_interop import HFRewardModelWrapper
+
+        class _BadModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                return "this is not a valid reward output"
+
+        wrapper = HFRewardModelWrapper(
+            _BadModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+        with pytest.raises(RuntimeError, match="could not extract reward"):
+            wrapper(td)
+
+    # ------------------------------------------------------------------
+    # Round-trip integration test
+    # ------------------------------------------------------------------
+
+    def test_round_trip_buffer_to_reward_wrapper(self):
+        """Integration: sample from buffer via dataset, run through HFRewardModelWrapper."""
+        from tensordict import TensorDict
+        from torchrl.data import ListStorage, ReplayBuffer
+        from torchrl.modules.llm.trl_interop import (
+            HFRewardModelWrapper,
+            TorchRLBufferDataset,
+        )
+
+        # 1. Populate a buffer that mimics rollout data
+        rb = ReplayBuffer(storage=ListStorage(max_size=100), batch_size=8)
+        seq_len = 16
+        for _ in range(20):
+            rb.add(
+                TensorDict(
+                    {
+                        "tokens": TensorDict(
+                            {"full": torch.randint(0, 1000, (seq_len,))},
+                            batch_size=[],
+                        ),
+                        "masks": TensorDict(
+                            {
+                                "all_attention_mask": torch.ones(
+                                    seq_len, dtype=torch.long
+                                )
+                            },
+                            batch_size=[],
+                        ),
+                    },
+                    batch_size=[],
+                )
+            )
+
+        # 2. Wrap as IterableDataset and collect one batch worth of samples
+        dataset = TorchRLBufferDataset(
+            rb,
+            batch_size=8,
+            keys=[("tokens", "full"), ("masks", "all_attention_mask")],
+        )
+        samples = list(dataset)
+        assert len(samples) == 8
+
+        # 3. Re-batch samples into a TensorDict for the reward wrapper
+        batch_ids = torch.stack([s["tokens.full"] for s in samples])  # [8, 16]
+        batch_mask = torch.stack(
+            [s["masks.all_attention_mask"] for s in samples]
+        )  # [8, 16]
+
+        td_batch = TensorDict(
+            {
+                "tokens": TensorDict({"full": batch_ids}, batch_size=[8]),
+                "masks": TensorDict({"all_attention_mask": batch_mask}, batch_size=[8]),
+            },
+            batch_size=[8],
+        )
+
+        # 4. Forward through the reward wrapper
+        reward_model = self._make_dummy_reward_model(batch_logits_shape=(1,))
+        wrapper = HFRewardModelWrapper(reward_model, inference_mode=True)
+        result = wrapper(td_batch)
+
+        assert "reward" in result.keys()
+        assert result["reward"].shape == torch.Size([8])
+        assert result["reward"].dtype == torch.float32
+
+    def test_lazy_import_from_llm_module(self):
+        """TorchRLBufferDataset and HFRewardModelWrapper should be importable
+        from ``torchrl.modules.llm`` without loading trl / transformers."""
+        import torchrl.modules.llm as llm_mod
+
+        # Access via __getattr__ lazy dispatch
+        TorchRLBufferDataset = llm_mod.TorchRLBufferDataset
+        HFRewardModelWrapper = llm_mod.HFRewardModelWrapper
+
+        assert TorchRLBufferDataset is not None
+        assert HFRewardModelWrapper is not None
+
+        # They should be the same objects as direct imports
+        from torchrl.modules.llm.trl_interop import (
+            HFRewardModelWrapper as _HF,
+            TorchRLBufferDataset as _DS,
+        )
+
+        assert TorchRLBufferDataset is _DS
+        assert HFRewardModelWrapper is _HF
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

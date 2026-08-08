@@ -564,3 +564,62 @@ Distillation
     :template: rl_template.rst
 
     TopKRewardSelector
+
+.. _trl_interop_section:
+
+TRL Interoperability
+--------------------
+
+.. currentmodule:: torchrl.modules.llm
+
+TorchRL provides native adapters for interoperating with Hugging Face ``trl``.
+No loop rewrite is needed: pull in a single component and plug it into an
+existing ``trl`` or TorchRL training loop.
+
+**TorchRL -> TRL** (feed a ``trl.GRPOTrainer`` from a TorchRL buffer):
+
+.. code-block:: python
+
+    from torchrl.data import ReplayBuffer, LazyTensorStorage
+    from torchrl.modules.llm import TorchRLBufferDataset
+    from torch.utils.data import DataLoader
+
+    rb = ReplayBuffer(storage=LazyTensorStorage(10_000), batch_size=32)
+    # ... fill rb with trajectories from an LLMCollector ...
+
+    dataset = TorchRLBufferDataset(rb, batch_size=32)
+    loader = DataLoader(dataset, batch_size=None)   # already batched
+    for batch in loader:
+        # batch is a dict[str, Tensor] ready for trl trainers
+        ...
+
+**TRL -> TorchRL** (use an HF reward model inside a TorchRL GRPO step):
+
+.. code-block:: python
+
+    from transformers import AutoModelForSequenceClassification
+    from torchrl.modules.llm import HFRewardModelWrapper
+    from tensordict import TensorDict
+    import torch
+
+    hf_model = AutoModelForSequenceClassification.from_pretrained(
+        "my-org/reward-model-v1", num_labels=1
+    )
+    reward_fn = HFRewardModelWrapper(
+        hf_model,
+        token_key=("tokens", "full"),
+        attention_mask_key=("masks", "all_attention_mask"),
+        reward_key="reward",
+        inference_mode=True,   # disable grad for pure reward inference
+    )
+
+    # Inside your GRPO / PPO rollout loop:
+    rollout_td = ...  # TensorDict from LLMCollector
+    reward_fn(rollout_td)  # writes "reward" key in-place
+    print(rollout_td["reward"].shape)  # [B]
+
+.. seealso::
+
+    * :class:`TorchRLBufferDataset`
+    * :class:`HFRewardModelWrapper`
+    * Tutorial: :ref:`trl_interop_tutorial`
