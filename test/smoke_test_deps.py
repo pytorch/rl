@@ -6,10 +6,13 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import runpy
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
+from omegaconf import OmegaConf
 
 # This file is a smoke test for optional deps. All optional-dep imports must
 # stay lazy: the file is collected even when none of these libraries are
@@ -35,6 +38,29 @@ def test_dm_control():
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
     env.reset()
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
+def test_dreamer_v3_dmc_walker_env():
+    repo_root = Path(__file__).parents[1]
+    example = runpy.run_path(
+        repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
+        run_name="dreamer_v3_dmc_smoke",
+    )
+    base = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
+    walker = OmegaConf.load(
+        repo_root / "sota-implementations/dreamer_v3/config_dmc_walker.yaml"
+    )
+    del walker.defaults
+    cfg = OmegaConf.merge(base, walker)
+    env = example["make_env"](cfg, seed=0)
+    tensordict = env.reset()
+    assert tensordict["observation"].ndim == 1
+    assert env.action_spec.shape[-1] > 0
+    env.close()
 
 
 @pytest.mark.skipif(

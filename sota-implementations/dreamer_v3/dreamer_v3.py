@@ -26,6 +26,8 @@ Usage::
 from __future__ import annotations
 
 import importlib.util
+import json
+from pathlib import Path
 
 import hydra
 import torch
@@ -46,7 +48,12 @@ from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.transforms import TensorDictPrimer
+from torchrl.envs.transforms import (
+    CatTensors,
+    DoubleToFloat,
+    InitTracker,
+    TensorDictPrimer,
+)
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DreamerV3MLP, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
@@ -64,6 +71,7 @@ from torchrl.objectives import (
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 
 _has_matplotlib = importlib.util.find_spec("matplotlib") is not None
+_has_dm_control = importlib.util.find_spec("dm_control") is not None
 
 
 class _DreamerV3Actor(torch.nn.Module):
@@ -100,9 +108,32 @@ def adaptive_grad_clip_(parameters, clip: float, minimum: float = 1e-3) -> None:
         parameter.grad.mul_(scale)
 
 
-def make_env(env_name: str, seed: int = 0):
-    env = GymEnv(env_name, device="cpu")
-    env = TransformedEnv(env, StepCounter())
+def make_env(cfg: DictConfig, seed: int = 0):
+    if cfg.env.backend == "gym":
+        base_env = GymEnv(cfg.env.name, device="cpu")
+    elif cfg.env.backend == "dm_control":
+        if not _has_dm_control:
+            raise ImportError(
+                "The DMC DreamerV3 preset requires dm_control. Install the "
+                "optional dm_control dependencies before running it."
+            )
+        from torchrl.envs.libs.dm_control import DMControlEnv
+
+        base_env = DMControlEnv(cfg.env.name, cfg.env.task, device="cpu")
+    else:
+        raise ValueError(f"Unknown environment backend {cfg.env.backend!r}.")
+
+    env = TransformedEnv(base_env)
+    if cfg.env.backend == "dm_control":
+        env.append_transform(
+            CatTensors(
+                in_keys=list(base_env.observation_spec.keys()),
+                out_key="observation",
+            )
+        )
+    env.append_transform(DoubleToFloat())
+    env.append_transform(StepCounter(max_steps=cfg.env.max_episode_steps))
+    env.append_transform(InitTracker())
     env.set_seed(seed)
     return env
 
@@ -359,11 +390,17 @@ def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
 
 
 @torch.no_grad()
-def eval_episode_reward(env, actor, num_episodes: int) -> torch.Tensor:
+def eval_episode_reward(
+    env, actor, num_episodes: int, max_episode_steps: int
+) -> torch.Tensor:
     totals = []
     with set_exploration_type(ExplorationType.DETERMINISTIC):
         for _ in range(num_episodes):
-            td = env.rollout(max_steps=200, policy=actor, break_when_any_done=True)
+            td = env.rollout(
+                max_steps=max_episode_steps,
+                policy=actor,
+                break_when_any_done=True,
+            )
             totals.append(td.get(("next", "reward")).sum())
     return torch.stack(totals).mean()
 
@@ -372,7 +409,7 @@ def eval_episode_reward(env, actor, num_episodes: int) -> torch.Tensor:
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
 
-    real_env = make_env(cfg.env.name, cfg.env.seed)
+    real_env = make_env(cfg, cfg.env.seed)
     obs_dim = real_env.observation_spec["observation"].shape[0]
     action_dim = real_env.action_spec.shape[0]
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
@@ -394,7 +431,7 @@ def main(cfg: DictConfig):
     value_model = build_value(cfg=cfg)
     mb_env = build_mb_env(
         cfg=cfg,
-        real_env=make_env(cfg.env.name, cfg.env.seed + 1),
+        real_env=make_env(cfg, cfg.env.seed + 1),
         imagination_model=imagination_model,
     )
 
@@ -453,7 +490,7 @@ def main(cfg: DictConfig):
     ]
 
     explore_env = TransformedEnv(
-        make_env(cfg.env.name, cfg.env.seed + 2),
+        make_env(cfg, cfg.env.seed + 2),
         TensorDictPrimer(
             random=False,
             default_value=0,
@@ -495,7 +532,7 @@ def main(cfg: DictConfig):
     next_eval = 0
 
     eval_env = TransformedEnv(
-        make_env(cfg.env.name, cfg.env.seed + 100),
+        make_env(cfg, cfg.env.seed + 100),
         TensorDictPrimer(
             random=False,
             default_value=0,
@@ -510,6 +547,17 @@ def main(cfg: DictConfig):
         * cfg.replay_buffer.seq_len
     )
 
+    updates_per_batch = cfg.optimization.updates_per_batch
+    if cfg.optimization.train_ratio is not None:
+        updates_per_batch = max(
+            1,
+            round(
+                cfg.collector.frames_per_batch
+                * cfg.optimization.train_ratio
+                / (cfg.replay_buffer.batch_size * cfg.replay_buffer.seq_len)
+            ),
+        )
+
     for data in collector:
         rb.extend(data.reshape(-1))
         env_step += data.numel()
@@ -517,7 +565,7 @@ def main(cfg: DictConfig):
         if len(rb) < warmup:
             continue
 
-        for _ in range(cfg.optimization.updates_per_batch):
+        for _ in range(updates_per_batch):
             sample = rb.sample().reshape(
                 cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len
             )
@@ -594,7 +642,12 @@ def main(cfg: DictConfig):
             loss_hist["value"].append(v_td["loss_value"].detach())
 
         if env_step >= next_eval:
-            r = eval_episode_reward(eval_env, actor_model, cfg.logger.eval_episodes)
+            r = eval_episode_reward(
+                eval_env,
+                actor_model,
+                cfg.logger.eval_episodes,
+                cfg.env.max_episode_steps,
+            )
             history_steps.append(env_step)
             history_eval.append(r)
             torchrl_logger.info(
@@ -640,7 +693,7 @@ def main(cfg: DictConfig):
 
         fig.suptitle(
             f"DreamerV3 on {cfg.env.name} - {cfg.collector.total_frames} env steps, "
-            f"{cfg.optimization.updates_per_batch} updates/batch"
+            f"{updates_per_batch} updates/batch"
         )
         fig.tight_layout()
         fig.savefig(cfg.logger.output_plot, dpi=120)
@@ -649,6 +702,25 @@ def main(cfg: DictConfig):
         torchrl_logger.warning(
             "matplotlib is not installed; skipping plot %s", cfg.logger.output_plot
         )
+
+    if cfg.logger.metrics_json:
+        metrics_path = Path(cfg.logger.metrics_json)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        metrics_path.write_text(
+            json.dumps(
+                {
+                    "backend": cfg.env.backend,
+                    "environment": cfg.env.name,
+                    "task": cfg.env.task,
+                    "seed": cfg.env.seed,
+                    "environment_steps": history_steps,
+                    "evaluation_returns": [value.item() for value in history_eval],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        torchrl_logger.info("Saved evaluation metrics to %s", metrics_path)
 
 
 if __name__ == "__main__":

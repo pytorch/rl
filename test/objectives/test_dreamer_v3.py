@@ -8,6 +8,7 @@ Reference: https://arxiv.org/abs/2301.04104
 """
 from __future__ import annotations
 
+import json
 import runpy
 from pathlib import Path
 
@@ -856,6 +857,41 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         parameter.grad = torch.tensor([30.0, 40.0], device=device)
         example["adaptive_grad_clip_"]([parameter], clip=0.3)
         assert parameter.grad.norm().item() == pytest.approx(1.5)
+
+    def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
+        del device
+        repo_root = Path(__file__).parents[2]
+        benchmark = runpy.run_path(
+            repo_root / "sota-implementations/dreamer_v3/benchmark.py",
+            run_name="dreamer_v3_benchmark_test",
+        )
+        paths = []
+        for seed, returns in enumerate(([1.0, 4.0], [3.0, 6.0], [2.0, 5.0])):
+            path = tmp_path / f"seed_{seed}.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "seed": seed,
+                        "environment_steps": [100, 200],
+                        "evaluation_returns": returns,
+                    }
+                )
+            )
+            paths.append(path)
+
+        summary = benchmark["aggregate_runs"](paths)
+        assert summary["environment_steps"] == [100, 200]
+        assert summary["median_return"] == [2.0, 5.0]
+        assert summary["lower_quartile_return"] == [1.5, 4.5]
+        assert summary["upper_quartile_return"] == [2.5, 5.5]
+
+        config = OmegaConf.load(
+            repo_root / "sota-implementations/dreamer_v3/config_dmc_walker.yaml"
+        )
+        assert config.env.name == "walker"
+        assert config.env.task == "walk"
+        assert config.collector.total_frames == 1_100_000
+        assert config.optimization.train_ratio == 1024
 
     def test_dreamer_v3_value_invalid_loss_type(self, device):
         value_model = self._create_value_model()

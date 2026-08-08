@@ -1,7 +1,10 @@
 env:
+  backend: gym
   name: Pendulum-v1
+  task: null
   seed: 0
   device: cpu
+  max_episode_steps: 200
 
 collector:
   frames_per_batch: 200
@@ -15,7 +18,6 @@ replay_buffer:
   warmup_factor: 2  # collect (warmup_factor * batch_size * seq_len) frames before training
 
 networks:
-  state_dim: 16
   rnn_hidden_dim: 32
   num_categoricals: 4
   num_classes: 4
@@ -30,7 +32,6 @@ networks:
   num_reward_bins: 255
   num_value_bins: 255
   hidden_dim: 64
-  depth: 2
   encoder_layers: 3
   decoder_layers: 3
   reward_layers: 1
@@ -45,6 +46,7 @@ optimization:
   adaptive_grad_clip: 0.3
   warmup_steps: 1000
   updates_per_batch: 8
+  train_ratio: null
   imagination_horizon: 15
   continuation_horizon: 333
   use_reinforce: true
@@ -62,3 +64,4 @@ logger:
   eval_every: 500
   eval_episodes: 3
   output_plot: dreamer_v3_pendulum.png
+  metrics_json: null
