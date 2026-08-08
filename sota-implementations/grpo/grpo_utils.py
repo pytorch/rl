@@ -20,7 +20,6 @@ from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import SGLangWrapper, TransformersWrapper, vLLMWrapper
-from torchrl.record.loggers.llm import PostTrainingLogger
 from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -921,6 +920,7 @@ def add_kl_transforms_to_replay_buffer(replay_buffer, cfg: DictConfig):
 @timeit("Logging metrics")
 def log_training_metrics(
     wandb_logger,
+    post_training_logger,
     replay_buffer,
     batch,
     loss,
@@ -940,6 +940,7 @@ def log_training_metrics(
 
     Args:
         wandb_logger: The wandb logger instance.
+        post_training_logger: Persistent post-training logger for this run.
         replay_buffer: The replay buffer containing collected data.
         batch: The current training batch.
         loss: The computed loss object.
@@ -952,15 +953,13 @@ def log_training_metrics(
         history_str: Optional history string for logging.
         use_kl_to_ref: Whether KL-to-reference metrics are available.
     """
-    pt_logger = PostTrainingLogger(logger=wandb_logger, start_time=start_time)
-
-    pt_logger.log_training_step(
+    post_training_logger.log_training_step(
         loss=loss,
         step=global_step,
         grad_norm=grad_norm,
         gradient_accumulation_steps=gradient_accumulation_steps,
     )
-    pt_logger.log_collection_step(
+    post_training_logger.log_collection_step(
         batch=batch,
         replay_buffer=replay_buffer,
         collector=collector,
@@ -981,9 +980,8 @@ def log_training_metrics(
             "'training/kl_approx_to_inference' are deprecated and will be removed "
             "in v0.16.0. Use the batch/* keys emitted by PostTrainingLogger "
             "(computed over the sampled batch rather than the whole buffer), "
-            "'training/loss_entropy' and 'training/kl_approx'. Note that "
-            "'inference/staleness_mean'/'_max' keep their names but are now "
-            "computed over the sampled batch instead of the whole buffer.",
+            "'training/loss_entropy', 'training/kl_approx' and "
+            "'batch/staleness_mean'/'batch/staleness_max'.",
             FutureWarning,
             stacklevel=2,
         )

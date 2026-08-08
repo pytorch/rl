@@ -168,8 +168,23 @@ class PostTrainingLogger:
                     ("tokens", "response"), default=None, as_list=True
                 )
                 if isinstance(response_list, torch.Tensor):
-                    # dense (padded) batch: one row per sequence
-                    metrics["batch/seq_length_mean"] = float(response_list.shape[-1])
+                    # Dense response tensors may be padded, so their trailing
+                    # dimension is not a sequence length. The assistant mask
+                    # is the only reliable source of the unpadded lengths.
+                    assistant_mask = batch.get(
+                        ("masks", "all_assistant_mask"),
+                        default=None,
+                        as_list=True,
+                    )
+                    if assistant_mask is not None:
+                        if isinstance(assistant_mask, torch.Tensor):
+                            lengths = assistant_mask.bool().sum(-1).float().reshape(-1)
+                        else:
+                            lengths = torch.tensor(
+                                [mask.bool().sum().item() for mask in assistant_mask],
+                                dtype=torch.float,
+                            )
+                        metrics["batch/seq_length_mean"] = float(lengths.mean())
                 elif response_list is not None:
                     lengths = torch.tensor(
                         [t.numel() for t in response_list], dtype=torch.float
@@ -180,16 +195,12 @@ class PostTrainingLogger:
 
             if replay_buffer is not None:
                 try:
-                    metrics["buffer/write_count"] = int(replay_buffer.write_count)
-                    # RayReplayBuffer has no _storage; guard with getattr.
-                    storage = getattr(replay_buffer, "_storage", None)  # noqa: SLF001
-                    if (
-                        storage is not None
-                        and hasattr(storage, "max_size")
-                        and storage.max_size > 0
-                    ):
-                        metrics["buffer/utilization"] = (
-                            len(replay_buffer) / storage.max_size
+                    buffer_stats = replay_buffer.stats()
+                    if "write_count" in buffer_stats:
+                        metrics["buffer/write_count"] = int(buffer_stats["write_count"])
+                    if "utilization" in buffer_stats:
+                        metrics["buffer/utilization"] = float(
+                            buffer_stats["utilization"]
                         )
                 except (AttributeError, RuntimeError, TypeError) as exc:
                     self._warn_once("buffer", exc)
@@ -210,8 +221,8 @@ class PostTrainingLogger:
                         versions = None
                     if versions is not None:
                         staleness = current_version - versions
-                        metrics["inference/staleness_mean"] = float(staleness.mean())
-                        metrics["inference/staleness_max"] = float(staleness.max())
+                        metrics["batch/staleness_mean"] = float(staleness.mean())
+                        metrics["batch/staleness_max"] = float(staleness.max())
                 except (AttributeError, KeyError, RuntimeError, TypeError) as exc:
                     self._warn_once("inference/staleness", exc)
 

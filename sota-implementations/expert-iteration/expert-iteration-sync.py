@@ -14,6 +14,7 @@ import hydra
 
 from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
+from torchrl.record.loggers import PostTrainingLogger
 from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.weight_update.llm import get_model_metadata
 
@@ -219,6 +220,7 @@ def train(
     global_step = 0
     optim_step = 0  # Track optimization steps separately for scheduler
     start_time = time.time()
+    post_training_logger = PostTrainingLogger(wandb_logger, start_time=start_time)
     write_count = replay_buffer.write_count
     for data in collector:
         new_write_count = replay_buffer.write_count
@@ -312,6 +314,7 @@ def train(
                 if (global_step % cfg.train.logging_frequency) == 0:
                     log_training_metrics(
                         wandb_logger=wandb_logger,
+                        post_training_logger=post_training_logger,
                         replay_buffer=replay_buffer,
                         batch=batch,
                         loss=loss,

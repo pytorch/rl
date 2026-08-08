@@ -20,7 +20,6 @@ from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-from torchrl.record.loggers.llm import PostTrainingLogger
 from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -644,6 +643,7 @@ def get_wandb_run_id(wandb_logger):
 
 def log_training_metrics(
     wandb_logger,
+    post_training_logger,
     replay_buffer,
     batch,
     loss,
@@ -667,6 +667,7 @@ def log_training_metrics(
 
     Args:
         wandb_logger: The wandb logger instance.
+        post_training_logger: Persistent post-training logger for this run.
         replay_buffer: The replay buffer containing collected data.
         batch: The current training batch.
         loss: The computed loss object.
@@ -678,15 +679,13 @@ def log_training_metrics(
         gradient_accumulation_steps: Number of gradient accumulation steps.
         history_str: Optional history string for logging.
     """
-    pt_logger = PostTrainingLogger(logger=wandb_logger, start_time=start_time)
-
-    pt_logger.log_training_step(
+    post_training_logger.log_training_step(
         loss=loss,
         step=global_step,
         grad_norm=grad_norm,
         gradient_accumulation_steps=gradient_accumulation_steps,
     )
-    pt_logger.log_collection_step(
+    post_training_logger.log_collection_step(
         batch=batch,
         replay_buffer=replay_buffer,
         collector=collector,

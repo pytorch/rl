@@ -6,25 +6,36 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import logging
 import multiprocessing as mp
 import os
 import os.path
 import pathlib
 import tempfile
 import threading
+import time
 from time import sleep
+from types import SimpleNamespace
 
 import pytest
 import torch
-from tensordict import MemoryMappedTensor
+from tensordict import (
+    lazy_stack,
+    MemoryMappedTensor,
+    set_list_to_stack,
+    TensorClass,
+    TensorDict,
+)
 
 from torchrl._comm import MailboxPeerClosedError
 from torchrl.checkpoint import Checkpoint
-from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data import LazyStackStorage, LazyTensorStorage, ReplayBuffer
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.objectives.llm.grpo import GRPOLossOutput
+from torchrl.objectives.llm.sft import SFTLossOutput
+from torchrl.record.loggers import PostTrainingLogger
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
-from torchrl.record.loggers.llm import PostTrainingLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.monitoring import Every, LoggerMonitor
 from torchrl.record.loggers.process import ProcessLogger
@@ -1529,11 +1540,6 @@ class TestLoggerMonitor:
         logger.close()
 
 
-if __name__ == "__main__":
-    args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
-
-
 # ---------------------------------------------------------------------------
 # PostTrainingLogger tests
 # ---------------------------------------------------------------------------
@@ -1556,8 +1562,6 @@ class TestPostTrainingLogger:
 
     def test_log_training_step_grpo_loss(self, csv_logger):
         """Standard GRPO loss output with all optional fields set."""
-        from torchrl.objectives.llm.grpo import GRPOLossOutput
-
         loss = GRPOLossOutput(
             loss_objective=torch.tensor(0.42),
             clip_fraction=torch.tensor(0.10),
@@ -1586,8 +1590,6 @@ class TestPostTrainingLogger:
 
     def test_log_training_step_sft_loss(self, csv_logger):
         """SFTLossOutput with all optional fields set."""
-        from torchrl.objectives.llm.sft import SFTLossOutput
-
         loss = SFTLossOutput(
             loss_sft=torch.tensor(0.77),
             loss_kl_to_ref=torch.tensor(0.02),
@@ -1606,8 +1608,6 @@ class TestPostTrainingLogger:
 
     def test_log_training_step_sft_loss_no_kl(self, csv_logger):
         """SFTLossOutput with only the required field — None fields skipped."""
-        from torchrl.objectives.llm.sft import SFTLossOutput
-
         loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
         pt = PostTrainingLogger(logger=csv_logger)
         metrics = pt.log_training_step(loss=loss, step=1)
@@ -1619,8 +1619,6 @@ class TestPostTrainingLogger:
 
     def test_log_training_step_grpo_none_optionals(self, csv_logger):
         """GRPOLossOutput with optional fields left as None — must not appear."""
-        from torchrl.objectives.llm.grpo import GRPOLossOutput
-
         loss = GRPOLossOutput(
             loss_objective=torch.tensor(0.42),
             clip_fraction=torch.tensor(0.10),
@@ -1640,7 +1638,6 @@ class TestPostTrainingLogger:
         """Fields are discovered by iterating the tensorclass, not from a
         hardcoded list: a loss subclass gaining a new term is logged without
         touching the logger."""
-        from tensordict import TensorClass
 
         class MyLossOutput(TensorClass["nocast"]):
             loss_sft: torch.Tensor
@@ -1655,8 +1652,6 @@ class TestPostTrainingLogger:
 
     def test_log_collection_step_single_reward_no_std(self, csv_logger):
         """std of a single element is NaN; the key is omitted instead."""
-        from tensordict import TensorDict
-
         batch = TensorDict({("next", "reward"): torch.tensor([[1.0]])}, batch_size=[1])
         pt = PostTrainingLogger(logger=csv_logger)
         metrics = pt.log_collection_step(batch)
@@ -1666,9 +1661,6 @@ class TestPostTrainingLogger:
     def test_metric_failure_warns_once(self, csv_logger, caplog):
         """A metric that cannot be computed warns at WARNING level on the first
         failure and stays quiet afterwards -- never a silent empty emit."""
-        import logging
-
-        from tensordict import TensorDict
 
         class BadBuffer:
             @property
@@ -1687,8 +1679,6 @@ class TestPostTrainingLogger:
 
     def test_log_training_step_custom_duck_type(self, csv_logger):
         """Arbitrary object exposing only loss_sft — duck-typing must not crash."""
-        from types import SimpleNamespace
-
         loss = SimpleNamespace(loss_sft=torch.tensor(0.5))
         pt = PostTrainingLogger(logger=csv_logger)
         metrics = pt.log_training_step(loss=loss, step=1)
@@ -1703,8 +1693,6 @@ class TestPostTrainingLogger:
         On accumulation steps the key is absent -- logging a literal 0.0 there
         would pollute any aggregate (mean, min, histogram) over the series.
         """
-        from torchrl.objectives.llm.sft import SFTLossOutput
-
         loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
         pt = PostTrainingLogger(logger=csv_logger)
 
@@ -1726,8 +1714,6 @@ class TestPostTrainingLogger:
 
     def test_log_collection_step_minimal(self, csv_logger):
         """Minimal call: only batch and step.  Must not crash."""
-        from tensordict import lazy_stack, set_list_to_stack, TensorDict
-
         with set_list_to_stack(True):
             batch = lazy_stack(
                 [
@@ -1754,9 +1740,6 @@ class TestPostTrainingLogger:
 
     def test_log_collection_step_with_buffer(self, csv_logger):
         """With replay buffer: utilization and write_count emitted."""
-        from tensordict import lazy_stack, set_list_to_stack, TensorDict
-        from torchrl.data import LazyStackStorage, ReplayBuffer
-
         with set_list_to_stack(True):
             td = TensorDict(
                 {"next": TensorDict({"reward": torch.tensor([1.0])}, [])}, []
@@ -1772,12 +1755,66 @@ class TestPostTrainingLogger:
         assert "buffer/utilization" in metrics
         assert abs(metrics["buffer/utilization"] - 0.3) < 1e-5
 
+    def test_log_collection_step_dense_response_uses_assistant_mask(self, csv_logger):
+        """Padding in a dense response tensor is excluded from sequence lengths."""
+        batch = TensorDict(
+            {
+                ("tokens", "response"): torch.tensor([[11, 12, 0, 0], [21, 0, 0, 0]]),
+                ("masks", "all_assistant_mask"): torch.tensor(
+                    [[True, True, False, False], [True, False, False, False]]
+                ),
+            },
+            batch_size=[2],
+        )
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(batch)
+
+        assert metrics["batch/seq_length_mean"] == 1.5
+
+    def test_log_collection_step_dense_response_without_mask_omits_length(
+        self, csv_logger
+    ):
+        """A padded dense width is never reported as an inferred token count."""
+        batch = TensorDict(
+            {("tokens", "response"): torch.tensor([[11, 12, 0, 0]])},
+            batch_size=[1],
+        )
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(batch)
+
+        assert "batch/seq_length_mean" not in metrics
+
+    def test_log_collection_step_uses_public_buffer_stats(self, csv_logger):
+        """Remote-style buffers need no local storage or write-count property."""
+
+        class StatsOnlyBuffer:
+            def stats(self):
+                return {"write_count": 8, "utilization": 0.4}
+
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(
+            TensorDict({}, batch_size=[1]), replay_buffer=StatsOnlyBuffer()
+        )
+
+        assert metrics["buffer/write_count"] == 8
+        assert metrics["buffer/utilization"] == 0.4
+
+    def test_log_collection_step_batch_staleness_namespace(self, csv_logger):
+        """Sampled policy staleness is identified as a batch metric."""
+        batch = TensorDict(
+            {("next", "policy_version"): torch.tensor([3, 4])}, batch_size=[2]
+        )
+        collector = SimpleNamespace(policy_version=5)
+
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(
+            batch, collector=collector
+        )
+
+        assert metrics["batch/staleness_mean"] == 1.5
+        assert metrics["batch/staleness_max"] == 2.0
+        assert "inference/staleness_mean" not in metrics
+
     def test_log_collection_step_throughput_omitted_without_start_time(
         self, csv_logger
     ):
         """throughput/* must not appear when start_time=None."""
-        from tensordict import lazy_stack, set_list_to_stack, TensorDict
-
         with set_list_to_stack(True):
             batch = lazy_stack(
                 [
@@ -1793,10 +1830,6 @@ class TestPostTrainingLogger:
 
     def test_log_collection_step_throughput_emitted_with_start_time(self, csv_logger):
         """throughput/* emitted as a positive float when start_time is set."""
-        import time
-
-        from tensordict import lazy_stack, set_list_to_stack, TensorDict
-
         with set_list_to_stack(True):
             batch = lazy_stack(
                 [
@@ -1829,6 +1862,9 @@ class TestPostTrainingLogger:
 
     def test_importable_from_package(self):
         """PostTrainingLogger must be importable from the top-level package."""
-        from torchrl.record.loggers import PostTrainingLogger as PTL
+        assert PostTrainingLogger.__name__ == "PostTrainingLogger"
 
-        assert PTL is PostTrainingLogger
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
