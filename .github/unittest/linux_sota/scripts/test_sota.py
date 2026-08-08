@@ -342,6 +342,7 @@ commands = {
   networks.num_categoricals=2 \
   networks.num_classes=2 \
   networks.num_reward_bins=11 \
+  networks.num_value_bins=11 \
   networks.rnn_hidden_dim=8 \
   networks.obs_embed_dim=8
 """,

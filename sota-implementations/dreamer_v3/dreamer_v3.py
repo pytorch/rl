@@ -48,23 +48,56 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeSequential, WorldModelWrapper
+from torchrl.modules import DreamerV3MLP, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.model_based import DreamerActor
 from torchrl.modules.models.model_based_v3 import (
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,
 )
-from torchrl.modules.models.models import MLP
 from torchrl.objectives import (
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
+    symlog,
 )
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 
 _has_matplotlib = importlib.util.find_spec("matplotlib") is not None
+
+
+class _DreamerV3Actor(torch.nn.Module):
+    def __init__(self, cfg: DictConfig, action_dim: int):
+        super().__init__()
+        state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
+        self.backbone = DreamerV3MLP(
+            state_dim + cfg.networks.rnn_hidden_dim,
+            2 * action_dim,
+            depth=cfg.networks.actor_layers,
+            num_cells=cfg.networks.hidden_dim,
+            outscale=0.01,
+            norm_eps=cfg.networks.norm_eps,
+        )
+        self.action_dim = action_dim
+        self.min_std = cfg.networks.policy_min_std
+        self.max_std = cfg.networks.policy_max_std
+
+    def forward(self, state: torch.Tensor, belief: torch.Tensor):
+        mean, std = self.backbone(state, belief).split(self.action_dim, -1)
+        std = (self.max_std - self.min_std) * torch.sigmoid(std + 2) + self.min_std
+        return mean, std
+
+
+@torch.no_grad()
+def adaptive_grad_clip_(parameters, clip: float, minimum: float = 1e-3) -> None:
+    """Clip each parameter gradient relative to its parameter norm."""
+    for parameter in parameters:
+        if parameter.grad is None:
+            continue
+        grad_norm = parameter.grad.norm()
+        parameter_norm = parameter.detach().norm().clamp_min(minimum)
+        scale = (clip * parameter_norm / grad_norm.clamp_min(1e-12)).clamp_max(1)
+        parameter.grad.mul_(scale)
 
 
 def make_env(env_name: str, seed: int = 0):
@@ -82,15 +115,23 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     """
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
 
-    encoder = TensorDictModule(
-        MLP(
-            in_features=obs_dim,
-            out_features=cfg.networks.obs_embed_dim,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
+    encoder = TensorDictSequential(
+        TensorDictModule(
+            symlog,
+            in_keys=[("next", "observation")],
+            out_keys=[("next", "symlog_observation")],
         ),
-        in_keys=[("next", "observation")],
-        out_keys=[("next", "encoded_latents")],
+        TensorDictModule(
+            DreamerV3MLP(
+                in_features=obs_dim,
+                out_features=cfg.networks.obs_embed_dim,
+                depth=cfg.networks.encoder_layers,
+                num_cells=cfg.networks.hidden_dim,
+                norm_eps=cfg.networks.norm_eps,
+            ),
+            in_keys=[("next", "symlog_observation")],
+            out_keys=[("next", "encoded_latents")],
+        ),
     )
 
     prior_net = RSSMPriorV3(
@@ -100,6 +141,12 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
         action_dim=action_dim,
+        unimix=cfg.networks.unimix,
+        recurrent_model=cfg.networks.recurrent_model,
+        num_blocks=cfg.networks.num_blocks,
+        num_layers=cfg.networks.dynamics_layers,
+        prior_num_layers=cfg.networks.prior_layers,
+        norm_eps=cfg.networks.norm_eps,
     )
     rssm_prior = TensorDictModule(
         prior_net,
@@ -117,6 +164,10 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         num_classes=cfg.networks.num_classes,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
         obs_embed_dim=cfg.networks.obs_embed_dim,
+        unimix=cfg.networks.unimix,
+        use_rms_norm=True,
+        num_layers=cfg.networks.posterior_layers,
+        norm_eps=cfg.networks.norm_eps,
     )
     rssm_posterior = TensorDictModule(
         posterior_net,
@@ -127,37 +178,101 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior)
 
     decoder = TensorDictModule(
-        MLP(
-            in_features=state_dim,
+        DreamerV3MLP(
+            in_features=state_dim + cfg.networks.rnn_hidden_dim,
             out_features=obs_dim,
-            depth=cfg.networks.depth,
+            depth=cfg.networks.decoder_layers,
             num_cells=cfg.networks.hidden_dim,
+            norm_eps=cfg.networks.norm_eps,
         ),
-        in_keys=[("next", "state")],
+        in_keys=[("next", "state"), ("next", "belief")],
         out_keys=[("next", "reco_pixels")],
     )
 
-    reward_head = TensorDictModule(
-        MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=cfg.networks.num_reward_bins,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
+    reward_net = DreamerV3MLP(
+        in_features=state_dim + cfg.networks.rnn_hidden_dim,
+        out_features=cfg.networks.num_reward_bins,
+        depth=cfg.networks.reward_layers,
+        num_cells=cfg.networks.hidden_dim,
+        outscale=0.0,
+        norm_eps=cfg.networks.norm_eps,
+    )
+    reward_decoder = SymExpTwoHot(cfg.networks.num_reward_bins)
+    reward_head = TensorDictSequential(
+        TensorDictModule(
+            reward_net,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reward_logits")],
         ),
-        in_keys=[("next", "state"), ("next", "belief")],
-        out_keys=[("next", "reward")],
+        TensorDictModule(
+            reward_decoder,
+            in_keys=[("next", "reward_logits")],
+            out_keys=[("next", "reward")],
+        ),
     )
 
-    return TensorDictSequential(encoder, rollout, decoder, reward_head)
+    continuation_net = DreamerV3MLP(
+        in_features=state_dim + cfg.networks.rnn_hidden_dim,
+        out_features=1,
+        depth=cfg.networks.reward_layers,
+        num_cells=cfg.networks.hidden_dim,
+        norm_eps=cfg.networks.norm_eps,
+    )
+    continuation_head = TensorDictModule(
+        continuation_net,
+        in_keys=[("next", "state"), ("next", "belief")],
+        out_keys=[("next", "continue_pred")],
+    )
+
+    world_model = TensorDictSequential(
+        encoder, rollout, decoder, reward_head, continuation_head
+    )
+    return world_model, prior_net, reward_net, reward_decoder, continuation_net
+
+
+def build_imagination_model(*, prior_net, reward_net, reward_decoder):
+    """Build imagination operators backed by the trained world-model heads."""
+    transition_model = TensorDictSequential(
+        TensorDictModule(
+            prior_net,
+            in_keys=["state", "belief", "action"],
+            out_keys=["_", "state", "belief"],
+        )
+    )
+    reward_model = TensorDictSequential(
+        TensorDictModule(
+            reward_net,
+            in_keys=["state", "belief"],
+            out_keys=["reward_logits"],
+        ),
+        TensorDictModule(
+            reward_decoder,
+            in_keys=["reward_logits"],
+            out_keys=["reward"],
+        ),
+    )
+    return WorldModelWrapper(transition_model, reward_model)
+
+
+def build_continuation_model(*, continuation_net):
+    """Build the imagination continuation predictor from the trained head."""
+    return TensorDictSequential(
+        TensorDictModule(
+            continuation_net,
+            in_keys=["state", "belief"],
+            out_keys=["continue_logits"],
+        ),
+        TensorDictModule(
+            torch.nn.Sigmoid(),
+            in_keys=["continue_logits"],
+            out_keys=["continuation"],
+        ),
+    )
 
 
 def build_actor(*, cfg: DictConfig, action_dim: int):
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
-    actor_mlp = DreamerActor(
-        out_features=action_dim,
-        depth=cfg.networks.depth,
-        num_cells=cfg.networks.hidden_dim,
-    )
+    actor_mlp = _DreamerV3Actor(cfg, action_dim)
     actor_model = ProbabilisticTensorDictSequential(
         TensorDictModule(
             actor_mlp,
@@ -188,15 +303,24 @@ def build_actor(*, cfg: DictConfig, action_dim: int):
 
 def build_value(*, cfg: DictConfig):
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
-    value_model = TensorDictModule(
-        MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=1,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
+    value_model = TensorDictSequential(
+        TensorDictModule(
+            DreamerV3MLP(
+                in_features=state_dim + cfg.networks.rnn_hidden_dim,
+                out_features=cfg.networks.num_value_bins,
+                depth=cfg.networks.value_layers,
+                num_cells=cfg.networks.hidden_dim,
+                outscale=0.0,
+                norm_eps=cfg.networks.norm_eps,
+            ),
+            in_keys=["state", "belief"],
+            out_keys=["state_value_logits"],
         ),
-        in_keys=["state", "belief"],
-        out_keys=["state_value"],
+        TensorDictModule(
+            SymExpTwoHot(cfg.networks.num_value_bins),
+            in_keys=["state_value_logits"],
+            out_keys=["state_value"],
+        ),
     )
     with torch.no_grad():
         value_model(
@@ -211,8 +335,8 @@ def build_value(*, cfg: DictConfig):
     return value_model
 
 
-def build_mb_env(*, cfg: DictConfig, real_env, action_dim: int):
-    """Imagination env: DreamerEnv wrapping an independent V3 prior + reward head."""
+def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
+    """Imagination env backed by the trained prior and reward head."""
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
     primer_env = TransformedEnv(
         real_env,
@@ -223,33 +347,8 @@ def build_mb_env(*, cfg: DictConfig, real_env, action_dim: int):
             belief=Unbounded(cfg.networks.rnn_hidden_dim),
         ),
     )
-    rssm_prior = RSSMPriorV3(
-        action_spec=real_env.action_spec,
-        hidden_dim=cfg.networks.rnn_hidden_dim,
-        rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
-        num_categoricals=cfg.networks.num_categoricals,
-        num_classes=cfg.networks.num_classes,
-        action_dim=action_dim,
-    )
-    transition_model = SafeSequential(
-        TensorDictModule(
-            rssm_prior,
-            in_keys=["state", "belief", "action"],
-            out_keys=["_", "state", "belief"],
-        )
-    )
-    reward_model = TensorDictModule(
-        MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=1,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
-        ),
-        in_keys=["state", "belief"],
-        out_keys=["reward"],
-    )
     mb_env = DreamerEnv(
-        world_model=WorldModelWrapper(transition_model, reward_model),
+        world_model=imagination_model,
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([cfg.networks.rnn_hidden_dim]),
     )
@@ -269,7 +368,7 @@ def eval_episode_reward(env, actor, num_episodes: int) -> torch.Tensor:
     return torch.stack(totals).mean()
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(config_path="", config_name="config")
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
 
@@ -278,20 +377,37 @@ def main(cfg: DictConfig):
     action_dim = real_env.action_spec.shape[0]
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
 
-    world_model = build_world_model(cfg=cfg, obs_dim=obs_dim, action_dim=action_dim)
+    (
+        world_model,
+        prior_net,
+        reward_net,
+        reward_decoder,
+        continuation_net,
+    ) = build_world_model(cfg=cfg, obs_dim=obs_dim, action_dim=action_dim)
+    imagination_model = build_imagination_model(
+        prior_net=prior_net,
+        reward_net=reward_net,
+        reward_decoder=reward_decoder,
+    )
+    continuation_model = build_continuation_model(continuation_net=continuation_net)
     actor_model = build_actor(cfg=cfg, action_dim=action_dim)
     value_model = build_value(cfg=cfg)
     mb_env = build_mb_env(
         cfg=cfg,
         real_env=make_env(cfg.env.name, cfg.env.seed + 1),
-        action_dim=action_dim,
+        imagination_model=imagination_model,
     )
 
     model_loss = DreamerV3ModelLoss(
         world_model,
         num_reward_bins=cfg.networks.num_reward_bins,
         free_bits=cfg.optimization.free_bits,
-        kl_alpha=cfg.optimization.kl_alpha,
+        kl_mode="separate",
+        lambda_dynamic=cfg.optimization.dynamic_loss_weight,
+        lambda_representation=cfg.optimization.representation_loss_weight,
+        unimix=cfg.networks.unimix,
+        lambda_continue=1.0,
+        continue_target_scale=1 - 1 / cfg.optimization.continuation_horizon,
         global_average=True,  # state-based obs, not (C, H, W) pixels
     )
     model_loss.set_keys(pixels="observation")
@@ -299,8 +415,11 @@ def main(cfg: DictConfig):
         actor_model,
         value_model,
         mb_env,
+        continuation_model=continuation_model,
         imagination_horizon=cfg.optimization.imagination_horizon,
         use_reinforce=cfg.optimization.use_reinforce,
+        return_normalization_rate=cfg.optimization.return_normalization_rate,
+        return_normalization_min_scale=cfg.optimization.return_normalization_min_scale,
     )
     actor_loss.make_value_estimator(
         ValueEstimators.TDLambda,
@@ -308,12 +427,30 @@ def main(cfg: DictConfig):
         lmbda=cfg.optimization.lmbda,
     )
     value_loss = DreamerV3ValueLoss(
-        value_model, value_loss="symlog_mse", actor_loss=actor_loss
+        value_model,
+        value_loss="two_hot",
+        num_value_bins=cfg.networks.num_value_bins,
+        actor_loss=actor_loss,
+        slow_critic_regularization=cfg.optimization.slow_critic_regularization,
     )
+    value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
 
-    opt_model = torch.optim.Adam(model_loss.parameters(), lr=cfg.optimization.lr)
-    opt_actor = torch.optim.Adam(actor_loss.parameters(), lr=cfg.optimization.lr)
-    opt_value = torch.optim.Adam(value_loss.parameters(), lr=cfg.optimization.lr)
+    optimizer_kwargs = {
+        "lr": cfg.optimization.lr,
+        "eps": cfg.optimization.adam_eps,
+        "betas": (0.9, 0.999),
+    }
+    opt_model = torch.optim.Adam(model_loss.parameters(), **optimizer_kwargs)
+    opt_actor = torch.optim.Adam(actor_model.parameters(), **optimizer_kwargs)
+    opt_value = torch.optim.Adam(value_loss.parameters(), **optimizer_kwargs)
+    schedulers = [
+        torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=1 / cfg.optimization.warmup_steps,
+            total_iters=cfg.optimization.warmup_steps,
+        )
+        for optimizer in (opt_model, opt_actor, opt_value)
+    ]
 
     explore_env = TransformedEnv(
         make_env(cfg.env.name, cfg.env.seed + 2),
@@ -403,17 +540,20 @@ def main(cfg: DictConfig):
             )
 
             m_td, model_out = model_loss(sample)
+            model_kl = m_td["loss_model_dynamic"] + m_td["loss_model_representation"]
             total_m = (
-                m_td["loss_model_kl"]
+                model_kl
                 + m_td["loss_model_reco"]
                 + m_td["loss_model_reward"]
+                + m_td["loss_model_continue"]
             ).squeeze()
             opt_model.zero_grad(set_to_none=True)
             total_m.backward()
-            torch.nn.utils.clip_grad_norm_(
-                model_loss.parameters(), cfg.optimization.grad_clip
+            adaptive_grad_clip_(
+                model_loss.parameters(), cfg.optimization.adaptive_grad_clip
             )
             opt_model.step()
+            schedulers[0].step()
 
             # Imagine from posterior states.
             post_state = (
@@ -431,20 +571,23 @@ def main(cfg: DictConfig):
             a_td, fake_data = actor_loss(actor_input)
             opt_actor.zero_grad(set_to_none=True)
             a_td["loss_actor"].backward()
-            torch.nn.utils.clip_grad_norm_(
-                actor_loss.parameters(), cfg.optimization.grad_clip
+            adaptive_grad_clip_(
+                actor_loss.parameters(), cfg.optimization.adaptive_grad_clip
             )
             opt_actor.step()
+            schedulers[1].step()
 
             v_td, _ = value_loss(fake_data.detach())
             opt_value.zero_grad(set_to_none=True)
             v_td["loss_value"].backward()
-            torch.nn.utils.clip_grad_norm_(
-                value_loss.parameters(), cfg.optimization.grad_clip
+            adaptive_grad_clip_(
+                value_loss.parameters(), cfg.optimization.adaptive_grad_clip
             )
             opt_value.step()
+            schedulers[2].step()
+            value_target_updater.step()
 
-            loss_hist["kl"].append(m_td["loss_model_kl"].detach())
+            loss_hist["kl"].append(model_kl.detach())
             loss_hist["reco"].append(m_td["loss_model_reco"].detach())
             loss_hist["reward"].append(m_td["loss_model_reward"].detach())
             loss_hist["actor"].append(a_td["loss_actor"].detach())
