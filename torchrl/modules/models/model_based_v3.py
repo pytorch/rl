@@ -241,6 +241,16 @@ def _default_bins(
     return torch.cat((half, -half.flip(0)))
 
 
+def _unimix_probs(logits: torch.Tensor, unimix: float) -> torch.Tensor:
+    """Return categorical probabilities mixed with a uniform distribution."""
+    if not 0 <= unimix < 1:
+        raise ValueError(f"unimix must be in [0, 1), got {unimix}.")
+    probs = torch.softmax(logits, dim=-1)
+    if unimix:
+        probs = (1 - unimix) * probs + unimix / logits.shape[-1]
+    return probs
+
+
 def two_hot_encode(x: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
     """Encode raw scalar values on a sorted two-hot support.
 
@@ -452,6 +462,8 @@ class RSSMPriorV3(nn.Module):
             block-GRU mode. Defaults to 2.
         norm_eps (float, optional): RMS normalization epsilon. Defaults to
             ``1e-4``.
+        unimix (float, optional): Fraction of uniform probability mixed into
+            categorical samples. Defaults to ``0.0`` for compatibility.
         device (torch.device, optional): Device. Defaults to None.
 
     Examples:
@@ -489,6 +501,7 @@ class RSSMPriorV3(nn.Module):
         num_layers: int = 1,
         prior_num_layers: int = 2,
         norm_eps: float = 1e-4,
+        unimix: float = 0.0,
     ):
         super().__init__()
         if action_spec is not None and action_shape is not None:
@@ -505,6 +518,9 @@ class RSSMPriorV3(nn.Module):
         self.num_categoricals = num_categoricals
         self.num_classes = num_classes
         self.rnn_hidden_dim = rnn_hidden_dim
+        if not 0 <= unimix < 1:
+            raise ValueError(f"unimix must be in [0, 1), got {unimix}.")
+        self.unimix = unimix
         state_dim = num_categoricals * num_classes
 
         if recurrent_model not in ("gru", "block_gru"):
@@ -604,7 +620,7 @@ class RSSMPriorV3(nn.Module):
             *prior_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
         )
 
-        state = _straight_through_categorical(prior_logits)
+        state = _straight_through_categorical(prior_logits, self.unimix)
         state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
 
         return prior_logits, state, belief
@@ -640,6 +656,8 @@ class RSSMPosteriorV3(nn.Module):
             ``use_rms_norm=True``. Defaults to 1.
         norm_eps (float, optional): RMS normalization epsilon. Defaults to
             ``1e-4``.
+        unimix (float, optional): Fraction of uniform probability mixed into
+            categorical samples. Defaults to ``0.0`` for compatibility.
         device (torch.device, optional): Device. Defaults to None.
 
     Examples:
@@ -671,10 +689,14 @@ class RSSMPosteriorV3(nn.Module):
         use_rms_norm: bool = False,
         num_layers: int = 1,
         norm_eps: float = 1e-4,
+        unimix: float = 0.0,
     ):
         super().__init__()
         self.num_categoricals = num_categoricals
         self.num_classes = num_classes
+        if not 0 <= unimix < 1:
+            raise ValueError(f"unimix must be in [0, 1), got {unimix}.")
+        self.unimix = unimix
 
         if use_rms_norm and (rnn_hidden_dim is None or obs_embed_dim is None):
             raise ValueError(
@@ -745,7 +767,7 @@ class RSSMPosteriorV3(nn.Module):
         posterior_logits = post_logits_flat.view(
             *post_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
         )
-        state = _straight_through_categorical(posterior_logits)
+        state = _straight_through_categorical(posterior_logits, self.unimix)
         state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
         return posterior_logits, state
 
@@ -847,7 +869,9 @@ class RSSMRolloutV3(TensorDictModuleBase):
         return torch.stack(tensordict_out, tensordict.ndim - 1)
 
 
-def _straight_through_categorical(logits: torch.Tensor) -> torch.Tensor:
+def _straight_through_categorical(
+    logits: torch.Tensor, unimix: float = 0.0
+) -> torch.Tensor:
     """Sample from categorical with straight-through gradient estimator.
 
     Forward: hard one-hot sample.
@@ -859,8 +883,8 @@ def _straight_through_categorical(logits: torch.Tensor) -> torch.Tensor:
     Returns:
         one_hot tensor with same shape, gradients through softmax.
     """
-    probs = torch.softmax(logits, dim=-1)
-    indices = torch.distributions.Categorical(logits=logits).sample()
+    probs = _unimix_probs(logits, unimix)
+    indices = torch.distributions.Categorical(probs=probs).sample()
     one_hot = torch.zeros_like(probs)
     one_hot.scatter_(-1, indices.unsqueeze(-1), 1.0)
     # Straight-through: forward = one_hot, backward gradient = grad(probs).

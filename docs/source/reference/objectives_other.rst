@@ -47,3 +47,4 @@ DreamerV3 Utilities
     two_hot_encode
     two_hot_decode
     two_hot_cross_entropy
+    categorical_kl_terms

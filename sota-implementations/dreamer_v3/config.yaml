@@ -19,6 +19,7 @@ networks:
   rnn_hidden_dim: 32
   num_categoricals: 4
   num_classes: 4
+  unimix: 0.01
   obs_embed_dim: 32
   num_reward_bins: 255
   num_value_bins: 255
@@ -36,7 +37,8 @@ optimization:
   slow_critic_regularization: 1.0
   slow_critic_tau: 0.02
   free_bits: 1.0
-  kl_alpha: 0.8
+  dynamic_loss_weight: 1.0
+  representation_loss_weight: 0.1
   gamma: 0.99
   lmbda: 0.95
 

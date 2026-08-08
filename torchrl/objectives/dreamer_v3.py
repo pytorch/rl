@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 from tensordict import TensorDict, TensorDictParams
@@ -31,6 +32,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.modules.models.model_based_v3 import (
     _default_bins,
     _DEFAULT_NUM_BINS,
+    _unimix_probs,
     symexp as _symexp,
     symlog as symlog,
     two_hot_cross_entropy as two_hot_cross_entropy,
@@ -53,6 +55,54 @@ two_hot_encode = _two_hot_encode
 # ---------------------------------------------------------------------------
 # KL balancing for categorical distributions (DreamerV3 §3)
 # ---------------------------------------------------------------------------
+
+
+def categorical_kl_terms(
+    posterior_logits: torch.Tensor,
+    prior_logits: torch.Tensor,
+    free_nats: float = 1.0,
+    unimix: float = 0.01,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return DreamerV3 dynamics and representation KL losses.
+
+    The dynamics term stops gradients through the posterior and the
+    representation term stops gradients through the prior. KL divergence is
+    summed over the stochastic categoricals before applying the free-nat
+    threshold, matching the aggregated one-hot distribution used by the
+    reference DreamerV3 implementation.
+
+    Args:
+        posterior_logits (torch.Tensor): Posterior logits with shape
+            ``[..., num_categoricals, num_classes]``.
+        prior_logits (torch.Tensor): Prior logits with the same shape.
+        free_nats (float, optional): Minimum aggregated KL in nats. Defaults to
+            ``1.0``.
+        unimix (float, optional): Fraction of uniform probability mixed into
+            each categorical. Defaults to ``0.01``.
+
+    Returns:
+        A pair containing the scalar dynamics and representation KL losses.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives import categorical_kl_terms
+        >>> posterior = torch.randn(2, 4, 8, requires_grad=True)
+        >>> prior = torch.randn(2, 4, 8, requires_grad=True)
+        >>> dynamics, representation = categorical_kl_terms(posterior, prior)
+        >>> dynamics.shape, representation.shape
+        (torch.Size([]), torch.Size([]))
+    """
+    posterior = _unimix_probs(posterior_logits, unimix)
+    prior = _unimix_probs(prior_logits, unimix)
+    posterior_log = posterior.log()
+    prior_log = prior.log()
+
+    dynamics = (posterior.detach() * (posterior_log.detach() - prior_log)).sum((-1, -2))
+    representation = (posterior * (posterior_log - prior_log.detach())).sum((-1, -2))
+    if free_nats:
+        dynamics = dynamics.clamp_min(free_nats)
+        representation = representation.clamp_min(free_nats)
+    return dynamics.mean(), representation.mean()
 
 
 def categorical_kl_balanced(
@@ -162,6 +212,16 @@ class DreamerV3ModelLoss(LossModule):
         lambda_reward (float, optional): Reward prediction loss weight. Default: 1.0.
         lambda_continue (float, optional): Continue prediction loss weight.
             Default: 0.0 (disabled).
+        kl_mode ("balanced" or "separate", optional): KL formulation.
+            ``"balanced"`` preserves the historical weighted aggregate;
+            ``"separate"`` emits the reference dynamics and representation
+            losses. Defaults to ``"balanced"``.
+        lambda_dynamic (float, optional): Dynamics KL weight in separate mode.
+            Defaults to 1.0.
+        lambda_representation (float, optional): Representation KL weight in
+            separate mode. Defaults to 0.1.
+        unimix (float, optional): Uniform mixture used by the categorical KL
+            distributions. Defaults to 0.0 for compatibility.
         kl_alpha (float, optional): KL balancing factor (alpha in the paper).
             Default: 0.8.
         free_bits (float, optional): Minimum KL per categorical in nats.
@@ -269,6 +329,10 @@ class DreamerV3ModelLoss(LossModule):
         lambda_reco: float = 1.0,
         lambda_reward: float = 1.0,
         lambda_continue: float = 0.0,
+        kl_mode: Literal["balanced", "separate"] = "balanced",
+        lambda_dynamic: float = 1.0,
+        lambda_representation: float = 0.1,
+        unimix: float = 0.0,
         kl_alpha: float = 0.8,
         free_bits: float = 1.0,
         reco_loss: str = "l2",
@@ -282,6 +346,14 @@ class DreamerV3ModelLoss(LossModule):
         self.lambda_reco = lambda_reco
         self.lambda_reward = lambda_reward
         self.lambda_continue = lambda_continue
+        if kl_mode not in ("balanced", "separate"):
+            raise ValueError(
+                "kl_mode must be 'balanced' or 'separate', got " f"{kl_mode!r}."
+            )
+        self.kl_mode = kl_mode
+        self.lambda_dynamic = lambda_dynamic
+        self.lambda_representation = lambda_representation
+        self.unimix = unimix
         self.kl_alpha = kl_alpha
         self.free_bits = free_bits
         self.reco_loss = reco_loss
@@ -309,12 +381,22 @@ class DreamerV3ModelLoss(LossModule):
         # ---- KL loss ----
         prior_logits = tensordict.get(("next", self.tensor_keys.prior_logits))
         posterior_logits = tensordict.get(("next", self.tensor_keys.posterior_logits))
-        kl_loss = categorical_kl_balanced(
-            posterior_logits,
-            prior_logits,
-            alpha=self.kl_alpha,
-            free_bits=self.free_bits,
-        ).unsqueeze(-1)
+        if self.kl_mode == "separate":
+            dynamic_loss, representation_loss = categorical_kl_terms(
+                posterior_logits,
+                prior_logits,
+                free_nats=self.free_bits,
+                unimix=self.unimix,
+            )
+            dynamic_loss = dynamic_loss.unsqueeze(-1)
+            representation_loss = representation_loss.unsqueeze(-1)
+        else:
+            kl_loss = categorical_kl_balanced(
+                posterior_logits,
+                prior_logits,
+                alpha=self.kl_alpha,
+                free_bits=self.free_bits,
+            ).unsqueeze(-1)
 
         # ---- Reconstruction loss ----
         pixels = tensordict.get(("next", self.tensor_keys.pixels)).contiguous()
@@ -360,10 +442,20 @@ class DreamerV3ModelLoss(LossModule):
         reward_loss = reward_loss.mean().unsqueeze(-1)
 
         td_out = TensorDict(
-            loss_model_kl=self.lambda_kl * kl_loss,
             loss_model_reco=self.lambda_reco * reco_loss,
             loss_model_reward=self.lambda_reward * reward_loss,
         )
+        if self.kl_mode == "separate":
+            td_out.set(
+                "loss_model_dynamic",
+                self.lambda_kl * self.lambda_dynamic * dynamic_loss,
+            )
+            td_out.set(
+                "loss_model_representation",
+                self.lambda_kl * self.lambda_representation * representation_loss,
+            )
+        else:
+            td_out.set("loss_model_kl", self.lambda_kl * kl_loss)
 
         # ---- Optional continue loss ----
         if self.lambda_continue > 0:
