@@ -20,13 +20,14 @@ from tensordict.nn import (
 )
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded, Unbounded
-from torchrl.modules import MLP, QValueActor, TanhNormal
+from torchrl.modules import MLP, QValueActor, SymExpTwoHot, TanhNormal
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
     CQLLoss,
     DDPGLoss,
     DQNLoss,
+    DreamerV3ValueLoss,
     IQLLoss,
     REDQLoss,
     ReinforceLoss,
@@ -34,6 +35,7 @@ from torchrl.objectives import (
     TD3Loss,
 )
 from torchrl.objectives.deprecated import REDQLoss_deprecated
+from torchrl.objectives.utils import SoftUpdate
 from torchrl.objectives.value import GAE
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -165,6 +167,51 @@ def _maybe_compile(fn, compile, td, fullgraph=FULLGRAPH, warmup=3):
             fn(td)
 
     return fn
+
+
+@pytest.mark.parametrize("compile", [False, True])
+def test_dreamer_v3_value_speed(
+    benchmark, compile, state_dim=32, belief_dim=32, bins=255, batch=128
+):
+    device = torch.device("cpu")
+    value_model = Seq(
+        Mod(
+            MLP(
+                in_features=state_dim + belief_dim,
+                out_features=bins,
+                depth=2,
+                num_cells=128,
+                device=device,
+            ),
+            in_keys=["state", "belief"],
+            out_keys=["state_value_logits"],
+        ),
+        Mod(
+            SymExpTwoHot(bins).to(device),
+            in_keys=["state_value_logits"],
+            out_keys=["state_value"],
+        ),
+    )
+    td = TensorDict(
+        {
+            "state": torch.randn(batch, state_dim, device=device),
+            "belief": torch.randn(batch, belief_dim, device=device),
+            "lambda_target": torch.randn(batch, 1, device=device),
+        },
+        [batch],
+    )
+    value_model(td.clone())
+    loss = DreamerV3ValueLoss(
+        value_model,
+        value_loss="two_hot",
+        discount_loss=False,
+        num_value_bins=bins,
+        slow_critic_regularization=1.0,
+    )
+    SoftUpdate(loss, tau=0.02)
+    loss(td)
+    loss = _maybe_compile(loss, compile, td, fullgraph=False, warmup=1)
+    benchmark(loss, td)
 
 
 @pytest.mark.parametrize("backward", [None, "backward"])

@@ -48,7 +48,7 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeSequential, WorldModelWrapper
+from torchrl.modules import SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
 from torchrl.modules.models.model_based import DreamerActor
 from torchrl.modules.models.model_based_v3 import (
@@ -62,7 +62,7 @@ from torchrl.objectives import (
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
 )
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 
 _has_matplotlib = importlib.util.find_spec("matplotlib") is not None
 
@@ -100,6 +100,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
         action_dim=action_dim,
+        unimix=cfg.networks.unimix,
     )
     rssm_prior = TensorDictModule(
         prior_net,
@@ -117,6 +118,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         num_classes=cfg.networks.num_classes,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
         obs_embed_dim=cfg.networks.obs_embed_dim,
+        unimix=cfg.networks.unimix,
     )
     rssm_posterior = TensorDictModule(
         posterior_net,
@@ -137,18 +139,52 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         out_keys=[("next", "reco_pixels")],
     )
 
-    reward_head = TensorDictModule(
-        MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=cfg.networks.num_reward_bins,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
+    reward_net = MLP(
+        in_features=state_dim + cfg.networks.rnn_hidden_dim,
+        out_features=cfg.networks.num_reward_bins,
+        depth=cfg.networks.depth,
+        num_cells=cfg.networks.hidden_dim,
+    )
+    reward_decoder = SymExpTwoHot(cfg.networks.num_reward_bins)
+    reward_head = TensorDictSequential(
+        TensorDictModule(
+            reward_net,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reward_logits")],
         ),
-        in_keys=[("next", "state"), ("next", "belief")],
-        out_keys=[("next", "reward")],
+        TensorDictModule(
+            reward_decoder,
+            in_keys=[("next", "reward_logits")],
+            out_keys=[("next", "reward")],
+        ),
     )
 
-    return TensorDictSequential(encoder, rollout, decoder, reward_head)
+    world_model = TensorDictSequential(encoder, rollout, decoder, reward_head)
+    return world_model, prior_net, reward_net, reward_decoder
+
+
+def build_imagination_model(*, prior_net, reward_net, reward_decoder):
+    """Build imagination operators backed by the trained world-model heads."""
+    transition_model = TensorDictSequential(
+        TensorDictModule(
+            prior_net,
+            in_keys=["state", "belief", "action"],
+            out_keys=["_", "state", "belief"],
+        )
+    )
+    reward_model = TensorDictSequential(
+        TensorDictModule(
+            reward_net,
+            in_keys=["state", "belief"],
+            out_keys=["reward_logits"],
+        ),
+        TensorDictModule(
+            reward_decoder,
+            in_keys=["reward_logits"],
+            out_keys=["reward"],
+        ),
+    )
+    return WorldModelWrapper(transition_model, reward_model)
 
 
 def build_actor(*, cfg: DictConfig, action_dim: int):
@@ -188,15 +224,22 @@ def build_actor(*, cfg: DictConfig, action_dim: int):
 
 def build_value(*, cfg: DictConfig):
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
-    value_model = TensorDictModule(
-        MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=1,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
+    value_model = TensorDictSequential(
+        TensorDictModule(
+            MLP(
+                in_features=state_dim + cfg.networks.rnn_hidden_dim,
+                out_features=cfg.networks.num_value_bins,
+                depth=cfg.networks.depth,
+                num_cells=cfg.networks.hidden_dim,
+            ),
+            in_keys=["state", "belief"],
+            out_keys=["state_value_logits"],
         ),
-        in_keys=["state", "belief"],
-        out_keys=["state_value"],
+        TensorDictModule(
+            SymExpTwoHot(cfg.networks.num_value_bins),
+            in_keys=["state_value_logits"],
+            out_keys=["state_value"],
+        ),
     )
     with torch.no_grad():
         value_model(
@@ -211,8 +254,8 @@ def build_value(*, cfg: DictConfig):
     return value_model
 
 
-def build_mb_env(*, cfg: DictConfig, real_env, action_dim: int):
-    """Imagination env: DreamerEnv wrapping an independent V3 prior + reward head."""
+def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
+    """Imagination env backed by the trained prior and reward head."""
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
     primer_env = TransformedEnv(
         real_env,
@@ -223,33 +266,8 @@ def build_mb_env(*, cfg: DictConfig, real_env, action_dim: int):
             belief=Unbounded(cfg.networks.rnn_hidden_dim),
         ),
     )
-    rssm_prior = RSSMPriorV3(
-        action_spec=real_env.action_spec,
-        hidden_dim=cfg.networks.rnn_hidden_dim,
-        rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
-        num_categoricals=cfg.networks.num_categoricals,
-        num_classes=cfg.networks.num_classes,
-        action_dim=action_dim,
-    )
-    transition_model = SafeSequential(
-        TensorDictModule(
-            rssm_prior,
-            in_keys=["state", "belief", "action"],
-            out_keys=["_", "state", "belief"],
-        )
-    )
-    reward_model = TensorDictModule(
-        MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=1,
-            depth=cfg.networks.depth,
-            num_cells=cfg.networks.hidden_dim,
-        ),
-        in_keys=["state", "belief"],
-        out_keys=["reward"],
-    )
     mb_env = DreamerEnv(
-        world_model=WorldModelWrapper(transition_model, reward_model),
+        world_model=imagination_model,
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([cfg.networks.rnn_hidden_dim]),
     )
@@ -269,7 +287,7 @@ def eval_episode_reward(env, actor, num_episodes: int) -> torch.Tensor:
     return torch.stack(totals).mean()
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(config_path="", config_name="config")
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
 
@@ -278,20 +296,30 @@ def main(cfg: DictConfig):
     action_dim = real_env.action_spec.shape[0]
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
 
-    world_model = build_world_model(cfg=cfg, obs_dim=obs_dim, action_dim=action_dim)
+    world_model, prior_net, reward_net, reward_decoder = build_world_model(
+        cfg=cfg, obs_dim=obs_dim, action_dim=action_dim
+    )
+    imagination_model = build_imagination_model(
+        prior_net=prior_net,
+        reward_net=reward_net,
+        reward_decoder=reward_decoder,
+    )
     actor_model = build_actor(cfg=cfg, action_dim=action_dim)
     value_model = build_value(cfg=cfg)
     mb_env = build_mb_env(
         cfg=cfg,
         real_env=make_env(cfg.env.name, cfg.env.seed + 1),
-        action_dim=action_dim,
+        imagination_model=imagination_model,
     )
 
     model_loss = DreamerV3ModelLoss(
         world_model,
         num_reward_bins=cfg.networks.num_reward_bins,
         free_bits=cfg.optimization.free_bits,
-        kl_alpha=cfg.optimization.kl_alpha,
+        kl_mode="separate",
+        lambda_dynamic=cfg.optimization.dynamic_loss_weight,
+        lambda_representation=cfg.optimization.representation_loss_weight,
+        unimix=cfg.networks.unimix,
         global_average=True,  # state-based obs, not (C, H, W) pixels
     )
     model_loss.set_keys(pixels="observation")
@@ -301,6 +329,8 @@ def main(cfg: DictConfig):
         mb_env,
         imagination_horizon=cfg.optimization.imagination_horizon,
         use_reinforce=cfg.optimization.use_reinforce,
+        return_normalization_rate=cfg.optimization.return_normalization_rate,
+        return_normalization_min_scale=cfg.optimization.return_normalization_min_scale,
     )
     actor_loss.make_value_estimator(
         ValueEstimators.TDLambda,
@@ -308,11 +338,16 @@ def main(cfg: DictConfig):
         lmbda=cfg.optimization.lmbda,
     )
     value_loss = DreamerV3ValueLoss(
-        value_model, value_loss="symlog_mse", actor_loss=actor_loss
+        value_model,
+        value_loss="two_hot",
+        num_value_bins=cfg.networks.num_value_bins,
+        actor_loss=actor_loss,
+        slow_critic_regularization=cfg.optimization.slow_critic_regularization,
     )
+    value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
 
     opt_model = torch.optim.Adam(model_loss.parameters(), lr=cfg.optimization.lr)
-    opt_actor = torch.optim.Adam(actor_loss.parameters(), lr=cfg.optimization.lr)
+    opt_actor = torch.optim.Adam(actor_model.parameters(), lr=cfg.optimization.lr)
     opt_value = torch.optim.Adam(value_loss.parameters(), lr=cfg.optimization.lr)
 
     explore_env = TransformedEnv(
@@ -403,10 +438,9 @@ def main(cfg: DictConfig):
             )
 
             m_td, model_out = model_loss(sample)
+            model_kl = m_td["loss_model_dynamic"] + m_td["loss_model_representation"]
             total_m = (
-                m_td["loss_model_kl"]
-                + m_td["loss_model_reco"]
-                + m_td["loss_model_reward"]
+                model_kl + m_td["loss_model_reco"] + m_td["loss_model_reward"]
             ).squeeze()
             opt_model.zero_grad(set_to_none=True)
             total_m.backward()
@@ -443,8 +477,9 @@ def main(cfg: DictConfig):
                 value_loss.parameters(), cfg.optimization.grad_clip
             )
             opt_value.step()
+            value_target_updater.step()
 
-            loss_hist["kl"].append(m_td["loss_model_kl"].detach())
+            loss_hist["kl"].append(model_kl.detach())
             loss_hist["reco"].append(m_td["loss_model_reco"].detach())
             loss_hist["reward"].append(m_td["loss_model_reward"].detach())
             loss_hist["actor"].append(a_td["loss_actor"].detach())

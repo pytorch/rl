@@ -20,11 +20,13 @@ from torchrl.objectives.dreamer import (
 )
 from torchrl.objectives.dreamer_v3 import (
     categorical_kl_balanced,
+    categorical_kl_terms,
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
     symexp,
     symlog,
+    two_hot_cross_entropy,
     two_hot_decode,
     two_hot_encode,
 )
@@ -97,6 +99,7 @@ __all__ = [
     "WorldModelLoss",
     "add_random_module",
     "categorical_kl_balanced",
+    "categorical_kl_terms",
     "default_value_kwargs",
     "distance_loss",
     "group_optimizers",
@@ -105,6 +108,7 @@ __all__ = [
     "next_state_value",
     "symexp",
     "symlog",
+    "two_hot_cross_entropy",
     "two_hot_decode",
     "two_hot_encode",
 ]
