@@ -1,13 +1,6 @@
 {
   "history": [
     {
-      "date": "2026-05-10",
-      "flaky_count": 130,
-      "new_flaky_count": 130,
-      "resolved_count": 0,
-      "total_tests": 27451
-    },
-    {
       "date": "2026-05-11",
       "flaky_count": 130,
       "new_flaky_count": 130,
@@ -625,6 +618,13 @@
     },
     {
       "date": "2026-08-08",
+      "flaky_count": 129,
+      "new_flaky_count": 129,
+      "resolved_count": 0,
+      "total_tests": 31295
+    },
+    {
+      "date": "2026-08-09",
       "flaky_count": 129,
       "new_flaky_count": 129,
       "resolved_count": 0,
