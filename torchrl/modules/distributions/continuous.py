@@ -486,7 +486,11 @@ class TanhNormal(FasterTransformedDistribution):
         self.cached_pair = preimage, sample
         self.cached_snapshot = sample.detach().clone()
         self.cached_version = (
-            None if is_compiling() or torch.is_inference(sample) else sample._version
+            None
+            if is_compiling()
+            or safe_is_current_stream_capturing()
+            or torch.is_inference(sample)
+            else sample._version
         )
         return sample
 
