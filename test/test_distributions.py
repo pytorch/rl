@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
+import sys
 import warnings
 from functools import partial
 
@@ -32,7 +34,10 @@ from torchrl.modules.distributions import (
     MaskedOneHotCategorical,
     TanhDelta,
 )
-from torchrl.modules.distributions.continuous import SafeTanhTransform
+from torchrl.modules.distributions.continuous import (
+    SafeTanhTransform,
+    TORCH_VERSION_PRE_2_6,
+)
 from torchrl.modules.distributions.discrete import (
     _generate_ordinal_logits,
     LLMMaskedCategorical,
@@ -138,6 +143,69 @@ class TestTanhNormal:
             assert (a <= d.high).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
+    @pytest.mark.parametrize("safe_tanh", [False, True])
+    @pytest.mark.parametrize("compiled", [False, True])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_tanhnormal_rsample_log_prob_consistency(
+        self, dtype, low, high, safe_tanh, compiled, device
+    ):
+        if compiled and sys.version_info >= (3, 14):
+            pytest.skip("torch.compile requires Python < 3.14")
+        if compiled and safe_tanh and TORCH_VERSION_PRE_2_6:
+            pytest.skip("safe_tanh compilation requires torch 2.6+")
+
+        if safe_tanh:
+            magnitude = 20.0 if dtype is torch.float32 else 40.0
+        else:
+            magnitude = 7.5 if dtype is torch.float32 else 18.0
+        loc = torch.tensor(
+            [[magnitude, -magnitude], [-magnitude, magnitude]],
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+        scale = torch.full_like(loc, 0.1, requires_grad=True)
+
+        def sample_and_log_prob(loc, scale):
+            dist = TanhNormal(
+                loc=loc,
+                scale=scale,
+                low=low,
+                high=high,
+                event_dims=1,
+                safe_tanh=safe_tanh,
+            )
+            sample = dist.rsample()
+            return sample, dist.log_prob(sample)
+
+        if compiled:
+            sample_and_log_prob = torch.compile(
+                sample_and_log_prob, backend="eager", fullgraph=True
+            )
+
+        torch.manual_seed(0)
+        sample, log_prob = sample_and_log_prob(loc, scale)
+        sample_loc_grad, sample_scale_grad = torch.autograd.grad(
+            sample.sum(), (loc, scale), retain_graph=True
+        )
+        noise = (sample_scale_grad / sample_loc_grad).detach()
+        pre_tanh = loc + scale * noise
+        tanh_log_det = 2.0 * (math.log(2.0) - pre_tanh - F.softplus(-2.0 * pre_tanh))
+        affine_log_det = math.log((high - low) / 2.0)
+        expected = (
+            torch.distributions.Normal(loc, scale).log_prob(pre_tanh)
+            - tanh_log_det
+            - affine_log_det
+        ).sum(-1)
+
+        torch.testing.assert_close(log_prob, expected)
+        log_prob_grads = torch.autograd.grad(log_prob.sum(), (loc, scale))
+        expected_grads = torch.autograd.grad(expected.sum(), (loc, scale))
+        for log_prob_grad, expected_grad in zip(log_prob_grads, expected_grads):
+            torch.testing.assert_close(log_prob_grad, expected_grad)
 
     def test_tanhnormal_mode(self):
         # Checks that the std of the mode computed by tanh normal is within a certain range

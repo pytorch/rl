@@ -454,19 +454,22 @@ class TanhNormal(FasterTransformedDistribution):
         self.low = low
         self.high = high
 
+        # Preserve exact preimages when finite-precision tanh saturates.
         if safe_tanh:
             if is_compiling() and TORCH_VERSION_PRE_2_6:
                 _err_compile_safetanh()
-            t = SafeTanhTransform()
+            t = SafeTanhTransform(cache_size=1)
         else:
-            t = D.TanhTransform()
+            t = D.TanhTransform(cache_size=1)
         # t = D.TanhTransform()
         if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
             t = _PatchedComposeTransform(
                 [
                     t,
                     _PatchedAffineTransform(
-                        loc=(high + low) / 2, scale=(high - low) / 2
+                        loc=(high + low) / 2,
+                        scale=(high - low) / 2,
+                        cache_size=1,
                     ),
                 ]
             )
@@ -557,7 +560,8 @@ class TanhNormal(FasterTransformedDistribution):
             tanh_loc=False,
         )
         for _ in range(200):
-            lp = -self_copy.log_prob(m)
+            # Adam mutates m, so each inverse-cache key must be a new tensor.
+            lp = -self_copy.log_prob(m.clone())
             lp.mean().backward()
             mc = m.clone().detach()
             m.grad.clamp_max_(1)
