@@ -39,6 +39,7 @@ from torchrl.objectives.rnd import RNDLoss
 from torchrl.objectives.sac import DiscreteSACLoss, SACLoss
 from torchrl.objectives.td3 import TD3Loss
 from torchrl.objectives.td3_bc import TD3BCLoss
+from torchrl.objectives.tqc import TQCLoss
 from torchrl.objectives.utils import (
     default_value_kwargs,
     distance_loss,
@@ -93,6 +94,7 @@ __all__ = [
     "TD3BCLoss",
     "TD3Loss",
     "TargetNetUpdater",
+    "TQCLoss",
     "ValueEstimators",
     "WorldModelLoss",
     "add_random_module",
