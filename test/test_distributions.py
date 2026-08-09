@@ -179,7 +179,25 @@ class TestTanhNormal:
                 safe_tanh=safe_tanh,
             )
             sample = dist.rsample()
-            return sample, dist.log_prob(sample)
+            log_prob = dist.log_prob(sample)
+            dist.log_prob(torch.zeros_like(sample))
+            rescored_log_prob = dist.log_prob(sample)
+            mutated_dist = TanhNormal(
+                loc=loc,
+                scale=scale,
+                low=low,
+                high=high,
+                event_dims=1,
+                safe_tanh=safe_tanh,
+            )
+            mutated_sample = mutated_dist.rsample()
+            mutated_sample.fill_((low + high) / 2)
+            return (
+                sample,
+                log_prob,
+                rescored_log_prob,
+                mutated_dist.log_prob(mutated_sample),
+            )
 
         if compiled:
             sample_and_log_prob = torch.compile(
@@ -187,7 +205,9 @@ class TestTanhNormal:
             )
 
         torch.manual_seed(0)
-        sample, log_prob = sample_and_log_prob(loc, scale)
+        sample, log_prob, rescored_log_prob, mutated_log_prob = sample_and_log_prob(
+            loc, scale
+        )
         sample_loc_grad, sample_scale_grad = torch.autograd.grad(
             sample.sum(), (loc, scale), retain_graph=True
         )
@@ -200,12 +220,90 @@ class TestTanhNormal:
             - tanh_log_det
             - affine_log_det
         ).sum(-1)
+        expected_mutated = TanhNormal(
+            loc=loc,
+            scale=scale,
+            low=low,
+            high=high,
+            event_dims=1,
+            safe_tanh=safe_tanh,
+        ).log_prob(torch.full_like(sample, (low + high) / 2))
 
         torch.testing.assert_close(log_prob, expected)
-        log_prob_grads = torch.autograd.grad(log_prob.sum(), (loc, scale))
+        torch.testing.assert_close(rescored_log_prob, expected)
+        torch.testing.assert_close(mutated_log_prob, expected_mutated)
+        log_prob_grads = torch.autograd.grad(
+            log_prob.sum(), (loc, scale), retain_graph=True
+        )
+        rescored_log_prob_grads = torch.autograd.grad(
+            rescored_log_prob.sum(), (loc, scale), retain_graph=True
+        )
         expected_grads = torch.autograd.grad(expected.sum(), (loc, scale))
-        for log_prob_grad, expected_grad in zip(log_prob_grads, expected_grads):
-            torch.testing.assert_close(log_prob_grad, expected_grad)
+        for actual_grads in (log_prob_grads, rescored_log_prob_grads):
+            for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+                torch.testing.assert_close(actual_grad, expected_grad)
+
+    @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
+    def test_tanhnormal_repeated_log_prob(self, low, high):
+        loc = torch.tensor([0.3])
+        scale = torch.tensor([0.7])
+        dist = TanhNormal(loc, scale, low=low, high=high, event_dims=0)
+        deterministic = dist.deterministic_sample
+        expected = deterministic.clone()
+        deterministic.zero_()
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+
+        value = torch.tensor([0.2], requires_grad=True)
+        grads = []
+        for _ in range(2):
+            dist.log_prob(value).sum().backward()
+            grads.append(value.grad.clone())
+            value.grad = None
+        torch.testing.assert_close(grads[0], grads[1])
+
+        with torch.no_grad():
+            value.fill_(0.7)
+        expected = TanhNormal(loc, scale, low=low, high=high, event_dims=0).log_prob(
+            value
+        )
+        torch.testing.assert_close(dist.log_prob(value), expected)
+
+        torch.manual_seed(0)
+        sample = dist.sample()
+        dist.log_prob(sample)
+        sample.zero_()
+        expected = TanhNormal(loc, scale, low=low, high=high, event_dims=0).log_prob(
+            sample
+        )
+        torch.testing.assert_close(dist.log_prob(sample), expected)
+
+    @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
+    @pytest.mark.parametrize("event_dims", [0, 1, 2])
+    def test_tanhnormal_update_clears_cache(self, low, high, event_dims):
+        old_loc = torch.full((2, 3), 7.5)
+        old_scale = torch.full((2, 3), 0.1)
+        dist = TanhNormal(
+            old_loc,
+            old_scale,
+            low=low,
+            high=high,
+            event_dims=event_dims,
+            safe_tanh=False,
+        )
+        torch.manual_seed(0)
+        sample = dist.rsample()
+        new_loc = torch.full((2, 3), 0.4)
+        new_scale = torch.full((2, 3), 0.8)
+        dist.update(new_loc, new_scale)
+        expected = TanhNormal(
+            new_loc,
+            new_scale,
+            low=low,
+            high=high,
+            event_dims=event_dims,
+            safe_tanh=False,
+        ).log_prob(sample)
+        torch.testing.assert_close(dist.log_prob(sample), expected)
 
     def test_tanhnormal_mode(self):
         # Checks that the std of the mode computed by tanh normal is within a certain range

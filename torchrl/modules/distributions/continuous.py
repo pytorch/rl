@@ -14,6 +14,7 @@ from packaging import version
 from torch import distributions as D, nn
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
+from torch.distributions.utils import _sum_rightmost
 
 from torchrl._utils import safe_is_current_stream_capturing
 from torchrl.modules.distributions.truncated_normal import (
@@ -454,14 +455,12 @@ class TanhNormal(FasterTransformedDistribution):
         self.low = low
         self.high = high
 
-        # Preserve exact preimages when finite-precision tanh saturates.
         if safe_tanh:
             if is_compiling() and TORCH_VERSION_PRE_2_6:
                 _err_compile_safetanh()
-            t = SafeTanhTransform(cache_size=1)
+            t = SafeTanhTransform()
         else:
-            t = D.TanhTransform(cache_size=1)
-        # t = D.TanhTransform()
+            t = D.TanhTransform()
         if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
             t = _PatchedComposeTransform(
                 [
@@ -469,13 +468,66 @@ class TanhNormal(FasterTransformedDistribution):
                     _PatchedAffineTransform(
                         loc=(high + low) / 2,
                         scale=(high - low) / 2,
-                        cache_size=1,
                     ),
                 ]
             )
         self._t = t
+        # Preserve exact preimages when finite-precision tanh saturates.
+        self.cached_pair = None, None
+        self.cached_snapshot = None
+        self.cached_version = None
 
         self.update(loc, scale)
+
+    def transform_sample(self, preimage):
+        sample = preimage
+        for transform in self.transforms:
+            sample = transform(sample)
+        self.cached_pair = preimage, sample
+        self.cached_snapshot = sample.detach().clone()
+        self.cached_version = (
+            None if is_compiling() or torch.is_inference(sample) else sample._version
+        )
+        return sample
+
+    @torch.no_grad()
+    def sample(self, sample_shape=None):
+        if sample_shape is None:
+            sample_shape = torch.Size()
+        return self.transform_sample(self.base_dist.sample(sample_shape))
+
+    def rsample(self, sample_shape=None):
+        if sample_shape is None:
+            sample_shape = torch.Size()
+        return self.transform_sample(self.base_dist.rsample(sample_shape))
+
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+        cached_preimage, cached_sample = self.cached_pair
+        if value is not cached_sample:
+            return super().log_prob(value)
+        transform = self.transforms[0]
+        if is_compiling() or self.cached_version is None:
+            unchanged = torch.eq(value, self.cached_snapshot).all()
+            midpoint = torch.zeros_like(value) + (self.high + self.low) / 2
+            inverse_input = torch.where(unchanged, midpoint, value)
+            preimage = torch.where(
+                unchanged, cached_preimage, transform.inv(inverse_input)
+            )
+        elif value._version == self.cached_version:
+            preimage = cached_preimage
+        else:
+            return super().log_prob(value)
+
+        event_dim = len(self.event_shape)
+        event_dim += transform.domain.event_dim - transform.codomain.event_dim
+        log_prob = -_sum_rightmost(
+            transform.log_abs_det_jacobian(preimage, value),
+            event_dim - transform.domain.event_dim,
+        )
+        return log_prob + _sum_rightmost(
+            self.base_dist.log_prob(preimage),
+            event_dim - len(self.base_dist.event_shape),
+        )
 
     @property
     def min(self):
@@ -488,6 +540,9 @@ class TanhNormal(FasterTransformedDistribution):
         return self.high
 
     def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
+        self.cached_pair = None, None
+        self.cached_snapshot = None
+        self.cached_version = None
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
@@ -538,10 +593,7 @@ class TanhNormal(FasterTransformedDistribution):
 
     @property
     def deterministic_sample(self):
-        m = self.root_dist.mean
-        for t in self.transforms:
-            m = t(m)
-        return m
+        return self.transform_sample(self.root_dist.mean)
 
     @torch.enable_grad()
     def get_mode(self):
@@ -560,8 +612,7 @@ class TanhNormal(FasterTransformedDistribution):
             tanh_loc=False,
         )
         for _ in range(200):
-            # Adam mutates m, so each inverse-cache key must be a new tensor.
-            lp = -self_copy.log_prob(m.clone())
+            lp = -self_copy.log_prob(m)
             lp.mean().backward()
             mc = m.clone().detach()
             m.grad.clamp_max_(1)
