@@ -54,9 +54,9 @@ from .models import (
     RSSMPosterior,
     RSSMPrior,
     RSSMRollout,
-    SymExpTwoHot,
     Squeeze2dLayer,
     SqueezeLayer,
+    SymExpTwoHot,
     VDNMixer,
 )
 from .tensordict_module import (
