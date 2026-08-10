@@ -24,7 +24,7 @@ uv pip install --pre torch torchvision --index-url https://download.pytorch.org/
 uv pip install tensordict torchrl
 
 # Install additional dependencies
-uv pip install mujoco dm_control wandb tqdm hydra-core
+uv pip install mujoco dm_control wandb tqdm "hydra-core>=1.3,<1.4"
 ```
 
 ### System Dependencies (for MuJoCo rendering)

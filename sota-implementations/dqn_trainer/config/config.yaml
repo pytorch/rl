@@ -122,3 +122,7 @@ trainer:
   eps_end: 0.05
   annealing_num_steps: 250_000
   async_collection: false
+
+hydra:
+  job:
+    chdir: true

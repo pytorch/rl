@@ -31,10 +31,11 @@ class WriterConfig(ConfigBase):
 
 @dataclass
 class RoundRobinWriterConfig(WriterConfig):
-    """Configuration for round-robin writer that distributes data across multiple storages."""
+    """Hydra configuration for :class:`~torchrl.data.RoundRobinWriter`."""
 
     _target_: str = "torchrl.data.replay_buffers.RoundRobinWriter"
     compilable: bool = False
+    track_generations: bool = False
 
     def __post_init__(self) -> None:
         """Post-initialization hook for round-robin writer configurations."""
@@ -94,10 +95,11 @@ class TensorDictMaxValueWriterConfig(WriterConfig):
 
 @dataclass
 class TensorDictRoundRobinWriterConfig(WriterConfig):
-    """Configuration for TensorDict round-robin writer."""
+    """Hydra configuration for :class:`~torchrl.data.TensorDictRoundRobinWriter`."""
 
     _target_: str = "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
     compilable: bool = False
+    track_generations: bool = False
 
 
 @dataclass

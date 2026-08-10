@@ -55,3 +55,7 @@ logger:
   eval_iter: 25000
   video: False
   num_eval_envs: 1
+
+hydra:
+  job:
+    chdir: true

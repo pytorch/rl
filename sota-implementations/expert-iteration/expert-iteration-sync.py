@@ -379,7 +379,7 @@ def train(
     collector.shutdown()
 
 
-@hydra.main(version_base=None, config_path="config", config_name="ei_gsm8k")
+@hydra.main(version_base="1.3", config_path="config", config_name="ei_gsm8k")
 def main(cfg):
     # Force sync mode
     if not cfg.train.sync:
