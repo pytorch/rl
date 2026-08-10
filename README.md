@@ -562,8 +562,9 @@ The following trusted collaborators are also available for review guidance and
 contributor advice:
 
 - [`theap06`](https://github.com/theap06)
-- [`ParamThakkar123`](https://github.com/ParamThakkar123)
-- [`Xmaster6y`](https://github.com/Xmaster6y)
+
+If you would like to be added to this list, reach out to
+[Vincent Moens (`vmoens`)](https://github.com/vmoens).
 
 For local development, install pre-commit hooks with:
 
