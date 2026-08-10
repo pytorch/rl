@@ -7,7 +7,7 @@ import torchrl
 from torchrl.trainers.algorithms.configs import A2CTrainerConfig  # noqa: F401
 
 
-@hydra.main(config_path="config", config_name="config", version_base="1.1")
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg):
     def print_reward(td):
         torchrl.logger.info(f"reward: {td['next', 'reward'].mean(): 4.4f}")

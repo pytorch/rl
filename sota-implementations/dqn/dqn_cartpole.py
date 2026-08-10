@@ -94,7 +94,7 @@ def _resume_checkpoint(
     )
 
 
-@hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
+@hydra.main(config_path="", config_name="config_cartpole", version_base="1.3")
 def main(cfg: DictConfig):
 
     device = torch.device(cfg.device) if cfg.device else get_available_device()

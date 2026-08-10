@@ -136,3 +136,7 @@ trainer:
   optim_steps_per_batch: null
   num_epochs: 1
   async_collection: false
+
+hydra:
+  job:
+    chdir: true
