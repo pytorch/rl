@@ -1710,6 +1710,49 @@ class TestPostTrainingLogger:
         assert m["training/grad_norm"] == 1.0
         assert m["training/optim_steps"] == 1
 
+    def test_log_training_step_accumulation_matches_caller_loop(self, csv_logger):
+        """Integration: simulate the actual caller-loop pattern and verify the
+        logger's grad_norm gate fires at exactly the same steps.
+
+        Recipe loops do:
+            global_step += 1          # increment first
+            loss.backward()
+            if global_step % accum == 0:   # FIXED: was (global_step+1) % accum
+                optimizer.step()
+                grad_norm = clip_grad_norm_(...)
+            log_training_metrics(..., grad_norm=grad_norm, global_step=global_step)
+
+        With accum=4 the optimizer fires at steps 4, 8, 12, ...
+        The logger must emit training/grad_norm on exactly those steps.
+        """
+        loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
+        pt = PostTrainingLogger(logger=csv_logger)
+        accum = 4
+        grad_norm = 0.0
+        optim_steps_logged = []
+        grad_norm_steps = []
+
+        for global_step in range(1, 13):  # simulate 12 gradient steps
+            # Simulate optimizer boundary — matches fixed callers
+            if global_step % accum == 0:
+                grad_norm = 1.0  # pretend clip_grad_norm_ returned 1.0
+            m = pt.log_training_step(
+                loss=loss,
+                step=global_step,
+                grad_norm=grad_norm,
+                gradient_accumulation_steps=accum,
+            )
+            if "training/grad_norm" in m:
+                grad_norm_steps.append(global_step)
+            optim_steps_logged.append(m["training/optim_steps"])
+
+        # Optimizer fired at steps 4, 8, 12
+        assert grad_norm_steps == [4, 8, 12], grad_norm_steps
+        # optim_steps should be 0 for steps 1-3, then 1 for steps 4-7, etc.
+        assert optim_steps_logged[3] == 1   # step 4
+        assert optim_steps_logged[7] == 2   # step 8
+        assert optim_steps_logged[11] == 3  # step 12
+
     # --- log_collection_step ---
 
     def test_log_collection_step_minimal(self, csv_logger):

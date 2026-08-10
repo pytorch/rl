@@ -242,7 +242,7 @@ def train(
                     else:
                         loss_val.backward()
 
-                if ((global_step + 1) % cfg.train.gradient_accumulation_steps) == 0:
+                if (global_step % cfg.train.gradient_accumulation_steps) == 0:
                     with timeit("optim_step"):
                         if (
                             cfg.train.mixed_precision
