@@ -170,7 +170,7 @@ def pilco_loop(
     return policy_module
 
 
-@hydra.main(config_path="", config_name="config", version_base="1.1")
+@hydra.main(config_path="", config_name="config", version_base="1.3")
 def main(cfg: DictConfig) -> None:
     device = torch.device(cfg.device) if cfg.device else get_available_device()
 

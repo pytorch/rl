@@ -106,7 +106,7 @@ def _make_eval_env_kwargs(cfg: DictConfig) -> dict[str, object]:
     return kwargs
 
 
-@hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
+@hydra.main(config_path="", config_name="config_mujoco", version_base="1.3")
 def main(cfg: DictConfig):
     device = (
         torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()

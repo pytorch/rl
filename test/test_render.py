@@ -1058,6 +1058,7 @@ class TestSotaCheckpointFactories:
         assert current_config == {"learning_rate": 2e-3}
         assert current_state == {"collected_frames": 9}
         assert result.unrequested == {"config", "replay_buffer"}
+        assert result.comparison["version_skew"] is False
 
         compact_path = tmp_path / "compact_dqn.torchrl"
         compact_checkpoint = Checkpoint(

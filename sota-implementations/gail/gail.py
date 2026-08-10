@@ -34,7 +34,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 torch.set_float32_matmul_precision("high")
 
 
-@hydra.main(config_path="", config_name="config")
+@hydra.main(config_path="", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 

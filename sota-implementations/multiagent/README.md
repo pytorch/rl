@@ -28,7 +28,7 @@ Install vmas and dependencies:
 ```bash
 pip install vmas
 pip install wandb "moviepy<2.0.0"
-pip install hydra-core
+pip install --upgrade "hydra-core>=1.3,<1.4"
 ```
 
 ### Run
