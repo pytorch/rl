@@ -49,3 +49,7 @@ compile:
 replay_buffer:
   dataset: halfcheetah-expert-v2
   batch_size: 256
+
+hydra:
+  job:
+    chdir: true

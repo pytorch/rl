@@ -286,6 +286,48 @@ class TestBCLoss:
         assert "is_pad" not in loss.in_keys
         torch.testing.assert_close(loss(td)["loss_bc"], unmasked)
 
+    def test_collector_mask(self):
+        # ("collector", "mask"), as written by SliceSampler(pad_output=True),
+        # is honored without any set_keys() call: padding rows (mask=False) do
+        # not contribute, so the loss matches the one over the real rows only.
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        loss = BCLoss(actor, loss_function="l1")
+        obs = torch.randn(3, n_obs)
+        action = torch.randn(3, n_act)
+        action[2] = 1e6  # garbage target on the padding row
+        td = TensorDict(
+            {"observation": obs.clone(), "action": action.clone()}, batch_size=[3]
+        )
+        td["collector", "mask"] = torch.tensor([True, True, False])
+        real = TensorDict(
+            {"observation": obs[:2].clone(), "action": action[:2].clone()},
+            batch_size=[2],
+        )
+        torch.testing.assert_close(loss(td)["loss_bc"], loss(real)["loss_bc"])
+
+    def test_collector_mask_can_be_disabled(self):
+        n_obs, n_act = 3, 4
+        actor = TensorDictModule(
+            nn.Linear(n_obs, n_act), in_keys=["observation"], out_keys=["action"]
+        )
+        loss = BCLoss(actor, loss_function="l1")
+        action = torch.randn(3, n_act)
+        action[2] = 1e6  # padding row, far from anything the actor can predict
+        td = TensorDict(
+            {"observation": torch.randn(3, n_obs), "action": action}, batch_size=[3]
+        )
+        td["collector", "mask"] = torch.tensor([True, True, False])
+        masked = loss(td)["loss_bc"]
+        loss.loss_mask_key = None
+        unmasked = loss(td)["loss_bc"]
+        assert masked < unmasked
+        torch.testing.assert_close(
+            unmasked, loss(td.exclude(("collector", "mask")))["loss_bc"]
+        )
+
     def test_pad_mask_reduction_none(self):
         # with a mask, reduction="none" returns the flat 1D tensor of
         # unmasked loss elements (the _reduce convention)

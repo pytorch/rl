@@ -1,4 +1,4 @@
-hydra-core
+hydra-core>=1.3,<1.4
 tqdm
 wandb
 mujoco-torch @ git+https://github.com/vmoens/mujoco-torch.git@main

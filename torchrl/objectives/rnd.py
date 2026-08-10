@@ -14,7 +14,6 @@ from tensordict.utils import NestedKey
 
 from torchrl.envs.transforms.rnd import RunningMeanStd
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce
 
 
 class RNDLoss(LossModule):
@@ -129,6 +128,7 @@ class RNDLoss(LossModule):
 
         per_sample_loss = (pred_feat - target_feat).pow(2).mean(dim=-1)
 
+        mask = None
         if self.update_fraction < 1.0:
             mask = (
                 torch.rand(per_sample_loss.shape, device=per_sample_loss.device)
@@ -137,11 +137,8 @@ class RNDLoss(LossModule):
             per_sample_loss = torch.where(
                 mask, per_sample_loss, torch.zeros_like(per_sample_loss)
             )
-            if self.reduction == "mean":
-                loss = per_sample_loss.sum() / mask.sum().clamp_min(1)
-            else:
-                loss = _reduce(per_sample_loss, self.reduction)
-        else:
-            loss = _reduce(per_sample_loss, self.reduction)
+            if self.reduction == "none":
+                mask = None
+        loss = self._reduce_loss(per_sample_loss, tensordict=tensordict, mask=mask)
 
         return TensorDict({"loss_predictor": loss}, batch_size=[])

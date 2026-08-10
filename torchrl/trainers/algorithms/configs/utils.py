@@ -228,6 +228,7 @@ class LBFGSConfig(ConfigBase):
     tolerance_change: float = 1e-9
     history_size: int = 100
     line_search_fn: str | None = None
+    maximize: bool = False
     _target_: str = "torch.optim.LBFGS"
     _partial_: bool = True
 
