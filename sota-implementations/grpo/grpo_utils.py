@@ -24,6 +24,9 @@ from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncSche
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
 
+# Tracks which one-time deprecation warnings have already fired.
+_GRPO_WARNED: set[str] = set()
+
 
 def check_grpo_dependencies(backend: str = "vllm") -> None:
     """Check for required GRPO dependencies and provide helpful error messages.
@@ -917,6 +920,7 @@ def add_kl_transforms_to_replay_buffer(replay_buffer, cfg: DictConfig):
 @timeit("Logging metrics")
 def log_training_metrics(
     wandb_logger,
+    post_training_logger,
     replay_buffer,
     batch,
     loss,
@@ -931,63 +935,90 @@ def log_training_metrics(
 ):
     """Log training metrics to wandb.
 
+    Delegates standard metrics to :class:`~torchrl.record.loggers.PostTrainingLogger`
+    and appends GRPO-recipe-specific metrics directly.
+
     Args:
-        wandb_logger: The wandb logger instance
-        replay_buffer: The replay buffer containing collected data
-        batch: The current training batch
-        loss: The computed loss object
-        grad_norm: The gradient norm value
-        global_step: Current global training step
-        data_read_count: Total data read count
-        collector: The collector instance
-        start_time: Training start time
-        gradient_accumulation_steps: Number of gradient accumulation steps
-        history_str: Optional history string for logging
+        wandb_logger: The wandb logger instance.
+        post_training_logger: Persistent post-training logger for this run.
+        replay_buffer: The replay buffer containing collected data.
+        batch: The current training batch.
+        loss: The computed loss object.
+        grad_norm: The gradient norm value.
+        global_step: Current global training step.
+        data_read_count: Total data read count.
+        collector: The collector instance.
+        start_time: Training start time (``time.time()`` at loop start).
+        gradient_accumulation_steps: Number of gradient accumulation steps.
+        history_str: Optional history string for logging.
+        use_kl_to_ref: Whether KL-to-reference metrics are available.
     """
-    with torch.no_grad():
-        rb_content = replay_buffer[:]
-        step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
-        batch_policy_version = batch["next", "policy_version"].view(-1).min()
-        batch_policy_age = collector.policy_version - batch_policy_version
+    post_training_logger.log_training_step(
+        loss=loss,
+        step=global_step,
+        grad_norm=grad_norm,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+    )
+    post_training_logger.log_collection_step(
+        batch=batch,
+        replay_buffer=replay_buffer,
+        collector=collector,
+        step=global_step,
+    )
 
-        # Buffer-level staleness stats
-        buffer_policy_versions = (
-            rb_content.get(("next", "policy_version")).view(-1).float()
+    # Legacy keys superseded by PostTrainingLogger's batch/* metrics (computed
+    # over the sampled batch, where these are computed over the whole buffer or
+    # from recipe-local state). Per the deprecation policy they stay emitted,
+    # under their old names and with their old semantics, for two minor
+    # releases: deprecated in v0.14, removed in v0.16.0.
+    if "grpo-legacy-keys" not in _GRPO_WARNED:
+        _GRPO_WARNED.add("grpo-legacy-keys")
+        warnings.warn(
+            "The GRPO metric keys 'buffer/reward_mean', 'buffer/seq_length_mean', "
+            "'inference/batch_policy_version', 'inference/batch_policy_age', "
+            "'throughput/optim_steps_per_second', 'training/entropy_loss' and "
+            "'training/kl_approx_to_inference' are deprecated and will be removed "
+            "in v0.16.0. Use the batch/* keys emitted by PostTrainingLogger "
+            "(computed over the sampled batch rather than the whole buffer), "
+            "'training/loss_entropy', 'training/kl_approx' and "
+            "'batch/staleness_mean'/'batch/staleness_max'.",
+            FutureWarning,
+            stacklevel=2,
         )
-        current_version = collector.policy_version
-        buffer_staleness = current_version - buffer_policy_versions
-        buffer_staleness_mean = float(buffer_staleness.mean())
-        buffer_staleness_max = float(buffer_staleness.max())
 
+    # GRPO-specific extras (step_count, kl_penalty, read counts) plus the
+    # deprecated legacy keys above, all of which need recipe-local state
+    # (whole-buffer contents, the collector, the wall clock) that is not part
+    # of the standard PostTrainingLogger interface.
+    with torch.no_grad():
+        extra_metrics = {"buffer/data_read_count": data_read_count}
+        loss_entropy = getattr(loss, "loss_entropy", None)
+        if loss_entropy is not None:
+            extra_metrics["training/entropy_loss"] = float(loss_entropy.mean())
+        kl_approx = getattr(loss, "kl_approx", None)
+        if kl_approx is not None:
+            extra_metrics["training/kl_approx_to_inference"] = float(kl_approx.mean())
+        try:
+            batch_policy_version = int(batch["next", "policy_version"].view(-1).min())
+            extra_metrics["inference/batch_policy_version"] = batch_policy_version
+            extra_metrics["inference/batch_policy_age"] = (
+                int(collector.policy_version) - batch_policy_version
+            )
+        except (AttributeError, KeyError, RuntimeError, TypeError):
+            pass
         elapsed = time.time() - start_time
-        optim_steps = global_step // gradient_accumulation_steps
-
-        metrics = {
-            # --- training/ : loss components and optimizer state ---
-            "training/loss_objective": float(loss.loss_objective),
-            "training/clip_fraction": float(loss.clip_fraction),
-            "training/ESS": float(loss.ESS),
-            "training/entropy_loss": float(loss.loss_entropy.mean()),
-            "training/kl_approx_to_inference": float(loss.kl_approx),
-            "training/kl_to_inference": float(loss.kl_to_inference.mean()),
-            "training/loss_kl_to_inference": float(loss.loss_kl_to_inference.mean()),
-            "training/grad_norm": float(grad_norm)
-            if global_step % gradient_accumulation_steps == 0
-            else 0.0,
-            "training/gradient_steps": global_step,
-            "training/optim_steps": optim_steps,
-            # --- inference/ : collection and policy version state ---
-            "inference/policy_version": collector.policy_version,
-            "inference/batch_policy_version": batch_policy_version,
-            "inference/batch_policy_age": batch_policy_age,
-            "inference/staleness_mean": buffer_staleness_mean,
-            "inference/staleness_max": buffer_staleness_max,
-            # --- buffer/ : replay buffer statistics ---
-            "buffer/write_count": int(replay_buffer.write_count),
-            "buffer/reward_mean": float(
+        if elapsed > 0:
+            extra_metrics["throughput/optim_steps_per_second"] = float(
+                (global_step // gradient_accumulation_steps) / elapsed
+            )
+        try:
+            rb_content = replay_buffer[:]
+            step_count = rb_content.get(("next", "step_count")).view(-1).float().mean()
+            extra_metrics["buffer/step_count_mean"] = float(step_count)
+            extra_metrics["buffer/reward_mean"] = float(
                 torch.cat(rb_content.get(("next", "reward"), as_list=True)).mean()
-            ),
-            "buffer/seq_length_mean": float(
+            )
+            extra_metrics["buffer/seq_length_mean"] = float(
                 torch.tensor(
                     [
                         t.numel()
@@ -995,27 +1026,16 @@ def log_training_metrics(
                     ],
                     dtype=torch.float,
                 ).mean()
-            ),
-            "buffer/step_count_mean": float(step_count),
-            "buffer/data_read_count": data_read_count,
-            # --- throughput/ : training speed metrics ---
-            "throughput/gradient_steps_per_second": float(global_step / elapsed),
-            "throughput/optim_steps_per_second": float(optim_steps / elapsed),
-            "throughput/gradient_steps_per_write": float(
-                global_step / replay_buffer.write_count
-            ),
-            "throughput/optim_steps_per_write": float(
-                optim_steps / replay_buffer.write_count
-            ),
-        }
-        if use_kl_to_ref:
-            metrics["training/kl_to_ref"] = float(loss.kl_to_ref.mean())
-            metrics["training/loss_kl_to_ref"] = float(loss.loss_kl_to_ref.mean())
-            metrics["buffer/kl_penalty_to_ref_mean"] = float(
-                torch.cat(rb_content.get(("next", "kl_penalty"), as_list=True)).mean()
             )
+            if use_kl_to_ref:
+                extra_metrics["buffer/kl_penalty_to_ref_mean"] = float(
+                    torch.cat(
+                        rb_content.get(("next", "kl_penalty"), as_list=True)
+                    ).mean()
+                )
+        except (AttributeError, KeyError, RuntimeError, TypeError):
+            pass
+        wandb_logger.log_metrics(extra_metrics, step=global_step)
 
-        wandb_logger.log_metrics(metrics, step=global_step)
-
-        if history_str is not None:
-            wandb_logger.log_str("history", history_str, step=global_step)
+    if history_str is not None:
+        wandb_logger.log_str("history", history_str, step=global_step)

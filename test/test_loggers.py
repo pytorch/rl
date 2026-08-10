@@ -6,22 +6,34 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import logging
 import multiprocessing as mp
 import os
 import os.path
 import pathlib
 import tempfile
 import threading
+import time
 from time import sleep
+from types import SimpleNamespace
 
 import pytest
 import torch
-from tensordict import MemoryMappedTensor
+from tensordict import (
+    lazy_stack,
+    MemoryMappedTensor,
+    set_list_to_stack,
+    TensorClass,
+    TensorDict,
+)
 
 from torchrl._comm import MailboxPeerClosedError
 from torchrl.checkpoint import Checkpoint
-from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data import LazyStackStorage, LazyTensorStorage, ReplayBuffer
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
+from torchrl.objectives.llm.grpo import GRPOLossOutput
+from torchrl.objectives.llm.sft import SFTLossOutput
+from torchrl.record.loggers import PostTrainingLogger
 from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
@@ -1526,6 +1538,374 @@ class TestLoggerMonitor:
         scalar_files = list(tmp_path.rglob("*.csv"))
         assert scalar_files
         logger.close()
+
+
+# ---------------------------------------------------------------------------
+# PostTrainingLogger tests
+# ---------------------------------------------------------------------------
+
+
+class TestPostTrainingLogger:
+    """Tests for torchrl.record.loggers.llm.PostTrainingLogger.
+
+    All tests use CSVLogger with a temporary directory so no external
+    services are required.  Loss output objects are constructed directly
+    with dummy tensors — no real model is needed.
+    """
+
+    @pytest.fixture()
+    def csv_logger(self, tmp_path):
+        """A fresh CSVLogger for each test."""
+        return CSVLogger(exp_name="pt_test", log_dir=str(tmp_path))
+
+    # --- log_training_step ---
+
+    def test_log_training_step_grpo_loss(self, csv_logger):
+        """Standard GRPO loss output with all optional fields set."""
+        loss = GRPOLossOutput(
+            loss_objective=torch.tensor(0.42),
+            clip_fraction=torch.tensor(0.10),
+            kl_approx=torch.tensor(0.05),
+            ESS=torch.tensor(0.88),
+            entropy=torch.tensor(1.23),
+            loss_entropy=torch.tensor(-0.12),
+            loss_kl_to_ref=torch.tensor(0.03),
+            kl_to_ref=torch.tensor(0.04),
+            loss_kl_to_inference=torch.tensor(0.02),
+            kl_to_inference=torch.tensor(0.01),
+        )
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=10, grad_norm=1.5)
+
+        assert "training/loss_objective" in metrics
+        assert abs(metrics["training/loss_objective"] - 0.42) < 1e-5
+        assert "training/ESS" in metrics
+        assert "training/entropy" in metrics
+        assert "training/kl_to_ref" in metrics
+        assert "training/grad_norm" in metrics
+        assert metrics["training/gradient_steps"] == 10
+        assert metrics["training/optim_steps"] == 10  # accumulation=1
+        # SFT-only field must NOT appear
+        assert "training/loss_sft" not in metrics
+
+    def test_log_training_step_sft_loss(self, csv_logger):
+        """SFTLossOutput with all optional fields set."""
+        loss = SFTLossOutput(
+            loss_sft=torch.tensor(0.77),
+            loss_kl_to_ref=torch.tensor(0.02),
+            kl_to_ref=torch.tensor(0.03),
+        )
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=5)
+
+        assert "training/loss_sft" in metrics
+        assert abs(metrics["training/loss_sft"] - 0.77) < 1e-5
+        assert "training/loss_kl_to_ref" in metrics
+        assert "training/kl_to_ref" in metrics
+        # GRPO-only fields must NOT appear
+        assert "training/loss_objective" not in metrics
+        assert "training/clip_fraction" not in metrics
+
+    def test_log_training_step_sft_loss_no_kl(self, csv_logger):
+        """SFTLossOutput with only the required field — None fields skipped."""
+        loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=1)
+
+        assert "training/loss_sft" in metrics
+        # Optional None fields must be absent, not zero
+        assert "training/kl_to_ref" not in metrics
+        assert "training/loss_kl_to_ref" not in metrics
+
+    def test_log_training_step_grpo_none_optionals(self, csv_logger):
+        """GRPOLossOutput with optional fields left as None — must not appear."""
+        loss = GRPOLossOutput(
+            loss_objective=torch.tensor(0.42),
+            clip_fraction=torch.tensor(0.10),
+            kl_approx=torch.tensor(0.05),
+            ESS=torch.tensor(0.88),
+            # entropy, loss_entropy, kl_to_ref, etc. remain None
+        )
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=1)
+
+        assert "training/loss_objective" in metrics
+        assert "training/entropy" not in metrics
+        assert "training/loss_entropy" not in metrics
+        assert "training/kl_to_ref" not in metrics
+
+    def test_log_training_step_discovers_new_fields(self, csv_logger):
+        """Fields are discovered by iterating the tensorclass, not from a
+        hardcoded list: a loss subclass gaining a new term is logged without
+        touching the logger."""
+
+        class MyLossOutput(TensorClass["nocast"]):
+            loss_sft: torch.Tensor
+            loss_my_new_term: torch.Tensor | None = None
+
+        loss = MyLossOutput(
+            loss_sft=torch.tensor(0.5), loss_my_new_term=torch.tensor(0.25)
+        )
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=1)
+        assert metrics["training/loss_my_new_term"] == 0.25
+
+    def test_log_collection_step_single_reward_no_std(self, csv_logger):
+        """std of a single element is NaN; the key is omitted instead."""
+        batch = TensorDict({("next", "reward"): torch.tensor([[1.0]])}, batch_size=[1])
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_collection_step(batch)
+        assert metrics["batch/reward_mean"] == 1.0
+        assert "batch/reward_std" not in metrics
+
+    def test_metric_failure_warns_once(self, csv_logger, caplog):
+        """A metric that cannot be computed warns at WARNING level on the first
+        failure and stays quiet afterwards -- never a silent empty emit."""
+
+        class BadBuffer:
+            @property
+            def write_count(self):
+                raise RuntimeError("boom")
+
+        batch = TensorDict({}, batch_size=[1])
+        pt = PostTrainingLogger(logger=csv_logger)
+        with caplog.at_level(logging.WARNING, logger="torchrl"):
+            pt.log_collection_step(batch, replay_buffer=BadBuffer())
+            pt.log_collection_step(batch, replay_buffer=BadBuffer())
+        warnings_seen = [
+            rec for rec in caplog.records if "could not compute 'buffer'" in rec.message
+        ]
+        assert len(warnings_seen) == 1
+
+    def test_log_training_step_custom_duck_type(self, csv_logger):
+        """Arbitrary object exposing only loss_sft — duck-typing must not crash."""
+        loss = SimpleNamespace(loss_sft=torch.tensor(0.5))
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_training_step(loss=loss, step=1)
+
+        assert "training/loss_sft" in metrics
+        # All other fields absent (SimpleNamespace has no other attrs)
+        assert "training/loss_objective" not in metrics
+
+    def test_log_training_step_gradient_accumulation(self, csv_logger):
+        """grad_norm is only emitted on optimizer steps.
+
+        On accumulation steps the key is absent -- logging a literal 0.0 there
+        would pollute any aggregate (mean, min, histogram) over the series.
+        """
+        loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
+        pt = PostTrainingLogger(logger=csv_logger)
+
+        # step=3, accumulation=4: not an optimizer step -> no grad_norm key
+        m = pt.log_training_step(
+            loss=loss, step=3, grad_norm=1.0, gradient_accumulation_steps=4
+        )
+        assert "training/grad_norm" not in m
+        assert m["training/optim_steps"] == 0
+
+        # step=4, accumulation=4: optimizer step -> grad_norm = 1.0
+        m = pt.log_training_step(
+            loss=loss, step=4, grad_norm=1.0, gradient_accumulation_steps=4
+        )
+        assert m["training/grad_norm"] == 1.0
+        assert m["training/optim_steps"] == 1
+
+    def test_log_training_step_accumulation_matches_caller_loop(self, csv_logger):
+        """Integration: simulate the actual caller-loop pattern and verify the
+        logger's grad_norm gate fires at exactly the same steps.
+
+        Recipe loops do:
+            global_step += 1          # increment first
+            loss.backward()
+            if global_step % accum == 0:   # FIXED: was (global_step+1) % accum
+                optimizer.step()
+                grad_norm = clip_grad_norm_(...)
+            log_training_metrics(..., grad_norm=grad_norm, global_step=global_step)
+
+        With accum=4 the optimizer fires at steps 4, 8, 12, ...
+        The logger must emit training/grad_norm on exactly those steps.
+        """
+        loss = SFTLossOutput(loss_sft=torch.tensor(0.5))
+        pt = PostTrainingLogger(logger=csv_logger)
+        accum = 4
+        grad_norm = 0.0
+        optim_steps_logged = []
+        grad_norm_steps = []
+
+        for global_step in range(1, 13):  # simulate 12 gradient steps
+            # Simulate optimizer boundary — matches fixed callers
+            if global_step % accum == 0:
+                grad_norm = 1.0  # pretend clip_grad_norm_ returned 1.0
+            m = pt.log_training_step(
+                loss=loss,
+                step=global_step,
+                grad_norm=grad_norm,
+                gradient_accumulation_steps=accum,
+            )
+            if "training/grad_norm" in m:
+                grad_norm_steps.append(global_step)
+            optim_steps_logged.append(m["training/optim_steps"])
+
+        # Optimizer fired at steps 4, 8, 12
+        assert grad_norm_steps == [4, 8, 12], grad_norm_steps
+        # optim_steps should be 0 for steps 1-3, then 1 for steps 4-7, etc.
+        assert optim_steps_logged[3] == 1   # step 4
+        assert optim_steps_logged[7] == 2   # step 8
+        assert optim_steps_logged[11] == 3  # step 12
+
+    # --- log_collection_step ---
+
+    def test_log_collection_step_minimal(self, csv_logger):
+        """Minimal call: only batch and step.  Must not crash."""
+        with set_list_to_stack(True):
+            batch = lazy_stack(
+                [
+                    TensorDict(
+                        {"next": TensorDict({"reward": torch.tensor([1.0])}, [])}, []
+                    ),
+                    TensorDict(
+                        {"next": TensorDict({"reward": torch.tensor([2.0])}, [])}, []
+                    ),
+                ]
+            )
+            pt = PostTrainingLogger(logger=csv_logger)
+            metrics = pt.log_collection_step(batch, step=1)
+
+        assert "batch/reward_mean" in metrics
+        assert abs(metrics["batch/reward_mean"] - 1.5) < 1e-5
+        assert "batch/reward_std" in metrics
+        assert "batch/reward_min" in metrics
+        assert "batch/reward_max" in metrics
+        # Optional metrics absent when not provided
+        assert "buffer/utilization" not in metrics
+        assert "inference/policy_version" not in metrics
+        assert "throughput/gradient_steps_per_second" not in metrics
+
+    def test_log_collection_step_with_buffer(self, csv_logger):
+        """With replay buffer: utilization and write_count emitted."""
+        with set_list_to_stack(True):
+            td = TensorDict(
+                {"next": TensorDict({"reward": torch.tensor([1.0])}, [])}, []
+            )
+            rb = ReplayBuffer(storage=LazyStackStorage(10))
+            rb.extend(lazy_stack([td, td, td]))
+            batch = rb[:]
+            pt = PostTrainingLogger(logger=csv_logger)
+            metrics = pt.log_collection_step(batch, replay_buffer=rb, step=1)
+
+        assert "buffer/write_count" in metrics
+        assert metrics["buffer/write_count"] == 3
+        assert "buffer/utilization" in metrics
+        assert abs(metrics["buffer/utilization"] - 0.3) < 1e-5
+
+    def test_log_collection_step_dense_response_uses_assistant_mask(self, csv_logger):
+        """Padding in a dense response tensor is excluded from sequence lengths."""
+        batch = TensorDict(
+            {
+                ("tokens", "response"): torch.tensor([[11, 12, 0, 0], [21, 0, 0, 0]]),
+                ("masks", "all_assistant_mask"): torch.tensor(
+                    [[True, True, False, False], [True, False, False, False]]
+                ),
+            },
+            batch_size=[2],
+        )
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(batch)
+
+        assert metrics["batch/seq_length_mean"] == 1.5
+
+    def test_log_collection_step_dense_response_without_mask_omits_length(
+        self, csv_logger
+    ):
+        """A padded dense width is never reported as an inferred token count."""
+        batch = TensorDict(
+            {("tokens", "response"): torch.tensor([[11, 12, 0, 0]])},
+            batch_size=[1],
+        )
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(batch)
+
+        assert "batch/seq_length_mean" not in metrics
+
+    def test_log_collection_step_uses_public_buffer_stats(self, csv_logger):
+        """Remote-style buffers need no local storage or write-count property."""
+
+        class StatsOnlyBuffer:
+            def stats(self):
+                return {"write_count": 8, "utilization": 0.4}
+
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(
+            TensorDict({}, batch_size=[1]), replay_buffer=StatsOnlyBuffer()
+        )
+
+        assert metrics["buffer/write_count"] == 8
+        assert metrics["buffer/utilization"] == 0.4
+
+    def test_log_collection_step_batch_staleness_namespace(self, csv_logger):
+        """Sampled policy staleness is identified as a batch metric."""
+        batch = TensorDict(
+            {("next", "policy_version"): torch.tensor([3, 4])}, batch_size=[2]
+        )
+        collector = SimpleNamespace(policy_version=5)
+
+        metrics = PostTrainingLogger(logger=csv_logger).log_collection_step(
+            batch, collector=collector
+        )
+
+        assert metrics["batch/staleness_mean"] == 1.5
+        assert metrics["batch/staleness_max"] == 2.0
+        assert "inference/staleness_mean" not in metrics
+
+    def test_log_collection_step_throughput_omitted_without_start_time(
+        self, csv_logger
+    ):
+        """throughput/* must not appear when start_time=None."""
+        with set_list_to_stack(True):
+            batch = lazy_stack(
+                [
+                    TensorDict(
+                        {"next": TensorDict({"reward": torch.tensor([1.0])}, [])}, []
+                    ),
+                ]
+            )
+            pt = PostTrainingLogger(logger=csv_logger, start_time=None)
+            metrics = pt.log_collection_step(batch, step=100)
+
+        assert "throughput/gradient_steps_per_second" not in metrics
+
+    def test_log_collection_step_throughput_emitted_with_start_time(self, csv_logger):
+        """throughput/* emitted as a positive float when start_time is set."""
+        with set_list_to_stack(True):
+            batch = lazy_stack(
+                [
+                    TensorDict(
+                        {"next": TensorDict({"reward": torch.tensor([1.0])}, [])}, []
+                    ),
+                ]
+            )
+            t0 = time.time() - 10  # pretend training started 10 seconds ago
+            pt = PostTrainingLogger(logger=csv_logger, start_time=t0)
+            metrics = pt.log_collection_step(batch, step=50)
+
+        assert "throughput/gradient_steps_per_second" in metrics
+        assert metrics["throughput/gradient_steps_per_second"] > 0
+
+    # --- log_weight_sync ---
+
+    def test_log_weight_sync(self, csv_logger):
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_weight_sync(latency_s=0.042, step=100)
+        assert metrics == {"weight_sync/latency_s": 0.042}
+
+    def test_log_weight_sync_no_step(self, csv_logger):
+        """Calling without step must not raise."""
+        pt = PostTrainingLogger(logger=csv_logger)
+        metrics = pt.log_weight_sync(latency_s=0.1)
+        assert "weight_sync/latency_s" in metrics
+
+    # --- Export / import ---
+
+    def test_importable_from_package(self):
+        """PostTrainingLogger must be importable from the top-level package."""
+        assert PostTrainingLogger.__name__ == "PostTrainingLogger"
 
 
 if __name__ == "__main__":

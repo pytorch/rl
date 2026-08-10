@@ -17,6 +17,7 @@ from omegaconf import OmegaConf
 
 from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
+from torchrl.record.loggers import PostTrainingLogger
 from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.weight_update.llm import get_model_metadata
 
@@ -215,6 +216,7 @@ def train(
     optim_steps = 0  # Track optimizer steps for weight update scheduling
     skipped_nonfinite_updates = 0
     start_time = time.time()
+    post_training_logger = PostTrainingLogger(wandb_logger, start_time=start_time)
     exit_code = 1
     try:
         for step in range(total_steps):
@@ -335,6 +337,7 @@ def train(
             if (step % cfg.train.logging_frequency) == 0:
                 log_training_metrics(
                     wandb_logger=wandb_logger,
+                    post_training_logger=post_training_logger,
                     replay_buffer=replay_buffer,
                     batch=batch,
                     loss=loss,

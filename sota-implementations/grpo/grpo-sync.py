@@ -15,6 +15,7 @@ import hydra
 
 from torchrl import merge_ray_runtime_env, torchrl_logger
 from torchrl.data.llm.history import History
+from torchrl.record.loggers import PostTrainingLogger
 from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.weight_update.llm import get_model_metadata
 
@@ -184,6 +185,7 @@ def train(
 
     global_step = 0
     start_time = time.time()
+    post_training_logger = PostTrainingLogger(wandb_logger, start_time=start_time)
     for data in pbar:
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
@@ -240,7 +242,7 @@ def train(
                     else:
                         loss_val.backward()
 
-                if ((global_step + 1) % cfg.train.gradient_accumulation_steps) == 0:
+                if (global_step % cfg.train.gradient_accumulation_steps) == 0:
                     with timeit("optim_step"):
                         if (
                             cfg.train.mixed_precision
@@ -271,6 +273,7 @@ def train(
                 if (global_step % cfg.train.logging_frequency) == 0:
                     log_training_metrics(
                         wandb_logger=wandb_logger,
+                        post_training_logger=post_training_logger,
                         replay_buffer=replay_buffer,
                         batch=batch,
                         loss=loss,
