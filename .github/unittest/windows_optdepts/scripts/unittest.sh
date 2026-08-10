@@ -148,6 +148,8 @@ export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=60
 export BATCHED_PIPE_TIMEOUT=60
 export LAZY_LEGACY_OP=False
+# PyTorch's Windows nightly wheel is built without libuv support.
+export USE_LIBUV=0
 
 echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env

@@ -138,6 +138,10 @@ class CheckpointLoadResult:
         unrequested: Manifest components intentionally not requested.
         values: Values returned by adapters, including immutable JSON components.
         manifest: Parsed checkpoint manifest.
+        comparison: Compatibility comparisons performed while loading. When the
+            manifest contains dependency versions, ``comparison["versions"]``
+            records the checkpoint and runtime version of each known dependency,
+            and ``comparison["version_skew"]`` reports whether any differ.
 
     Examples:
         >>> from torchrl.checkpoint import CheckpointLoadResult
@@ -152,6 +156,7 @@ class CheckpointLoadResult:
     unrequested: set[str] = field(default_factory=set)
     values: dict[str, Any] = field(default_factory=dict)
     manifest: dict[str, Any] = field(default_factory=dict)
+    comparison: dict[str, Any] = field(default_factory=dict)
 
 
 class CheckpointAdapter(abc.ABC):
@@ -892,6 +897,34 @@ class Checkpoint:
             if stage is not None:
                 self._remove_path(stage)
 
+    @staticmethod
+    def _compare_versions(
+        manifest_versions: object,
+    ) -> dict[str, Any]:
+        if not isinstance(manifest_versions, Mapping):
+            return {}
+        runtime_versions = {
+            "torchrl": torchrl_version,
+            "tensordict": tensordict.__version__,
+            "torch": str(torch.__version__),
+        }
+        versions = {
+            name: {
+                "checkpoint": checkpoint_version,
+                "runtime": runtime_version,
+                "matches": checkpoint_version == runtime_version,
+            }
+            for name, runtime_version in runtime_versions.items()
+            if isinstance(checkpoint_version := manifest_versions.get(name), str)
+        }
+        return {
+            "versions": versions,
+            "version_skew": any(
+                not version_comparison["matches"]
+                for version_comparison in versions.values()
+            ),
+        }
+
     def load(
         self,
         path: str | Path,
@@ -929,7 +962,20 @@ class Checkpoint:
             missing=requested.difference(manifest_components),
             unrequested=set(manifest_components).difference(requested),
             manifest=manifest,
+            comparison=self._compare_versions(manifest.get("versions")),
         )
+        if result.comparison.get("version_skew", False):
+            version_skew = ", ".join(
+                f"{name} (checkpoint={comparison['checkpoint']!r}, "
+                f"runtime={comparison['runtime']!r})"
+                for name, comparison in result.comparison["versions"].items()
+                if not comparison["matches"]
+            )
+            torchrl_logger.warning(
+                "Checkpoint dependency version skew detected: %s. "
+                "The mismatch is non-fatal, but restored state may be incompatible.",
+                version_skew,
+            )
         options = component_options or {}
         unknown_options = set(options).difference(requested)
         if unknown_options:
