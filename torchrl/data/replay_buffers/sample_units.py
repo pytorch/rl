@@ -271,6 +271,9 @@ class Sequence(SampleUnit):
     @staticmethod
     def _newest_index(storage: Storage, written: int) -> int:
         """Physical index of the most recently written record."""
+        cursor = getattr(storage, "_last_cursor_index", None)
+        if cursor is not None:
+            return cursor % written
         cursor = getattr(storage, "_last_cursor", None)
         if isinstance(cursor, torch.Tensor):
             cursor = cursor.reshape(-1)
@@ -352,8 +355,11 @@ class Sequence(SampleUnit):
             boundary = _ReplayBoundaryIndex(
                 end=done,
                 at_capacity=storage._is_full,
-                cursor=getattr(storage, "_last_cursor", None),
+                cursor=getattr(storage, "_last_cursor_index", None),
                 device=device,
+                storage=storage,
+                source=("end", self.done_key),
+                cache_values=True,
             )
             dist_from_start, dist_to_stop = boundary.distances(anchor)
             max_len = boundary.length

@@ -25,8 +25,10 @@ from torchrl.data.replay_buffers import (
     RandomSampler,
     RoundRobinWriter,
     SamplerWithoutReplacement,
+    Sequence,
     SliceSampler,
 )
+from torchrl.data.replay_buffers.utils import _boundary_distances_1d
 from torchrl.envs.transforms import ActionChunkTransform, CatFrames
 
 _TensorDictPrioritizedReplayBuffer = functools.partial(
@@ -75,6 +77,87 @@ def populate(rb, td):
 
 def sample(rb):
     rb.sample()
+
+
+def _replay_boundary_device():
+    device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
+    if device == "GPU":
+        if not torch.cuda.is_available():
+            _skip_or_fail_unavailable("CUDA is not available")
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
+def _make_boundary_storage(size, episode_length, device):
+    done = torch.zeros(size, 1, dtype=torch.bool, device=device)
+    done[episode_length - 1 :: episode_length] = True
+    done[-1] = True
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size, device=device),
+    )
+    rb.extend(TensorDict({("next", "done"): done}, [size], device=device))
+    return rb
+
+
+@pytest.mark.parametrize("size", [10_000, 1_000_000])
+@pytest.mark.parametrize("episode_length", [32, 256])
+@pytest.mark.parametrize("cache_state", ["hot", "write_invalidated"])
+def test_sequence_boundary_query_benchmark(
+    benchmark, size, episode_length, cache_state
+):
+    device = _replay_boundary_device()
+    rb = _make_boundary_storage(size, episode_length, device)
+    anchor = torch.linspace(0, size - 1, 256, device=device).to(torch.long)
+    unit = Sequence(length=64, burn_in=40, bootstrap=5)
+    unit.expand(anchor, {}, rb.storage)
+
+    if cache_state == "write_invalidated":
+
+        def query():
+            rb.storage._bump_mutation_revision()
+            return unit.expand(anchor, {}, rb.storage)
+
+    else:
+
+        def query():
+            return unit.expand(anchor, {}, rb.storage)
+
+    benchmark(query)
+
+
+@pytest.mark.parametrize("size", [10_000, 1_000_000])
+@pytest.mark.parametrize("episode_length", [32, 256])
+@pytest.mark.parametrize("cache_values", [False, True])
+def test_slice_sampler_boundary_query_benchmark(
+    benchmark, size, episode_length, cache_values
+):
+    device = _replay_boundary_device()
+    rb = _make_boundary_storage(size, episode_length, device)
+    sampler = SliceSampler(
+        num_slices=256,
+        cache_values=cache_values,
+        end_key=("next", "done"),
+    )
+    benchmark(sampler._get_stop_and_length, rb.storage)
+
+
+@pytest.mark.parametrize("compiled", [False, True])
+def test_replay_boundary_kernel_benchmark(benchmark, compiled):
+    device = _replay_boundary_device()
+    size = 1_000_000
+    episode_length = 256
+    stop = torch.arange(
+        episode_length - 1, size, episode_length, device=device, dtype=torch.long
+    )
+    if stop[-1] != size - 1:
+        stop = torch.cat([stop, stop.new_tensor([size - 1])])
+    start = torch.remainder(torch.roll(stop, 1) + 1, size)
+    anchor = torch.linspace(0, size - 1, 256, device=device).to(torch.long)
+    query = _boundary_distances_1d
+    if compiled:
+        query = torch.compile(query, fullgraph=True)
+        query(anchor, start, stop, size)
+    benchmark(query, anchor, start, stop, size)
 
 
 def test_replay_buffer_direct_client_identity(benchmark):

@@ -48,7 +48,12 @@ from torchrl.data.replay_buffers.storages import (
     LazyTensorStorage,
     ListStorage,
 )
-from torchrl.data.replay_buffers.utils import _ReplayBoundaryIndex
+from torchrl.data.replay_buffers.utils import (
+    _boundary_distances_1d,
+    _boundary_distances_nd,
+    _make_boundary_search_nd,
+    _ReplayBoundaryIndex,
+)
 from torchrl.modules import GRUModule, set_recurrent_mode
 from torchrl.testing import get_default_devices
 
@@ -2745,6 +2750,93 @@ class TestFindStartStopTraj:
         assert start.squeeze(-1).tolist() == [8, 3, 5]
         assert stop.squeeze(-1).tolist() == [2, 4, 7]
         assert lengths.tolist() == [5, 2, 3]
+
+    def test_boundary_index_cache_and_storage_invalidation(self):
+        storage = LazyTensorStorage(10)
+        rb = TensorDictReplayBuffer(storage=storage, dim_extend=0)
+        done = torch.zeros(10, dtype=torch.bool)
+        done[[4, 9]] = True
+        rb.extend(TensorDict({"done": done}, [10]))
+
+        def make_boundary():
+            return _ReplayBoundaryIndex(
+                end=storage[:]["done"],
+                at_capacity=storage._is_full,
+                cursor=storage._last_cursor_index,
+                storage=storage,
+                source=("end", "done"),
+                cache_values=True,
+            )
+
+        first = make_boundary().boundaries()
+        second = make_boundary().boundaries()
+        assert first[0].data_ptr() == second[0].data_ptr()
+
+        updated = storage.get(4).clone()
+        updated["done"] = False
+        storage.set(4, updated, set_cursor=False)
+        third = make_boundary().boundaries()
+        assert third[0].data_ptr() != first[0].data_ptr()
+        assert third[1].squeeze(-1).tolist() == [9]
+
+    def test_slice_sampler_cache_uses_storage_revision(self):
+        storage = LazyTensorStorage(10)
+        sampler = SliceSampler(slice_len=2, end_key="done", cache_values=True)
+        rb = TensorDictReplayBuffer(storage=storage, sampler=sampler)
+        done = torch.zeros(10, dtype=torch.bool)
+        done[[4, 9]] = True
+        rb.extend(TensorDict({"done": done}, [10]))
+
+        first = sampler._get_stop_and_length(storage)
+        second = sampler._get_stop_and_length(storage)
+        assert first[0].data_ptr() == second[0].data_ptr()
+
+        updated = storage.get(4).clone()
+        updated["done"] = False
+        storage.set(4, updated, set_cursor=False)
+        third = sampler._get_stop_and_length(storage)
+        assert third[0].data_ptr() != first[0].data_ptr()
+        assert third[1].squeeze(-1).tolist() == [9]
+
+    def test_boundary_distance_kernel_fullgraph(self):
+        start = torch.tensor([8, 3, 5])
+        stop = torch.tensor([2, 4, 7])
+        anchor = torch.tensor([9, 3, 6])
+        compiled = torch.compile(
+            _boundary_distances_1d, backend="eager", fullgraph=True
+        )
+        eager = _boundary_distances_1d(anchor, start, stop, 10)
+        result = compiled(anchor, start, stop, 10)
+        torch.testing.assert_close(result, eager)
+
+    def test_multidimensional_boundary_index_and_fullgraph(self):
+        storage = LazyTensorStorage(10, ndim=2)
+        rb = TensorDictReplayBuffer(storage=storage, dim_extend=0)
+        done = torch.zeros(5, 2, 1, dtype=torch.bool)
+        done[1, 0] = done[2, 1] = True
+        done[4] = True
+        rb.extend(TensorDict({("next", "done"): done}, [5, 2]))
+        boundary = _ReplayBoundaryIndex(
+            end=done.squeeze(-1),
+            at_capacity=True,
+            cursor=storage._last_cursor_index,
+            storage=storage,
+            source=("end", ("next", "done")),
+            cache_values=True,
+        )
+        anchor = torch.tensor([[0, 0], [4, 0], [1, 1], [4, 1]])
+        distance_from_start, distance_to_stop = boundary.distances(anchor)
+        assert distance_from_start.tolist() == [0, 2, 1, 1]
+        assert distance_to_stop.tolist() == [1, 0, 1, 0]
+
+        start, stop, _ = boundary.boundaries()
+        search = _make_boundary_search_nd(start, stop, tuple(storage.shape))
+        compiled = torch.compile(
+            _boundary_distances_nd, backend="eager", fullgraph=True
+        )
+        eager = _boundary_distances_nd(anchor, start, stop, *search, 5)
+        result = compiled(anchor, start, stop, *search, 5)
+        torch.testing.assert_close(result, eager)
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
