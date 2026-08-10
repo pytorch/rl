@@ -144,6 +144,11 @@ t0 = time.time()
 for i, data in enumerate(collector):
     # Write data in replay buffer
     rb.extend(data)
+    num_frames = data.numel()
+    total_count += num_frames
+    total_episodes += data["next", "done"].sum().item()
+    # Update the exploration factor once per collected frame
+    exploration_module.step(num_frames)
     max_length = rb[:]["next", "step_count"].max()
     if len(rb) > init_rand_steps:
         # Optim loop (we do several optim steps
@@ -154,14 +159,10 @@ for i, data in enumerate(collector):
             loss_vals["loss"].backward()
             optim.step()
             optim.zero_grad()
-            # Update exploration factor
-            exploration_module.step(data.numel())
             # Update target params
             updater.step()
-            if i % 10:
-                torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
-            total_count += data.numel()
-            total_episodes += data["next", "done"].sum()
+        if i % 10 == 0:
+            torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
     if max_length > 200:
         break
 
