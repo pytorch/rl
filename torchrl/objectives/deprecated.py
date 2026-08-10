@@ -335,6 +335,10 @@ class REDQLoss_deprecated(LossModule):
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
+        loss_tensordict = tensordict.unsqueeze(0)
+        loss_actor = self._reduce_loss(loss_actor, loss_tensordict)
+        loss_qval = self._reduce_loss(loss_qval, loss_tensordict)
+        loss_alpha = self._reduce_loss(loss_alpha, tensordict)
         td_out = TensorDict(
             {
                 "loss_actor": loss_actor,
@@ -344,12 +348,6 @@ class REDQLoss_deprecated(LossModule):
                 "entropy": -sample_log_prob.detach().mean(),
             },
             [],
-        )
-        td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, tensordict=tensordict)
-            if name.startswith("loss_")
-            else value,
-            batch_size=[],
         )
         self._clear_weakrefs(
             tensordict,

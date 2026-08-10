@@ -123,7 +123,7 @@ def test_dqn_maker(
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
-    with initialize(version_base="1.1", config_path=None):
+    with initialize(version_base="1.3", config_path=None):
         cfg = compose(config_name="config", overrides=flags)
 
         env_maker = (
@@ -243,7 +243,7 @@ def test_transformed_env_constructor_with_state_dict(from_pixels):
     Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
     cs = ConfigStore.instance()
     cs.store(name="config", node=Config)
-    with initialize(version_base="1.1", config_path=None):
+    with initialize(version_base="1.3", config_path=None):
         cfg = compose(config_name="config", overrides=flags)
         env_maker = (
             ContinuousActionConvMockEnvNumpy

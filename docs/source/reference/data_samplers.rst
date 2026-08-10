@@ -32,7 +32,10 @@ Samplers control how data is retrieved from the replay buffer storage.
 Writers
 -------
 
-Writers control how data is written to the storage.
+Writers control how data is written to the storage. Writers that reuse
+storage slots can stamp each slot with a reuse counter so consumers holding
+an index can detect that it was overwritten -- see
+:ref:`Detecting overwritten slots <ref_buffers_generations>`.
 
 .. autosummary::
     :toctree: generated/
