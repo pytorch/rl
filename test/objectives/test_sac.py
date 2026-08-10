@@ -1281,6 +1281,28 @@ class TestSAC(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+    def test_sac_uses_joint_sample_log_prob(self, version, monkeypatch):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value() if version == 1 else None
+        loss = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("SAC rescored a newly sampled action")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        with pytest.warns(
+            UserWarning, match="No target network updater"
+        ) if rl_warnings() else contextlib.nullcontext():
+            result = loss(td)
+        assert result.isfinite().all()
+
     @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
     def test_sac_target_entropy_auto(self, version, action_dim):
         """Regression test for issue #3291: target_entropy='auto' should be -dim(A)."""

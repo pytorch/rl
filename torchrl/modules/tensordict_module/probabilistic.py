@@ -6,15 +6,19 @@ from __future__ import annotations
 
 import inspect
 import warnings
+from contextlib import nullcontext
 
 import torch
 from tensordict import TensorDictBase, unravel_key_list
 from tensordict.nn import (
+    dispatch,
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
+from tensordict.nn.probabilistic import interaction_type
+from tensordict.nn.utils import _set_skip_existing_None as set_skip_existing_none
 from tensordict.utils import NestedKey
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
@@ -28,6 +32,10 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 _PTDM_HAS_GENERATOR = (
     "generator" in inspect.signature(ProbabilisticTensorDictModule.__init__).parameters
 )
+if _PTDM_HAS_GENERATOR:
+    from tensordict.nn.probabilistic import _use_generator as use_generator
+else:
+    use_generator = nullcontext
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
@@ -277,6 +285,54 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                     "specs are not specified"
                 )
             self.register_forward_hook(_forward_hook_safe_action)
+
+    @dispatch(auto_batch_size=False)
+    @set_skip_existing_none()
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: TensorDictBase | None = None,
+        _requires_sample: bool = True,
+    ) -> TensorDictBase:
+        if not self.return_log_prob or not _requires_sample:
+            return super().forward(
+                tensordict,
+                tensordict_out,
+                _requires_sample=_requires_sample,
+            )
+
+        dist = self.get_dist(tensordict)
+        current_interaction = interaction_type() or self.default_interaction_type
+        joint_sample = getattr(dist, "rsample_and_log_prob", None)
+        if (
+            current_interaction is not InteractionType.RANDOM
+            or joint_sample is None
+            or len(self.dist_sample_keys) != 1
+        ):
+            return super().forward(
+                tensordict,
+                tensordict_out,
+                _requires_sample=_requires_sample,
+            )
+
+        if tensordict_out is None:
+            tensordict_out = tensordict
+        if _PTDM_HAS_GENERATOR:
+            generator, writeback = self._resolve_generator(tensordict)
+        else:
+            generator = writeback = None
+        sample_shape = self.num_samples or torch.Size()
+        with use_generator(generator):
+            sample, log_prob = joint_sample(sample_shape)
+        if writeback is not None:
+            writeback(generator)
+        if self.num_samples is not None:
+            tensordict_out = tensordict_out.expand(
+                self.num_samples + tensordict_out.shape
+            )
+        tensordict_out.set(self.dist_sample_keys[0], sample)
+        tensordict_out.set(self.log_prob_key, log_prob)
+        return tensordict_out
 
     @property
     def spec(self) -> Composite:

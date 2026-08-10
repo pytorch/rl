@@ -461,77 +461,40 @@ class TanhNormal(FasterTransformedDistribution):
             t = SafeTanhTransform()
         else:
             t = D.TanhTransform()
+        # t = D.TanhTransform()
         if is_compiling() or (self.non_trivial_max or self.non_trivial_min):
             t = _PatchedComposeTransform(
                 [
                     t,
                     _PatchedAffineTransform(
-                        loc=(high + low) / 2,
-                        scale=(high - low) / 2,
+                        loc=(high + low) / 2, scale=(high - low) / 2
                     ),
                 ]
             )
         self._t = t
-        # Preserve exact preimages when finite-precision tanh saturates.
-        self.cached_pair = None, None
-        self.cached_snapshot = None
-        self.cached_version = None
 
         self.update(loc, scale)
 
-    def transform_sample(self, preimage):
-        sample = preimage
-        for transform in self.transforms:
-            sample = transform(sample)
-        self.cached_pair = preimage, sample
-        self.cached_snapshot = sample.detach().clone()
-        self.cached_version = (
-            None
-            if is_compiling()
-            or safe_is_current_stream_capturing()
-            or torch.is_inference(sample)
-            else sample._version
-        )
-        return sample
-
-    @torch.no_grad()
-    def sample(self, sample_shape=None):
-        if sample_shape is None:
-            sample_shape = torch.Size()
-        return self.transform_sample(self.base_dist.sample(sample_shape))
-
-    def rsample(self, sample_shape=None):
-        if sample_shape is None:
-            sample_shape = torch.Size()
-        return self.transform_sample(self.base_dist.rsample(sample_shape))
-
-    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
-        cached_preimage, cached_sample = self.cached_pair
-        if value is not cached_sample:
-            return super().log_prob(value)
+    def rsample_and_log_prob(
+        self, sample_shape: torch.Size | tuple[int, ...] = ()
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Draw a reparameterized sample and score it from the same preimage."""
+        sample_shape = torch.Size(sample_shape)
+        preimage = self.base_dist.rsample(sample_shape)
         transform = self.transforms[0]
-        if is_compiling() or self.cached_version is None:
-            unchanged = torch.eq(value, self.cached_snapshot).all()
-            midpoint = torch.zeros_like(value) + (self.high + self.low) / 2
-            inverse_input = torch.where(unchanged, midpoint, value)
-            preimage = torch.where(
-                unchanged, cached_preimage, transform.inv(inverse_input)
-            )
-        elif value._version == self.cached_version:
-            preimage = cached_preimage
-        else:
-            return super().log_prob(value)
+        sample = transform(preimage)
 
         event_dim = len(self.event_shape)
         event_dim += transform.domain.event_dim - transform.codomain.event_dim
         log_prob = -_sum_rightmost(
-            transform.log_abs_det_jacobian(preimage, value),
+            transform.log_abs_det_jacobian(preimage, sample),
             event_dim - transform.domain.event_dim,
         )
-        return log_prob + _sum_rightmost(
+        log_prob = log_prob + _sum_rightmost(
             self.base_dist.log_prob(preimage),
             event_dim - len(self.base_dist.event_shape),
         )
+        return sample, log_prob
 
     @property
     def min(self):
@@ -544,9 +507,6 @@ class TanhNormal(FasterTransformedDistribution):
         return self.high
 
     def update(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
-        self.cached_pair = None, None
-        self.cached_snapshot = None
-        self.cached_version = None
         if self.tanh_loc:
             loc = (loc / self.upscale).tanh() * self.upscale
             # loc must be rescaled if tanh_loc
@@ -597,7 +557,10 @@ class TanhNormal(FasterTransformedDistribution):
 
     @property
     def deterministic_sample(self):
-        return self.transform_sample(self.root_dist.mean)
+        m = self.root_dist.mean
+        for t in self.transforms:
+            m = t(m)
+        return m
 
     @torch.enable_grad()
     def get_mode(self):

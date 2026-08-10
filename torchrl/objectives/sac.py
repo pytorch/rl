@@ -57,6 +57,18 @@ def compute_log_prob(action_dist, action_or_tensordict, tensor_key) -> torch.Ten
     return lp
 
 
+def compute_rsample_log_prob(
+    action_dist, tensor_key
+) -> tuple[torch.Tensor | TensorDictBase, torch.Tensor]:
+    """Draw and score a reparameterized action in one operation when supported."""
+    if not isinstance(action_dist, CompositeDistribution):
+        joint_sample = getattr(action_dist, "rsample_and_log_prob", None)
+        if joint_sample is not None:
+            return joint_sample()
+    action = action_dist.rsample()
+    return action, compute_log_prob(action_dist, action, tensor_key)
+
+
 class SACLoss(LossModule):
     """TorchRL implementation of the SAC loss.
 
@@ -725,8 +737,9 @@ class SACLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
-            a_reparm = dist.rsample()
-        log_prob = compute_log_prob(dist, a_reparm, self.tensor_keys.log_prob)
+            a_reparm, log_prob = compute_rsample_log_prob(
+                dist, self.tensor_keys.log_prob
+            )
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
@@ -853,9 +866,8 @@ class SACLoss(LossModule):
                     else:
                         next_tensordict_select = next_tensordict
                     next_dist = self.actor_network.get_dist(next_tensordict_select)
-                    next_action = next_dist.rsample()
-                    next_sample_log_prob = compute_log_prob(
-                        next_dist, next_action, self.tensor_keys.log_prob
+                    next_action, next_sample_log_prob = compute_rsample_log_prob(
+                        next_dist, self.tensor_keys.log_prob
                     )
                     if next_tensordict_select is not next_tensordict:
                         mask = ~done.squeeze(-1)
@@ -878,11 +890,10 @@ class SACLoss(LossModule):
                     next_tensordict.set(self.tensor_keys.action, next_action)
                 else:
                     next_dist = self.actor_network.get_dist(next_tensordict)
-                    next_action = next_dist.rsample()
-                    next_tensordict.set(self.tensor_keys.action, next_action)
-                    next_sample_log_prob = compute_log_prob(
-                        next_dist, next_action, self.tensor_keys.log_prob
+                    next_action, next_sample_log_prob = compute_rsample_log_prob(
+                        next_dist, self.tensor_keys.log_prob
                     )
+                    next_tensordict.set(self.tensor_keys.action, next_action)
 
             # get q-values
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -943,7 +954,7 @@ class SACLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ):
             action_dist = self.actor_network.get_dist(td_copy)  # resample an action
-        action = action_dist.rsample()
+        action, log_p = compute_rsample_log_prob(action_dist, self.tensor_keys.log_prob)
 
         td_copy.set(self.tensor_keys.action, action, inplace=False)
 
@@ -955,8 +966,6 @@ class SACLoss(LossModule):
         min_qval = (
             td_copy.get(self.tensor_keys.state_action_value).squeeze(-1).min(0)[0]
         )
-
-        log_p = compute_log_prob(action_dist, action, self.tensor_keys.log_prob)
 
         if log_p.shape != min_qval.shape:
             raise RuntimeError(
