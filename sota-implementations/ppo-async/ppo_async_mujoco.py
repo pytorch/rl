@@ -55,7 +55,7 @@ from train import train_iterate, train_start
 from utils_mujoco import make_ppo_models
 
 
-@hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
+@hydra.main(config_path="", config_name="config_mujoco", version_base="1.3")
 def main(cfg: DictConfig):
 
     torch.set_float32_matmul_precision("high")

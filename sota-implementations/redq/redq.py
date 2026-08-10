@@ -41,7 +41,7 @@ DEFAULT_REWARD_SCALING = {
 }
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.3", config_path="", config_name="config")
 def main(cfg: DictConfig):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
