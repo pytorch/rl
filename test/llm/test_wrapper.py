@@ -15,15 +15,15 @@ import types
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
 from itertools import islice
-from typing import TYPE_CHECKING, Any
+from typing import Any, TYPE_CHECKING
 
 import pytest
 import torch
-from tensordict import TensorDict, assert_close, lazy_stack, set_list_to_stack
-from tensordict.utils import _zip_strict
-from torch.nn.utils.rnn import pad_sequence
 
 import torchrl.modules.llm as llm_mod
+from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
+from tensordict.utils import _zip_strict
+from torch.nn.utils.rnn import pad_sequence
 from torchrl import logger as torchrl_logger
 from torchrl.data import ListStorage, ReplayBuffer
 from torchrl.data.llm import History
@@ -33,12 +33,12 @@ from torchrl.modules.llm import AsyncVLLM
 from torchrl.modules.llm.backends.vllm import vllm_async
 from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
+    _batching,
     ChatHistory,
     LogProbs,
     Masks,
     Text,
     Tokens,
-    _batching,
 )
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 from torchrl.modules.llm.policies.vllm_wrapper import (
@@ -46,10 +46,7 @@ from torchrl.modules.llm.policies.vllm_wrapper import (
     _RequestOutput_tc,
     vLLMWrapper,
 )
-from torchrl.modules.llm.trl_interop import (
-    HFRewardModelWrapper,
-    TorchRLBufferDataset,
-)
+from torchrl.modules.llm.trl_interop import HFRewardModelWrapper, TorchRLBufferDataset
 
 _has_datasets = importlib.util.find_spec("datasets") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -4057,12 +4054,8 @@ class TestTRLInterop:
     )
     def test_torchrl_buffer_dataset_grpo_trainer(self, tmp_path):
         """A real GRPOTrainer can read prompts from the replay-buffer stream."""
-        from tokenizers import Tokenizer, models, pre_tokenizers
-        from transformers import (
-            GPT2Config,
-            GPT2LMHeadModel,
-            PreTrainedTokenizerFast,
-        )
+        from tokenizers import models, pre_tokenizers, Tokenizer
+        from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
         from trl import GRPOConfig, GRPOTrainer
 
         raw_tokenizer = Tokenizer(
@@ -4331,6 +4324,37 @@ class TestTRLInterop:
         )
         wrapper(td)
         assert not grad_states[-1], "Grad should be disabled with inference_mode=True"
+
+    def test_hf_reward_model_wrapper_backward_pass(self):
+        """inference_mode=True should still allow downstream backward passes (regression test)."""
+
+        class _GradCheckModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                class _Out:
+                    logits = torch.randn(input_ids.shape[0], 1)
+
+                return _Out()
+
+        wrapper = HFRewardModelWrapper(
+            _GradCheckModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+            inference_mode=True,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+
+        # Run wrapper (operates in no_grad mode now, returns a normal tensor)
+        reward = wrapper(td)["reward"]
+
+        # The backward pass shouldn't fail with "Inference tensors cannot be saved for backward"
+        param = torch.nn.Parameter(torch.ones(2))
+        loss = (param * reward).sum()
+        loss.backward()
+
+        assert param.grad is not None
 
     def test_hf_reward_model_wrapper_missing_token_key(self):
         """Missing token_key in TensorDict should raise KeyError."""

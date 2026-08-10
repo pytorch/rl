@@ -27,7 +27,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any
+from typing import Any, TYPE_CHECKING
 
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorDictBase
@@ -269,7 +269,7 @@ class _HFRewardModule(nn.Module):
     ) -> torch.Tensor:
         """Call the HF reward model and return a 1-D reward tensor of shape ``[B]``."""
         if self._inference_mode:
-            ctx = torch.inference_mode()
+            ctx = torch.no_grad()
         else:
             ctx = contextlib.nullcontext()
 
