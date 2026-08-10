@@ -552,6 +552,19 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 contribution guide and the [call for contributions](https://github.com/pytorch/rl/issues/509)
 for open areas where help is especially useful.
 
+To work on an open issue, comment `/assign` on the issue. This will assign the
+issue to you.
+
+### Trusted collaborators
+
+TorchRL is maintained by [Vincent Moens (`vmoens`)](https://github.com/vmoens).
+The following trusted collaborators are also available for review guidance and
+contributor advice:
+
+- [`theap06`](https://github.com/theap06)
+- [`ParamThakkar123`](https://github.com/ParamThakkar123)
+- [`Xmaster6y`](https://github.com/Xmaster6y)
+
 For local development, install pre-commit hooks with:
 
 ```bash
