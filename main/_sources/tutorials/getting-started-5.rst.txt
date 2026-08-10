@@ -221,7 +221,7 @@ defined as 200 steps in the environment -- with CartPole, success is defined
 as having longer trajectories).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 140-174
+.. GENERATED FROM PYTHON SOURCE LINES 140-175
 
 .. code-block:: Python
 
@@ -232,6 +232,11 @@ as having longer trajectories).
     for i, data in enumerate(collector):
         # Write data in replay buffer
         rb.extend(data)
+        num_frames = data.numel()
+        total_count += num_frames
+        total_episodes += data["next", "done"].sum().item()
+        # Update the exploration factor once per collected frame
+        exploration_module.step(num_frames)
         max_length = rb[:]["next", "step_count"].max()
         if len(rb) > init_rand_steps:
             # Optim loop (we do several optim steps
@@ -242,14 +247,10 @@ as having longer trajectories).
                 loss_vals["loss"].backward()
                 optim.step()
                 optim.zero_grad()
-                # Update exploration factor
-                exploration_module.step(data.numel())
                 # Update target params
                 updater.step()
-                if i % 10:
-                    torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
-                total_count += data.numel()
-                total_episodes += data["next", "done"].sum()
+            if i % 10 == 0:
+                torchrl_logger.info(f"Max num steps: {max_length}, rb length {len(rb)}")
         if max_length > 200:
             break
 
@@ -266,7 +267,7 @@ as having longer trajectories).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 175-180
+.. GENERATED FROM PYTHON SOURCE LINES 176-181
 
 Rendering
 ---------
@@ -274,7 +275,7 @@ Rendering
 Finally, we run the environment for as many steps as we can and save the
 video locally (notice that we are not exploring).
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-184
+.. GENERATED FROM PYTHON SOURCE LINES 181-185
 
 .. code-block:: Python
 
@@ -289,7 +290,7 @@ video locally (notice that we are not exploring).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-193
+.. GENERATED FROM PYTHON SOURCE LINES 186-194
 
 This is what your rendered CartPole video will look like after a full
 training loop:
@@ -303,7 +304,7 @@ Feel free to share feedback about it on GitHub.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.202 seconds)
+   **Total running time of the script:** (0 minutes 7.560 seconds)
 
 
 .. _sphx_glr_download_tutorials_getting-started-5.py:

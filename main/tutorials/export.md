@@ -122,6 +122,11 @@ t0 = time.time()
 for data in collector:
  # Write data in replay buffer
  rb.extend(data)
+ num_frames = data.numel()
+ total_count += num_frames
+ total_episodes += data["next", "done"].sum().item()
+ # Update the exploration factor once per collected frame
+ exploration_module.step(num_frames)
  max_length = rb[:]["next", "step_count"].max()
  if len(rb) > init_rand_steps:
  # Optim loop (we do several optim steps
@@ -132,12 +137,8 @@ for data in collector:
  loss_vals["loss"].backward()
  optim.step()
  optim.zero_grad()
- # Update exploration factor
- exploration_module.step(data.numel())
  # Update target params
  updater.step()
- total_count += data.numel()
- total_episodes += data["next", "done"].sum()
  if max_length > 200:
  break
 ```
@@ -649,7 +650,7 @@ print(compiled_module(pixels=pixels))
 ```
 
 ```
-pkg_path /tmp/tmpft_t73yd/model.pt2
+pkg_path /tmp/tmprdzd341z/model.pt2
 tensor(1)
 ```
 
@@ -779,8 +780,8 @@ with TemporaryDirectory() as tmpdir:
 [torch.onnx] Translate the graph into ONNX... ✅
 [torch.onnx] Optimize the ONNX graph...
 [torch.onnx] Optimize the ONNX graph... ✅
-ONNX rollout took 616.4658 msec (total = 0.6165 sec since last reset).
-TorchRL version took 2050.0765 msec (total = 2.0501 sec since last reset).
+ONNX rollout took 625.8135 msec (total = 0.6258 sec since last reset).
+TorchRL version took 1986.7041 msec (total = 1.9867 sec since last reset).
 ```
 
 Note that ONNX also offers the possibility of optimizing models directly, but this is beyond the scope of this
@@ -808,7 +809,7 @@ information.
 - Experiment with deploying exported models on different devices.
 - Explore optimization techniques for ONNX models to improve performance.
 
-**Total running time of the script:** (0 minutes 23.306 seconds)
+**Total running time of the script:** (0 minutes 23.388 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 

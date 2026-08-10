@@ -65,7 +65,7 @@ with Atari games as they are rendered by the gymnasium library.
 We will stick to the DQN example, and show how a policy that outputs a distribution over values can be used instead
 later.
 
-.. GENERATED FROM PYTHON SOURCE LINES 50-143
+.. GENERATED FROM PYTHON SOURCE LINES 50-144
 
 .. code-block:: Python
 
@@ -143,6 +143,11 @@ later.
     for data in collector:
         # Write data in replay buffer
         rb.extend(data)
+        num_frames = data.numel()
+        total_count += num_frames
+        total_episodes += data["next", "done"].sum().item()
+        # Update the exploration factor once per collected frame
+        exploration_module.step(num_frames)
         max_length = rb[:]["next", "step_count"].max()
         if len(rb) > init_rand_steps:
             # Optim loop (we do several optim steps
@@ -153,12 +158,8 @@ later.
                 loss_vals["loss"].backward()
                 optim.step()
                 optim.zero_grad()
-                # Update exploration factor
-                exploration_module.step(data.numel())
                 # Update target params
                 updater.step()
-                total_count += data.numel()
-                total_episodes += data["next", "done"].sum()
         if max_length > 200:
             break
 
@@ -169,7 +170,7 @@ later.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-160
+.. GENERATED FROM PYTHON SOURCE LINES 145-161
 
 Exporting a TensorDictModule-based policy
 -----------------------------------------
@@ -188,7 +189,7 @@ Here again, the magic of tensordict will unblock us: it happens that most of loc
 transforms can be used both as environment transforms or preprocessing blocks within a :class:`~torch.nn.Module`
 instance. Let's see how we can prepend them to our policy:
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-169
+.. GENERATED FROM PYTHON SOURCE LINES 161-170
 
 .. code-block:: Python
 
@@ -208,7 +209,7 @@ instance. Let's see how we can prepend them to our policy:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 170-176
+.. GENERATED FROM PYTHON SOURCE LINES 171-177
 
 We create a fake input, and pass it to :func:`~torch.export.export` with the policy. This will give a "raw" python
 function that will read our input tensor and output an action without any reference to TorchRL or tensordict modules.
@@ -217,7 +218,7 @@ A good practice is to call :meth:`~tensordict.nn.TensorDictSequential.select_out
 we only want a certain set of outputs (in case the policy returns more than one tensor).
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 176-188
+.. GENERATED FROM PYTHON SOURCE LINES 177-189
 
 .. code-block:: Python
 
@@ -240,13 +241,13 @@ we only want a certain set of outputs (in case the policy returns more than one 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 189-192
+.. GENERATED FROM PYTHON SOURCE LINES 190-193
 
 Representing the policy can be quite insightful: we can see that the first operations are a permute, a div, unsqueeze,
 resize followed by the convolutional and MLP layers.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 192-195
+.. GENERATED FROM PYTHON SOURCE LINES 193-196
 
 .. code-block:: Python
 
@@ -330,12 +331,12 @@ resize followed by the convolutional and MLP layers.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 196-198
+.. GENERATED FROM PYTHON SOURCE LINES 197-199
 
 As a final check, we can execute the policy with a dummy input. The output (for a single image) should be an integer
 from 0 to 6 representing the action to be executed in the game.
 
-.. GENERATED FROM PYTHON SOURCE LINES 198-202
+.. GENERATED FROM PYTHON SOURCE LINES 199-203
 
 .. code-block:: Python
 
@@ -356,7 +357,7 @@ from 0 to 6 representing the action to be executed in the game.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 203-229
+.. GENERATED FROM PYTHON SOURCE LINES 204-230
 
 Further details on exporting :class:`~tensordict.nn.TensorDictModule` instances can be found in the tensordict
 `documentation <https://pytorch.org/tensordict/stable/tutorials/export.html>`_.
@@ -385,7 +386,7 @@ Fortunately, export utils can understand that context manager and as long as the
 context manager, the behaviour of the policy should match what is indicated. To demonstrate this, let us try with
 another exploration type:
 
-.. GENERATED FROM PYTHON SOURCE LINES 229-238
+.. GENERATED FROM PYTHON SOURCE LINES 230-239
 
 .. code-block:: Python
 
@@ -405,14 +406,14 @@ another exploration type:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 239-243
+.. GENERATED FROM PYTHON SOURCE LINES 240-244
 
 Our exported policy should now have a random module at the end of the call stack, unlike the previous version.
 Indeed, the last three operations are: generate a random integer between 0 and 6, use a random mask and select
 the network output or the random action based on the value in the mask.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 243-246
+.. GENERATED FROM PYTHON SOURCE LINES 244-247
 
 .. code-block:: Python
 
@@ -509,7 +510,7 @@ the network output or the random action based on the value in the mask.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 247-257
+.. GENERATED FROM PYTHON SOURCE LINES 248-258
 
 Working with recurrent policies
 -------------------------------
@@ -522,7 +523,7 @@ implementation of these modules that can be swapped with the CuDNN version when 
 To show this, let us write a prototypical policy that relies on an RNN:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 257-269
+.. GENERATED FROM PYTHON SOURCE LINES 258-270
 
 .. code-block:: Python
 
@@ -545,13 +546,13 @@ To show this, let us write a prototypical policy that relies on an RNN:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 270-273
+.. GENERATED FROM PYTHON SOURCE LINES 271-274
 
 If the LSTM module is not python based but CuDNN (:class:`~torch.nn.LSTM`), the :meth:`~torchrl.modules.LSTMModule.make_python_based`
 method can be used to use the python version.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 273-275
+.. GENERATED FROM PYTHON SOURCE LINES 274-276
 
 .. code-block:: Python
 
@@ -564,13 +565,13 @@ method can be used to use the python version.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 276-279
+.. GENERATED FROM PYTHON SOURCE LINES 277-280
 
 Let's now create the policy. We combine two layers that modify the shape of the input (unsqueeze/squeeze operations)
 with the LSTM and an MLP.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 279-293
+.. GENERATED FROM PYTHON SOURCE LINES 280-294
 
 .. code-block:: Python
 
@@ -595,12 +596,12 @@ with the LSTM and an MLP.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 294-296
+.. GENERATED FROM PYTHON SOURCE LINES 295-297
 
 As before, we select the relevant keys:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 296-301
+.. GENERATED FROM PYTHON SOURCE LINES 297-302
 
 .. code-block:: Python
 
@@ -623,12 +624,12 @@ As before, we select the relevant keys:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 302-304
+.. GENERATED FROM PYTHON SOURCE LINES 303-305
 
 We are now ready to export. To do this, we build fake inputs and pass them to :func:`~torch.export.export`:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 304-326
+.. GENERATED FROM PYTHON SOURCE LINES 305-327
 
 .. code-block:: Python
 
@@ -794,7 +795,7 @@ We are now ready to export. To do this, we build fake inputs and pass them to :f
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 327-336
+.. GENERATED FROM PYTHON SOURCE LINES 328-337
 
 AOTInductor: Export your policy to pytorch-free C++ binaries
 ------------------------------------------------------------
@@ -806,7 +807,7 @@ Here's an example of how you can use AOTInductor to export your policy, inspired
 `AOTI documentation <https://pytorch.org/docs/main/torch.compiler_aot_inductor.html>`_:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 336-355
+.. GENERATED FROM PYTHON SOURCE LINES 337-356
 
 .. code-block:: Python
 
@@ -837,13 +838,13 @@ Here's an example of how you can use AOTInductor to export your policy, inspired
 
  .. code-block:: none
 
-    pkg_path /tmp/tmpft_t73yd/model.pt2
+    pkg_path /tmp/tmprdzd341z/model.pt2
     tensor(1)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 356-385
+.. GENERATED FROM PYTHON SOURCE LINES 357-386
 
 Exporting TorchRL models with ONNX
 ----------------------------------
@@ -875,7 +876,7 @@ a good example of what we can achieve with ONNX.
 
 Let us see what this API looks like:
 
-.. GENERATED FROM PYTHON SOURCE LINES 386-407
+.. GENERATED FROM PYTHON SOURCE LINES 387-408
 
 .. code-block:: Python
 
@@ -919,12 +920,12 @@ Let us see what this API looks like:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 408-410
+.. GENERATED FROM PYTHON SOURCE LINES 409-411
 
 Exporting to ONNX is quite similar the Export/AOTI above:
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 410-464
+.. GENERATED FROM PYTHON SOURCE LINES 411-465
 
 .. code-block:: Python
 
@@ -998,13 +999,13 @@ Exporting to ONNX is quite similar the Export/AOTI above:
     [torch.onnx] Translate the graph into ONNX... ✅
     [torch.onnx] Optimize the ONNX graph...
     [torch.onnx] Optimize the ONNX graph... ✅
-    ONNX rollout took 616.4658 msec (total =  0.6165 sec since last reset).
-    TorchRL version took 2050.0765 msec (total =  2.0501 sec since last reset).
+    ONNX rollout took 625.8135 msec (total =  0.6258 sec since last reset).
+    TorchRL version took 1986.7041 msec (total =  1.9867 sec since last reset).
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 465-491
+.. GENERATED FROM PYTHON SOURCE LINES 466-492
 
 Note that ONNX also offers the possibility of optimizing models directly, but this is beyond the scope of this
 tutorial.
@@ -1036,7 +1037,7 @@ Further reading and learning steps:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 23.306 seconds)
+   **Total running time of the script:** (0 minutes 23.388 seconds)
 
 
 .. _sphx_glr_download_tutorials_export.py:
