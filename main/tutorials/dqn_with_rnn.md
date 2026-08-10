@@ -566,10 +566,10 @@ for i, _ in enumerate(collector):
 
 ```
 0%| | 0/200 [00:00<?, ?it/s]
- 25%|██▌ | 50/200 [00:00<00:01, 116.19it/s]
- 50%|█████ | 100/200 [00:00<00:00, 118.37it/s]
- 75%|███████▌ | 150/200 [00:01<00:00, 118.86it/s]
-100%|██████████| 200/200 [00:01<00:00, 119.04it/s]
+ 25%|██▌ | 50/200 [00:00<00:01, 118.25it/s]
+ 50%|█████ | 100/200 [00:00<00:00, 120.40it/s]
+ 75%|███████▌ | 150/200 [00:01<00:00, 121.24it/s]
+100%|██████████| 200/200 [00:01<00:00, 121.41it/s]
 ```
 
 Let's plot our results:
@@ -600,7 +600,7 @@ the data
 
 - The TorchRL documentation can be found [here](https://pytorch.org/rl/).
 
-**Total running time of the script:** (0 minutes 5.976 seconds)
+**Total running time of the script:** (0 minutes 5.939 seconds)
 
 [`Download Jupyter notebook: dqn_with_rnn.ipynb`](../_downloads/28be785bad9a380ed2a853d865b074b9/dqn_with_rnn.ipynb)
 
