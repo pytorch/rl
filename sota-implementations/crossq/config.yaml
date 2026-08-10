@@ -61,3 +61,7 @@ logger:
   exp_name: ${env.name}_CrossQ
   mode: online
   eval_iter: 25000
+
+hydra:
+  job:
+    chdir: true

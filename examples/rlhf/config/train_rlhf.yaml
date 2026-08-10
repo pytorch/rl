@@ -39,3 +39,7 @@ sys:
   ref_device: cuda:1  # device of reference model
   dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
   compile: False # use PyTorch 2.0 to compile the model to be faster
+
+hydra:
+  job:
+    chdir: true

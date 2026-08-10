@@ -18,3 +18,7 @@ pilco:
   epochs: 3
   policy_training_steps: 100
   policy_n_basis: 10
+
+hydra:
+  job:
+    chdir: true

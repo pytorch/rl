@@ -47,7 +47,7 @@ from utils import (
 warnings.filterwarnings("ignore", category=UserWarning, module="tensordict")
 
 
-@hydra.main(config_path="config", config_name="vla_grpo_toy", version_base="1.1")
+@hydra.main(config_path="config", config_name="vla_grpo_toy", version_base="1.3")
 def main(cfg):  # noqa: F821
     torch.manual_seed(cfg.env.seed)
     train_device = auto_device(cfg.policy.device)
