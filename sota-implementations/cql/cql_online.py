@@ -39,7 +39,7 @@ from utils import (
 torch.set_float32_matmul_precision("high")
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="online_config")
+@hydra.main(version_base="1.3", config_path="", config_name="online_config")
 def main(cfg: DictConfig):  # noqa: F821
     # Create logger
     exp_name = generate_exp_name("CQL-online", cfg.logger.exp_name)

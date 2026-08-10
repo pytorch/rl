@@ -68,6 +68,12 @@ def _ray_lib():
     return _ray
 
 
+def _has_nccl_multi_rank_gpu() -> bool:
+    if not torch.cuda.is_available() or not dist.is_nccl_available():
+        return False
+    return tuple(torch.cuda.nccl.version()[:3]) >= (2, 30, 0)
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -1641,7 +1647,10 @@ class TestRayTransport:
             server.shutdown()
 
     @pytest.mark.gpu
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    @pytest.mark.skipif(
+        not _has_nccl_multi_rank_gpu(),
+        reason="requires NCCL >= 2.30 for multiple ranks on one GPU",
+    )
     def test_ray_owned_inference_with_nccl_transport(self, monkeypatch):
         # This test runs both NCCL ranks on the single GPU provided by the CI
         # worker. Production deployments should normally assign one GPU per rank.

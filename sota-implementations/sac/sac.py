@@ -39,7 +39,7 @@ from utils import (
 torch.set_float32_matmul_precision("high")
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.3", config_path="", config_name="config")
 def main(cfg: DictConfig):  # noqa: F821
     device = (
         torch.device(cfg.network.device)
