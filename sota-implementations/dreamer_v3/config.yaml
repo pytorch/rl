@@ -62,3 +62,7 @@ logger:
   eval_every: 500
   eval_episodes: 3
   output_plot: dreamer_v3_pendulum.png
+
+hydra:
+  job:
+    chdir: true

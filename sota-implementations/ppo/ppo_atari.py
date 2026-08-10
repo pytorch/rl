@@ -15,7 +15,7 @@ import hydra
 from torchrl._utils import compile_with_warmup, get_available_device
 
 
-@hydra.main(config_path="", config_name="config_atari", version_base="1.1")
+@hydra.main(config_path="", config_name="config_atari", version_base="1.3")
 def main(cfg: DictConfig):  # noqa: F821
 
     import torch.optim

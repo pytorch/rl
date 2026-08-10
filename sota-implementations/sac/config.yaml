@@ -56,3 +56,7 @@ compile:
   compile: False
   compile_mode:
   cudagraphs: False
+
+hydra:
+  job:
+    chdir: true

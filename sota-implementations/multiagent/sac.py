@@ -31,7 +31,7 @@ def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="sac")
+@hydra.main(version_base="1.3", config_path="", config_name="sac")
 def train(cfg: DictConfig):  # noqa: F821
     # Device
     cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"

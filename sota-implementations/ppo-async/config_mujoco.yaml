@@ -54,3 +54,7 @@ loss:
   # worker: GAE computed on collector worker (stale critic, synced via SharedMemWeightSyncScheme)
   # learner: TD(0) advantage computed at training time with current critic
   # Only meaningful when collector.async_mode=start. Ignored when iterate.
+
+hydra:
+  job:
+    chdir: true
