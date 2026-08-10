@@ -45,3 +45,7 @@ compile:
   compile: False
   compile_mode: default
   cudagraphs: False
+
+hydra:
+  job:
+    chdir: true

@@ -621,7 +621,6 @@ class REDQLoss(LossModule):
                 "next.state_value": next_state_value.detach(),
                 "target_value": target_value.detach(),
             }
-            td_out = TensorDict(out, [])
         else:
             out = {
                 "loss_actor": loss_actor,
@@ -634,20 +633,17 @@ class REDQLoss(LossModule):
                 "next.state_value": next_state_value.detach(),
                 "target_value": target_value.detach(),
             }
-            td_out = TensorDict(out, [])
-            if self.reduction != "none":
-                loss_mask = tensordict.get("shifted_valid", default=None)
-                if loss_mask is not None:
-                    loss_mask = loss_mask.unsqueeze(0)
-                td_out = td_out.named_apply(
-                    lambda name, value: self._reduce_loss(value, mask=loss_mask)
-                    if name.startswith("loss_")
-                    else value,
-                )
-            elif self.scalar_output_mode == "non_tensor":
-                # Move scalars to non-tensor after creation
-                td_out.set_non_tensor("alpha", td_out.pop("alpha"))
-                td_out.set_non_tensor("entropy", td_out.pop("entropy"))
+        td_out = TensorDict(out, [])
+        loss_tensordict = tensordict.unsqueeze(0)
+        td_out = td_out.named_apply(
+            lambda name, value: self._reduce_loss(value, loss_tensordict)
+            if name.startswith("loss_")
+            else value,
+        )
+        if self.reduction == "none" and self.scalar_output_mode == "non_tensor":
+            # Move scalars to non-tensor after creation
+            td_out.set_non_tensor("alpha", td_out.pop("alpha"))
+            td_out.set_non_tensor("entropy", td_out.pop("entropy"))
         self._clear_weakrefs(
             tensordict,
             td_out,
