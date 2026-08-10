@@ -41,7 +41,7 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 from utils_mujoco import eval_model, make_env, make_ppo_models, make_rnd_networks
 
 
-@hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
+@hydra.main(config_path="", config_name="config_mujoco", version_base="1.3")
 def main(cfg: DictConfig):
     torch.set_float32_matmul_precision("high")
 

@@ -58,3 +58,7 @@ logger:
   mode: online
   eval_iter: 5000
   video: False
+
+hydra:
+  job:
+    chdir: true

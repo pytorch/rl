@@ -30,7 +30,7 @@ from utils_atari import eval_model, make_dqn_model, make_env
 torch.set_float32_matmul_precision("high")
 
 
-@hydra.main(config_path="", config_name="config_atari", version_base="1.1")
+@hydra.main(config_path="", config_name="config_atari", version_base="1.3")
 def main(cfg: DictConfig):  # noqa: F821
 
     device = torch.device(cfg.device) if cfg.device else get_available_device()

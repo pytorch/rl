@@ -441,14 +441,16 @@ class TestDataConfigs:
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import RoundRobinWriterConfig
 
-        cfg = RoundRobinWriterConfig(compilable=True)
+        cfg = RoundRobinWriterConfig(compilable=True, track_generations=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.RoundRobinWriter"
         assert cfg.compilable is True
+        assert cfg.track_generations is True
 
         # Test instantiation
         writer = instantiate(cfg)
         assert isinstance(writer, RoundRobinWriter)
         assert writer._compilable is True
+        assert writer.tracks_generations is True
 
     def test_sampler_config(self):
         """Test basic SamplerConfig."""
@@ -652,14 +654,16 @@ class TestDataConfigs:
             TensorDictRoundRobinWriterConfig,
         )
 
-        cfg = TensorDictRoundRobinWriterConfig(compilable=True)
+        cfg = TensorDictRoundRobinWriterConfig(compilable=True, track_generations=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
         assert cfg.compilable is True
+        assert cfg.track_generations is True
 
         # Test instantiation
         writer = instantiate(cfg)
         assert isinstance(writer, TensorDictRoundRobinWriter)
         assert writer._compilable is True
+        assert writer.tracks_generations is True
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_immutable_dataset_writer_config(self):
@@ -2368,7 +2372,7 @@ class TestHydraParsing:
         # Register the configs manually for testing
         _register_configs()
         initialize_config_module(
-            "torchrl.trainers.algorithms.configs", version_base="1.1"
+            "torchrl.trainers.algorithms.configs", version_base="1.3"
         )
 
     def _run_hydra_test(
@@ -2383,7 +2387,7 @@ import hydra
 import torchrl
 from torchrl.trainers.algorithms.configs.common import Config
 
-@hydra.main(config_path="config", config_name="config", version_base="1.1")
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg):
 {test_script_content}
     print("{success_message}")

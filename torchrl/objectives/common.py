@@ -11,9 +11,10 @@ import warnings
 from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
-from tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict import is_tensor_collection, NestedKey, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictParams
 from tensordict.utils import Buffer
 from torch import nn
@@ -29,6 +30,15 @@ try:
     from torch.compiler import is_compiling
 except ImportError:
     from torch._dynamo import is_compiling
+
+
+#: Input entries that :attr:`LossModule.loss_mask_key` ``= "auto"`` looks for,
+#: in order, ANDing every one it finds. Both are written by TorchRL itself:
+#: ``("collector", "mask")`` by :class:`~torchrl.data.SliceSampler` with
+#: ``pad_output=True`` (``False`` marks duplicated padding steps), and
+#: ``"shifted_valid"`` by the value estimators (``False`` marks positions whose
+#: bootstrapped target crosses an episode boundary).
+AUTO_LOSS_MASK_KEYS: tuple[NestedKey, ...] = (("collector", "mask"), "shifted_valid")
 
 
 def _updater_check_forward_prehook(module, *args, **kwargs):
@@ -107,6 +117,17 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     buffers that are commonly scheduled during training. The assignment performs
     an in-place update, preserving the buffer's device and dtype.
 
+    Padded or otherwise invalid positions are excluded from the reduction
+    through :attr:`loss_mask_key`. It defaults to ``"auto"``, which discovers
+    the validity masks TorchRL itself writes (``("collector", "mask")`` from
+    :class:`~torchrl.data.SliceSampler` with ``pad_output=True``, and
+    ``"shifted_valid"`` from the value estimators); set it to a
+    :class:`~tensordict.NestedKey` to name a single mask entry, or to ``None``
+    to reduce over every position:
+
+        >>> loss.loss_mask_key = ("my_masks", "valid")  # use this entry only
+        >>> loss.loss_mask_key = None                   # no masking at all
+
     Examples:
         >>> class MyLoss(LossModule):
         >>>     @dataclass
@@ -130,6 +151,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     """
 
     _schedulable_buffers: frozenset = frozenset()
+    _loss_mask_key: NestedKey | Literal["auto"] | None = "auto"
 
     @dataclass
     class _AcceptedKeys:
@@ -262,8 +284,55 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
                 )
 
+    @property
+    def loss_mask_key(self) -> NestedKey | Literal["auto"] | None:
+        """Which input entry marks the positions that contribute to the loss.
+
+        ``"auto"`` (the default) discovers the validity masks TorchRL writes
+        itself -- see :data:`AUTO_LOSS_MASK_KEYS`. A
+        :class:`~tensordict.NestedKey` restricts masking to that single entry;
+        ``None`` disables it. To use an entry literally named ``"auto"``, pass
+        the one-element tuple ``("auto",)``.
+        """
+        return self._loss_mask_key
+
+    @loss_mask_key.setter
+    def loss_mask_key(self, value: NestedKey | Literal["auto"] | None) -> None:
+        if value is None or (isinstance(value, str) and value == "auto"):
+            self._loss_mask_key = value
+            return
+        error = ValueError(
+            f"loss_mask_key must be 'auto', None or a NestedKey, got {value!r}."
+        )
+        if not isinstance(value, NestedKey):
+            raise error
+        self._loss_mask_key = value
+
+    def _loss_mask_keys(self) -> tuple[NestedKey, ...]:
+        """The input entries :meth:`_reduce_loss` will look for, in order."""
+        key = self._loss_mask_key
+        if key is None:
+            return ()
+        if key == "auto":
+            return AUTO_LOSS_MASK_KEYS
+        return (key,)
+
     @staticmethod
     def _expand_loss_mask(mask: torch.Tensor, loss: torch.Tensor) -> torch.Tensor:
+        # Validity masks conventionally carry a trailing singleton dimension, to
+        # broadcast against the [..., 1]-shaped rewards they accompany --
+        # ``("collector", "mask")`` is [B, T, 1] where a per-timestep loss is
+        # [B, T]. Drop those before broadcasting the other way.
+        while mask.ndim > loss.ndim and mask.shape[-1] == 1:
+            mask = mask.squeeze(-1)
+        if mask.ndim > loss.ndim:
+            raise ValueError(
+                f"A mask of shape {tuple(mask.shape)} cannot be applied to a "
+                f"loss of shape {tuple(loss.shape)}: the mask has more "
+                "non-singleton dimensions than the loss. Per-element masking "
+                "requires an elementwise loss, not one whose event dimensions "
+                "have already been reduced (e.g. a log-prob)."
+            )
         if mask.ndim < loss.ndim:
             mask = mask.reshape(mask.shape + (1,) * (loss.ndim - mask.ndim))
         return mask.expand_as(loss)
@@ -279,16 +348,32 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     ) -> torch.Tensor:
         if reduction is None:
             reduction = self.reduction
-        if mask is None and tensordict is not None:
-            mask = tensordict.get("shifted_valid", default=None)
+        # A caller-supplied mask keeps the legacy ``reduction="none"`` contract
+        # (masked positions are dropped, the output is compacted); masks read
+        # from the input instead preserve the loss shape, so that per-position
+        # outputs stay aligned with the input batch.
+        caller_mask = mask is not None
         if mask is not None:
             mask = self._expand_loss_mask(mask, loss)
+        if tensordict is not None:
+            for mask_key in self._loss_mask_keys():
+                tensordict_mask = tensordict.get(mask_key, default=None)
+                if tensordict_mask is not None:
+                    tensordict_mask = self._expand_loss_mask(tensordict_mask, loss)
+                    mask = tensordict_mask if mask is None else mask & tensordict_mask
+        if mask is not None:
+            # Select rather than multiply: masked positions may hold non-finite
+            # values, and ``nan * 0`` is ``nan`` in both the forward and the
+            # backward pass.
+            loss = torch.where(mask, loss, torch.zeros_like(loss))
             if weights is not None and weights.shape != loss.shape:
                 weights = self._expand_loss_mask(weights, loss)
+            if reduction == "none" and not caller_mask:
+                return loss if weights is None else loss * weights
             if weights is None and reduction == "mean":
-                return (loss * mask.to(loss.dtype)).sum() / mask.sum().clamp_min(1)
+                return loss.sum() / mask.sum().clamp_min(1)
             if weights is None and reduction == "sum":
-                return (loss * mask.to(loss.dtype)).sum()
+                return loss.sum()
         return _reduce(loss, reduction=reduction, mask=mask, weights=weights)
 
     def set_keys(self, **kwargs) -> None:
