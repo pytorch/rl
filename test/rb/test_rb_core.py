@@ -1665,6 +1665,208 @@ class TestSequenceUnit:
         assert sample["obs"].shape[0] == 6
 
 
+class TestSequenceMultidimensional:
+    """Sequence expands time while preserving multidimensional lanes."""
+
+    def _make_rb(self, time=8, lanes=2, capacity=None, done=None, unit=None):
+        if capacity is None:
+            capacity = time * lanes
+        if done is None:
+            done = torch.zeros(time, lanes, 1, dtype=torch.bool)
+            done[-1] = True
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(capacity, ndim=2),
+            dim_extend=0,
+            batch_size=2,
+            sample_unit=unit,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(time * lanes).reshape(time, lanes),
+                    ("stats", "episode_end"): done,
+                },
+                batch_size=[time, lanes],
+            )
+        )
+        return rb
+
+    def test_time_expansion_preserves_lanes_and_nested_done_key(self):
+        done = torch.zeros(8, 2, 1, dtype=torch.bool)
+        done[4, 0] = True
+        done[6, 1] = True
+        done[7] = True
+        rb = self._make_rb(done=done)
+        unit = Sequence(
+            length=2,
+            burn_in=1,
+            bootstrap=1,
+            dilation=2,
+            done_key=("stats", "episode_end"),
+        )
+        anchors = (torch.tensor([2, 2]), torch.tensor([0, 1]))
+
+        index, info = unit.expand(anchors, {}, rb.storage)
+
+        assert index[0].tolist() == [0, 2, 4, 4, 0, 2, 4, 6]
+        assert index[1].tolist() == [0, 0, 0, 0, 1, 1, 1, 1]
+        assert info["validity_mask"].tolist() == [
+            True,
+            True,
+            True,
+            False,
+            True,
+            True,
+            True,
+            True,
+        ]
+        assert info["learning_mask"].tolist() == [False, True, True, False] * 2
+        assert info["anchor_index"].tolist() == [[2, 0]] * 4 + [[2, 1]] * 4
+
+    def test_stop_shifts_time_but_retains_sampled_anchor(self):
+        done = torch.zeros(8, 2, 1, dtype=torch.bool)
+        done[4, 0] = True
+        done[7] = True
+        rb = self._make_rb(done=done)
+        unit = Sequence(
+            length=3,
+            episode_boundary="stop",
+            done_key=("stats", "episode_end"),
+        )
+
+        index, info = unit.expand(
+            (torch.tensor([4]), torch.tensor([0])), {}, rb.storage
+        )
+
+        assert index[0].tolist() == [2, 3, 4]
+        assert index[1].tolist() == [0, 0, 0]
+        assert info["validity_mask"].all()
+        assert info["anchor_index"].tolist() == [[4, 0]] * 3
+
+    def test_include_reset_respects_multidimensional_ring_write_seam(self):
+        rb = self._make_rb(time=8, capacity=12)
+        unit = Sequence(
+            length=3,
+            episode_boundary="include_reset",
+            done_key=("stats", "episode_end"),
+        )
+
+        wrapped, wrapped_info = unit.expand(
+            (torch.tensor([5]), torch.tensor([1])), {}, rb.storage
+        )
+        clamped, clamped_info = unit.expand(
+            (torch.tensor([1]), torch.tensor([1])), {}, rb.storage
+        )
+
+        assert wrapped[0].tolist() == [5, 0, 1]
+        assert wrapped[1].tolist() == [1, 1, 1]
+        assert wrapped_info["validity_mask"].all()
+        assert clamped[0].tolist() == [1, 1, 1]
+        assert clamped_info["validity_mask"].tolist() == [True, False, False]
+
+    def test_sampling_emits_full_coordinate_metadata(self):
+        unit = Sequence(
+            length=3,
+            done_key=("stats", "episode_end"),
+        )
+        rb = self._make_rb(time=5, unit=unit)
+
+        sample, info = rb.sample(return_info=True)
+
+        assert sample.batch_size == torch.Size([6])
+        assert sample["index"].shape == torch.Size([6, 2])
+        assert sample["anchor_index"].shape == torch.Size([6, 2])
+        assert isinstance(info["index"], tuple)
+        assert len(info["index"]) == 2
+        lane = sample["index"].reshape(2, 3, 2)[..., 1]
+        assert (lane == lane[:, :1]).all()
+
+    def test_priority_reduction_uses_full_anchor_coordinate(self):
+        rb = self._make_rb(time=5, unit=Sequence(length=2))
+        data = TensorDict(
+            {
+                "anchor_index": torch.tensor(
+                    [[2, 0], [2, 0], [2, 1], [2, 1], [2, 0], [2, 0]]
+                ),
+                "validity_mask": torch.tensor([True, False, True, True, True, True]),
+            },
+            batch_size=[6],
+        )
+        priority = torch.tensor([1.0, 99.0, 3.0, 4.0, 5.0, 6.0])
+
+        anchor, reduced = rb._anchor_reduced_priority(data, priority)
+
+        assert anchor.tolist() == [[2, 0], [2, 1]]
+        assert reduced.tolist() == [6.0, 4.0]
+
+    def test_priority_update_routes_to_multidimensional_anchors(self):
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=1.0,
+            beta=1.0,
+            storage=LazyTensorStorage(10, ndim=2),
+            dim_extend=0,
+            sample_unit=Sequence(length=2),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(10).reshape(5, 2),
+                    ("next", "done"): torch.zeros(5, 2, 1, dtype=torch.bool),
+                },
+                batch_size=[5, 2],
+            )
+        )
+        coordinates = torch.cartesian_prod(torch.arange(5), torch.arange(2))
+        rb.update_priority(coordinates, torch.ones(10))
+        index, info = rb._sample_unit.expand(
+            (torch.tensor([2, 2, 2]), torch.tensor([0, 1, 0])), {}, rb.storage
+        )
+        data = rb.storage.get(index)
+        data.set("index", torch.stack(index, -1))
+        data.set("anchor_index", info["anchor_index"])
+        data.set(
+            "validity_mask",
+            torch.tensor([True, False, True, True, True, True]),
+        )
+        data.set("td_error", torch.tensor([1.0, 99.0, 3.0, 4.0, 5.0, 6.0]))
+        before = torch.tensor([float(rb.sampler._sum_tree[i]) for i in range(10)])
+
+        rb.update_tensordict_priority(data)
+
+        after = torch.tensor([float(rb.sampler._sum_tree[i]) for i in range(10)])
+        assert (before != after).nonzero().squeeze(-1).tolist() == [4, 5]
+        assert after[4].item() == pytest.approx(6.0)
+        assert after[5].item() == pytest.approx(4.0)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cuda_storage_with_cpu_multidimensional_anchors(self):
+        done = torch.zeros(5, 2, 1, dtype=torch.bool, device="cuda")
+        done[-1] = True
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10, ndim=2, device="cuda"),
+            dim_extend=0,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.arange(10, device="cuda").reshape(5, 2),
+                    ("next", "done"): done,
+                },
+                batch_size=[5, 2],
+                device="cuda",
+            )
+        )
+        anchors = (torch.tensor([1]), torch.tensor([1]))
+
+        index, info = Sequence(length=3).expand(anchors, {}, rb.storage)
+
+        assert all(component.device.type == "cpu" for component in index)
+        assert index[0].tolist() == [1, 2, 3]
+        assert index[1].tolist() == [1, 1, 1]
+        assert info["validity_mask"].device.type == "cpu"
+
+
 class TestSequenceBurnInBootstrap:
     """Executable spec for Sequence burn-in, bootstrap and dilation (#4039, piece 3).
 

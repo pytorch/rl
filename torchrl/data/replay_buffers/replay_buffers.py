@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import json
+import math
 import multiprocessing
 import textwrap
 import threading
@@ -2865,15 +2866,35 @@ class TensorDictReplayBuffer(ReplayBuffer):
         the update well-defined when the same anchor appears in several
         windows. Returns ``None`` when no expansion metadata is present.
         """
-        if (
-            not isinstance(self._sample_unit, SequenceSampleUnit)
-            or self._storage.ndim > 1
-        ):
+        if not isinstance(self._sample_unit, SequenceSampleUnit):
             return None
         anchor = data.get("anchor_index", None)
         if anchor is None:
             return None
         validity = data.get("validity_mask", None)
+        if self._storage.ndim > 1:
+            if anchor.ndim < 2 or anchor.shape[-1] != self._storage.ndim:
+                return None
+            anchor = anchor.reshape(-1, self._storage.ndim)
+            priority = priority.reshape(-1)
+            if anchor.shape[0] != priority.shape[0]:
+                return None
+            if validity is not None:
+                validity = validity.reshape(-1)
+                anchor = anchor[validity]
+                priority = priority[validity]
+            shape = tuple(self._storage.shape)
+            stride = anchor.new_tensor(
+                [math.prod(shape[dim + 1 :]) for dim in range(len(shape))]
+            )
+            flat_anchor = (anchor * stride).sum(-1)
+            unique, inverse = torch.unique(flat_anchor, return_inverse=True)
+            reduced = torch.zeros_like(unique, dtype=priority.dtype)
+            reduced.scatter_reduce_(
+                0, inverse, priority, reduce="amax", include_self=False
+            )
+            coordinate = (unique.unsqueeze(-1) // stride) % anchor.new_tensor(shape)
+            return coordinate, reduced
         while anchor.shape != priority.shape and anchor.ndim > priority.ndim:
             anchor = anchor[..., 0]
             if validity is not None:
