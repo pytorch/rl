@@ -484,16 +484,11 @@ class TanhNormal(FasterTransformedDistribution):
         transform = self.transforms[0]
         sample = transform(preimage)
 
-        event_dim = len(self.event_shape)
-        event_dim += transform.domain.event_dim - transform.codomain.event_dim
         log_prob = -_sum_rightmost(
             transform.log_abs_det_jacobian(preimage, sample),
-            event_dim - transform.domain.event_dim,
+            len(self.event_shape),
         )
-        log_prob = log_prob + _sum_rightmost(
-            self.base_dist.log_prob(preimage),
-            event_dim - len(self.base_dist.event_shape),
-        )
+        log_prob = log_prob + self.base_dist.log_prob(preimage)
         return sample, log_prob
 
     @property
