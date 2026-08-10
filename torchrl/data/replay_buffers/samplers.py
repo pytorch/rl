@@ -26,9 +26,9 @@ from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import (
     _auto_device,
-    _derive_end_flags,
     _end_to_start_stop,
     _is_int,
+    _ReplayBoundaryIndex,
     unravel_index,
 )
 
@@ -2184,10 +2184,17 @@ class SliceSampler(Sampler):
         # torchrl.data.find_start_stop_traj). Kept as a method, dispatching
         # through self._end_to_start_stop, so that subclasses overriding
         # either hook keep working and the sampler's GPU device is applied.
-        end, length = _derive_end_flags(
-            trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
+        boundary = _ReplayBoundaryIndex(
+            trajectory=trajectory,
+            end=end,
+            at_capacity=at_capacity,
+            cursor=cursor,
+            device=self._gpu_device,
+            end_to_start_stop=lambda end, length: self._end_to_start_stop(
+                end=end, length=length
+            ),
         )
-        return self._end_to_start_stop(end=end, length=length)
+        return boundary.boundaries()
 
     def _end_to_start_stop(self, end, length):
         return _end_to_start_stop(end=end, length=length, device=self._gpu_device)

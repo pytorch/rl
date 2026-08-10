@@ -48,6 +48,7 @@ from torchrl.data.replay_buffers.storages import (
     LazyTensorStorage,
     ListStorage,
 )
+from torchrl.data.replay_buffers.utils import _ReplayBoundaryIndex
 from torchrl.modules import GRUModule, set_recurrent_mode
 from torchrl.testing import get_default_devices
 
@@ -2730,6 +2731,20 @@ class TestFindStartStopTraj:
         result = sampler._find_start_stop_traj(at_capacity=at_capacity, **kwargs)
         for r, e in zip(result, expected):
             assert (r == e).all()
+
+    def test_boundary_index_anchor_distances(self):
+        end = torch.zeros(10, dtype=torch.bool)
+        end[2] = end[7] = True
+        boundary = _ReplayBoundaryIndex(end=end, at_capacity=True, cursor=4)
+        distance_from_start, distance_to_stop = boundary.distances(
+            torch.tensor([9, 3, 6])
+        )
+        assert distance_from_start.tolist() == [1, 0, 1]
+        assert distance_to_stop.tolist() == [3, 1, 1]
+        start, stop, lengths = boundary.boundaries()
+        assert start.squeeze(-1).tolist() == [8, 3, 5]
+        assert stop.squeeze(-1).tolist() == [2, 4, 7]
+        assert lengths.tolist() == [5, 2, 3]
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
