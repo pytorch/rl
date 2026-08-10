@@ -46,7 +46,7 @@ from torchrl.objectives import (
     SACLoss,
     TD3Loss,
 )
-from torchrl.objectives.common import add_random_module, LossModule
+from torchrl.objectives.common import add_random_module, AUTO_LOSS_MASK_KEYS, LossModule
 from torchrl.objectives.utils import (
     _VALUE_ESTIMATOR_REGISTRY,
     _vmap_func,
@@ -702,6 +702,195 @@ class TestBase:
         assert loss_module.tensor_keys.some_key == "some_value"
         loss_module.set_keys(some_key="test")
         assert loss_module.tensor_keys.some_key == "test"
+
+
+class _MaskedToyLoss(LossModule):
+    """Minimal loss exposing ``_reduce_loss`` on a per-position input entry."""
+
+    def __init__(self, reduction: str = "mean"):
+        super().__init__()
+        self.reduction = reduction
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        loss = self._reduce_loss(tensordict.get("elementwise"), tensordict)
+        return TensorDict({"loss_x": loss}, [])
+
+
+class TestLossMaskReduction:
+    """Executable spec for ``LossModule.loss_mask_key`` (#3866, #4057).
+
+    Contract pinned by this class:
+
+    - ``loss_mask_key="auto"`` (the default) reads the validity masks TorchRL
+      writes itself -- ``("collector", "mask")`` and ``"shifted_valid"``,
+      listed in ``AUTO_LOSS_MASK_KEYS`` -- and ANDs every one it finds, so a
+      position excluded by either does not contribute.
+    - With none of those entries present the reduction is unchanged, for every
+      ``reduction`` mode: adopting mask-aware reduction is a no-op on unmasked
+      data.
+    - A ``NestedKey`` restricts masking to that single entry (the auto keys are
+      then ignored); ``None`` disables masking entirely.
+    - Masked positions are *selected out*, not multiplied by zero, so a
+      non-finite value at a masked position poisons neither the loss nor the
+      gradients.
+    - A caller-supplied ``mask=`` keeps the legacy ``reduction="none"``
+      contract (output compacted to the unmasked elements), while a mask read
+      from the input preserves the loss shape.
+    """
+
+    @staticmethod
+    def _make(reduction="mean", mask_key="auto"):
+        loss = _MaskedToyLoss(reduction=reduction)
+        loss.loss_mask_key = mask_key
+        return loss
+
+    @staticmethod
+    def _td(elementwise, *, collector_mask=None, shifted_valid=None, **extra):
+        td = TensorDict({"elementwise": elementwise}, elementwise.shape[:1])
+        if collector_mask is not None:
+            td.set(("collector", "mask"), collector_mask)
+        if shifted_valid is not None:
+            td.set("shifted_valid", shifted_valid)
+        for key, value in extra.items():
+            td.set(key, value)
+        return td
+
+    def test_default_is_auto(self):
+        assert _MaskedToyLoss().loss_mask_key == "auto"
+        assert AUTO_LOSS_MASK_KEYS == (("collector", "mask"), "shifted_valid")
+
+    @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+    def test_no_mask_entry_leaves_reduction_unchanged(self, reduction):
+        x = torch.randn(6)
+        out = self._make(reduction)(self._td(x)).get("loss_x")
+        expected = {"mean": x.mean(), "sum": x.sum(), "none": x}[reduction]
+        torch.testing.assert_close(out, expected)
+
+    @pytest.mark.parametrize("mask_entry", ["collector_mask", "shifted_valid"])
+    @pytest.mark.parametrize("reduction", ["mean", "sum"])
+    def test_auto_mask_excludes_masked_positions(self, mask_entry, reduction):
+        x = torch.arange(6, dtype=torch.float)
+        valid = torch.tensor([True, True, True, False, False, False])
+        td = self._td(x, **{mask_entry: valid})
+        out = self._make(reduction)(td).get("loss_x")
+        expected = x[valid].mean() if reduction == "mean" else x[valid].sum()
+        torch.testing.assert_close(out, expected)
+
+    def test_auto_masks_are_anded(self):
+        x = torch.ones(4)
+        collector = torch.tensor([True, True, False, False])
+        shifted = torch.tensor([True, False, True, False])
+        td = self._td(x, collector_mask=collector, shifted_valid=shifted)
+        # only position 0 is valid under both masks
+        torch.testing.assert_close(self._make("sum")(td).get("loss_x"), torch.ones(()))
+
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+    @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+    def test_non_finite_masked_positions_do_not_poison(self, bad, reduction):
+        base = torch.ones(4, requires_grad=True)
+        elementwise = base + torch.tensor([0.0, 0.0, bad, bad])
+        valid = torch.tensor([True, True, False, False])
+        out = self._make(reduction)(self._td(elementwise, collector_mask=valid)).get(
+            "loss_x"
+        )
+        assert torch.isfinite(out).all(), f"{reduction} reduction returned {out}"
+        out.sum().backward()
+        assert torch.isfinite(base.grad).all()
+        # masked positions contribute no gradient at all
+        torch.testing.assert_close(base.grad[~valid], torch.zeros(2))
+
+    def test_explicit_key_ignores_the_auto_keys(self):
+        x = torch.arange(4, dtype=torch.float)
+        auto = torch.tensor([True, False, True, False])
+        mine = torch.tensor([True, True, False, False])
+        td = self._td(x, collector_mask=auto)
+        td.set(("my_masks", "valid"), mine)
+        out = self._make("sum", mask_key=("my_masks", "valid"))(td).get("loss_x")
+        torch.testing.assert_close(out, x[mine].sum())
+
+    def test_none_disables_masking(self):
+        x = torch.arange(4, dtype=torch.float)
+        valid = torch.tensor([True, False, True, False])
+        td = self._td(x, collector_mask=valid)
+        out = self._make("sum", mask_key=None)(td).get("loss_x")
+        torch.testing.assert_close(out, x.sum())
+
+    def test_tuple_key_reaches_an_entry_named_auto(self):
+        x = torch.arange(4, dtype=torch.float)
+        mine = torch.tensor([True, True, False, False])
+        td = self._td(x, auto=mine)
+        out = self._make("sum", mask_key=("auto",))(td).get("loss_x")
+        torch.testing.assert_close(out, x[mine].sum())
+
+    def test_missing_explicit_key_is_not_an_error(self):
+        x = torch.arange(4, dtype=torch.float)
+        out = self._make("sum", mask_key="absent")(self._td(x)).get("loss_x")
+        torch.testing.assert_close(out, x.sum())
+
+    def test_reduction_none_preserves_shape_and_zeroes_masked(self):
+        x = torch.arange(1, 5, dtype=torch.float)
+        valid = torch.tensor([True, False, True, False])
+        out = self._make("none")(self._td(x, collector_mask=valid)).get("loss_x")
+        assert out.shape == x.shape
+        torch.testing.assert_close(out, torch.where(valid, x, torch.zeros_like(x)))
+
+    def test_caller_mask_keeps_compaction_with_reduction_none(self):
+        # BCLoss relies on this: an explicitly passed mask drops the masked
+        # elements rather than zeroing them (see test_bc.py).
+        x = torch.arange(4, dtype=torch.float)
+        mask = torch.tensor([True, False, True, False])
+        out = _MaskedToyLoss("none")._reduce_loss(x, None, mask=mask)
+        torch.testing.assert_close(out, x[mask])
+
+    def test_caller_mask_and_auto_mask_combine(self):
+        x = torch.ones(4)
+        caller = torch.tensor([True, True, False, False])
+        collector = torch.tensor([True, False, True, False])
+        loss = self._make("sum")
+        out = loss._reduce_loss(x, self._td(x, collector_mask=collector), mask=caller)
+        torch.testing.assert_close(out, torch.ones(()))
+
+    @pytest.mark.parametrize("mask_entry", ["collector_mask", "shifted_valid"])
+    def test_mask_with_trailing_singleton_dim(self, mask_entry):
+        # ("collector", "mask") is [B, T, 1] -- masks carry a trailing singleton
+        # to broadcast against [..., 1]-shaped rewards -- while a per-timestep
+        # loss is [B, T]. Expanding [B, T, 1] to [B, T] used to raise.
+        x = torch.ones(2, 3)
+        valid = torch.tensor([[True, True, False], [True, False, False]])
+        td = TensorDict({"elementwise": x}, [2])
+        key = (
+            ("collector", "mask") if mask_entry == "collector_mask" else "shifted_valid"
+        )
+        td.set(key, valid.unsqueeze(-1))
+        out = self._make("sum")(td).get("loss_x")
+        torch.testing.assert_close(out, torch.full((), 3.0))
+
+    def test_mask_with_extra_non_singleton_dim_raises(self):
+        x = torch.ones(2, 3)
+        td = TensorDict({"elementwise": x}, [2])
+        td.set(("collector", "mask"), torch.ones(2, 3, 4, dtype=torch.bool))
+        with pytest.raises(ValueError, match="more non-singleton dimensions"):
+            self._make("sum")(td)
+
+    def test_mask_broadcasts_over_trailing_dims(self):
+        x = torch.ones(3, 2)
+        valid = torch.tensor([True, True, False])
+        td = TensorDict({"elementwise": x}, [3])
+        td.set(("collector", "mask"), valid)
+        torch.testing.assert_close(
+            self._make("sum")(td).get("loss_x"), torch.full((), 4.0)
+        )
+
+    @pytest.mark.parametrize("bad", [0, 1.5, object(), (), ("mask", 0), ("mask", None)])
+    def test_invalid_loss_mask_key_raises(self, bad):
+        loss = _MaskedToyLoss()
+        with pytest.raises(ValueError, match="loss_mask_key"):
+            loss.loss_mask_key = bad
+        # the rejected assignment left the previous value in place
+        assert loss.loss_mask_key == "auto"
 
 
 class TestUtils:

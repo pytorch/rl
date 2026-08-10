@@ -6,7 +6,7 @@ import hydra
 from torchrl.trainers.algorithms.configs import *  # noqa: F401, F403
 
 
-@hydra.main(config_path="config", config_name="config", version_base="1.1")
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg):
     trainer = hydra.utils.instantiate(cfg.trainer)
     trainer.train()

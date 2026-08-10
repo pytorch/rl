@@ -162,3 +162,7 @@ trainer:
   save_trainer_file: null
   async_collection: false
   policy_update_delay: 2
+
+hydra:
+  job:
+    chdir: true

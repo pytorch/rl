@@ -95,3 +95,7 @@ loss:
   gamma: 0.99
   hard_update: False
   value_network_update_interval: 200
+
+hydra:
+  job:
+    chdir: true
