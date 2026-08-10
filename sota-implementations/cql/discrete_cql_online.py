@@ -36,7 +36,7 @@ from utils import (
 torch.set_float32_matmul_precision("high")
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="discrete_online_config")
+@hydra.main(version_base="1.3", config_path="", config_name="discrete_online_config")
 def main(cfg: DictConfig):  # noqa: F821
     device = (
         torch.device(cfg.optim.device) if cfg.optim.device else get_available_device()

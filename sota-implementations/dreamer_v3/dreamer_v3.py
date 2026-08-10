@@ -405,7 +405,7 @@ def eval_episode_reward(
     return torch.stack(totals).mean()
 
 
-@hydra.main(config_path="", config_name="config")
+@hydra.main(version_base="1.3", config_path="", config_name="config")
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
 

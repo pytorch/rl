@@ -109,6 +109,13 @@ def _connect_key(prefix: str, client_idx: int) -> str:
     return f"{prefix}/connect/{client_idx}"
 
 
+def _store_flag_is_set(store: dist.Store, key: str) -> bool:
+    # Store.check() was not exposed to Python until torch 2.3. Adding zero is
+    # a nonblocking, cross-version value probe: an absent key is initialized
+    # to 0, while a set flag retains its nonzero value.
+    return bool(store.add(key, 0))
+
+
 def _sorted_leaf_keys(spec: TensorDictBase) -> list[NestedKey]:
     # _is_leaf_nontensor surfaces NonTensorData leaves (excluded by the
     # default leaf iterator) so validation rejects them instead of ignoring
@@ -741,7 +748,7 @@ class TorchDistributedTransport(RequestReplyTransport):
             connecting = [
                 client_idx
                 for client_idx in pending
-                if store.check([_connect_key(self._prefix, client_idx)])
+                if _store_flag_is_set(store, _connect_key(self._prefix, client_idx))
             ]
             for client_idx in connecting:
                 thread = threading.Thread(

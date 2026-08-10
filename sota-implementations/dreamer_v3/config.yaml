@@ -65,3 +65,7 @@ logger:
   eval_episodes: 3
   output_plot: dreamer_v3_pendulum.png
   metrics_json: null
+
+hydra:
+  job:
+    chdir: true

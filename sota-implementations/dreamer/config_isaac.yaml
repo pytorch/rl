@@ -84,3 +84,7 @@ logger:
   # Enable async eval with viewport rendering (requires >= 3 GPUs).
   video: True
   video_skip: 1
+
+hydra:
+  job:
+    chdir: true
