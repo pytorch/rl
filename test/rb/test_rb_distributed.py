@@ -19,14 +19,17 @@ from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl import service_backend, transport_backend
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import RayReplayBuffer, ReplayBuffer
+from torchrl.data import RayReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+)
 from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
@@ -210,6 +213,47 @@ class TestRayRB:
             assert stats["utilization"] == 0.1
             client = rb.client()
             assert client.stats()["write_count"] == 10
+        finally:
+            rb.close()
+
+    def test_ray_rb_update_if_present(self):
+        """Spec: update_if_present is delegated to the actor in one RPC.
+
+        The remote buffer is a TensorDictReplayBuffer with a generation
+        tracking writer (tracking is opt-in), so samples carry the index and
+        index_generation keys; the conditional update validates and writes
+        inside the actor, and stale handles created by a wraparound are
+        skipped exactly as in the local contract.
+        """
+        rb = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 10),
+            writer=partial(TensorDictRoundRobinWriter, track_generations=True),
+            batch_size=4,
+            ray_init_config={"num_cpus": 1},
+        )
+        try:
+            index = rb.extend(TensorDict({"x": torch.zeros(10, 2)}, batch_size=10))
+            index = torch.as_tensor(index).reshape(-1)
+            sample = rb.sample()
+            batch = sample.batch_size[0]
+            sampled_index = sample.get("index").reshape(batch, -1)[:, 0]
+            generation = sample.get("index_generation").reshape(batch, -1)[:, 0]
+            marker = torch.full((batch, 2), 42.0)
+            result = rb.update_if_present(
+                index=sampled_index, generation=generation, patch={"x": marker}
+            )
+            assert result.updated.all()
+            assert result.updated_count == batch
+            rb.extend(TensorDict({"x": torch.ones(4, 2)}, batch_size=4))
+            stale = rb.update_if_present(
+                index=index[:4],
+                generation=torch.zeros(4, dtype=torch.int64),
+                patch={"x": torch.full((4, 2), -5.0)},
+            )
+            assert not stale.updated.any()
+            assert stale.stale_count == 4
+            assert (rb[:4]["x"] == 1.0).all()
         finally:
             rb.close()
 
