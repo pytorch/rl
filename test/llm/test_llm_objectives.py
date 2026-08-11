@@ -14,6 +14,7 @@ import tensordict
 import torch
 
 from tensordict import lazy_stack, MetaData, TensorDict
+from tensordict.nn import TensorDictModule
 from torchrl._utils import logger
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.data.llm.history import _CHAT_TEMPLATES
@@ -1219,6 +1220,28 @@ class TestDistillation:
             DistillationLoss(actor_network=None, kl_direction="sideways")
         with pytest.raises(ValueError, match="reduction"):
             DistillationLoss(actor_network=None, reduction="average")
+
+    def test_distillation_empty_sequence_in_multidimensional_batch_raises(self):
+        mask = torch.ones(2, 2, 3, dtype=torch.bool)
+        mask[0, 1] = False
+        student_log_probs = torch.full((2, 2, 3), -1.0)
+        data = TensorDict(
+            {
+                ("history", "full"): student_log_probs,
+                ("masks", "all_attention_mask"): mask,
+                ("masks", "all_assistant_mask"): mask,
+                ("next", "teacher_log_probs", "full"): torch.full((2, 2, 3), -2.0),
+            },
+            batch_size=(2, 2),
+        )
+        student = TensorDictModule(
+            torch.nn.Identity(),
+            in_keys=[("history", "full")],
+            out_keys=[("log_probs", "full")],
+        )
+
+        with pytest.raises(ValueError, match="Some sequences"):
+            DistillationLoss(actor_network=student)(data)
 
     @pytest.mark.skipif(
         not _has_transformers, reason="transformers lib required to test distillation"
