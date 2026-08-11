@@ -4,6 +4,7 @@
 Triggered by PR comments starting with `@torchrlbot`. Supports commands:
   - merge: Merge a PR (or ghstack) using ghstack land or gh pr merge
   - rebase: Rebase a PR onto a target branch
+  - reviewer: Request reviews from one or more collaborators
 
 Inspired by PyTorch's @pytorchbot.
 """
@@ -264,6 +265,85 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def normalize_reviewers(tokens: list[str]) -> list[str]:
+    """Normalize reviewer tokens into a deduplicated list of usernames.
+
+    Accepts space- and/or comma-separated tokens, with or without a leading
+    ``@`` (e.g. ``["@user1", "user2,user3"]`` -> ``["user1", "user2", "user3"]``).
+    """
+    reviewers: list[str] = []
+    for token in tokens:
+        for name in token.split(","):
+            name = name.strip().lstrip("@")
+            if name and name not in reviewers:
+                reviewers.append(name)
+    return reviewers
+
+
+def cmd_reviewer(ctx: CommandContext, args: argparse.Namespace) -> None:
+    """Handle ``@torchrlbot reviewer``."""
+    # Permission gate
+    if not check_write_permission(ctx.repo, ctx.comment_author):
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"@{ctx.comment_author} you don't have write permission on this repository. "
+            "Only collaborators with write access can request reviewers.",
+        )
+        return
+
+    reviewers = normalize_reviewers(args.reviewers)
+
+    pr_author = ctx.pr_info.get("author", {}).get("login")
+    skipped_author = pr_author in reviewers
+    if skipped_author:
+        reviewers = [r for r in reviewers if r != pr_author]
+
+    if not reviewers:
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"@{ctx.comment_author} no valid reviewers to request"
+            + (
+                f" (the PR author @{pr_author} cannot review their own PR)."
+                if skipped_author
+                else "."
+            ),
+        )
+        return
+
+    try:
+        gh(
+            "pr",
+            "edit",
+            str(ctx.pr_number),
+            "--repo",
+            ctx.repo,
+            "--add-reviewer",
+            ",".join(reviewers),
+        )
+        mentions = ", ".join(f"@{r}" for r in reviewers)
+        note = (
+            f"\n\nNote: skipped @{pr_author} (PR author cannot review their own PR)."
+            if skipped_author
+            else ""
+        )
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"Requested review from {mentions} (requested by @{ctx.comment_author})."
+            + note,
+        )
+    except subprocess.CalledProcessError as exc:
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            "Requesting reviewers **failed**. Reviewers must be collaborators "
+            f"on this repository.\n\n```\n{exc.stderr or exc.stdout}\n```",
+        )
+        sys.exit(1)
+
+
 def cmd_help(ctx: CommandContext, _args: argparse.Namespace) -> None:
     """Handle ``@torchrlbot help``."""
     post_comment(ctx.repo, ctx.pr_number, HELP_TEXT)
@@ -277,7 +357,7 @@ HELP_TEXT = """\
 ## <img src="https://raw.githubusercontent.com/pytorch/rl/main/.github/torchrlbot/icon.png" width="20"> @torchrlbot Help
 
 ```
-usage: @torchrlbot {merge,rebase,help}
+usage: @torchrlbot {merge,rebase,reviewer,help}
 ```
 
 ### `merge`
@@ -304,6 +384,16 @@ Rebase the PR branch onto a target branch.
 | Flag | Description |
 |------|-------------|
 | `-b`, `--branch` | Target branch (default: `main`) |
+
+### `reviewer`
+Request reviews from one or more repository collaborators.
+
+```
+@torchrlbot reviewer @user1 @user2
+```
+
+Reviewers can be space- or comma-separated, with or without a leading `@`.
+The PR author is skipped automatically.
 
 ### `help`
 Show this help message.
@@ -338,6 +428,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Branch to rebase onto (default: main)",
     )
 
+    # reviewer
+    reviewer_p = sub.add_parser("reviewer", add_help=False)
+    reviewer_p.add_argument(
+        "reviewers",
+        nargs="+",
+        help="Reviewers to request, space- or comma-separated (with or without @)",
+    )
+
     # help
     sub.add_parser("help", add_help=False)
 
@@ -347,6 +445,7 @@ def build_parser() -> argparse.ArgumentParser:
 COMMAND_HANDLERS = {
     "merge": cmd_merge,
     "rebase": cmd_rebase,
+    "reviewer": cmd_reviewer,
     "help": cmd_help,
 }
 
