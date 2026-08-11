@@ -105,33 +105,10 @@ and cannot be used in conjunction with `end_key` or `traj_key`.
 To be used whenever the `end_key` or `traj_key` is expensive to get,
 or when this signal is readily available. Must be used with `cache_values=True`
 and cannot be used in conjunction with `end_key` or `traj_key`.
-- **cache_values** (*bool**,**optional*) -
-
-to be used with static datasets.
-Will cache the start and end signal of the trajectory. This can be safely used even
-if the trajectory indices change during calls to [`extend`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.extend)
-as this operation will erase the cache.
-
-Warning
-
-`cache_values=True` will not work if the sampler is used with a
-storage that is extended by another buffer. For instance:
-
-```
->>> buffer0 = ReplayBuffer(storage=storage,
-... sampler=SliceSampler(num_slices=8, cache_values=True),
-... writer=ImmutableWriter())
->>> buffer1 = ReplayBuffer(storage=storage,
-... sampler=other_sampler)
->>> # Wrong! Does not erase the buffer from the sampler of buffer0
->>> buffer1.extend(data)
-```
-
-Warning
-
-`cache_values=True` will not work as expected if the buffer is
-shared between processes and one process is responsible for writing
-and one process for sampling, as erasing the cache can only be done locally.
+- **cache_values** (*bool**,**optional*) - to be used with static datasets.
+Caches trajectory boundaries until the storage revision changes,
+including writes from another buffer or process. Direct backing
+tensor mutations cannot be detected.
 - **truncated_key** (*NestedKey**,**optional*) - If not `None`, this argument
 indicates where a truncated signal should be written in the output
 data. This is used to indicate to value estimators where the provided
