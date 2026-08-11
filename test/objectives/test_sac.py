@@ -373,6 +373,15 @@ class TestSAC(LossModuleTestBase):
             loss = loss_fn(td)
         assert "loss_qvalue" in loss.keys()
 
+        updater = SoftUpdate(loss_fn, eps=0.5)
+        targets_before = updater._targets.clone()
+        with torch.no_grad():
+            for source in updater._sources.values(True, True):
+                source.add_(1)
+        updater.step()
+        for key, target in updater._targets.items(True, True):
+            torch.testing.assert_close(target, targets_before.get(key) + 0.5)
+
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))

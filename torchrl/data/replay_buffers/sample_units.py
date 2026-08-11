@@ -12,7 +12,7 @@ from tensordict import is_tensor_collection
 from tensordict.utils import NestedKey
 
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.utils import _derive_end_flags, _end_to_start_stop
+from torchrl.data.replay_buffers.utils import _ReplayBoundaryIndex
 
 if TYPE_CHECKING:
     from torchrl.data.replay_buffers.storages import Storage
@@ -191,6 +191,10 @@ class Sequence(SampleUnit):
         dilation grid of the shifted anchor: the reported (pre-shift) anchor
         is then not necessarily one of the window's records.
 
+    For multidimensional storage, coordinate zero is time and the others are
+    preserved lanes. ``"index"`` and ``"anchor_index"`` carry full storage
+    coordinates.
+
     .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SequenceConfig`
         for the Hydra configuration companion.
 
@@ -271,6 +275,9 @@ class Sequence(SampleUnit):
     @staticmethod
     def _newest_index(storage: Storage, written: int) -> int:
         """Physical index of the most recently written record."""
+        cursor = getattr(storage, "_last_cursor_index", None)
+        if cursor is not None:
+            return cursor % written
         cursor = getattr(storage, "_last_cursor", None)
         if isinstance(cursor, torch.Tensor):
             cursor = cursor.reshape(-1)
@@ -306,13 +313,21 @@ class Sequence(SampleUnit):
         info: dict[str, Any],
         storage: Storage,
     ) -> tuple[torch.Tensor | tuple, dict[str, Any]]:
-        if isinstance(index, tuple):
-            raise NotImplementedError(
-                "Multidimensional storage not yet supported by Sequence."
-            )
         self._check_storage(storage)
-
-        anchor = index.clone()
+        multidimensional = storage.ndim > 1
+        if isinstance(index, tuple):
+            anchor = torch.stack(index, -1)
+        else:
+            anchor = index.clone()
+        if multidimensional:
+            if anchor.ndim != 2 or anchor.shape[-1] != storage.ndim:
+                raise RuntimeError(
+                    "Sequence expected multidimensional anchors with shape "
+                    f"[batch, {storage.ndim}]."
+                )
+            anchor_time = anchor[:, 0]
+        else:
+            anchor_time = anchor
         B = anchor.shape[0]
         # All bookkeeping happens on the sampler's index device so that the
         # returned indices live on the same device as the ones Transition
@@ -337,7 +352,7 @@ class Sequence(SampleUnit):
         )
         expanded_info["step_in_sequence"] = steps.repeat(B)
         expanded_info["learning_mask"] = learning.repeat(B)
-        expanded_info["anchor_index"] = anchor.repeat_interleave(total)
+        expanded_info["anchor_index"] = anchor.repeat_interleave(total, dim=0)
 
         offset = ((steps - self.burn_in) * self.dilation).unsqueeze(0).expand(B, total)
 
@@ -345,39 +360,23 @@ class Sequence(SampleUnit):
             done = (
                 storage.get(self.done_key)
                 if self.done_key is not None
-                else torch.zeros(len(storage), dtype=torch.bool, device=device)
+                else torch.zeros(storage.shape, dtype=torch.bool, device=device)
             )
-            end, max_len = _derive_end_flags(
+            while done.ndim > storage.ndim and done.shape[-1] == 1:
+                done = done.squeeze(-1)
+            boundary = _ReplayBoundaryIndex(
                 end=done,
                 at_capacity=storage._is_full,
-                cursor=getattr(storage, "_last_cursor", None),
+                cursor=getattr(storage, "_last_cursor_index", None),
+                device=device,
+                storage=storage,
+                source=("end", self.done_key),
+                cache_values=True,
             )
-            # _end_to_start_stop returns its indices on the device of ``end``
-            # (the storage device): move the flags first so start/stop live
-            # on the anchor device.
-            end = end.to(device)
-            start, stop, _ = _end_to_start_stop(end=end, length=max_len, device=device)
-            start = start[:, 0]
-            stop = stop[:, 0]
+            dist_from_start, dist_to_stop = boundary.distances(anchor)
+            max_len = boundary.length
 
-            start_exp = start.unsqueeze(0)
-            stop_exp = stop.unsqueeze(0)
-            a_exp = anchor.unsqueeze(1)
-
-            cond1 = (start_exp <= stop_exp) & (start_exp <= a_exp) & (a_exp <= stop_exp)
-            cond2 = (start_exp > stop_exp) & (
-                (a_exp >= start_exp) | (a_exp <= stop_exp)
-            )
-            mask = cond1 | cond2
-
-            traj_idx = mask.float().argmax(dim=1)
-            a_start = start[traj_idx]
-            a_stop = stop[traj_idx]
-
-            dist_to_stop = ((a_stop - anchor) % max_len).to(torch.long)
-            dist_from_start = ((anchor - a_start) % max_len).to(torch.long)
-
-            anchor_eff = anchor
+            anchor_eff = anchor_time
             if self.episode_boundary == "stop":
                 shortfall = (
                     self.dilation * (self.length + self.bootstrap - 1) - dist_to_stop
@@ -385,7 +384,7 @@ class Sequence(SampleUnit):
                 shift = torch.clamp(
                     shortfall, min=torch.zeros_like(shortfall), max=dist_from_start
                 )
-                anchor_eff = anchor - shift
+                anchor_eff = anchor_time - shift
                 dist_to_stop = dist_to_stop + shift
                 dist_from_start = dist_from_start - shift
 
@@ -402,20 +401,25 @@ class Sequence(SampleUnit):
             # write seam (between the newest and the oldest record of the
             # ring buffer) nor read slots that were never written -- in
             # either direction, since burn-in walks backward from the anchor.
-            written = len(storage)
+            written = storage.shape[0]
             newest = self._newest_index(storage, written)
             oldest = (newest + 1) % written if storage._is_full else 0
             newest = torch.as_tensor(newest, device=device, dtype=torch.long)
             oldest = torch.as_tensor(oldest, device=device, dtype=torch.long)
-            dist_forward = torch.remainder(newest - anchor, written)
-            dist_backward = torch.remainder(anchor - oldest, written)
+            dist_forward = torch.remainder(newest - anchor_time, written)
+            dist_backward = torch.remainder(anchor_time - oldest, written)
             validity = (offset <= dist_forward.unsqueeze(1)) & (
                 offset >= -dist_backward.unsqueeze(1)
             )
             clamped_offset = torch.minimum(offset, dist_forward.unsqueeze(1))
             clamped_offset = torch.maximum(clamped_offset, -dist_backward.unsqueeze(1))
-            indices = torch.remainder(anchor.unsqueeze(1) + clamped_offset, written)
+            indices = torch.remainder(
+                anchor_time.unsqueeze(1) + clamped_offset, written
+            )
 
         expanded_info["validity_mask"] = validity.flatten()
-
+        if multidimensional:
+            lane = anchor[:, 1:].unsqueeze(1).expand(B, total, storage.ndim - 1)
+            coordinates = torch.cat([indices.unsqueeze(-1), lane], -1).flatten(0, 1)
+            return tuple(coordinates.unbind(-1)), expanded_info
         return indices.flatten(), expanded_info
