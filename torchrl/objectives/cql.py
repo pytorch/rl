@@ -20,6 +20,7 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
@@ -591,8 +592,7 @@ class CQLLoss(LossModule):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
-            a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm)
+            a_reparm, log_prob = rsample_and_log_prob(dist)
         bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
@@ -616,8 +616,7 @@ class CQLLoss(LossModule):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
-            a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm)
+            a_reparm, log_prob = rsample_and_log_prob(dist)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         if td_q is tensordict:
@@ -665,9 +664,8 @@ class CQLLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
-            action = dist.rsample()
+            action, sample_log_prob = rsample_and_log_prob(dist)
             tensordict.set(self.tensor_keys.action, action)
-            sample_log_prob = dist.log_prob(action)
 
         return (
             tensordict.select(
@@ -686,9 +684,8 @@ class CQLLoss(LossModule):
         with set_exploration_type(ExplorationType.RANDOM):
             next_tensordict = tensordict.get("next").clone(False)
             next_dist = self.actor_network.get_dist(next_tensordict)
-            next_action = next_dist.rsample()
+            next_action, next_sample_log_prob = rsample_and_log_prob(next_dist)
             next_tensordict.set(self.tensor_keys.action, next_action)
-            next_sample_log_prob = next_dist.log_prob(next_action)
         actor_data.to_module(
             self.actor_network, return_swap=False, preserve_module_state=False
         )

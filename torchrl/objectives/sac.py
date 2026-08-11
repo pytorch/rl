@@ -15,7 +15,6 @@ import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import (
     composite_lp_aggregate,
-    CompositeDistribution,
     dispatch,
     ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
@@ -27,6 +26,7 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -48,25 +48,12 @@ def _delezify(func):
     return new_func
 
 
-def compute_log_prob(action_dist, action_or_tensordict, tensor_key) -> torch.Tensor:
-    """Compute the log probability of an action given a distribution."""
-    lp = action_dist.log_prob(action_or_tensordict)
-    if isinstance(action_dist, CompositeDistribution):
-        with set_composite_lp_aggregate(False):
-            return sum(lp.sum(dim="feature").values(True, True))
-    return lp
-
-
 def compute_rsample_log_prob(
-    action_dist, tensor_key
+    action_dist,
 ) -> tuple[torch.Tensor | TensorDictBase, torch.Tensor]:
-    """Draw and score a reparameterized action in one operation when supported."""
-    if not isinstance(action_dist, CompositeDistribution):
-        joint_sample = getattr(action_dist, "rsample_and_log_prob", None)
-        if joint_sample is not None:
-            return joint_sample()
-    action = action_dist.rsample()
-    return action, compute_log_prob(action_dist, action, tensor_key)
+    """Draw and score an action, aggregating composite log-probabilities."""
+    with set_composite_lp_aggregate(True):
+        return rsample_and_log_prob(action_dist)
 
 
 class SACLoss(LossModule):
@@ -737,9 +724,7 @@ class SACLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
-            a_reparm, log_prob = compute_rsample_log_prob(
-                dist, self.tensor_keys.log_prob
-            )
+            a_reparm, log_prob = compute_rsample_log_prob(dist)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         td_q.set(self.tensor_keys.action, a_reparm)
@@ -867,7 +852,7 @@ class SACLoss(LossModule):
                         next_tensordict_select = next_tensordict
                     next_dist = self.actor_network.get_dist(next_tensordict_select)
                     next_action, next_sample_log_prob = compute_rsample_log_prob(
-                        next_dist, self.tensor_keys.log_prob
+                        next_dist
                     )
                     if next_tensordict_select is not next_tensordict:
                         mask = ~done.squeeze(-1)
@@ -891,7 +876,7 @@ class SACLoss(LossModule):
                 else:
                     next_dist = self.actor_network.get_dist(next_tensordict)
                     next_action, next_sample_log_prob = compute_rsample_log_prob(
-                        next_dist, self.tensor_keys.log_prob
+                        next_dist
                     )
                     next_tensordict.set(self.tensor_keys.action, next_action)
 
@@ -954,7 +939,7 @@ class SACLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ):
             action_dist = self.actor_network.get_dist(td_copy)  # resample an action
-        action, log_p = compute_rsample_log_prob(action_dist, self.tensor_keys.log_prob)
+        action, log_p = compute_rsample_log_prob(action_dist)
 
         td_copy.set(self.tensor_keys.action, action, inplace=False)
 

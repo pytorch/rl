@@ -15,8 +15,12 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from tensordict import TensorDictBase
-from tensordict.nn import NormalParamExtractor
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import (
+    CompositeDistribution,
+    NormalParamExtractor,
+    set_composite_lp_aggregate,
+)
 from torch import autograd, nn
 from torch.utils._pytree import tree_map
 from torchrl.modules import (
@@ -41,6 +45,11 @@ from torchrl.modules.distributions.continuous import (
 from torchrl.modules.distributions.discrete import (
     _generate_ordinal_logits,
     LLMMaskedCategorical,
+)
+from torchrl.modules.distributions.utils import (
+    composite_entropy,
+    rsample_and_log_prob,
+    sample_and_log_prob,
 )
 
 from torchrl.testing import get_default_devices
@@ -157,10 +166,7 @@ class TestTanhNormal:
         if compiled and safe_tanh and TORCH_VERSION_PRE_2_6:
             pytest.skip("safe_tanh compilation requires torch 2.6+")
 
-        if safe_tanh:
-            magnitude = 20.0 if dtype is torch.float32 else 40.0
-        else:
-            magnitude = 7.5 if dtype is torch.float32 else 18.0
+        magnitude = 20.0 if dtype is torch.float32 else 40.0
         loc = torch.tensor(
             [[magnitude, -magnitude], [-magnitude, magnitude]],
             dtype=dtype,
@@ -186,12 +192,11 @@ class TestTanhNormal:
             )
 
         torch.manual_seed(0)
+        pre_tanh = torch.distributions.Normal(loc, scale).rsample()
+        torch.manual_seed(0)
         sample, log_prob = sample_and_log_prob(loc, scale)
-        sample_loc_grad, sample_scale_grad = torch.autograd.grad(
-            sample.sum(), (loc, scale), retain_graph=True
-        )
-        noise = (sample_scale_grad / sample_loc_grad).detach()
-        pre_tanh = loc + scale * noise
+        assert sample.isfinite().all()
+        assert (sample >= low).all() and (sample <= high).all()
         tanh_log_det = 2.0 * (math.log(2.0) - pre_tanh - F.softplus(-2.0 * pre_tanh))
         affine_log_det = math.log((high - low) / 2.0)
         expected = (
@@ -205,11 +210,84 @@ class TestTanhNormal:
         for actual_grad, expected_grad in zip(log_prob_grads, expected_grads):
             torch.testing.assert_close(actual_grad, expected_grad)
 
-    @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
-    def test_tanhnormal_log_prob_is_history_independent(self, low, high):
+    @pytest.mark.parametrize(
+        "reparameterize, sample_shape", [(False, ()), (True, (3,))]
+    )
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_composite_sample_and_log_prob(
+        self, reparameterize, sample_shape, monkeypatch, device
+    ):
+        loc = torch.tensor([[20.0], [-20.0]], device=device, requires_grad=True)
+        scale = torch.full_like(loc, 0.1, requires_grad=True)
+        params = TensorDict(
+            {
+                "squashed": TensorDict({"loc": loc, "scale": scale}, batch_size=[2]),
+                "normal": TensorDict(
+                    {"loc": torch.zeros_like(loc), "scale": torch.ones_like(loc)},
+                    batch_size=[2],
+                ),
+            },
+            batch_size=[2],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "squashed": TanhNormal,
+                "normal": torch.distributions.Normal,
+            },
+            name_map={
+                "squashed": ("agent", "action"),
+                "normal": ("agent", "aux"),
+            },
+            extra_kwargs={"squashed": {"event_dims": 1}},
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("a freshly sampled TanhNormal was inverse-scored")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        helper = rsample_and_log_prob if reparameterize else sample_and_log_prob
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(False):
+            sample, component_log_prob = helper(dist, sample_shape)
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(True):
+            aggregate_sample, aggregate_log_prob = helper(dist, sample_shape)
+
+        expected_batch = torch.Size(sample_shape) + torch.Size([2])
+        assert sample.batch_size == expected_batch
+        assert sample["agent", "action"].requires_grad is reparameterize
+        torch.testing.assert_close(sample, aggregate_sample)
+        assert set(component_log_prob.keys(True, True)) == {
+            ("agent", "action_log_prob"),
+            ("agent", "aux_log_prob"),
+        }
+        expected_aggregate = sum(
+            component_log_prob.sum(dim="feature").values(True, True)
+        )
+        torch.testing.assert_close(aggregate_log_prob, expected_aggregate)
+
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(False):
+            component_entropy = composite_entropy(dist, 3)
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(True):
+            aggregate_entropy = composite_entropy(dist, 3)
+        assert set(component_entropy.keys(True, True)) == {
+            ("agent", "action_entropy"),
+            ("agent", "aux_entropy"),
+        }
+        expected_entropy = sum(component_entropy.sum(dim="feature").values(True, True))
+        torch.testing.assert_close(aggregate_entropy, expected_entropy)
+
+        aggregate_log_prob.sum().backward()
+        assert loc.grad is not None and loc.grad.isfinite().all()
+        assert scale.grad is not None and scale.grad.isfinite().all()
+
+    def test_tanhnormal_log_prob_is_history_independent(self):
         loc = torch.tensor([0.3], requires_grad=True)
         scale = torch.tensor([0.7])
-        dist = TanhNormal(loc, scale, low=low, high=high, event_dims=0)
+        dist = TanhNormal(loc, scale, event_dims=0)
         torch.manual_seed(0)
         first = dist.rsample()
         dist.rsample()

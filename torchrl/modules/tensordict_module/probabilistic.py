@@ -4,38 +4,33 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import inspect
 import warnings
 from contextlib import nullcontext
 
 import torch
-from tensordict import TensorDictBase, unravel_key_list
+from tensordict import is_tensor_collection, TensorDictBase, unravel_key_list
 from tensordict.nn import (
+    composite_lp_aggregate,
+    CompositeDistribution,
     dispatch,
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
+    set_composite_lp_aggregate,
     TensorDictModule,
 )
-from tensordict.nn.probabilistic import interaction_type
+from tensordict.nn.probabilistic import (
+    _use_generator as use_generator,
+    interaction_type,
+)
 from tensordict.nn.utils import _set_skip_existing_None as set_skip_existing_none
 from tensordict.utils import NestedKey
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.modules.distributions import Delta
+from torchrl.modules.distributions.utils import sample_and_log_prob
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-
-# Older stable-release versions of ``tensordict`` predate the ``generator``
-# kwarg on ``ProbabilisticTensorDictModule.__init__``. We probe the signature
-# once at import time and forward the kwarg only when it is supported.
-_PTDM_HAS_GENERATOR = (
-    "generator" in inspect.signature(ProbabilisticTensorDictModule.__init__).parameters
-)
-if _PTDM_HAS_GENERATOR:
-    from tensordict.nn.probabilistic import _use_generator as use_generator
-else:
-    use_generator = nullcontext
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
@@ -141,6 +136,12 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             If ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
             `log_prob_key`. Default is ``False``.
+
+            Fresh random samples use a joint sample-and-score operation when
+            available, including each CompositeDistribution component. Existing
+            samples and deterministic interactions use regular log_prob. Other
+            distributions retain separate sampling and scoring.
+
         log_prob_keys (List[NestedKey], optional): keys where to write the log_prob if ``return_log_prob=True``.
             Defaults to `'<sample_key_name>_log_prob'`, where `<sample_key_name>` is each of the :attr:`out_keys`.
 
@@ -225,10 +226,6 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         num_samples: int | torch.Size | None = None,
         generator: torch.Generator | int | NestedKey | None = None,
     ):
-        # ``generator`` was added to ``ProbabilisticTensorDictModule`` after
-        # the current stable-release tensordict; forward it only when the
-        # underlying class accepts it.
-        extra_kwargs = {"generator": generator} if _PTDM_HAS_GENERATOR else {}
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -241,7 +238,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             log_prob_keys=log_prob_keys,
             log_prob_key=log_prob_key,
             num_samples=num_samples,
-            **extra_kwargs,
+            generator=generator,
         )
         if spec is not None:
             spec = spec.clone()
@@ -294,20 +291,11 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         tensordict_out: TensorDictBase | None = None,
         _requires_sample: bool = True,
     ) -> TensorDictBase:
-        if not self.return_log_prob or not _requires_sample:
-            return super().forward(
-                tensordict,
-                tensordict_out,
-                _requires_sample=_requires_sample,
-            )
-
-        dist = self.get_dist(tensordict)
-        current_interaction = interaction_type() or self.default_interaction_type
-        joint_sample = getattr(dist, "rsample_and_log_prob", None)
         if (
-            current_interaction is not InteractionType.RANDOM
-            or joint_sample is None
-            or len(self.dist_sample_keys) != 1
+            not self.return_log_prob
+            or not _requires_sample
+            or (interaction_type() or self.default_interaction_type)
+            is not InteractionType.RANDOM
         ):
             return super().forward(
                 tensordict,
@@ -315,23 +303,58 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                 _requires_sample=_requires_sample,
             )
 
+        dist = self.get_dist(tensordict)
         if tensordict_out is None:
             tensordict_out = tensordict
-        if _PTDM_HAS_GENERATOR:
-            generator, writeback = self._resolve_generator(tensordict)
-        else:
-            generator = writeback = None
+        generator, writeback = self._resolve_generator(tensordict)
         sample_shape = self.num_samples or torch.Size()
-        with use_generator(generator):
-            sample, log_prob = joint_sample(sample_shape)
+        aggregate = composite_lp_aggregate()
+        aggregate_context = nullcontext()
+        if isinstance(dist, CompositeDistribution):
+            if aggregate != self._composite_lp_aggreate_at_init:
+                raise RuntimeError(
+                    self._CHANGE_IN_C_LP_A.format(
+                        type(self).__name__,
+                        self._composite_lp_aggreate_at_init,
+                        aggregate,
+                    )
+                )
+            aggregate_context = set_composite_lp_aggregate(False)
+        with use_generator(generator), aggregate_context:
+            sample, log_prob = sample_and_log_prob(
+                dist, sample_shape, reparameterize=dist.has_rsample
+            )
         if writeback is not None:
             writeback(generator)
         if self.num_samples is not None:
             tensordict_out = tensordict_out.expand(
                 self.num_samples + tensordict_out.shape
             )
-        tensordict_out.set(self.dist_sample_keys[0], sample)
-        tensordict_out.set(self.log_prob_key, log_prob)
+
+        if isinstance(sample, TensorDictBase):
+            if is_tensor_collection(log_prob):
+                if aggregate:
+                    sample.update(log_prob)
+                    sample.set(
+                        self.log_prob_key,
+                        log_prob.sum(dim="feature", reduce=True),
+                    )
+                else:
+                    self._update_td_lp(log_prob)
+                    sample.update(log_prob)
+            else:
+                sample.set(self.log_prob_key, log_prob)
+            tensordict_out.update(sample)
+            return tensordict_out
+
+        if isinstance(sample, torch.Tensor):
+            sample = (sample,)
+        tensordict_out.update(dict(zip(self.dist_sample_keys, sample, strict=True)))
+        if is_tensor_collection(log_prob):
+            self._update_td_lp(log_prob)
+            tensordict_out.update(log_prob)
+        else:
+            tensordict_out.set(self.log_prob_key, log_prob)
         return tensordict_out
 
     @property

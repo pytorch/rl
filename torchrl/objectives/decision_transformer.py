@@ -14,6 +14,7 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import distributions as d
 
+from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import distance_loss
 
@@ -224,8 +225,7 @@ class OnlineDTLoss(LossModule):
         self._out_keys = values
 
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
-        x = dist.rsample((self.samples_mc_entropy,))
-        log_p = dist.log_prob(x)
+        _, log_p = rsample_and_log_prob(dist, (self.samples_mc_entropy,))
         # log_p: (batch_size, context_len)
         return -log_p.mean(axis=0)
 

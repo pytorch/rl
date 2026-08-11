@@ -478,17 +478,52 @@ class TanhNormal(FasterTransformedDistribution):
     def rsample_and_log_prob(
         self, sample_shape: torch.Size | tuple[int, ...] = ()
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Draw a reparameterized sample and score it from the same preimage."""
+        """Sample and score the same pre-tanh value with pathwise gradients.
+
+        Calling rsample() and log_prob() separately reconstructs the pre-tanh
+        value from the rounded action. Once tanh saturates, that inverse can return
+        a different Normal value and produce the wrong score and gradients. This
+        method scores the exact Normal value used to create the action.
+
+        Args:
+            sample_shape: Leading sample dimensions.
+
+        Returns:
+            The action and its log probability. Their shapes are
+            sample_shape + batch_shape + event_shape and
+            sample_shape + batch_shape, respectively.
+
+        Use log_prob() for actions not drawn by this call.
+        """
         sample_shape = torch.Size(sample_shape)
         preimage = self.base_dist.rsample(sample_shape)
         transform = self.transforms[0]
         sample = transform(preimage)
 
-        log_prob = -_sum_rightmost(
+        log_prob = self.base_dist.log_prob(preimage) - _sum_rightmost(
             transform.log_abs_det_jacobian(preimage, sample),
             len(self.event_shape),
         )
-        log_prob = log_prob + self.base_dist.log_prob(preimage)
+        return sample, log_prob
+
+    def sample_and_log_prob(
+        self, sample_shape: torch.Size | tuple[int, ...] = ()
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Sample and score the same pre-tanh value without pathwise gradients.
+
+        The action is detached. Its log probability keeps score-function gradients
+        with respect to the distribution parameters.
+        """
+        sample_shape = torch.Size(sample_shape)
+        preimage = self.base_dist.sample(sample_shape)
+        transform = self.transforms[0]
+        with torch.no_grad():
+            sample = transform(preimage)
+
+        log_prob = self.base_dist.log_prob(preimage) - _sum_rightmost(
+            transform.log_abs_det_jacobian(preimage, sample),
+            len(self.event_shape),
+        )
         return sample, log_prob
 
     @property

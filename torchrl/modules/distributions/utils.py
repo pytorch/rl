@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import torch
+from tensordict import is_tensor_collection, TensorDict
+from tensordict.nn import composite_lp_aggregate, CompositeDistribution
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
 
@@ -12,6 +14,101 @@ try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+
+def sample_and_log_prob(
+    distribution: d.Distribution,
+    sample_shape: torch.Size | tuple[int, ...] = (),
+    *,
+    reparameterize: bool = False,
+):
+    """Sample once and score the same draw atomically when supported."""
+    sample_shape = torch.Size(sample_shape)
+    if isinstance(distribution, CompositeDistribution):
+        samples = {}
+        log_probs = {}
+        for name, component in distribution.dists.items():
+            sample, log_prob = sample_and_log_prob(
+                component,
+                sample_shape,
+                reparameterize=reparameterize,
+            )
+            samples[name] = sample
+            if isinstance(name, str):
+                log_prob_name = name + "_log_prob"
+            else:
+                log_prob_name = name[:-1] + (name[-1] + "_log_prob",)
+            log_probs[log_prob_name] = log_prob
+
+        batch_size = sample_shape + distribution.batch_shape
+        sample = TensorDict(samples, batch_size=batch_size)
+        if not composite_lp_aggregate():
+            return sample, TensorDict(log_probs, batch_size=batch_size)
+
+        log_prob = 0.0
+        for component_log_prob in log_probs.values():
+            if is_tensor_collection(component_log_prob):
+                component_log_prob = component_log_prob.sum(dim="feature", reduce=True)
+            elif component_log_prob.ndim > sample.ndim:
+                component_log_prob = component_log_prob.flatten(sample.ndim, -1).sum(-1)
+            log_prob = log_prob + component_log_prob
+        return sample, log_prob
+
+    method_name = "rsample_and_log_prob" if reparameterize else "sample_and_log_prob"
+    joint_sample = getattr(distribution, method_name, None)
+    if joint_sample is not None:
+        return joint_sample(sample_shape)
+    sample_fn = distribution.rsample if reparameterize else distribution.sample
+    sample = sample_fn(sample_shape)
+    if isinstance(sample, torch.Tensor) or is_tensor_collection(sample):
+        return sample, distribution.log_prob(sample)
+    return sample, distribution.log_prob(*sample)
+
+
+def rsample_and_log_prob(
+    distribution: d.Distribution,
+    sample_shape: torch.Size | tuple[int, ...] = (),
+):
+    """Reparameterize once and score the same draw atomically when supported."""
+    return sample_and_log_prob(
+        distribution,
+        sample_shape,
+        reparameterize=True,
+    )
+
+
+def composite_entropy(
+    distribution: CompositeDistribution,
+    samples_mc: int = 1,
+):
+    """Compute component entropy without inverse-scoring Monte Carlo samples."""
+    entropies = {}
+    for name, component in distribution.dists.items():
+        try:
+            entropy = component.entropy()
+        except NotImplementedError:
+            if not component.has_rsample:
+                raise
+            _, log_prob = rsample_and_log_prob(component, (samples_mc,))
+            entropy = -log_prob.mean(0)
+        if isinstance(name, str):
+            entropy_name = name + "_entropy"
+        else:
+            entropy_name = name[:-1] + (name[-1] + "_entropy",)
+        entropies[entropy_name] = entropy
+
+    if not composite_lp_aggregate():
+        return TensorDict(entropies, batch_size=distribution.batch_shape)
+
+    entropy = 0.0
+    batch_ndim = len(distribution.batch_shape)
+    for component_entropy in entropies.values():
+        if is_tensor_collection(component_entropy):
+            component_entropy = component_entropy.sum(dim="feature", reduce=True)
+        elif component_entropy.ndim > batch_ndim:
+            component_entropy = component_entropy.flatten(batch_ndim, -1).sum(-1)
+        entropy = entropy + component_entropy
+    return entropy
 
 
 def _cast_device(elt: torch.Tensor | float, device) -> torch.Tensor | float:
