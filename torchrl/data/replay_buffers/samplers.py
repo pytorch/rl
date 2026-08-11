@@ -26,9 +26,9 @@ from torchrl._utils import _replace_last, logger, rl_warnings
 from torchrl.data.replay_buffers.storages import Storage, StorageEnsemble, TensorStorage
 from torchrl.data.replay_buffers.utils import (
     _auto_device,
-    _derive_end_flags,
     _end_to_start_stop,
     _is_int,
+    _ReplayBoundaryIndex,
     unravel_index,
 )
 
@@ -1751,24 +1751,9 @@ class SliceSampler(Sampler):
             if the last element of the trajectory tensor is identical to the first,
             the same trajectory spans across end and beginning.
         cache_values (bool, optional): to be used with static datasets.
-            Will cache the start and end signal of the trajectory. This can be safely used even
-            if the trajectory indices change during calls to :class:`~torchrl.data.ReplayBuffer.extend`
-            as this operation will erase the cache.
-
-            .. warning:: ``cache_values=True`` will not work if the sampler is used with a
-                storage that is extended by another buffer. For instance:
-
-                    >>> buffer0 = ReplayBuffer(storage=storage,
-                    ...     sampler=SliceSampler(num_slices=8, cache_values=True),
-                    ...     writer=ImmutableWriter())
-                    >>> buffer1 = ReplayBuffer(storage=storage,
-                    ...     sampler=other_sampler)
-                    >>> # Wrong! Does not erase the buffer from the sampler of buffer0
-                    >>> buffer1.extend(data)
-
-            .. warning:: ``cache_values=True`` will not work as expected if the buffer is
-                shared between processes and one process is responsible for writing
-                and one process for sampling, as erasing the cache can only be done locally.
+            Caches trajectory boundaries until the storage revision changes,
+            including writes from another buffer or process. Direct backing
+            tensor mutations cannot be detected.
 
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
@@ -2095,7 +2080,7 @@ class SliceSampler(Sampler):
                 trajectory=trajectories,
                 at_capacity=True,
             )
-            self._cache["stop-and-length"] = vals
+            self._cache["static-stop-and-length"] = vals
 
         elif ends is not None:
             if traj_key is not None or end_key or end_keys:
@@ -2109,7 +2094,7 @@ class SliceSampler(Sampler):
                     "To be used, ends requires `cache_values` to be set to `True`."
                 )
             vals = self._find_start_stop_traj(end=ends, at_capacity=True)
-            self._cache["stop-and-length"] = vals
+            self._cache["static-stop-and-length"] = vals
 
         else:
             if traj_key is not None:
@@ -2178,16 +2163,37 @@ class SliceSampler(Sampler):
         )
 
     def _find_start_stop_traj(
-        self, *, trajectory=None, end=None, at_capacity: bool, cursor=None
+        self,
+        *,
+        trajectory=None,
+        end=None,
+        at_capacity: bool,
+        cursor=None,
+        storage=None,
+        source=None,
     ):
         # Thin wrapper around the shared module-level utilities (see
         # torchrl.data.find_start_stop_traj). Kept as a method, dispatching
         # through self._end_to_start_stop, so that subclasses overriding
         # either hook keep working and the sampler's GPU device is applied.
-        end, length = _derive_end_flags(
-            trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
+        boundary = _ReplayBoundaryIndex(
+            trajectory=trajectory,
+            end=end,
+            at_capacity=at_capacity,
+            cursor=cursor,
+            device=self._gpu_device,
+            end_to_start_stop=lambda end, length: self._end_to_start_stop(
+                end=end, length=length
+            ),
+            storage=storage,
+            source=source,
+            cache_values=(
+                self.cache_values
+                and storage is not None
+                and type(self)._end_to_start_stop is SliceSampler._end_to_start_stop
+            ),
         )
-        return self._end_to_start_stop(end=end, length=length)
+        return boundary.boundaries()
 
     def _end_to_start_stop(self, end, length):
         return _end_to_start_stop(end=end, length=length, device=self._gpu_device)
@@ -2301,8 +2307,8 @@ class SliceSampler(Sampler):
         self._fetch_traj = False
 
     def _get_stop_and_length(self, storage, fallback=True):
-        if self.cache_values and "stop-and-length" in self._cache:
-            return self._cache.get("stop-and-length")
+        if self.cache_values and "static-stop-and-length" in self._cache:
+            return self._cache.get("static-stop-and-length")
 
         if getattr(self, "_traj_key_auto", False):
             self._resolve_traj_key(storage)
@@ -2322,10 +2328,10 @@ class SliceSampler(Sampler):
                 vals = self._find_start_stop_traj(
                     trajectory=trajectory,
                     at_capacity=storage._is_full,
-                    cursor=getattr(storage, "_last_cursor", None),
+                    cursor=getattr(storage, "_last_cursor_index", None),
+                    storage=storage,
+                    source=("trajectory", self._used_traj_key),
                 )
-                if self.cache_values:
-                    self._cache["stop-and-length"] = vals
                 return vals
             except KeyError:
                 if fallback:
@@ -2354,10 +2360,15 @@ class SliceSampler(Sampler):
                 vals = self._find_start_stop_traj(
                     end=done[: len(storage)],
                     at_capacity=storage._is_full,
-                    cursor=getattr(storage, "_last_cursor", None),
+                    cursor=getattr(storage, "_last_cursor_index", None),
+                    storage=storage,
+                    source=(
+                        "end",
+                        tuple(self.end_keys)
+                        if self.end_keys is not None
+                        else self.end_key,
+                    ),
                 )
-                if self.cache_values:
-                    self._cache["stop-and-length"] = vals
                 return vals
             except KeyError:
                 if fallback:
@@ -3187,24 +3198,9 @@ class PrioritizedSliceSampler(SliceSampler, PrioritizedSampler):
             or when this signal is readily available. Must be used with ``cache_values=True``
             and cannot be used in conjunction with ``end_key`` or ``traj_key``.
         cache_values (bool, optional): to be used with static datasets.
-            Will cache the start and end signal of the trajectory. This can be safely used even
-            if the trajectory indices change during calls to :class:`~torchrl.data.ReplayBuffer.extend`
-            as this operation will erase the cache.
-
-            .. warning:: ``cache_values=True`` will not work if the sampler is used with a
-                storage that is extended by another buffer. For instance:
-
-                    >>> buffer0 = ReplayBuffer(storage=storage,
-                    ...     sampler=SliceSampler(num_slices=8, cache_values=True),
-                    ...     writer=ImmutableWriter())
-                    >>> buffer1 = ReplayBuffer(storage=storage,
-                    ...     sampler=other_sampler)
-                    >>> # Wrong! Does not erase the buffer from the sampler of buffer0
-                    >>> buffer1.extend(data)
-
-            .. warning:: ``cache_values=True`` will not work as expected if the buffer is
-                shared between processes and one process is responsible for writing
-                and one process for sampling, as erasing the cache can only be done locally.
+            Caches trajectory boundaries until the storage revision changes,
+            including writes from another buffer or process. Direct backing
+            tensor mutations cannot be detected.
 
         truncated_key (NestedKey, optional): If not ``None``, this argument
             indicates where a truncated signal should be written in the output
