@@ -90,9 +90,25 @@ one of the environment has dynamic specs.
 > defaults to `use_buffers=False` (with a warning) and the data exchanged
 > between processes is staged on CPU. Passing `use_buffers=True` in that
 > case raises a `RuntimeError`.
+- **metadata_from_workers** (*bool**,**optional*) - if `True`, each worker constructs
+its environment and sends its metadata to the parent during startup. This
+avoids constructing temporary environments in the parent process. The mode
+is only supported by [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv), starts its workers
+eagerly, and currently requires `use_buffers=False`. All workers must
+report the same tensor schema: specs and example tensors may only differ
+in non-tensor payload values (such as language instructions). In this
+mode workers are also closed one at a time at shutdown to bound teardown
+resource spikes. Defaults to `False`.
 - **daemon** (*bool**,**optional*) - whether the processes should be daemonized.
 This is only applicable to parallel environments such as [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv).
 Defaults to `False`.
+- **shutdown_timeout** (*float**,**optional*) - grace period in seconds granted to
+workers to exit cleanly when the environment is closed. Workers that
+are still alive after this window are terminated, then killed.
+Increase it for environments whose `close()` legitimately takes
+long (e.g. flushing recorders or tearing down native renderers).
+This is only applicable to parallel environments such as
+[`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv). Defaults to `10.0`.
 - **auto_wrap_envs** (*bool**,**optional*) - if `True` (default), lambda functions passed as
 `create_env_fn` will be automatically wrapped in an [`EnvCreator`](torchrl.envs.EnvCreator.html#torchrl.envs.EnvCreator)
 to enable pickling for multiprocessing with the `spawn` start method.
@@ -613,7 +629,7 @@ env = TransformedEnv(
 
 See `eager()` to undo it.
 
-configure_parallel(***, *use_buffers: bool | None = None*, *shared_memory: bool | None = None*, *memmap: bool | None = None*, *mp_start_method: str | None = None*, *num_threads: int | None = None*, *num_sub_threads: int | None = None*, *non_blocking: bool | None = None*, *daemon: bool | None = None*) → BatchedEnvBase
+configure_parallel(***, *use_buffers: bool | None = None*, *shared_memory: bool | None = None*, *memmap: bool | None = None*, *mp_start_method: str | None = None*, *num_threads: int | None = None*, *num_sub_threads: int | None = None*, *non_blocking: bool | None = None*, *daemon: bool | None = None*, *shutdown_timeout: float | None = None*) → BatchedEnvBase
 
 Configure parallel execution parameters before the environment starts.
 
@@ -635,6 +651,8 @@ in memory map.
 - **non_blocking** (*bool**,**optional*) - if `True`, device moves will be done using
 the `non_blocking=True` option.
 - **daemon** (*bool**,**optional*) - whether the processes should be daemonized.
+- **shutdown_timeout** (*float**,**optional*) - grace period in seconds granted to
+workers to exit cleanly at shutdown before they are terminated.
 
 Returns:
 
