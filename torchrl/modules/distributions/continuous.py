@@ -494,6 +494,14 @@ class TanhNormal(FasterTransformedDistribution):
             sample_shape + batch_shape, respectively.
 
         Use log_prob() for actions not drawn by this call.
+
+        Examples:
+            >>> loc = torch.tensor([20.0, -20.0])
+            >>> scale = torch.full_like(loc, 0.1)
+            >>> dist = TanhNormal(loc, scale, event_dims=1)
+            >>> action, log_prob = dist.rsample_and_log_prob()
+            >>> action.shape, log_prob.shape
+            (torch.Size([2]), torch.Size([]))
         """
         sample_shape = torch.Size(sample_shape)
         preimage = self.base_dist.rsample(sample_shape)
@@ -513,6 +521,14 @@ class TanhNormal(FasterTransformedDistribution):
 
         The action is detached. Its log probability keeps score-function gradients
         with respect to the distribution parameters.
+
+        Args:
+            sample_shape: Leading sample dimensions.
+
+        Returns:
+            The detached action and its differentiable log probability. Their
+            shapes are sample_shape + batch_shape + event_shape and
+            sample_shape + batch_shape, respectively.
         """
         sample_shape = torch.Size(sample_shape)
         preimage = self.base_dist.sample(sample_shape)

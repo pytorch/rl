@@ -148,6 +148,22 @@ class TestCQL(LossModuleTestBase):
         )
         self.reset_parameters_recursive_test(loss_fn)
 
+    def test_cql_actor_uses_joint_sample_log_prob(self, monkeypatch):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql()
+        loss_fn = CQLLoss(
+            actor_network=self._create_mock_actor(),
+            qvalue_network=self._create_mock_qvalue(),
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("CQL inverse-scored a freshly sampled TanhNormal")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        actor_loss, metadata = loss_fn.actor_loss(td)
+        assert actor_loss.isfinite().all()
+        assert metadata[loss_fn.tensor_keys.log_prob].isfinite().all()
+
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, True))
     @pytest.mark.parametrize("max_q_backup", [True, False])

@@ -4,8 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from typing import Any
+
 import torch
-from tensordict import is_tensor_collection, TensorDict
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.nn import composite_lp_aggregate, CompositeDistribution
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
@@ -21,8 +23,26 @@ def sample_and_log_prob(
     sample_shape: torch.Size | tuple[int, ...] = (),
     *,
     reparameterize: bool = False,
-):
-    """Sample once and score the same draw atomically when supported."""
+) -> tuple[Any, torch.Tensor | TensorDictBase]:
+    """Sample once and score the same draw atomically when supported.
+
+    If the distribution implements ``sample_and_log_prob`` or
+    ``rsample_and_log_prob``, the matching method is used so that the score is
+    computed from the same latent draw as the sample. Otherwise, this function
+    falls back to separate sampling and scoring. Composite distributions are
+    handled component by component and respect
+    :func:`~tensordict.nn.composite_lp_aggregate`.
+
+    Args:
+        distribution (Distribution): distribution to sample and score.
+        sample_shape (torch.Size or tuple of int, optional): leading sample
+            dimensions. Defaults to an empty shape.
+        reparameterize (bool, optional): if ``True``, use reparameterized
+            sampling. Defaults to ``False``.
+
+    Returns:
+        A tuple containing the sample and its log probability.
+    """
     sample_shape = torch.Size(sample_shape)
     if isinstance(distribution, CompositeDistribution):
         samples = {}
@@ -68,8 +88,17 @@ def sample_and_log_prob(
 def rsample_and_log_prob(
     distribution: d.Distribution,
     sample_shape: torch.Size | tuple[int, ...] = (),
-):
-    """Reparameterize once and score the same draw atomically when supported."""
+) -> tuple[Any, torch.Tensor | TensorDictBase]:
+    """Reparameterize once and score the same draw atomically when supported.
+
+    Args:
+        distribution (Distribution): distribution to sample and score.
+        sample_shape (torch.Size or tuple of int, optional): leading sample
+            dimensions. Defaults to an empty shape.
+
+    Returns:
+        A tuple containing the reparameterized sample and its log probability.
+    """
     return sample_and_log_prob(
         distribution,
         sample_shape,
@@ -80,8 +109,22 @@ def rsample_and_log_prob(
 def composite_entropy(
     distribution: CompositeDistribution,
     samples_mc: int = 1,
-):
-    """Compute component entropy without inverse-scoring Monte Carlo samples."""
+) -> torch.Tensor | TensorDictBase:
+    """Compute component entropy without inverse-scoring Monte Carlo samples.
+
+    Analytic component entropies are used when available. Components without
+    analytic entropy are estimated from atomic reparameterized samples.
+
+    Args:
+        distribution (CompositeDistribution): distribution whose component
+            entropies are computed.
+        samples_mc (int, optional): number of Monte Carlo samples used for
+            components without analytic entropy. Defaults to ``1``.
+
+    Returns:
+        The aggregated entropy, or a TensorDict of component entropies when
+        composite log-probability aggregation is disabled.
+    """
     entropies = {}
     for name, component in distribution.dists.items():
         try:
