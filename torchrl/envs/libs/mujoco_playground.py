@@ -371,7 +371,7 @@ def _get_envs() -> list[str]:
 
 
 class _MujocoPlaygroundMeta(_EnvPostInit):
-    """Metaclass for MujocoPlaygroundEnv that returns a lazy ParallelEnv when num_workers > 1."""
+    """Metaclass returning a ParallelEnv when num_workers > 1."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         # Accept num_workers either as the explicit kwarg or via the kwargs
@@ -389,7 +389,7 @@ class _MujocoPlaygroundMeta(_EnvPostInit):
             def make_env(_env_name=env_name, _kwargs=env_kwargs):
                 return cls(_env_name, num_workers=1, **_kwargs)
 
-            return ParallelEnv(num_workers, make_env)
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
 
         return super().__call__(*args, **kwargs)
 
@@ -989,9 +989,10 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
-        num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`
+        num_workers (int, optional): if greater than 1, a :class:`~torchrl.envs.ParallelEnv`
             will be returned instead, with each worker instantiating its own
-            :class:`~torchrl.envs.MujocoPlaygroundEnv` instance. Defaults to ``None``.
+            :class:`~torchrl.envs.MujocoPlaygroundEnv` instance and reporting
+            metadata directly to the parent. Defaults to ``None``.
 
     .. note::
         There are two orthogonal ways to scale environment throughput:

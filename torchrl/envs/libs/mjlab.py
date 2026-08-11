@@ -621,7 +621,7 @@ class MJLabWrapper(_EnvWrapper):
 
 
 class _MJLabEnvMeta(_EnvPostInit):
-    """Return a lazy ParallelEnv when ``num_workers > 1``."""
+    """Return a ParallelEnv when ``num_workers > 1``."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         if num_workers is None:
@@ -630,7 +630,7 @@ class _MJLabEnvMeta(_EnvPostInit):
             kwargs.pop("num_workers", None)
         num_workers = int(num_workers) if num_workers is not None else 1
         if cls.__name__ == "MJLabEnv" and num_workers > 1:
-            from torchrl.envs import EnvCreator, ParallelEnv
+            from torchrl.envs import ParallelEnv
 
             task_id = args[0] if len(args) >= 1 else kwargs.get("task_id")
             env_kwargs = {
@@ -640,7 +640,7 @@ class _MJLabEnvMeta(_EnvPostInit):
             def make_env(_task_id=task_id, _kwargs=env_kwargs):
                 return cls(_task_id, num_workers=1, **_kwargs)
 
-            return ParallelEnv(num_workers, EnvCreator(make_env))
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
         return super().__call__(*args, **kwargs)
 
 
@@ -670,8 +670,9 @@ class MJLabEnv(MJLabWrapper, metaclass=_MJLabEnvMeta):
         pixels_only: See :class:`MJLabWrapper`.
         pixels_key: See :class:`MJLabWrapper`.
         pixels_sensor: See :class:`MJLabWrapper`.
-        num_workers: If greater than one, return a lazy
+        num_workers: If greater than one, return a
             :class:`~torchrl.envs.ParallelEnv` with one mjlab env per worker.
+            Workers report metadata directly to the parent.
 
     See also :class:`~torchrl.trainers.algorithms.configs.MJLabEnvConfig`.
 

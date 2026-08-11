@@ -30,9 +30,10 @@ _FAST = {"camera_height": 64, "camera_width": 64, "settle_steps": 2}
 
 
 class _FakeParallelEnv:
-    def __init__(self, num_workers, create_env_fn):
+    def __init__(self, num_workers, create_env_fn, **kwargs):
         self.num_workers = num_workers
         self.create_env_fn = create_env_fn
+        self.kwargs = kwargs
 
 
 def test_parallel_env_dispatch(monkeypatch):
@@ -50,6 +51,7 @@ def test_parallel_env_dispatch(monkeypatch):
     )
 
     assert env.num_workers == 2
+    assert env.kwargs["metadata_from_workers"] is False
     first, second = env.create_env_fn
     assert first.keywords["num_workers"] == 1
     assert first.keywords["task_suite"] == "libero_spatial"
@@ -77,6 +79,22 @@ def test_parallel_env_num_envs_alias(monkeypatch):
     )
 
     assert env.num_workers == 2
+    assert env.kwargs["metadata_from_workers"] is True
+
+
+def test_parallel_env_safe_worker_variation_uses_worker_metadata(monkeypatch):
+    monkeypatch.setattr(libero_module, "ParallelEnv", _FakeParallelEnv)
+
+    env = LiberoEnv(
+        task_suite="libero_spatial",
+        task_id=0,
+        num_workers=2,
+        camera_height=[64, 64],
+        render_gpu_device_id=[0, 1],
+        group_id_offset=[0, 1000],
+    )
+
+    assert env.kwargs["metadata_from_workers"] is True
 
 
 def test_parallel_env_dispatch_validation():
@@ -274,6 +292,8 @@ class TestLibero:
         )
         try:
             assert env.num_workers == 2
+            assert env._metadata_from_workers
+            assert env._use_buffers is False
             assert env.batch_size == torch.Size([2])
             assert env.full_observation_spec["observation", "image"].shape == (
                 2,

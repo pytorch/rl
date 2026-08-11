@@ -225,18 +225,16 @@ class TestBrax:
         for _ in range(5):
             env.clear_cache()
 
-    def test_num_workers_returns_lazy_parallel_env(self, envname, device):
-        """Ensure BraxEnv with num_workers > 1 returns a lazy ParallelEnv."""
+    def test_num_workers_returns_parallel_env(self, envname, device):
+        """Ensure BraxEnv workers report metadata directly."""
         env = BraxEnv(envname, num_workers=3, device=device)
         try:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
-            # ParallelEnv should be lazy (not started yet)
-            assert env.is_closed
-            # configure_parallel should work before env starts
-            env.configure_parallel(use_buffers=False)
-            env.reset()
+            assert env._metadata_from_workers
+            assert env._use_buffers is False
             assert not env.is_closed
+            env.reset()
             assert env.batch_size == torch.Size([3])
         finally:
             env.close()

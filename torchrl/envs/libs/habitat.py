@@ -40,7 +40,7 @@ def _get_available_envs():
 
 
 class _HabitatMeta(_GymAsyncMeta):
-    """Metaclass for HabitatEnv that returns a lazy ParallelEnv when num_workers > 1."""
+    """Metaclass for HabitatEnv that returns a ParallelEnv when num_workers > 1."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         # Extract num_workers from explicit kwarg or kwargs dict
@@ -77,7 +77,12 @@ class _HabitatMeta(_GymAsyncMeta):
                 functools.partial(cls, env_name, num_workers=1, device=d, **env_kwargs)
                 for d in devices
             ]
-            return ParallelEnv(num_workers, make_envs)
+            metadata_from_workers = len({str(device) for device in devices}) == 1
+            return ParallelEnv(
+                num_workers,
+                make_envs,
+                metadata_from_workers=metadata_from_workers,
+            )
 
         return super().__call__(*args, **kwargs)
 

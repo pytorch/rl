@@ -6,11 +6,32 @@ from __future__ import annotations
 
 import pytest
 import torch
-from tensordict import TensorDict
 
+import torchrl.envs as torchrl_envs
+from tensordict import TensorDict
 from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.utils import check_env_specs
+
+
+@pytest.mark.parametrize(
+    ("device", "expected"),
+    [([0, 0], True), ([0, 1], False)],
+)
+def test_num_workers_uses_worker_metadata_for_matching_devices(
+    monkeypatch, device, expected
+):
+    captured = {}
+
+    def fake_parallel_env(num_workers, create_env_fn, **kwargs):
+        captured["kwargs"] = kwargs
+        return captured
+
+    monkeypatch.setattr(torchrl_envs, "ParallelEnv", fake_parallel_env)
+
+    env = HabitatEnv("HabitatPick-v0", num_workers=2, device=device)
+
+    assert env["kwargs"]["metadata_from_workers"] is expected
 
 
 @pytest.mark.skipif(not _has_habitat, reason="habitat not installed")
@@ -29,22 +50,16 @@ class TestHabitat:
         if from_pixels:
             assert "pixels" in rollout.keys()
 
-    def test_num_workers_returns_lazy_parallel_env(self, envname):
-        """Ensure HabitatEnv with num_workers > 1 returns a lazy ParallelEnv."""
+    def test_num_workers_returns_parallel_env(self, envname):
+        """Ensure HabitatEnv workers report metadata directly."""
         env = HabitatEnv(envname, num_workers=3)
         try:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
-            # ParallelEnv should be lazy (not started yet)
-            assert env.is_closed
-
-            # configure_parallel should work before env starts
-            env.configure_parallel(use_buffers=False)
+            assert env._metadata_from_workers
             assert env._use_buffers is False
-
-            # After reset, env is started
-            env.reset()
             assert not env.is_closed
+            env.reset()
             assert env.batch_size == torch.Size([3])
         finally:
             env.close()

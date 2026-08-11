@@ -159,7 +159,10 @@ class _MujocoMeta(_EnvPostInit):
                     # Re-enters this metaclass with N=1 -> falls through.
                     return cls(*_args, **_kwargs)
 
-                return wrap_cls(n, _factory)
+                parallel_kwargs = (
+                    {"metadata_from_workers": True} if wrap_cls is ParallelEnv else {}
+                )
+                return wrap_cls(n, _factory, **parallel_kwargs)
             # Single env: pass through.
             return super().__call__(*args, **kwargs)
 
