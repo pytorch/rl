@@ -1492,6 +1492,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         index = _to_numpy(index)
         with self._replay_lock:
             self._storage[:].set_at_(key, value, index)
+            self._storage._bump_mutation_revision()
         return self
 
     @_maybe_delay_init
@@ -1508,6 +1509,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """
         with self._replay_lock:
             self._storage[:].set_(key, value)
+            self._storage._bump_mutation_revision()
         return self
 
     @_maybe_delay_init
@@ -1531,6 +1533,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 clone=clone,
                 keys_to_update=keys_to_update,
             )
+            self._storage._bump_mutation_revision()
         return self
 
     @_maybe_delay_init
@@ -2058,7 +2061,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             predicate=predicate,
             trajectory_key=trajectory_key,
             at_capacity=bool(storage._is_full),
-            cursor=getattr(storage, "_last_cursor", None),
+            cursor=getattr(storage, "_last_cursor_index", None),
         )
 
     @_maybe_delay_init

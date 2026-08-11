@@ -106,6 +106,39 @@ def test_replay_buffer_read_write_all_in_order_with_end():
     assert updated["obs"].tolist() == [10, 11, 12, 3, 4, 5]
 
 
+def test_storage_mutation_revision_for_buffer_write_paths():
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(8))
+    assert rb.storage._mutation_revision == 0
+
+    rb.extend(TensorDict({"obs": torch.arange(4)}, [4]))
+    revision = rb.storage._mutation_revision
+    assert revision == 1
+
+    rb[0] = TensorDict({"obs": torch.tensor(10)}, [])
+    assert rb.storage._mutation_revision == revision + 1
+    revision += 1
+
+    rb.set_at_("obs", torch.tensor([11]), torch.tensor([1]))
+    assert rb.storage._mutation_revision == revision + 1
+    revision += 1
+
+    rb.set_("obs", torch.arange(4) + 20)
+    assert rb.storage._mutation_revision == revision + 1
+    revision += 1
+
+    rb.update_(TensorDict({"obs": torch.arange(4) + 30}, [4]))
+    assert rb.storage._mutation_revision == revision + 1
+    revision += 1
+
+    state = rb.state_dict()
+    rb.load_state_dict(state)
+    assert rb.storage._mutation_revision == revision + 1
+    revision += 1
+
+    rb.empty()
+    assert rb.storage._mutation_revision == revision + 1
+
+
 def test_replay_buffer_read_write_all_in_order_matches_full_slice_ndim2():
     rb = TensorDictReplayBuffer(storage=LazyTensorStorage(6, ndim=2))
     rb_slice = TensorDictReplayBuffer(storage=LazyTensorStorage(6, ndim=2))
