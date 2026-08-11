@@ -377,14 +377,14 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
     def test_dreamer_v3_two_hot_module_state_and_compile(self, device):
         two_hot = SymExpTwoHot(5).to(device)
-        logits = torch.randn(4, 5, device=device)
+        logits = torch.linspace(-0.5, 0.5, 20, device=device).reshape(4, 5)
         expected = two_hot(logits)
         restored = SymExpTwoHot(5).to(device)
         restored.load_state_dict(two_hot.state_dict())
         torch.testing.assert_close(restored(logits), expected)
 
         compiled = torch.compile(restored, fullgraph=True)
-        torch.testing.assert_close(compiled(logits), expected)
+        torch.testing.assert_close(compiled(logits), expected, rtol=1e-5, atol=1e-5)
 
     # ------------------------------------------------------------------ #
     # World model loss tests

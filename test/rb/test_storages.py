@@ -43,6 +43,7 @@ from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.data import (
     CompressedListStorage,
     ReplayBuffer,
+    Sequence,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -882,6 +883,58 @@ class TestSharedStorageInit:
         assert len(rb) >= length + 2
         assert (rb[index] == data).all()
         queue.put("done")
+
+    def revision_worker(self, rb, queue):
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        queue.put(rb.storage._mutation_revision)
+
+    def boundary_worker(self, rb, queue):
+        rb[1] = TensorDict(
+            {"obs": torch.tensor(1), ("next", "done"): torch.tensor(True)},
+            [],
+        )
+        queue.put(rb.storage._mutation_revision)
+
+    def test_mutation_revision_shared_across_processes(self):
+        storage = LazyTensorStorage(max_size=8)
+        rb = TensorDictReplayBuffer(storage=storage).share(True)
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        assert storage._mutation_revision == 1
+
+        queue = mp.Queue()
+        process = mp.Process(target=self.revision_worker, args=(rb, queue))
+        process.start()
+        process.join()
+        assert process.exitcode == 0
+        assert queue.get(timeout=5) == 2
+        assert storage._mutation_revision == 2
+        assert storage._last_cursor_index == 3
+
+    def test_sequence_boundary_cache_invalidated_across_processes(self):
+        done = torch.zeros(8, dtype=torch.bool)
+        done[[3, 7]] = True
+        storage = LazyTensorStorage(max_size=8)
+        rb = TensorDictReplayBuffer(storage=storage).share(True)
+        rb.extend(
+            TensorDict(
+                {"obs": torch.arange(8), ("next", "done"): done},
+                batch_size=(8,),
+            )
+        )
+        unit = Sequence(length=4)
+        before, _ = unit.expand(torch.tensor([0]), {}, storage)
+        assert before.tolist() == [0, 1, 2, 3]
+
+        queue = mp.Queue()
+        process = mp.Process(target=self.boundary_worker, args=(rb, queue))
+        process.start()
+        process.join()
+        assert process.exitcode == 0
+        assert queue.get(timeout=5) == 2
+
+        after, info = unit.expand(torch.tensor([0]), {}, storage)
+        assert after.tolist() == [0, 1, 1, 1]
+        assert info["validity_mask"].tolist() == [True, True, False, False]
 
     @pytest.mark.parametrize(
         "storage_cls, use_tmpdir",
