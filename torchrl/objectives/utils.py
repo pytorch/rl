@@ -479,7 +479,8 @@ class TargetNetUpdater:
                 return (filter_target(key[0]), *key[1:])
             return key[7:]
 
-        self._sources = self._sources.select(
+        sources = self._sources.clone(False)
+        self._sources = sources.select(
             *[
                 filter_target(key)
                 for (key, val) in self._distinct_and_params.items()
