@@ -12,7 +12,7 @@ from tensordict import is_tensor_collection
 from tensordict.utils import NestedKey
 
 from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.utils import _derive_end_flags, _end_to_start_stop
+from torchrl.data.replay_buffers.utils import _ReplayBoundaryIndex
 
 if TYPE_CHECKING:
     from torchrl.data.replay_buffers.storages import Storage
@@ -347,35 +347,16 @@ class Sequence(SampleUnit):
                 if self.done_key is not None
                 else torch.zeros(len(storage), dtype=torch.bool, device=device)
             )
-            end, max_len = _derive_end_flags(
+            while done.ndim > storage.ndim and done.shape[-1] == 1:
+                done = done.squeeze(-1)
+            boundary = _ReplayBoundaryIndex(
                 end=done,
                 at_capacity=storage._is_full,
                 cursor=getattr(storage, "_last_cursor", None),
+                device=device,
             )
-            # _end_to_start_stop returns its indices on the device of ``end``
-            # (the storage device): move the flags first so start/stop live
-            # on the anchor device.
-            end = end.to(device)
-            start, stop, _ = _end_to_start_stop(end=end, length=max_len, device=device)
-            start = start[:, 0]
-            stop = stop[:, 0]
-
-            start_exp = start.unsqueeze(0)
-            stop_exp = stop.unsqueeze(0)
-            a_exp = anchor.unsqueeze(1)
-
-            cond1 = (start_exp <= stop_exp) & (start_exp <= a_exp) & (a_exp <= stop_exp)
-            cond2 = (start_exp > stop_exp) & (
-                (a_exp >= start_exp) | (a_exp <= stop_exp)
-            )
-            mask = cond1 | cond2
-
-            traj_idx = mask.float().argmax(dim=1)
-            a_start = start[traj_idx]
-            a_stop = stop[traj_idx]
-
-            dist_to_stop = ((a_stop - anchor) % max_len).to(torch.long)
-            dist_from_start = ((anchor - a_start) % max_len).to(torch.long)
+            dist_from_start, dist_to_stop = boundary.distances(anchor)
+            max_len = boundary.length
 
             anchor_eff = anchor
             if self.episode_boundary == "stop":

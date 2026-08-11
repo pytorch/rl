@@ -211,6 +211,79 @@ def find_start_stop_traj(
     return _end_to_start_stop(end=end, length=length, device=device)
 
 
+class _ReplayBoundaryIndex:
+    """Shared trajectory boundaries for replay components."""
+
+    def __init__(
+        self,
+        *,
+        trajectory: torch.Tensor | None = None,
+        end: torch.Tensor | None = None,
+        at_capacity: bool,
+        cursor: int | torch.Tensor | range | None = None,
+        device: torch.device | None = None,
+        end_to_start_stop: (
+            Callable[
+                [torch.Tensor, int], tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            ]
+            | None
+        ) = None,
+    ) -> None:
+        end, length = _derive_end_flags(
+            trajectory=trajectory,
+            end=end,
+            at_capacity=at_capacity,
+            cursor=cursor,
+        )
+        self.end = end
+        self.length = length
+        self.device = device
+        self._end_to_start_stop_fn = end_to_start_stop
+        self._boundaries = None
+
+    def boundaries(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns canonical inclusive starts, stops, and trajectory lengths."""
+        boundaries = self._boundaries
+        if boundaries is None:
+            if self._end_to_start_stop_fn is None:
+                boundaries = _end_to_start_stop(
+                    end=self.end, length=self.length, device=self.device
+                )
+            else:
+                boundaries = self._end_to_start_stop_fn(self.end, self.length)
+            self._boundaries = boundaries
+        return boundaries
+
+    def distances(self, anchor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns distances from starts and to stops for each anchor."""
+        start, stop, _ = self.boundaries()
+        if start.shape[-1] != 1:
+            raise NotImplementedError(
+                "Anchor boundary queries currently require one-dimensional storage."
+            )
+        start = start[:, 0].to(anchor.device)
+        stop = stop[:, 0].to(anchor.device)
+        start_exp = start.unsqueeze(0)
+        stop_exp = stop.unsqueeze(0)
+        anchor_exp = anchor.unsqueeze(1)
+        in_linear_trajectory = (
+            (start_exp <= stop_exp)
+            & (start_exp <= anchor_exp)
+            & (anchor_exp <= stop_exp)
+        )
+        in_wrapped_trajectory = (start_exp > stop_exp) & (
+            (anchor_exp >= start_exp) | (anchor_exp <= stop_exp)
+        )
+        trajectory_index = (
+            (in_linear_trajectory | in_wrapped_trajectory).to(torch.int64).argmax(dim=1)
+        )
+        anchor_start = start[trajectory_index]
+        anchor_stop = stop[trajectory_index]
+        distance_from_start = torch.remainder(anchor - anchor_start, self.length)
+        distance_to_stop = torch.remainder(anchor_stop - anchor, self.length)
+        return distance_from_start.to(torch.long), distance_to_stop.to(torch.long)
+
+
 def _derive_end_flags(
     *,
     trajectory: torch.Tensor | None = None,
