@@ -52,6 +52,19 @@ class TestDelta:
         assert d.log_prob(d.mode).shape == x.shape[:-1]
         assert (d.log_prob(d.mode) == float("inf")).all()
 
+    def test_delta_multidimensional_event_shape(self, device):
+        param = torch.zeros(2, 3, 4, device=device)
+        dist = Delta(param, batch_shape=(2,), event_shape=(3, 4))
+
+        assert dist.log_prob(dist.param).shape == (2,)
+
+        expanded = dist.expand((5, 2))
+
+        assert expanded.param.shape == (5, 2, 3, 4)
+        assert expanded.batch_shape == (5, 2)
+        assert expanded.event_shape == (3, 4)
+        assert expanded.log_prob(expanded.param).shape == (5, 2)
+
     @pytest.mark.parametrize("div_up", [1, 2])
     @pytest.mark.parametrize("div_down", [1, 2])
     def test_tanhdelta_logprob(self, device, div_up, div_down):
