@@ -110,6 +110,9 @@ Complete your CLA here: <https://code.facebook.com/cla>
 We use GitHub issues to track public bugs. Please ensure your description is
 clear and has sufficient instructions to be able to reproduce the issue.
 
+To work on an open issue, comment `/assign` on the issue. This will assign the
+issue to you.
+
 Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe
 disclosure of security bugs. In those cases, please go through the process
 outlined on that page and do not file a public issue.

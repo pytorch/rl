@@ -6,6 +6,7 @@
 # Commands:
 #   @torchrlbot merge [-f 'reason']   Merge a PR (ghstack land or squash merge)
 #   @torchrlbot rebase [-b BRANCH]    Rebase PR onto a branch (default: main)
+#   @torchrlbot reviewer USER...      Request reviews from collaborators
 #   @torchrlbot help                  Show available commands
 
 name: TorchRLBot
