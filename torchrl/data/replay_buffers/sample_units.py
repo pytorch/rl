@@ -191,6 +191,10 @@ class Sequence(SampleUnit):
         dilation grid of the shifted anchor: the reported (pre-shift) anchor
         is then not necessarily one of the window's records.
 
+    For multidimensional storage, coordinate zero is time and the others are
+    preserved lanes. ``"index"`` and ``"anchor_index"`` carry full storage
+    coordinates.
+
     .. seealso:: :class:`~torchrl.trainers.algorithms.configs.data.SequenceConfig`
         for the Hydra configuration companion.
 
@@ -309,13 +313,21 @@ class Sequence(SampleUnit):
         info: dict[str, Any],
         storage: Storage,
     ) -> tuple[torch.Tensor | tuple, dict[str, Any]]:
-        if isinstance(index, tuple):
-            raise NotImplementedError(
-                "Multidimensional storage not yet supported by Sequence."
-            )
         self._check_storage(storage)
-
-        anchor = index.clone()
+        multidimensional = storage.ndim > 1
+        if isinstance(index, tuple):
+            anchor = torch.stack(index, -1)
+        else:
+            anchor = index.clone()
+        if multidimensional:
+            if anchor.ndim != 2 or anchor.shape[-1] != storage.ndim:
+                raise RuntimeError(
+                    "Sequence expected multidimensional anchors with shape "
+                    f"[batch, {storage.ndim}]."
+                )
+            anchor_time = anchor[:, 0]
+        else:
+            anchor_time = anchor
         B = anchor.shape[0]
         # All bookkeeping happens on the sampler's index device so that the
         # returned indices live on the same device as the ones Transition
@@ -340,7 +352,7 @@ class Sequence(SampleUnit):
         )
         expanded_info["step_in_sequence"] = steps.repeat(B)
         expanded_info["learning_mask"] = learning.repeat(B)
-        expanded_info["anchor_index"] = anchor.repeat_interleave(total)
+        expanded_info["anchor_index"] = anchor.repeat_interleave(total, dim=0)
 
         offset = ((steps - self.burn_in) * self.dilation).unsqueeze(0).expand(B, total)
 
@@ -348,7 +360,7 @@ class Sequence(SampleUnit):
             done = (
                 storage.get(self.done_key)
                 if self.done_key is not None
-                else torch.zeros(len(storage), dtype=torch.bool, device=device)
+                else torch.zeros(storage.shape, dtype=torch.bool, device=device)
             )
             while done.ndim > storage.ndim and done.shape[-1] == 1:
                 done = done.squeeze(-1)
@@ -364,7 +376,7 @@ class Sequence(SampleUnit):
             dist_from_start, dist_to_stop = boundary.distances(anchor)
             max_len = boundary.length
 
-            anchor_eff = anchor
+            anchor_eff = anchor_time
             if self.episode_boundary == "stop":
                 shortfall = (
                     self.dilation * (self.length + self.bootstrap - 1) - dist_to_stop
@@ -372,7 +384,7 @@ class Sequence(SampleUnit):
                 shift = torch.clamp(
                     shortfall, min=torch.zeros_like(shortfall), max=dist_from_start
                 )
-                anchor_eff = anchor - shift
+                anchor_eff = anchor_time - shift
                 dist_to_stop = dist_to_stop + shift
                 dist_from_start = dist_from_start - shift
 
@@ -389,20 +401,25 @@ class Sequence(SampleUnit):
             # write seam (between the newest and the oldest record of the
             # ring buffer) nor read slots that were never written -- in
             # either direction, since burn-in walks backward from the anchor.
-            written = len(storage)
+            written = storage.shape[0]
             newest = self._newest_index(storage, written)
             oldest = (newest + 1) % written if storage._is_full else 0
             newest = torch.as_tensor(newest, device=device, dtype=torch.long)
             oldest = torch.as_tensor(oldest, device=device, dtype=torch.long)
-            dist_forward = torch.remainder(newest - anchor, written)
-            dist_backward = torch.remainder(anchor - oldest, written)
+            dist_forward = torch.remainder(newest - anchor_time, written)
+            dist_backward = torch.remainder(anchor_time - oldest, written)
             validity = (offset <= dist_forward.unsqueeze(1)) & (
                 offset >= -dist_backward.unsqueeze(1)
             )
             clamped_offset = torch.minimum(offset, dist_forward.unsqueeze(1))
             clamped_offset = torch.maximum(clamped_offset, -dist_backward.unsqueeze(1))
-            indices = torch.remainder(anchor.unsqueeze(1) + clamped_offset, written)
+            indices = torch.remainder(
+                anchor_time.unsqueeze(1) + clamped_offset, written
+            )
 
         expanded_info["validity_mask"] = validity.flatten()
-
+        if multidimensional:
+            lane = anchor[:, 1:].unsqueeze(1).expand(B, total, storage.ndim - 1)
+            coordinates = torch.cat([indices.unsqueeze(-1), lane], -1).flatten(0, 1)
+            return tuple(coordinates.unbind(-1)), expanded_info
         return indices.flatten(), expanded_info

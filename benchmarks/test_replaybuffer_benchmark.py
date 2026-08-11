@@ -125,6 +125,28 @@ def test_sequence_boundary_query_benchmark(
     benchmark(query)
 
 
+@pytest.mark.parametrize("lanes", [8, 64])
+def test_sequence_multidimensional_boundary_query_benchmark(benchmark, lanes):
+    device = _replay_boundary_device()
+    time = 100_000
+    done = torch.zeros(time, lanes, 1, dtype=torch.bool, device=device)
+    done[255::256] = True
+    done[-1] = True
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(time * lanes, ndim=2, device=device),
+        dim_extend=0,
+    )
+    rb.extend(TensorDict({("next", "done"): done}, [time, lanes], device=device))
+    anchors = (
+        torch.linspace(0, time - 1, 256, device=device).to(torch.long),
+        torch.arange(256, device=device) % lanes,
+    )
+    unit = Sequence(length=64, burn_in=40, bootstrap=5)
+    unit.expand(anchors, {}, rb.storage)
+
+    benchmark(unit.expand, anchors, {}, rb.storage)
+
+
 @pytest.mark.parametrize("size", [10_000, 1_000_000])
 @pytest.mark.parametrize("episode_length", [32, 256])
 @pytest.mark.parametrize("cache_values", [False, True])
