@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import gc
 import os
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -31,9 +33,11 @@ from torchrl.envs import (
     EnvCreator,
     ParallelEnv,
     SerialEnv,
+    ToyVLAEnv,
     TransformedEnv,
 )
 from torchrl.envs.batched_envs import _stackable
+from torchrl.envs.env_creator import get_env_metadata
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import Compose, StepCounter
@@ -54,6 +58,59 @@ from torchrl.testing.mocking_classes import (
     MockBatchedLockedEnv,
     NestedCountingEnv,
 )
+
+
+def _make_parent_guarded_env(parent_pid: int) -> ContinuousActionVecMockEnv:
+    if os.getpid() == parent_pid:
+        raise RuntimeError("environment factory was called in the parent process")
+    return ContinuousActionVecMockEnv()
+
+
+def _make_instruction_env(instruction: str) -> ToyVLAEnv:
+    return ToyVLAEnv(action_dim=2, state_dim=2, instruction=instruction)
+
+
+class _StartupTrackingEnv(CountingEnv):
+    def __init__(
+        self,
+        worker_idx: int,
+        marker_dir: str,
+        *,
+        batch_size: list[int] | None = None,
+        fail_metadata: bool = False,
+    ):
+        self.worker_idx = worker_idx
+        self.marker_dir = Path(marker_dir)
+        self.fail_metadata = fail_metadata
+        super().__init__(batch_size=batch_size)
+        (self.marker_dir / f"started-{worker_idx}").touch()
+
+    def fake_tensordict(self, *args, **kwargs):
+        if self.fail_metadata:
+            raise RuntimeError("metadata extraction failed")
+        return super().fake_tensordict(*args, **kwargs)
+
+    def close(self, *args, **kwargs):
+        (self.marker_dir / f"closed-{self.worker_idx}").touch()
+        return super().close(*args, **kwargs)
+
+
+def _make_startup_tracking_env(
+    worker_idx: int,
+    marker_dir: str,
+    *,
+    fail_worker: int | None = None,
+    metadata_failure_worker: int | None = None,
+    incompatible: bool = False,
+) -> _StartupTrackingEnv:
+    if worker_idx == fail_worker:
+        raise RuntimeError("worker construction failed")
+    return _StartupTrackingEnv(
+        worker_idx,
+        marker_dir,
+        batch_size=[worker_idx + 1] if incompatible else None,
+        fail_metadata=worker_idx == metadata_failure_worker,
+    )
 
 
 class TestParallel:
@@ -103,6 +160,101 @@ class TestParallel:
             maybe_fork_ParallelEnv(
                 4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
             )
+
+    def test_get_env_metadata_closes_only_callable_created_env(self):
+        closed = []
+
+        class CloseCountingEnv(CountingEnv):
+            def __init__(self, *, fail_metadata=False):
+                self.fail_metadata = fail_metadata
+                super().__init__()
+
+            def fake_tensordict(self, *args, **kwargs):
+                if self.fail_metadata:
+                    raise RuntimeError("metadata extraction failed")
+                return super().fake_tensordict(*args, **kwargs)
+
+            def close(self, *args, **kwargs):
+                closed.append(True)
+                return super().close(*args, **kwargs)
+
+        get_env_metadata(CloseCountingEnv)
+        assert closed == [True]
+
+        with pytest.raises(RuntimeError, match="metadata extraction failed"):
+            get_env_metadata(partial(CloseCountingEnv, fail_metadata=True))
+        assert closed == [True, True]
+
+        env = CloseCountingEnv()
+        get_env_metadata(env)
+        assert closed == [True, True]
+        env.close()
+        assert closed == [True, True, True]
+
+        creator = EnvCreator(CloseCountingEnv)
+        assert closed == [True, True, True, True]
+        get_env_metadata(creator)
+        assert closed == [True, True, True, True]
+
+    def test_metadata_from_workers(self, maybe_fork_ParallelEnv):
+        parent_pid = os.getpid()
+        env = maybe_fork_ParallelEnv(
+            2,
+            partial(_make_parent_guarded_env, parent_pid),
+            metadata_from_workers=True,
+        )
+        try:
+            assert env._use_buffers is False
+            assert not env.is_closed
+            rollout = env.rollout(3)
+            assert rollout.shape[:2] == torch.Size([2, 3])
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_metadata_from_workers_rejects_buffers(self, maybe_fork_ParallelEnv):
+        with pytest.raises(
+            RuntimeError,
+            match="metadata_from_workers=True is incompatible with use_buffers=True",
+        ):
+            maybe_fork_ParallelEnv(
+                2,
+                ContinuousActionVecMockEnv,
+                metadata_from_workers=True,
+                use_buffers=True,
+            )
+
+    @pytest.mark.parametrize(
+        ("factory_kwargs", "error"),
+        [
+            ({"incompatible": True}, "metadata is incompatible"),
+            ({"fail_worker": 1}, "worker construction failed"),
+            ({"metadata_failure_worker": 1}, "metadata extraction failed"),
+        ],
+    )
+    def test_metadata_from_workers_startup_failure_cleans_workers(
+        self, maybe_fork_ParallelEnv, tmp_path, factory_kwargs, error
+    ):
+        factory = partial(
+            _make_startup_tracking_env,
+            marker_dir=str(tmp_path),
+            **factory_kwargs,
+        )
+        with pytest.raises(RuntimeError, match=error):
+            maybe_fork_ParallelEnv(
+                3,
+                factory,
+                create_env_kwargs=[{"worker_idx": idx} for idx in range(3)],
+                metadata_from_workers=True,
+            )
+
+        started = {
+            path.name.removeprefix("started-") for path in tmp_path.glob("started-*")
+        }
+        closed = {
+            path.name.removeprefix("closed-") for path in tmp_path.glob("closed-*")
+        }
+        assert started
+        assert closed == started
 
     def test_compact_collector_skips_next_observation_copy(
         self, maybe_fork_ParallelEnv
@@ -1475,8 +1627,6 @@ def test_heterogeneous_non_tensor_workers(cls, maybe_fork_ParallelEnv):
     # instructions) stack their specs into a Stacked spec: the batched env
     # must still register the entry as non-tensor and route it through the
     # non-tensor channel instead of the shared buffers
-    from torchrl.envs import ToyVLAEnv
-
     if cls is ParallelEnv:
         cls = maybe_fork_ParallelEnv
 
@@ -1487,6 +1637,26 @@ def test_heterogeneous_non_tensor_workers(cls, maybe_fork_ParallelEnv):
     try:
         rollout = env.rollout(3)
         assert "language_instruction" in env._non_tensor_keys
+        instructions = rollout["language_instruction"]
+        assert instructions[0][0] == "pick up the apple"
+        assert instructions[1][0] == "pick up the pear"
+    finally:
+        env.close(raise_if_closed=False)
+
+
+@set_list_to_stack(True)
+def test_worker_metadata_allows_different_non_tensor_values(maybe_fork_ParallelEnv):
+    env = maybe_fork_ParallelEnv(
+        2,
+        _make_instruction_env,
+        create_env_kwargs=[
+            {"instruction": "pick up the apple"},
+            {"instruction": "pick up the pear"},
+        ],
+        metadata_from_workers=True,
+    )
+    try:
+        rollout = env.rollout(3)
         instructions = rollout["language_instruction"]
         assert instructions[0][0] == "pick up the apple"
         assert instructions[1][0] == "pick up the pear"

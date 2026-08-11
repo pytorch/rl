@@ -264,6 +264,7 @@ class _PEnvMeta(_EnvPostInit):
         # multiprocessing with the spawn start method. Lambda functions cannot
         # be serialized with standard pickle, but EnvCreator uses cloudpickle.
         auto_wrap_envs = kwargs.pop("auto_wrap_envs", True)
+        metadata_from_workers = kwargs.get("metadata_from_workers", False)
 
         def _warn_lambda():
             if rl_warnings():
@@ -302,7 +303,7 @@ class _PEnvMeta(_EnvPostInit):
                 return result
             return create_env_fn
 
-        if auto_wrap_envs:
+        if auto_wrap_envs and not metadata_from_workers:
             if "create_env_fn" in kwargs:
                 kwargs["create_env_fn"] = _wrap_lambdas(kwargs["create_env_fn"])
             elif len(args) >= 2:
@@ -381,6 +382,12 @@ class BatchedEnvBase(EnvBase):
         daemon (bool, optional): whether the processes should be daemonized.
             This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
             Defaults to ``False``.
+        metadata_from_workers (bool, optional): if ``True``, :class:`~torchrl.envs.ParallelEnv`
+            starts its workers during construction and obtains metadata from the
+            real worker environments instead of creating temporary environments
+            in the parent process. Worker schemas are validated before normal
+            initialization. This mode uses direct pipe communication and is
+            incompatible with ``use_buffers=True``. Defaults to ``False``.
         auto_wrap_envs (bool, optional): if ``True`` (default), lambda functions passed as
             ``create_env_fn`` will be automatically wrapped in an :class:`~torchrl.envs.EnvCreator`
             to enable pickling for multiprocessing with the ``spawn`` start method.
@@ -511,6 +518,7 @@ class BatchedEnvBase(EnvBase):
         use_buffers: bool | None = None,
         consolidate: bool = True,
         daemon: bool = False,
+        metadata_from_workers: bool = False,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -524,6 +532,7 @@ class BatchedEnvBase(EnvBase):
         self._use_buffers = use_buffers
         self.consolidate = consolidate
         self.daemon = daemon
+        self._metadata_from_workers = metadata_from_workers
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -575,13 +584,38 @@ class BatchedEnvBase(EnvBase):
         self.__dict__["_output_spec"] = None
         # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
         self._properties_set = False
-        self._get_metadata(create_env_fn, create_env_kwargs)
         self._non_blocking = non_blocking
         if mp_start_method is not None and not isinstance(self, ParallelEnv):
             raise TypeError(
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
             )
         self._mp_start_method = mp_start_method
+        self.has_lazy_inputs = False
+        if self._metadata_from_workers:
+            if not isinstance(self, ParallelEnv):
+                raise TypeError(
+                    "metadata_from_workers=True is only supported by ParallelEnv."
+                )
+            if self._use_buffers is True:
+                raise RuntimeError(
+                    "metadata_from_workers=True is incompatible with use_buffers=True. "
+                    "Worker metadata must be collected before shared buffers can be "
+                    "allocated; pass use_buffers=False or leave use_buffers unset."
+                )
+            self._use_buffers = False
+            try:
+                worker_metadata = self._start_workers(gather_metadata=True)
+                self._get_metadata(
+                    create_env_fn,
+                    create_env_kwargs,
+                    worker_metadata=worker_metadata,
+                )
+                self._initialize_started_workers()
+            except Exception:
+                self._abort_worker_startup()
+                raise
+        else:
+            self._get_metadata(create_env_fn, create_env_kwargs)
 
     is_spec_locked = EnvBase.is_spec_locked
 
@@ -901,15 +935,26 @@ class BatchedEnvBase(EnvBase):
             self._use_buffers = False
 
     def _get_metadata(
-        self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
+        self,
+        create_env_fn: list[Callable],
+        create_env_kwargs: list[dict],
+        *,
+        worker_metadata: list[EnvMetaData] | None = None,
     ):
         if self._single_task:
-            # if EnvCreator, the metadata are already there
-            meta_data: EnvMetaData = get_env_metadata(
-                create_env_fn[0],
-                create_env_kwargs[0],
-                env_validator=self._validate_worker_env,
-            )
+            if worker_metadata is None:
+                # if EnvCreator, the metadata are already there
+                meta_data: EnvMetaData = get_env_metadata(
+                    create_env_fn[0],
+                    create_env_kwargs[0],
+                    env_validator=self._validate_worker_env,
+                )
+            else:
+                self._validate_worker_metadata(worker_metadata)
+                meta_data = worker_metadata[0].clone()
+                meta_data.supports_set_state = all(
+                    metadata.supports_set_state for metadata in worker_metadata
+                )
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
@@ -931,13 +976,15 @@ class BatchedEnvBase(EnvBase):
             n_tasks = len(create_env_fn)
             self.meta_data: list[EnvMetaData] = []
             for i in range(n_tasks):
-                self.meta_data.append(
-                    get_env_metadata(
+                if worker_metadata is None:
+                    meta_data = get_env_metadata(
                         create_env_fn[i],
                         create_env_kwargs[i],
                         env_validator=self._validate_worker_env,
-                    ).clone()
-                )
+                    )
+                else:
+                    meta_data = worker_metadata[i]
+                self.meta_data.append(meta_data.clone())
             if self.share_individual_td is not True:
                 share_individual_td = not _stackable(
                     *[meta_data.tensordict for meta_data in self.meta_data]
@@ -966,6 +1013,55 @@ class BatchedEnvBase(EnvBase):
                 self._use_buffers = _use_buffers
 
         self._set_properties()
+
+    @staticmethod
+    def _validate_worker_metadata(worker_metadata: list[EnvMetaData]) -> None:
+        """Validate schemas before reusing one common factory's metadata."""
+        if not worker_metadata:
+            raise RuntimeError("No worker metadata was received.")
+        reference = worker_metadata[0]
+        reference_specs = reference.specs
+        reference_spec_keys = set(reference_specs.keys(True, True))
+        for worker_idx, metadata in enumerate(worker_metadata[1:], 1):
+            mismatch = None
+            if metadata.batch_size != reference.batch_size:
+                mismatch = (
+                    f"batch size {metadata.batch_size} does not match "
+                    f"worker 0 batch size {reference.batch_size}"
+                )
+            elif metadata.device != reference.device:
+                mismatch = (
+                    f"device {metadata.device} does not match worker 0 device "
+                    f"{reference.device}"
+                )
+            elif metadata.batch_locked != reference.batch_locked:
+                mismatch = "batch_locked differs from worker 0"
+            elif metadata.device_map != reference.device_map:
+                mismatch = "tensor devices differ from worker 0"
+            else:
+                specs = metadata.specs
+                spec_keys = set(specs.keys(True, True))
+                if spec_keys != reference_spec_keys:
+                    mismatch = "input or output spec keys differ from worker 0"
+                else:
+                    for key in reference_spec_keys:
+                        reference_spec = reference_specs[key]
+                        spec = specs[key]
+                        if isinstance(reference_spec, NonTensor) and isinstance(
+                            spec, NonTensor
+                        ):
+                            continue
+                        if spec != reference_spec:
+                            mismatch = (
+                                f"input or output tensor spec {key!r} differs "
+                                "from worker 0"
+                            )
+                            break
+            if mismatch is not None:
+                raise RuntimeError(
+                    f"Worker {worker_idx} metadata is incompatible with worker 0: "
+                    f"{mismatch}."
+                )
 
     def update_kwargs(self, kwargs: dict | list[dict]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -1951,15 +2047,22 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     """
 
-    def _start_workers(self) -> None:
+    def _start_workers(
+        self, *, gather_metadata: bool = False
+    ) -> list[EnvMetaData] | None:
         import torchrl
 
+        if gather_metadata and self._use_buffers:
+            raise RuntimeError(
+                "Worker metadata can only be gathered with use_buffers=False."
+            )
         self._timeout = 10.0
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
 
         num_threads = max(
             1, torch.get_num_threads() - self.num_workers
         )  # 1 more thread for this proc
+        self._num_threads_before_start = torch.get_num_threads()
 
         if self.num_threads is None:
             self.num_threads = num_threads
@@ -2015,60 +2118,180 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "shm_done_flags": self._shm_done_flags,
                     }
                 )
-        with clear_mpi_env_vars():
-            for idx in range(_num_workers):
-                if self._verbose:
-                    torchrl_logger.info(f"initiating worker {idx}")
-                # No certainty which module multiprocessing_context is
-                parent_pipe, child_pipe = ctx.Pipe()
-                env_fun = self.create_env_fn[idx]
-                if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
-                    env_fun = CloudpickleWrapper(env_fun)
+        try:
+            with clear_mpi_env_vars():
+                for idx in range(_num_workers):
+                    if self._verbose:
+                        torchrl_logger.info(f"initiating worker {idx}")
+                    # No certainty which module multiprocessing_context is
+                    parent_pipe, child_pipe = ctx.Pipe()
+                    env_fun = self.create_env_fn[idx]
+                    if not isinstance(env_fun, (EnvCreator, CloudpickleWrapper)):
+                        env_fun = CloudpickleWrapper(env_fun)
 
-                kwargs[idx].update(
-                    {
-                        "parent_pipe": parent_pipe,
-                        "child_pipe": child_pipe,
-                        "env_fun": env_fun,
-                        "env_fun_kwargs": self.create_env_kwargs[idx],
-                        "has_lazy_inputs": self.has_lazy_inputs,
-                        "num_threads": num_sub_threads,
-                        "non_blocking": self.non_blocking,
-                        "filter_warnings": self._filter_warnings_subprocess(),
-                    }
+                    kwargs[idx].update(
+                        {
+                            "parent_pipe": parent_pipe,
+                            "child_pipe": child_pipe,
+                            "env_fun": env_fun,
+                            "env_fun_kwargs": self.create_env_kwargs[idx],
+                            "has_lazy_inputs": self.has_lazy_inputs,
+                            "num_threads": num_sub_threads,
+                            "non_blocking": self.non_blocking,
+                            "filter_warnings": self._filter_warnings_subprocess(),
+                        }
+                    )
+                    if self._use_buffers:
+                        kwargs[idx].update(
+                            {
+                                "shared_tensordict": self.shared_tensordicts[idx],
+                                "_selected_input_keys": self._selected_input_keys,
+                                "_selected_reset_keys": self._selected_reset_keys,
+                                "_selected_step_keys": self._selected_step_keys,
+                                "_non_tensor_keys": self._non_tensor_keys,
+                            }
+                        )
+                    else:
+                        kwargs[idx].update(
+                            {
+                                "consolidate": self.consolidate,
+                                "send_metadata": gather_metadata,
+                            }
+                        )
+                    process = proc_fun(target=func, kwargs=kwargs[idx])
+                    process.daemon = self.daemon
+                    try:
+                        process.start()
+                    except Exception:
+                        child_pipe.close()
+                        parent_pipe.close()
+                        raise
+                    child_pipe.close()
+                    self.parent_channels.append(parent_pipe)
+                    self._workers.append(process)
+
+            metadata = self._receive_worker_startup(gather_metadata=gather_metadata)
+            if gather_metadata:
+                return metadata
+            self._initialize_started_workers()
+        except Exception:
+            self._abort_worker_startup()
+            raise
+        return None
+
+    def _receive_worker_startup(
+        self, *, gather_metadata: bool
+    ) -> list[EnvMetaData] | None:
+        metadata: list[EnvMetaData | None] | None = (
+            [None] * self.num_workers if gather_metadata else None
+        )
+        pipes_pending = {
+            channel: worker_idx
+            for worker_idx, channel in enumerate(self.parent_channels)
+        }
+        startup_timer = timeit(f"parallel_env/{id(self)}/worker_startup").start()
+        while pipes_pending:
+            remaining = self.BATCHED_PIPE_TIMEOUT - startup_timer.elapsed()
+            if remaining <= 0:
+                pending = sorted(pipes_pending.values())
+                raise RuntimeError(
+                    "Failed to start ParallelEnv workers "
+                    f"{pending} within the {self.BATCHED_PIPE_TIMEOUT} sec time "
+                    "limit. This threshold can be increased via the "
+                    "BATCHED_PIPE_TIMEOUT environment variable."
                 )
-                if self._use_buffers:
-                    kwargs[idx].update(
-                        {
-                            "shared_tensordict": self.shared_tensordicts[idx],
-                            "_selected_input_keys": self._selected_input_keys,
-                            "_selected_reset_keys": self._selected_reset_keys,
-                            "_selected_step_keys": self._selected_step_keys,
-                            "_non_tensor_keys": self._non_tensor_keys,
-                        }
+            ready = connection_wait(list(pipes_pending), timeout=remaining)
+            if not ready:
+                dead = [
+                    worker_idx
+                    for worker_idx in pipes_pending.values()
+                    if not self._workers[worker_idx].is_alive()
+                ]
+                if dead:
+                    raise RuntimeError(
+                        f"ParallelEnv workers {dead} exited during startup."
                     )
-                else:
-                    kwargs[idx].update(
-                        {
-                            "consolidate": self.consolidate,
-                        }
+                continue
+            for pipe in ready:
+                worker_idx = pipes_pending.pop(pipe)
+                try:
+                    message = pipe.recv()
+                except EOFError as err:
+                    raise RuntimeError(
+                        f"ParallelEnv worker {worker_idx} exited during startup."
+                    ) from err
+                if gather_metadata:
+                    if (
+                        isinstance(message, tuple)
+                        and len(message) == 2
+                        and message[0] == "startup_error"
+                    ):
+                        raise RuntimeError(
+                            f"ParallelEnv worker {worker_idx} failed during "
+                            f"metadata collection: {message[1]}"
+                        )
+                    if not (
+                        isinstance(message, tuple)
+                        and len(message) == 2
+                        and message[0] == "metadata"
+                        and isinstance(message[1], EnvMetaData)
+                    ):
+                        raise RuntimeError(
+                            f"Expected metadata from ParallelEnv worker "
+                            f"{worker_idx}, got {message!r}."
+                        )
+                    metadata[worker_idx] = message[1]
+                elif message != "started":
+                    raise RuntimeError(
+                        f"Expected startup confirmation from ParallelEnv worker "
+                        f"{worker_idx}, got {message!r}."
                     )
-                process = proc_fun(target=func, kwargs=kwargs[idx])
-                process.daemon = self.daemon
-                process.start()
-                child_pipe.close()
-                self.parent_channels.append(parent_pipe)
-                self._workers.append(process)
+        if metadata is None:
+            return None
+        if any(item is None for item in metadata):
+            raise RuntimeError("Metadata was not received from every worker.")
+        return [item for item in metadata if item is not None]
 
-        for parent_pipe in self.parent_channels:
-            # use msg as sync point
-            parent_pipe.recv()
-
-        # send shared tensordict to workers
+    def _initialize_started_workers(self) -> None:
         for channel in self.parent_channels:
             channel.send(("init", None))
         self.is_closed = False
         self.set_spec_lock_()
+
+    def _abort_worker_startup(self) -> None:
+        workers = getattr(self, "_workers", ())
+        channels = getattr(self, "parent_channels", ())
+        if not workers and not channels:
+            if hasattr(self, "_num_threads_before_start"):
+                torch.set_num_threads(self._num_threads_before_start)
+            return
+
+        for channel, process in zip(channels, workers):
+            if process.is_alive():
+                try:
+                    channel.send(("close", None))
+                except (EOFError, OSError):
+                    pass
+
+        timeout = getattr(self, "_timeout", 10.0)
+        shutdown_timer = timeit(f"parallel_env/{id(self)}/abort_startup").start()
+        for process in workers:
+            remaining = max(0.0, timeout - shutdown_timer.elapsed())
+            process.join(timeout=remaining)
+        for process in workers:
+            if process.is_alive():
+                process.terminate()
+        for process in workers:
+            process.join()
+        for channel in channels:
+            channel.close()
+
+        self._workers = []
+        self.parent_channels = []
+        self._events = None
+        self.event = None
+        self.is_closed = True
+        torch.set_num_threads(self._num_threads_before_start)
 
     def _filter_warnings_subprocess(self) -> bool:
         from torchrl import filter_warnings_subprocess
@@ -3449,6 +3672,7 @@ def _run_worker_pipe_direct(
     num_threads: int | None = None,  # for fork start method
     consolidate: bool = True,
     filter_warnings: bool = False,
+    send_metadata: bool = False,
 ) -> None:
     # Handle warning filtering (moved from _ProcessNoWarn)
     if filter_warnings:
@@ -3458,14 +3682,32 @@ def _run_worker_pipe_direct(
 
     parent_pipe.close()
     pid = os.getpid()
-    if not isinstance(env_fun, EnvBase):
-        env = env_fun(**env_fun_kwargs)
-    else:
-        if env_fun_kwargs:
-            raise RuntimeError(
-                "env_fun_kwargs must be empty if an environment is passed to a process."
-            )
-        env = env_fun
+    env = None
+    try:
+        if not isinstance(env_fun, EnvBase):
+            env = env_fun(**env_fun_kwargs)
+        else:
+            if env_fun_kwargs:
+                raise RuntimeError(
+                    "env_fun_kwargs must be empty if an environment is passed to a process."
+                )
+            env = env_fun
+        if send_metadata:
+            BatchedEnvBase._validate_worker_env(env)
+            metadata = EnvMetaData.metadata_from_env(env)
+    except Exception as err:
+        if not send_metadata:
+            raise
+        try:
+            child_pipe.send(("startup_error", repr(err)))
+        finally:
+            if env is not None:
+                try:
+                    env.close()
+                except Exception:
+                    pass
+            child_pipe.close()
+        return
     del env_fun
     for spec in env.output_spec.values(True, True):
         if spec.device is not None and spec.device.type == "cuda":
@@ -3504,7 +3746,11 @@ def _run_worker_pipe_direct(
 
     initialized = False
 
-    child_pipe.send("started")
+    if send_metadata:
+        child_pipe.send(("metadata", metadata))
+        del metadata
+    else:
+        child_pipe.send("started")
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -3653,8 +3899,6 @@ def _run_worker_pipe_direct(
             mp_event.set()
 
         elif cmd == "close":
-            if not initialized:
-                raise RuntimeError("call 'init' before closing")
             env.close()
             mp_event.set()
             child_pipe.close()
