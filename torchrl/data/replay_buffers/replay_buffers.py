@@ -11,7 +11,7 @@ import multiprocessing
 import textwrap
 import threading
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
@@ -33,6 +33,7 @@ from tensordict import (
     is_tensorclass,
     LazyStackedTensorDict,
     NestedKey,
+    TensorClass,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -125,6 +126,53 @@ def _maybe_delay_init(func):
         return func(self, *args, **kwargs)
 
     return wrapper
+
+
+class ConditionalUpdateResult(TensorClass["nocast"]):
+    """Result of :meth:`ReplayBuffer.update_if_present`.
+
+    Attributes:
+        updated (torch.Tensor): boolean mask aligned with the order of the
+            indices passed to the update. ``True`` marks records that were
+            still live and received the patch; ``False`` marks records that
+            were not patched, either because their slot had been reused or
+            emptied (stale) or because they were rejected by the version
+            comparison. Non-patched records are left untouched.
+        version_rejected (torch.Tensor, optional): boolean mask aligned like
+            ``updated``. Only present (non-``None``) when the update was
+            called with ``version_key``; ``True`` marks records that were
+            generation-live but lost the version comparison (including
+            duplicate handles on the same slot that did not carry the highest
+            incoming version). Every input record lands in exactly one of
+            updated / version_rejected / stale.
+
+    Note that ``stale_count`` counts only generation-stale records: when a
+    version comparison is active, records rejected by it are counted by
+    ``version_rejected_count``, not by ``stale_count``.
+    """
+
+    updated: torch.Tensor
+    version_rejected: torch.Tensor | None = None
+
+    @property
+    def updated_count(self) -> int:
+        """Number of records that were live and patched."""
+        return int(self.updated.sum().item())
+
+    @property
+    def version_rejected_count(self) -> int:
+        """Number of records that were live but rejected by version comparison."""
+        if self.version_rejected is None:
+            return 0
+        return int(self.version_rejected.sum().item())
+
+    @property
+    def stale_count(self) -> int:
+        """Number of records that were stale and skipped."""
+        base = int(self.updated.numel()) - self.updated_count
+        if self.version_rejected is not None:
+            base -= self.version_rejected_count
+        return base
 
 
 class ReplayBuffer(metaclass=_RayServiceMetaClass):
@@ -1013,6 +1061,299 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             stats["capacity"] = int(capacity)
             stats["utilization"] = float(size) / capacity if capacity else 0.0
         return stats
+
+    def update_if_present(
+        self,
+        *,
+        index: torch.Tensor,
+        generation: torch.Tensor,
+        patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        version_key: NestedKey | None = None,
+        version: int | torch.Tensor | None = None,
+        require_newer: bool = False,
+    ) -> ConditionalUpdateResult:
+        """Conditionally updates stored records that are still live.
+
+        Replay slots are recycled by round-robin writers, so a physical index
+        captured at sampling time can point to a different record by the time
+        an asynchronous computation writes back. This method applies ``patch``
+        only to records whose ``(index, generation)`` pair still matches the
+        writer's current slot generation, skipping records whose slot was
+        reused or emptied since the handle was captured. Skipped records are
+        never modified.
+
+        The whole patch is validated (key existence, shape and dtype) before
+        any write happens; a validation failure leaves the storage untouched.
+        Updating a record refreshes its content, not its identity: the same
+        handle keeps working until the slot is rewritten by ``add``,
+        ``extend`` or ``empty``.
+
+        Generation tracking is opt-in: the buffer must be constructed with a
+        writer that tracks slot generations, e.g.
+        ``RoundRobinWriter(track_generations=True)`` (see
+        :ref:`ref_buffers_generations`). Calling this method on a buffer whose
+        writer does not track generations raises a ``RuntimeError``.
+
+        Keyword Args:
+            index (torch.Tensor): storage indices, as returned by
+                :meth:`extend` or found in the sample under ``"index"``.
+            generation (torch.Tensor): slot generations captured with the
+                indices, as found in the sample under ``"index_generation"``.
+            patch (mapping of NestedKey to torch.Tensor, or TensorDictBase):
+                the fields to overwrite for live records. Leading dimension
+                must match the number of records addressed by ``index``.
+            version_key (NestedKey, optional): a stored per-record scalar
+                field holding each record's current version. When passed
+                (together with ``version``), a generation-live record is only
+                patched if the incoming version compares favorably against
+                the stored one, and the accepted version is written into
+                ``version_key`` atomically with the patch. ``version_key``
+                may not appear in ``patch``. Nested keys must be passed in
+                tuple form (``("nested", "version")``); dotted strings are
+                rejected. Defaults to ``None`` (no version comparison).
+            version (int or torch.Tensor, optional): the incoming version,
+                either a scalar (broadcast to every record) or a tensor with
+                one entry per record. Must be passed together with
+                ``version_key``.
+            require_newer (bool, optional): if ``True``, a record is only
+                patched when ``version > stored``; if ``False``, ties are
+                accepted (``version >= stored``). When the same slot is
+                addressed several times in one call, only the row carrying
+                the highest incoming version is applied (the last such row
+                on ties); the losing rows are reported in
+                ``version_rejected``. Defaults to ``False``.
+
+        Returns:
+            A :class:`ConditionalUpdateResult` whose ``updated`` mask is
+            aligned with the input index order, with ``updated_count`` and
+            ``stale_count`` conveniences. When ``version_key`` is passed, its
+            ``version_rejected`` mask marks generation-live records that were
+            rejected by the version comparison (``None`` otherwise).
+
+        Raises:
+            RuntimeError: if the storage does not support conditional updates
+                (for example :class:`ListStorage`) or the writer does not
+                track slot generations.
+            KeyError: if a patch key (or ``version_key``) does not exist in
+                the storage.
+            ValueError: if a patch entry has an incompatible shape or dtype,
+                if only one of ``version_key`` / ``version`` is passed, if
+                ``version_key`` appears in ``patch`` or names a non-scalar
+                field, or if it is a dotted string.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import (
+            ...     LazyTensorStorage,
+            ...     TensorDictReplayBuffer,
+            ...     TensorDictRoundRobinWriter,
+            ... )
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(10),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ...     batch_size=4,
+            ... )
+            >>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+            >>> sample = rb.sample()
+            >>> result = rb.update_if_present(
+            ...     index=sample["index"],
+            ...     generation=sample["index_generation"],
+            ...     patch={"obs": torch.ones(4, 3)},
+            ... )
+            >>> print(result.updated_count, result.stale_count)
+            4 0
+
+            With a version comparison, outdated asynchronous writers lose
+            deterministically:
+
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(10),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ...     batch_size=4,
+            ... )
+            >>> rb.extend(
+            ...     TensorDict(
+            ...         {
+            ...             "obs": torch.zeros(10, 3),
+            ...             "v": torch.full((10,), 5, dtype=torch.int64),
+            ...         },
+            ...         batch_size=[10],
+            ...     )
+            ... )
+            >>> sample = rb.sample()
+            >>> result = rb.update_if_present(
+            ...     index=sample["index"],
+            ...     generation=sample["index_generation"],
+            ...     patch={"obs": torch.ones(4, 3)},
+            ...     version_key="v",
+            ...     version=4,
+            ...     require_newer=True,
+            ... )
+            >>> print(result.updated_count, result.version_rejected_count)
+            0 4
+        """
+        storage = self._storage
+        if not getattr(storage, "supports_conditional_update", False) or not getattr(
+            self._writer, "tracks_generations", False
+        ):
+            raise RuntimeError(
+                f"Conditional updates are not supported by {type(storage).__name__} "
+                f"with {type(self._writer).__name__}: the storage must support "
+                "conditional updates and the writer must track slot generations."
+            )
+        index = torch.as_tensor(index, dtype=torch.long)
+        dim0 = index[..., 0] if index.ndim > 1 else index.reshape(-1)
+        generation = torch.as_tensor(generation, dtype=torch.long).reshape(-1)
+        if generation.numel() != dim0.numel():
+            raise ValueError(
+                f"index and generation must address the same number of records, "
+                f"got {dim0.numel()} indices and {generation.numel()} generations."
+            )
+        if (version_key is None) != (version is None):
+            raise ValueError("version_key and version must be provided together.")
+
+        if isinstance(patch, TensorDictBase):
+            patch = dict(patch.items(include_nested=True, leaves_only=True))
+        else:
+            patch = dict(patch)
+        # Normalize key spellings so ("v",) and "v" (and the patch's own keys)
+        # cannot silently name the same field under different forms.
+        patch = {unravel_key(key): value for key, value in patch.items()}
+
+        version_leaf = None
+        if version_key is not None:
+            if isinstance(version_key, str) and "." in version_key:
+                raise ValueError(
+                    f"Dotted-string version keys are not supported: got "
+                    f"{version_key!r}. Pass the nested key in tuple form, e.g. "
+                    f"{tuple(version_key.split('.'))!r}."
+                )
+            version_key = unravel_key(version_key)
+            if version_key in patch:
+                raise ValueError(
+                    f"version_key {version_key!r} may not appear in patch."
+                )
+            # Raises KeyError if the field does not exist; the version field
+            # must hold one scalar per record (trailing singleton dims are
+            # accepted and squeezed).
+            version_leaf = storage._conditional_patch_leaf(version_key)
+            n_coords = index.shape[-1] if index.ndim > 1 else 1
+            feature_shape = version_leaf.shape[n_coords:]
+            if any(dim != 1 for dim in feature_shape):
+                raise ValueError(
+                    f"version_key {version_key!r} must reference a per-record "
+                    f"scalar field; the storage holds feature shape "
+                    f"{tuple(feature_shape)}."
+                )
+            version_tensor = torch.as_tensor(version)
+            while version_tensor.ndim > 1 and version_tensor.shape[-1] == 1:
+                version_tensor = version_tensor.squeeze(-1)
+            if version_tensor.ndim == 0:
+                version_tensor = version_tensor.expand(dim0.shape)
+            elif version_tensor.ndim != 1 or version_tensor.numel() != dim0.numel():
+                raise ValueError(
+                    f"version must be a scalar or hold one entry per record, "
+                    f"got shape {tuple(torch.as_tensor(version).shape)} for "
+                    f"{dim0.numel()} records."
+                )
+            patch[version_key] = version_tensor.reshape((dim0.numel(), *feature_shape))
+
+        normalized = storage._validate_conditional_patch(index, patch)
+        version_rejected = None
+
+        with self._replay_lock, self._write_lock:
+            # ``generations_of`` returns on the index device; align the captured
+            # generations with it so the comparison never crosses devices
+            # (index/generation/storage may live on CPU, CUDA or MPS).
+            current = self._writer.generations_of(dim0)
+            live = current == generation.to(current.device)
+            if version_key is not None:
+                version_rejected = torch.zeros_like(live)
+            if live.any():
+                if version_key is not None:
+                    live_mask = live.to(version_leaf.device)
+                    live_index = index.to(version_leaf.device)[live_mask]
+                    # Read the stored versions the same way the write path
+                    # addresses the storage, so ndim > 1 storages resolve
+                    # coordinates instead of fancy-indexing dim 0.
+                    if live_index.ndim > 1:
+                        coords = tuple(live_index.unbind(-1))
+                    else:
+                        coords = (live_index,)
+                    stored_version = version_leaf[coords].reshape(-1)
+                    incoming_version = normalized[version_key][live_mask].reshape(-1)
+                    if require_newer:
+                        version_accepted = incoming_version > stored_version
+                    else:
+                        version_accepted = incoming_version >= stored_version
+
+                    # A record addressed several times in one call would make
+                    # the scatter write order-dependent (every row compares
+                    # against the pre-call version, and the last write wins).
+                    # Keep, per record, only the row carrying the highest
+                    # incoming version -- the last such row on ties -- and
+                    # reject the rest, so the result stays truthful. Records
+                    # are identified by their full coordinates: for ndim > 1
+                    # storages, cells sharing a dim-0 slot are distinct.
+                    if live_index.ndim > 1:
+                        slots, slot_ids = torch.unique(
+                            live_index, dim=0, return_inverse=True
+                        )
+                        n_slots = slots.shape[0]
+                    else:
+                        slots, slot_ids = torch.unique(live_index, return_inverse=True)
+                        n_slots = slots.numel()
+                    if n_slots != slot_ids.numel():
+                        if incoming_version.is_floating_point():
+                            lowest = torch.finfo(incoming_version.dtype).min
+                        else:
+                            lowest = torch.iinfo(incoming_version.dtype).min
+                        slot_max = torch.full(
+                            (n_slots,),
+                            lowest,
+                            dtype=incoming_version.dtype,
+                            device=version_leaf.device,
+                        ).scatter_reduce(0, slot_ids, incoming_version, "amax")
+                        is_max = incoming_version == slot_max[slot_ids]
+                        row = torch.arange(slot_ids.numel(), device=version_leaf.device)
+                        best_row = torch.full(
+                            (n_slots,),
+                            -1,
+                            dtype=torch.int64,
+                            device=version_leaf.device,
+                        ).scatter_reduce(
+                            0,
+                            slot_ids,
+                            torch.where(
+                                is_max, row, row.new_full((), -1).expand_as(row)
+                            ),
+                            "amax",
+                        )
+                        version_accepted = version_accepted & (
+                            row == best_row[slot_ids]
+                        )
+
+                    accepted = version_accepted.to(live.device)
+                    version_rejected[live] = ~accepted
+                    new_live = torch.zeros_like(live)
+                    new_live[live] = accepted
+                    live = new_live
+
+                if live.any():
+                    live_index = index[live.to(index.device)]
+                    storage._apply_conditional_patch(
+                        live_index,
+                        {
+                            key: value[live.to(value.device)]
+                            for key, value in normalized.items()
+                        },
+                    )
+        return ConditionalUpdateResult(
+            updated=live,
+            version_rejected=version_rejected,
+            batch_size=live.shape,
+        )
 
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose

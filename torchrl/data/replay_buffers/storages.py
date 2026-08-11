@@ -30,6 +30,7 @@ from tensordict import (
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
+    NestedKey,
     TensorDict,
     TensorDictBase,
 )
@@ -181,6 +182,7 @@ class Storage:
 
     ndim = 1
     max_size: int
+    supports_conditional_update: bool = False
     _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
     _rng: torch.Generator | None = None
 
@@ -712,6 +714,7 @@ class TensorStorage(Storage):
 
     _storage = None
     _default_checkpointer = TensorStorageCheckpointer
+    supports_conditional_update = True
 
     def __init__(
         self,
@@ -905,6 +908,59 @@ class TensorStorage(Storage):
                 self._storage,
             )
         )
+
+    def _conditional_patch_leaf(self, key: NestedKey) -> torch.Tensor:
+        storage = getattr(self, "_storage", None)
+        if storage is None or not self.initialized:
+            raise RuntimeError(
+                "Conditional updates require an initialized storage. Write some "
+                "data to the buffer before calling update_if_present."
+            )
+        leaf = None
+        if is_tensor_collection(storage):
+            leaf = storage.get(key, default=None)
+        if leaf is None:
+            raise KeyError(
+                f"Key {key} does not exist in the storage. Conditional patches "
+                "can only target existing tensor fields of a tensordict storage."
+            )
+        return leaf
+
+    def _validate_conditional_patch(
+        self, index: torch.Tensor, patch: dict[NestedKey, torch.Tensor]
+    ) -> dict[NestedKey, torch.Tensor]:
+        n_coords = index.shape[-1] if index.ndim > 1 else 1
+        n_rows = index.shape[0] if index.ndim > 1 else index.numel()
+        normalized = {}
+        for key, value in patch.items():
+            leaf = self._conditional_patch_leaf(key)
+            value = torch.as_tensor(value)
+            if value.dtype != leaf.dtype:
+                raise ValueError(
+                    f"dtype mismatch for patch key {key}: got {value.dtype}, "
+                    f"the storage holds {leaf.dtype}."
+                )
+            feature_shape = leaf.shape[n_coords:]
+            try:
+                value = value.reshape((n_rows, *feature_shape))
+            except RuntimeError:
+                raise ValueError(
+                    f"shape mismatch for patch key {key}: got {tuple(value.shape)}, "
+                    f"expected {n_rows} records with feature shape {tuple(feature_shape)}."
+                )
+            normalized[key] = value.to(leaf.device)
+        return normalized
+
+    def _apply_conditional_patch(
+        self, index: torch.Tensor, patch: dict[NestedKey, torch.Tensor]
+    ) -> None:
+        if index.ndim > 1:
+            coords = tuple(index.unbind(-1))
+        else:
+            coords = (index,)
+        for key, value in patch.items():
+            leaf = self._conditional_patch_leaf(key)
+            leaf[coords] = value
 
     def __getstate__(self):
         state = super().__getstate__()

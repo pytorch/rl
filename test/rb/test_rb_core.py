@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import json
+import threading
 
 import pytest
 import torch
@@ -38,7 +39,11 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     TensorStorage,
 )
-from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter, RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    ImmutableDatasetWriter,
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+)
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.objectives.llm import MCAdvantage
 
@@ -2019,6 +2024,723 @@ class TestSequencePrioritySemantics:
         )
         freqs = self._anchor_counts(rb, unit_length=2, draws=200)
         assert freqs[boosted] > 0.5
+
+
+class TestUpdateIfPresent:
+    """Executable spec for ReplayBuffer.update_if_present (RFC step 2).
+
+    Contract pinned by this class:
+
+    - Signature: ``rb.update_if_present(index=..., generation=..., patch=...)``
+      with keyword-only arguments. ``patch`` maps tensordict keys (flat or
+      nested) to tensors whose leading dimension equals ``len(index)``.
+    - Records whose (index, generation) pair is still live receive every
+      patch key; records whose slot was reused or emptied are skipped and
+      their current content is never modified.
+    - The result exposes ``updated`` (bool tensor aligned with the input
+      index order), ``updated_count`` and ``stale_count``.
+    - Updating a record does not consume its handle: the same (index,
+      generation) pair keeps working until the slot is rewritten.
+    - The whole patch is validated before any write: an unknown key raises
+      ``KeyError``, a shape or dtype mismatch raises ``ValueError``, and in
+      both cases storage is left byte-for-byte untouched, even when other
+      keys of the same patch were valid.
+    - Storages that cannot validate generations, and writers that were not
+      constructed with ``track_generations=True`` (tracking is opt-in), raise
+      a capability error mentioning "conditional" instead of writing through
+      raw indices.
+    """
+
+    def _make_rb(self, size=10):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        data = TensorDict(
+            {
+                "obs": torch.arange(size, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(size, 3)
+                .clone(),
+                "info": {"label": torch.zeros(size, dtype=torch.int64)},
+            },
+            batch_size=[size],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        return rb, data, index, generation
+
+    def test_updates_live_records(self):
+        rb, _, index, generation = self._make_rb()
+        patch = {"obs": torch.full((10, 3), 42.0)}
+        result = rb.update_if_present(index=index, generation=generation, patch=patch)
+        assert result.updated.dtype == torch.bool
+        assert result.updated.all()
+        assert result.updated_count == 10
+        assert result.stale_count == 0
+        torch.testing.assert_close(rb[:]["obs"], patch["obs"])
+
+    def test_stale_records_skipped_and_unmodified(self):
+        rb, _, index, generation = self._make_rb()
+        overwrite = TensorDict(
+            {
+                "obs": torch.full((4, 3), -1.0),
+                "info": {"label": torch.ones(4, dtype=torch.int64)},
+            },
+            batch_size=[4],
+        )
+        rb.extend(overwrite)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+        )
+        assert result.updated.tolist() == [False] * 4 + [True] * 6
+        assert result.updated_count == 6
+        assert result.stale_count == 4
+        torch.testing.assert_close(rb[:]["obs"][:4], overwrite["obs"])
+        torch.testing.assert_close(rb[:]["obs"][4:], torch.full((6, 3), 42.0))
+
+    def test_mask_aligns_with_input_order(self):
+        rb, _, index, generation = self._make_rb()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(4, 3),
+                    "info": {"label": torch.zeros(4, dtype=torch.int64)},
+                },
+                batch_size=[4],
+            )
+        )
+        permutation = torch.tensor([7, 0, 5, 2, 9, 1])
+        result = rb.update_if_present(
+            index=index[permutation],
+            generation=generation[permutation],
+            patch={"obs": torch.full((6, 3), 42.0)},
+        )
+        expected_live = (permutation >= 4).tolist()
+        assert result.updated.tolist() == expected_live
+
+    def test_handle_survives_repeated_updates(self):
+        rb, _, index, generation = self._make_rb()
+        for value in (1.0, 2.0):
+            result = rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.full((10, 3), value)},
+            )
+            assert result.updated.all()
+        torch.testing.assert_close(rb[:]["obs"], torch.full((10, 3), 2.0))
+
+    def test_unknown_key_raises_and_storage_untouched(self):
+        rb, data, index, generation = self._make_rb()
+        with pytest.raises(KeyError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"not_a_key": torch.zeros(10, 3)},
+            )
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+
+    def test_invalid_shape_or_dtype_raises_before_any_write(self):
+        rb, data, index, generation = self._make_rb()
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={
+                    "obs": torch.full((10, 3), 42.0),
+                    ("info", "label"): torch.zeros(10, 5, dtype=torch.int64),
+                },
+            )
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3, dtype=torch.int64)},
+            )
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+        torch.testing.assert_close(rb[:]["info", "label"], data["info", "label"])
+
+    def test_nested_key_patch(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={("info", "label"): torch.full((10,), 7, dtype=torch.int64)},
+        )
+        assert result.updated.all()
+        assert (rb[:]["info", "label"] == 7).all()
+
+    def test_capability_error_on_list_storage(self):
+        rb = ReplayBuffer(storage=ListStorage(10))
+        index = rb.extend([torch.randn(3) for _ in range(5)])
+        with pytest.raises(
+            (RuntimeError, TypeError, NotImplementedError), match="(?i)conditional"
+        ):
+            rb.update_if_present(
+                index=torch.as_tensor(index),
+                generation=torch.zeros(5, dtype=torch.int64),
+                patch={"obs": torch.zeros(5, 3)},
+            )
+
+    def test_capability_error_without_generation_tracking(self):
+        # Generation tracking is opt-in; the default writer does not track.
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10), batch_size=4)
+        index = rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+        with pytest.raises(RuntimeError, match="(?i)conditional"):
+            rb.update_if_present(
+                index=index,
+                generation=torch.zeros(10, dtype=torch.int64),
+                patch={"obs": torch.ones(10, 3)},
+            )
+
+    def test_empty_invalidates_handles(self):
+        rb, _, index, generation = self._make_rb()
+        rb.empty()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(10, 3),
+                    "info": {"label": torch.zeros(10, dtype=torch.int64)},
+                },
+                batch_size=[10],
+            )
+        )
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+        )
+        assert not result.updated.any()
+        assert result.stale_count == 10
+        assert (rb[:]["obs"] == 0).all()
+
+    def test_sampled_handles_roundtrip(self):
+        rb, _, _, _ = self._make_rb()
+        sample = rb.sample()
+        batch = sample.batch_size[0]
+        index = sample.get("index").reshape(batch, -1)[:, 0]
+        generation = sample.get("index_generation").reshape(batch, -1)[:, 0]
+        marker = torch.full((batch, 3), 123.0)
+        result = rb.update_if_present(
+            index=index, generation=generation, patch={"obs": marker}
+        )
+        assert result.updated.all()
+        torch.testing.assert_close(rb[:]["obs"][index], marker)
+
+    def test_multidim_storage_roundtrip(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(6, ndim=2),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        data = TensorDict(
+            {"obs": torch.arange(6, dtype=torch.float32).reshape(2, 3)},
+            batch_size=[2, 3],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full_like(data["obs"], 42.0)},
+        )
+        assert result.updated.all()
+        assert (rb[:]["obs"] == 42.0).all()
+
+    def test_concurrent_updates_do_not_tear_records(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(64),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=8,
+        )
+        rb.extend(
+            TensorDict({"a": torch.zeros(64), "b": torch.zeros(64)}, batch_size=[64])
+        )
+        stop = threading.Event()
+        errors = []
+
+        def writer_loop():
+            value = 1.0
+            try:
+                while not stop.is_set():
+                    rb.extend(
+                        TensorDict(
+                            {
+                                "a": torch.full((8,), value),
+                                "b": torch.full((8,), value),
+                            },
+                            batch_size=[8],
+                        )
+                    )
+                    value += 1.0
+            except Exception as err:
+                errors.append(err)
+
+        thread = threading.Thread(target=writer_loop)
+        thread.start()
+        try:
+            for step in range(200):
+                sample = rb.sample()
+                batch = sample.batch_size[0]
+                index = sample.get("index").reshape(batch, -1)[:, 0]
+                generation = sample.get("index_generation").reshape(batch, -1)[:, 0]
+                marker = torch.full((batch,), 10_000.0 + step)
+                rb.update_if_present(
+                    index=index,
+                    generation=generation,
+                    patch={"a": marker, "b": marker},
+                )
+                content = rb[:]
+                torch.testing.assert_close(content["a"], content["b"])
+        finally:
+            stop.set()
+            thread.join(timeout=10)
+        assert not errors
+
+
+class TestUpdateIfPresentVersioned:
+    """Executable spec for the compare-version facility (#4040, RFC extension).
+
+    Contract pinned by this class:
+
+    - The facility activates when ``version_key`` and ``version`` are both
+      passed; passing one without the other raises ``ValueError``. When
+      inactive, behavior is unchanged and ``result.version_rejected`` is
+      ``None``.
+    - For generation-live records, the patch applies iff
+      ``version > stored`` (``require_newer=True``) or ``version >= stored``
+      (``require_newer=False``, the default). Records that fail the check are
+      reported in ``result.version_rejected`` and left untouched.
+    - Records that pass both checks get ``version`` written into
+      ``version_key`` atomically with the patch; ``version_key`` may not
+      appear in ``patch``.
+    - Generation staleness takes precedence: every input record lands in
+      exactly one of updated / version_rejected / stale.
+    - Rejection is deterministic and side-effect free: retrying an outdated
+      update yields the same result and mutates nothing.
+    - ``version`` accepts a Python int (broadcast) or an int64 tensor with
+      one entry per record.
+    """
+
+    def _make_rb(self, size=10, version_shape=()):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        data = TensorDict(
+            {
+                "obs": torch.arange(size, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(size, 3)
+                .clone(),
+                "state_version": torch.full(
+                    (size, *version_shape), 5, dtype=torch.int64
+                ),
+            },
+            batch_size=[size],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        return rb, data, index, generation
+
+    def test_newer_version_applies_and_is_written_back(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert result.version_rejected is not None
+        assert not result.version_rejected.any()
+        assert result.version_rejected_count == 0
+        assert (rb[:]["obs"] == 42.0).all()
+        assert (rb[:]["state_version"] == 6).all()
+
+    def test_equal_version_rejected_when_require_newer(self):
+        rb, data, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=5,
+            require_newer=True,
+        )
+        assert not result.updated.any()
+        assert result.version_rejected.all()
+        assert result.version_rejected_count == 10
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+        assert (rb[:]["state_version"] == 5).all()
+
+    def test_equal_version_applies_when_not_require_newer(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=5,
+        )
+        assert result.updated.all()
+        assert (rb[:]["obs"] == 42.0).all()
+
+    def test_older_async_writer_loses_deterministically(self):
+        rb, data, index, generation = self._make_rb()
+        newer = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 2.0)},
+            version_key="state_version",
+            version=7,
+            require_newer=True,
+        )
+        assert newer.updated.all()
+        for _ in range(3):
+            older = rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.full((10, 3), 1.0)},
+                version_key="state_version",
+                version=6,
+                require_newer=True,
+            )
+            assert not older.updated.any()
+            assert older.version_rejected.all()
+            assert (rb[:]["obs"] == 2.0).all()
+            assert (rb[:]["state_version"] == 7).all()
+
+    def test_stale_takes_precedence_over_version(self):
+        rb, _, index, generation = self._make_rb()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(4, 3),
+                    "state_version": torch.zeros(4, dtype=torch.int64),
+                },
+                batch_size=[4],
+            )
+        )
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=1,
+            require_newer=True,
+        )
+        assert result.updated.tolist() == [False] * 10
+        assert result.version_rejected.tolist() == [False] * 4 + [True] * 6
+        assert result.stale_count == 4
+        assert result.version_rejected_count == 6
+        assert not (result.updated & result.version_rejected).any()
+
+    def test_per_record_version_tensor(self):
+        rb, _, index, generation = self._make_rb()
+        versions = torch.tensor([6, 6, 6, 6, 6, 4, 4, 4, 4, 4], dtype=torch.int64)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=versions,
+            require_newer=True,
+        )
+        assert result.updated.tolist() == [True] * 5 + [False] * 5
+        assert result.version_rejected.tolist() == [False] * 5 + [True] * 5
+        assert (rb[:]["state_version"][:5] == 6).all()
+        assert (rb[:]["state_version"][5:] == 5).all()
+
+    def test_validation_errors_leave_storage_untouched(self):
+        rb, data, index, generation = self._make_rb()
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3)},
+                version_key="state_version",
+            )
+        with pytest.raises(KeyError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3)},
+                version_key="not_a_key",
+                version=6,
+            )
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.zeros(10, 3)},
+                version_key="obs",
+                version=6,
+            )
+        with pytest.raises(ValueError):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"state_version": torch.zeros(10, dtype=torch.int64)},
+                version_key="state_version",
+                version=6,
+            )
+        torch.testing.assert_close(rb[:]["obs"], data["obs"])
+        assert (rb[:]["state_version"] == 5).all()
+
+    def test_facility_absent_is_backward_compatible(self):
+        rb, _, index, generation = self._make_rb()
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+        )
+        assert result.updated.all()
+        assert result.version_rejected is None
+        assert (rb[:]["state_version"] == 5).all()
+
+    @pytest.mark.parametrize("storage_type", ["tensor", "memmap"])
+    def test_checkpoint_roundtrip_preserves_mutable_fields_and_generations(
+        self, storage_type
+    ):
+        size = 10
+        if storage_type == "memmap":
+            storage_in = LazyMemmapStorage(size)
+            storage_out = LazyMemmapStorage(size)
+        else:
+            storage_in = LazyTensorStorage(size)
+            storage_out = LazyTensorStorage(size)
+
+        rb = TensorDictReplayBuffer(
+            storage=storage_in,
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        data = TensorDict(
+            {
+                "obs": torch.arange(size, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(size, 3)
+                .clone(),
+                "state_version": torch.full((size,), 5, dtype=torch.int64),
+            },
+            batch_size=[size],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+
+        sd = rb.state_dict()
+
+        new_rb = TensorDictReplayBuffer(
+            storage=storage_out,
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        new_rb.load_state_dict(sd)
+
+        result = new_rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((size, 3), 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+
+        assert result.updated.all()
+        assert not result.version_rejected.any()
+        assert (new_rb[:]["obs"] == 42.0).all()
+        assert (new_rb[:]["state_version"] == 6).all()
+
+    def test_duplicate_handles_resolve_to_max_version(self):
+        # Two handles on the same slot in one call: only the row carrying the
+        # highest incoming version is applied, whatever the input order, and
+        # the losing row is reported as version_rejected.
+        for versions, values, expected_version, expected_value in (
+            ([7, 6], [7.0, 6.0], 7, 7.0),
+            ([6, 7], [6.0, 7.0], 7, 7.0),
+        ):
+            rb, _, index, generation = self._make_rb()
+            dup_index = torch.stack([index[0], index[0]])
+            dup_generation = torch.stack([generation[0], generation[0]])
+            result = rb.update_if_present(
+                index=dup_index,
+                generation=dup_generation,
+                patch={"obs": torch.tensor(values).unsqueeze(-1).expand(2, 3).clone()},
+                version_key="state_version",
+                version=torch.tensor(versions, dtype=torch.int64),
+                require_newer=True,
+            )
+            winner = versions.index(max(versions))
+            assert result.updated.tolist() == [i == winner for i in range(2)]
+            assert result.version_rejected.tolist() == [i != winner for i in range(2)]
+            assert result.updated_count == 1
+            assert result.version_rejected_count == 1
+            assert result.stale_count == 0
+            assert rb[:]["state_version"][0].item() == expected_version
+            assert (rb[:]["obs"][0] == expected_value).all()
+
+    def test_trailing_singleton_version_leaf(self):
+        # A [N, 1]-shaped version field is treated as one scalar per record.
+        rb, _, index, generation = self._make_rb(version_shape=(1,))
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert not result.version_rejected.any()
+        assert (rb[:]["obs"] == 42.0).all()
+        assert (rb[:]["state_version"] == 6).all()
+        # A [N, 1]-shaped incoming version tensor is accepted too.
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 43.0)},
+            version_key="state_version",
+            version=torch.full((10, 1), 7, dtype=torch.int64),
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert (rb[:]["state_version"] == 7).all()
+
+    def test_tuple_version_key_matches_string_form(self):
+        # ("state_version",) and "state_version" name the same field, so the
+        # tuple form must hit the version_key-in-patch guard as well.
+        rb, _, index, generation = self._make_rb()
+        with pytest.raises(ValueError, match="may not appear in patch"):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"state_version": torch.zeros(10, dtype=torch.int64)},
+                version_key=("state_version",),
+                version=6,
+            )
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key=("state_version",),
+            version=6,
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert (rb[:]["state_version"] == 6).all()
+
+    def test_dotted_version_key_rejected(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        data = TensorDict(
+            {
+                "obs": torch.zeros(10, 3),
+                "nested": {"version": torch.full((10,), 5, dtype=torch.int64)},
+            },
+            batch_size=[10],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        with pytest.raises(ValueError, match="Dotted-string"):
+            rb.update_if_present(
+                index=index,
+                generation=generation,
+                patch={"obs": torch.ones(10, 3)},
+                version_key="nested.version",
+                version=6,
+            )
+        # The tuple form of the same nested key works.
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.ones(10, 3)},
+            version_key=("nested", "version"),
+            version=6,
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert (rb[:]["nested", "version"] == 6).all()
+
+    def test_multidim_storage_versioned_update(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(6, ndim=2),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        data = TensorDict(
+            {
+                "obs": torch.arange(6, dtype=torch.float32).reshape(2, 3),
+                "state_version": torch.full((2, 3), 5, dtype=torch.int64),
+            },
+            batch_size=[2, 3],
+        )
+        index = rb.extend(data)
+        generation = rb._writer.generations_of(index)
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full_like(data["obs"], 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        assert result.updated.all()
+        assert not result.version_rejected.any()
+        assert (rb[:]["obs"] == 42.0).all()
+        assert (rb[:]["state_version"] == 6).all()
+        # Stored versions are now 6 everywhere: an equal incoming version is
+        # rejected under require_newer, proving the stored read resolves
+        # coordinates rather than fancy-indexing dim 0.
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.zeros_like(data["obs"])},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        assert not result.updated.any()
+        assert result.version_rejected.all()
+        assert (rb[:]["obs"] == 42.0).all()
+
+    def test_all_stale_still_reports_version_rejected(self):
+        # version_rejected must be allocated whenever versioning is active,
+        # even if every handle is generation-stale.
+        rb, _, index, generation = self._make_rb()
+        rb.empty()
+        rb.extend(
+            TensorDict(
+                {
+                    "obs": torch.zeros(10, 3),
+                    "state_version": torch.full((10,), 5, dtype=torch.int64),
+                },
+                batch_size=[10],
+            )
+        )
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((10, 3), 42.0)},
+            version_key="state_version",
+            version=6,
+            require_newer=True,
+        )
+        assert not result.updated.any()
+        assert result.version_rejected is not None
+        assert not result.version_rejected.any()
+        assert result.version_rejected_count == 0
+        assert result.stale_count == 10
+        assert (rb[:]["obs"] == 0).all()
 
 
 if __name__ == "__main__":
