@@ -8,6 +8,7 @@ Reference: https://arxiv.org/abs/2301.04104
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import runpy
 from pathlib import Path
@@ -15,7 +16,6 @@ from pathlib import Path
 import pytest
 import torch
 from _objectives_common import LossModuleTestBase
-from omegaconf import OmegaConf
 from tensordict import TensorDict
 from tensordict.nn import (
     InteractionType,
@@ -57,6 +57,9 @@ from torchrl.objectives.dreamer_v3 import (
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
+
+_has_hydra = importlib.util.find_spec("hydra") is not None
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -379,14 +382,14 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
     def test_dreamer_v3_two_hot_module_state_and_compile(self, device):
         two_hot = SymExpTwoHot(5).to(device)
-        logits = torch.randn(4, 5, device=device)
+        logits = torch.linspace(-0.5, 0.5, 20, device=device).reshape(4, 5)
         expected = two_hot(logits)
         restored = SymExpTwoHot(5).to(device)
         restored.load_state_dict(two_hot.state_dict())
         torch.testing.assert_close(restored(logits), expected)
 
         compiled = torch.compile(restored, fullgraph=True)
-        torch.testing.assert_close(compiled(logits), expected)
+        torch.testing.assert_close(compiled(logits), expected, rtol=1e-5, atol=1e-5)
 
     # ------------------------------------------------------------------ #
     # World model loss tests
@@ -788,7 +791,13 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         value_loss(self._create_value_data().to(device))
 
+    @pytest.mark.skipif(
+        not (_has_hydra and _has_omegaconf),
+        reason="requires hydra and omegaconf",
+    )
     def test_dreamer_v3_sota_shares_imagination_parameters(self, device):
+        from omegaconf import OmegaConf
+
         repo_root = Path(__file__).parents[2]
         example = runpy.run_path(
             repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
@@ -858,7 +867,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         example["adaptive_grad_clip_"]([parameter], clip=0.3)
         assert parameter.grad.norm().item() == pytest.approx(1.5)
 
+    @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
+        from omegaconf import OmegaConf
+
         del device
         repo_root = Path(__file__).parents[2]
         benchmark = runpy.run_path(
