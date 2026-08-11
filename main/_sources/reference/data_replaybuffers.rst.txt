@@ -62,6 +62,10 @@ anchor as a single transition;
 fixed-length sequence of records with explicit episode-boundary policies
 (``"pad"``, ``"stop"`` or ``"include_reset"``).
 
+For multidimensional storage, coordinate zero is time and the others are
+preserved lanes. ``index`` and ``anchor_index`` contain full coordinates, so
+priority reduction remains lane-specific.
+
 A sequence can include context outside its loss-bearing region. For example,
 in a recurrent Q-learning learner, a ``burn_in`` prefix reconstructs the
 model's hidden state, ``length`` records contribute to the loss, and a

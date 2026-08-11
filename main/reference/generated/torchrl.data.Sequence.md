@@ -87,6 +87,10 @@ and with `dilation > 1` the shifted window is laid out on the
 dilation grid of the shifted anchor: the reported (pre-shift) anchor
 is then not necessarily one of the window's records.
 
+For multidimensional storage, coordinate zero is time and the others are
+preserved lanes. `"index"` and `"anchor_index"` carry full storage
+coordinates.
+
 See also
 
 `SequenceConfig`
