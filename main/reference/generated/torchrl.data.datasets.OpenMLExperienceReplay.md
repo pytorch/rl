@@ -690,6 +690,136 @@ Returns:
 
 self
 
+update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)
+
+Conditionally updates stored records that are still live.
+
+Replay slots are recycled by round-robin writers, so a physical index
+captured at sampling time can point to a different record by the time
+an asynchronous computation writes back. This method applies `patch`
+only to records whose `(index, generation)` pair still matches the
+writer's current slot generation, skipping records whose slot was
+reused or emptied since the handle was captured. Skipped records are
+never modified.
+
+The whole patch is validated (key existence, shape and dtype) before
+any write happens; a validation failure leaves the storage untouched.
+Updating a record refreshes its content, not its identity: the same
+handle keeps working until the slot is rewritten by `add`,
+`extend` or `empty`.
+
+Generation tracking is opt-in: the buffer must be constructed with a
+writer that tracks slot generations, e.g.
+`RoundRobinWriter(track_generations=True)` (see
+ref_buffers_generations). Calling this method on a buffer whose
+writer does not track generations raises a `RuntimeError`.
+
+Keyword Arguments:
+
+- **index** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - storage indices, as returned by
+`extend()` or found in the sample under `"index"`.
+- **generation** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - slot generations captured with the
+indices, as found in the sample under `"index_generation"`.
+- **patch** (*mapping**of**NestedKey to torch.Tensor**, or**TensorDictBase*) - the fields to overwrite for live records. Leading dimension
+must match the number of records addressed by `index`.
+- **version_key** (*NestedKey**,**optional*) - a stored per-record scalar
+field holding each record's current version. When passed
+(together with `version`), a generation-live record is only
+patched if the incoming version compares favorably against
+the stored one, and the accepted version is written into
+`version_key` atomically with the patch. `version_key`
+may not appear in `patch`. Nested keys must be passed in
+tuple form (`("nested", "version")`); dotted strings are
+rejected. Defaults to `None` (no version comparison).
+- **version** (*int**or*[*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*,**optional*) - the incoming version,
+either a scalar (broadcast to every record) or a tensor with
+one entry per record. Must be passed together with
+`version_key`.
+- **require_newer** (*bool**,**optional*) - if `True`, a record is only
+patched when `version > stored`; if `False`, ties are
+accepted (`version >= stored`). When the same slot is
+addressed several times in one call, only the row carrying
+the highest incoming version is applied (the last such row
+on ties); the losing rows are reported in
+`version_rejected`. Defaults to `False`.
+
+Returns:
+
+A `ConditionalUpdateResult` whose `updated` mask is
+aligned with the input index order, with `updated_count` and
+`stale_count` conveniences. When `version_key` is passed, its
+`version_rejected` mask marks generation-live records that were
+rejected by the version comparison (`None` otherwise).
+
+Raises:
+
+- **RuntimeError** - if the storage does not support conditional updates
+ (for example `ListStorage`) or the writer does not
+ track slot generations.
+- **KeyError** - if a patch key (or `version_key`) does not exist in
+ the storage.
+- **ValueError** - if a patch entry has an incompatible shape or dtype,
+ if only one of `version_key` / `version` is passed, if
+ `version_key` appears in `patch` or names a non-scalar
+ field, or if it is a dotted string.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from torchrl.data import (
+... LazyTensorStorage,
+... TensorDictReplayBuffer,
+... TensorDictRoundRobinWriter,
+... )
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(10),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... batch_size=4,
+... )
+>>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+>>> sample = rb.sample()
+>>> result = rb.update_if_present(
+... index=sample["index"],
+... generation=sample["index_generation"],
+... patch={"obs": torch.ones(4, 3)},
+... )
+>>> print(result.updated_count, result.stale_count)
+4 0
+```
+
+With a version comparison, outdated asynchronous writers lose
+deterministically:
+
+```
+>>> rb = TensorDictReplayBuffer(
+... storage=LazyTensorStorage(10),
+... writer=TensorDictRoundRobinWriter(track_generations=True),
+... batch_size=4,
+... )
+>>> rb.extend(
+... TensorDict(
+... {
+... "obs": torch.zeros(10, 3),
+... "v": torch.full((10,), 5, dtype=torch.int64),
+... },
+... batch_size=[10],
+... )
+... )
+>>> sample = rb.sample()
+>>> result = rb.update_if_present(
+... index=sample["index"],
+... generation=sample["index_generation"],
+... patch={"obs": torch.ones(4, 3)},
+... version_key="v",
+... version=4,
+... require_newer=True,
+... )
+>>> print(result.updated_count, result.version_rejected_count)
+0 4
+```
+
 write_all(*data: Any*, *end: int | None = None*) → None
 
 Write data back to storage in physical order.

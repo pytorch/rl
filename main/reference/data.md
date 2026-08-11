@@ -140,6 +140,7 @@ rb.update_tensordict_priority(sample)
 
 - [Core Replay Buffer Classes](data_replaybuffers.html#core-replay-buffer-classes)
 - [Sample units](data_replaybuffers.html#sample-units)
+- [Conditional record updates](data_replaybuffers.html#conditional-record-updates)
 - [Offline-to-online helpers](data_replaybuffers.html#offline-to-online-helpers)
 - [Trajectory queries](data_replaybuffers.html#trajectory-queries)
 - [Composable Replay Buffers](data_replaybuffers.html#composable-replay-buffers)

@@ -90,10 +90,83 @@ sample, info = rb.sample(return_info=True)
 loss_mask = info["learning_mask"] & info["validity_mask"]
 ```
 
+## Conditional record updates
+
+Round-robin writers recycle storage slots, so a physical index captured at
+sampling time can point to a different record by the time an asynchronous
+computation writes back. Writers constructed with `track_generations=True`
+stamp every slot with a generation counter (see
+ref_buffers_generations): samples then expose it as an
+`"index_generation"` entry next to `"index"`, and
+[`update_if_present()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present) applies a patch only to
+records whose `(index, generation)` pair is still live, skipping recycled
+slots instead of corrupting them. This supports algorithms that refresh
+stored fields after sampling, such as recurrent-state refreshes or
+asynchronously computed labels, without pinning the buffer or racing against
+collection. Generation tracking is opt-in, and
+[`update_if_present()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present) raises when the buffer's
+writer does not track generations.
+
+```
+buffer = TensorDictReplayBuffer(
+ storage=LazyTensorStorage(1000),
+ writer=TensorDictRoundRobinWriter(track_generations=True),
+ batch_size=32,
+)
+...
+sample = buffer.sample()
+refreshed = compute_refreshed_state(sample)
+result = buffer.update_if_present(
+ index=sample["index"],
+ generation=sample["index_generation"],
+ patch={"recurrent_state": refreshed},
+)
+print(f"updated {result.updated_count}, skipped {result.stale_count} stale records")
+```
+
+### Version-compared updates
+
+Generation stamps answer "is this still my record?"; they say nothing about
+*which* of several concurrent writers holds the freshest result. When
+multiple asynchronous workers write back to the same records, pass
+`version_key` and `version` to
+[`update_if_present()`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present): a generation-live
+record is then only patched when the incoming version compares favorably
+against the value stored under `version_key` (strictly greater with
+`require_newer=True`, greater-or-equal otherwise), and the accepted
+version is written back atomically with the patch. Outdated writers lose
+deterministically - retrying an outdated update mutates nothing and returns
+the same result. When one call addresses the same slot several times, only
+the row carrying the highest incoming version is applied and the others are
+rejected, so the reported result always reflects what was written.
+
+```
+result = buffer.update_if_present(
+ index=sample["index"],
+ generation=sample["index_generation"],
+ patch={"recurrent_state": refreshed},
+ version_key="state_version",
+ version=worker_step,
+ require_newer=True,
+)
+print(
+ f"updated {result.updated_count}, "
+ f"outdated {result.version_rejected_count}, "
+ f"stale {result.stale_count}"
+)
+```
+
+`version_key` must name a stored per-record scalar field (nested keys in
+tuple form), may not appear in `patch`, and `version` can be a scalar or
+one entry per record. The result's `version_rejected` mask marks
+generation-live records that lost the comparison; `stale_count` keeps
+counting only generation-stale handles.
+
 | [`SampleUnit`](generated/torchrl.data.SampleUnit.html#torchrl.data.SampleUnit)() | Expands sampled anchors into the records a batch is made of. |
 | --- | --- |
 | [`Sequence`](generated/torchrl.data.Sequence.html#torchrl.data.Sequence)(length[, episode_boundary, ...]) | Expands anchors into a window of records around each anchor. |
 | [`Transition`](generated/torchrl.data.Transition.html#torchrl.data.Transition)() | The identity sample unit: every anchor is one transition. |
+| [`ConditionalUpdateResult`](generated/torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)(updated[, ...]) | |
 
 ## Offline-to-online helpers
 

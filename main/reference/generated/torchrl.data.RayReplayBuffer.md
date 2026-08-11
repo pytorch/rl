@@ -468,6 +468,14 @@ Returns:
 
 self
 
+update_if_present(***, *index*, *generation*, *patch*, *version_key=None*, *version=None*, *require_newer=False*)[[source]](../../_modules/torchrl/data/replay_buffers/ray_buffer.html#RayReplayBuffer.update_if_present)
+
+Conditionally updates live records through a single actor round-trip.
+
+Validation, the generation and version comparisons and the patch write
+all run inside the replay-buffer actor under its own lock.
+See [`update_if_present()`](torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.update_if_present).
+
 write_all(*data: Any*, *end: int | None = None*) → None
 
 Write data back to storage in physical order.

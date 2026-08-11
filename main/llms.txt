@@ -86,6 +86,7 @@
 - [Bounded](reference/generated/torchrl.data.Bounded.md)
 - [Categorical](reference/generated/torchrl.data.Categorical.md)
 - [Composite](reference/generated/torchrl.data.Composite.md)
+- [ConditionalUpdateResult](reference/generated/torchrl.data.ConditionalUpdateResult.md)
 - [Flat2TED](reference/generated/torchrl.data.Flat2TED.md)
 - [MultiCategorical](reference/generated/torchrl.data.MultiCategorical.md)
 - [MultiOneHot](reference/generated/torchrl.data.MultiOneHot.md)
