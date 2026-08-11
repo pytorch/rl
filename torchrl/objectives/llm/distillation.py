@@ -428,7 +428,8 @@ class DistillationLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> DistillationLossOutput:
         history: History = tensordict[self.tensor_keys.history]
         masks, attention_masks, assistant_masks = self._get_masks(tensordict, history)
-        if any(not mask.any() for mask in masks):
+        token_dim = tensordict.ndim - 1
+        if any((~mask.any(dim=token_dim)).any() for mask in masks):
             raise ValueError(
                 "Some sequences have no tokens selected for distillation. "
                 "Check the assistant/attention masks of the input."
@@ -482,9 +483,9 @@ class DistillationLoss(LossModule):
                 kl = k3_kl_token_estimate(lp, tlp)
             kl_tokens.append(kl)
 
-        summed_kl = torch.stack([kl.sum(tensordict.ndim - 1) for kl in kl_tokens])
+        summed_kl = torch.stack([kl.sum(token_dim) for kl in kl_tokens])
         if self.normalize_by_seq_length:
-            seq_lengths = torch.stack([mask.sum(tensordict.ndim - 1) for mask in masks])
+            seq_lengths = torch.stack([mask.sum(token_dim) for mask in masks])
             summed_kl = summed_kl / seq_lengths.clamp(min=1)
 
         loss = _distillation_loss(summed_kl, self.reduction)
