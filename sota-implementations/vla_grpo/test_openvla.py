@@ -818,6 +818,128 @@ class TestTokenizerAndTransforms:
 
 
 class TestLiberoWorkers:
+    def test_standalone_env_factory_uses_worker_metadata(self, monkeypatch):
+        captured = {}
+
+        def fake_parallel_env(num_envs, env_factory, **kwargs):
+            captured["num_envs"] = num_envs
+            captured["env_factory"] = env_factory
+            captured["kwargs"] = kwargs
+            return object()
+
+        cfg = SimpleNamespace(
+            env=SimpleNamespace(
+                backend="libero",
+                task_ids=[0, 1],
+                num_envs=2,
+                parallel_group_repeats=False,
+            ),
+            collector=SimpleNamespace(group_size=8, candidate_group_size=None),
+        )
+        monkeypatch.setattr(utils, "ParallelEnv", fake_parallel_env)
+        monkeypatch.setattr(utils, "_chunk_transform", lambda *args, **kwargs: object())
+        monkeypatch.setattr(utils, "TransformedEnv", lambda base, transform: base)
+
+        result = utils.make_env(cfg, tokenizer=None)
+
+        assert result is not None
+        assert captured["num_envs"] == 2
+        assert captured["kwargs"]["create_env_kwargs"] == [
+            {"worker_idx": 0},
+            {"worker_idx": 1},
+        ]
+        assert captured["kwargs"]["metadata_from_workers"]
+        assert captured["kwargs"]["use_buffers"] is False
+        assert captured["env_factory"].func is utils._make_libero_worker
+
+    def test_collector_factory_uses_common_env_factory_and_worker_kwargs(
+        self, monkeypatch
+    ):
+        captured = {}
+
+        def fake_make_env_worker(*args, **kwargs):
+            return args, kwargs
+
+        def fake_parallel_env(num_envs, env_factory, **kwargs):
+            captured["num_envs"] = num_envs
+            captured["env_factory"] = env_factory
+            captured["kwargs"] = kwargs
+            return object()
+
+        cfg = SimpleNamespace(env=SimpleNamespace(backend="libero"))
+        tokenizer = object()
+        monkeypatch.setattr(utils, "_make_env_worker", fake_make_env_worker)
+        monkeypatch.setattr(utils, "ParallelEnv", fake_parallel_env)
+
+        result = utils._make_collector_env(
+            cfg,
+            tokenizer=tokenizer,
+            num_envs=3,
+            group_repeats=8,
+            seed=100,
+            device=torch.device("cpu"),
+            worker_idx_offset=16,
+            render_gpu_device_id=2,
+        )
+
+        assert result is not None
+        assert captured["num_envs"] == 3
+        assert captured["kwargs"]["create_env_kwargs"] == [
+            {"worker_idx": 0},
+            {"worker_idx": 1},
+            {"worker_idx": 2},
+        ]
+        assert captured["kwargs"]["metadata_from_workers"]
+        assert captured["kwargs"]["use_buffers"] is False
+        assert captured["kwargs"]["mp_start_method"] == "spawn"
+        args, kwargs = captured["env_factory"](worker_idx=2)
+        assert args == (cfg, tokenizer)
+        assert kwargs == {
+            "worker_idx": 2,
+            "group_repeats": 8,
+            "seed": 100,
+            "device": None,
+            "worker_idx_offset": 16,
+            "render_gpu_device_id": 2,
+        }
+
+    def test_collector_factory_preserves_group_offset_and_seed(self, monkeypatch):
+        captured = {}
+
+        class FakeLiberoEnv:
+            def set_seed(self, seed):
+                captured["seed"] = seed
+
+        def fake_make_libero_worker(cfg, worker_idx, **kwargs):
+            captured["worker_idx"] = worker_idx
+            captured["worker_kwargs"] = kwargs
+            return FakeLiberoEnv()
+
+        monkeypatch.setattr(utils, "_make_libero_worker", fake_make_libero_worker)
+        monkeypatch.setattr(utils, "_chunk_transform", lambda *args, **kwargs: object())
+        monkeypatch.setattr(utils, "TransformedEnv", lambda base, transform: base)
+        cfg = SimpleNamespace(env=SimpleNamespace(backend="libero"))
+
+        utils._make_env_worker(
+            cfg,
+            tokenizer=None,
+            worker_idx=3,
+            group_repeats=8,
+            seed=100,
+            worker_idx_offset=16,
+            render_gpu_device_id=2,
+        )
+
+        assert captured["worker_idx"] == 3
+        assert captured["worker_kwargs"] == {
+            "group_repeats": 8,
+            "eval_mode": False,
+            "from_pixels": False,
+            "worker_idx_offset": 16,
+            "render_gpu_device_id": 2,
+        }
+        assert captured["seed"] == 119
+
     def test_libero_worker_assignment_serial_and_parallel_groups(self):
         class _EnvCfg(dict):
             def __getattr__(self, name):
