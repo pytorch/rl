@@ -10,7 +10,9 @@ import itertools
 import math
 import operator
 import os
+import threading
 import typing
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Union
@@ -45,6 +47,96 @@ if hasattr(typing, "get_args"):
 else:
     # python 3.7
     INT_CLASSES = (int, np.integer)
+
+
+_REPLAY_BOUNDARY_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_REPLAY_BOUNDARY_CACHE_LOCK = threading.RLock()
+
+
+def _freeze_boundary_cache_key(value: Any) -> Any:
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_boundary_cache_key(item) for item in value)
+    if isinstance(value, torch.device):
+        return str(value)
+    if isinstance(value, torch.Tensor):
+        value = value.reshape(-1)
+        return tuple(value.detach().cpu().tolist())
+    if isinstance(value, range):
+        return (value.start, value.stop, value.step)
+    return value
+
+
+def _boundary_cursor_cache_key(cursor: Any) -> int | None:
+    if isinstance(cursor, torch.Tensor):
+        cursor = cursor.reshape(-1)
+        return int(cursor[-1].item()) if cursor.numel() else None
+    if isinstance(cursor, range):
+        return int(cursor[-1]) if len(cursor) else None
+    if cursor is None:
+        return None
+    return int(cursor)
+
+
+def _boundary_distances_1d(
+    anchor: torch.Tensor,
+    start: torch.Tensor,
+    stop: torch.Tensor,
+    length: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pure searchsorted boundary query used by sequence sample units."""
+    trajectory_index = torch.searchsorted(stop, anchor).remainder(stop.shape[0])
+    anchor_start = start[trajectory_index]
+    anchor_stop = stop[trajectory_index]
+    distance_from_start = torch.remainder(anchor - anchor_start, length)
+    distance_to_stop = torch.remainder(anchor_stop - anchor, length)
+    return distance_from_start.to(torch.long), distance_to_stop.to(torch.long)
+
+
+def _boundary_distances_nd(
+    anchor: torch.Tensor,
+    start: torch.Tensor,
+    stop: torch.Tensor,
+    stop_key: torch.Tensor,
+    boundary_index: torch.Tensor,
+    lane_stride: torch.Tensor,
+    length: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pure lane-aware searchsorted query for multidimensional storage."""
+    lane = (anchor[:, 1:] * lane_stride).sum(-1)
+    anchor_key = lane * (2 * length) + anchor[:, 0]
+    search_index = torch.searchsorted(stop_key, anchor_key)
+    trajectory_index = boundary_index[search_index]
+    anchor_start = start[trajectory_index, 0]
+    anchor_stop = stop[trajectory_index, 0]
+    distance_from_start = torch.remainder(anchor[:, 0] - anchor_start, length)
+    distance_to_stop = torch.remainder(anchor_stop - anchor[:, 0], length)
+    return distance_from_start.to(torch.long), distance_to_stop.to(torch.long)
+
+
+def _make_boundary_search_nd(
+    start: torch.Tensor,
+    stop: torch.Tensor,
+    storage_shape: tuple[int, ...],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    lane_shape = storage_shape[1:]
+    lane_stride = torch.tensor(
+        [math.prod(lane_shape[index + 1 :]) for index in range(len(lane_shape))],
+        dtype=torch.long,
+        device=stop.device,
+    )
+    lane = (stop[:, 1:] * lane_stride).sum(-1)
+    regular_key = lane * (2 * storage_shape[0]) + stop[:, 0]
+    order = torch.argsort(regular_key)
+    regular_key = regular_key[order]
+    ordered_lane = lane[order]
+    first = torch.ones_like(ordered_lane, dtype=torch.bool)
+    first[1:] = ordered_lane[1:] != ordered_lane[:-1]
+    first_index = torch.arange(order.shape[0], device=order.device)[first]
+    sentinel_key = regular_key[first_index] + storage_shape[0]
+    stop_key = torch.cat([regular_key, sentinel_key])
+    boundary_index = torch.cat([order, order[first_index]])
+    sort_order = torch.argsort(stop_key)
+    return stop_key[sort_order], boundary_index[sort_order], lane_stride
 
 
 def _to_numpy(data: Tensor) -> np.ndarray:
@@ -209,6 +301,137 @@ def find_start_stop_traj(
         trajectory=trajectory, end=end, at_capacity=at_capacity, cursor=cursor
     )
     return _end_to_start_stop(end=end, length=length, device=device)
+
+
+class _ReplayBoundaryIndex:
+    """Shared trajectory boundaries for replay components."""
+
+    def __init__(
+        self,
+        *,
+        trajectory: torch.Tensor | None = None,
+        end: torch.Tensor | None = None,
+        at_capacity: bool,
+        cursor: int | torch.Tensor | range | None = None,
+        device: torch.device | None = None,
+        end_to_start_stop: (
+            Callable[
+                [torch.Tensor, int], tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            ]
+            | None
+        ) = None,
+        storage: Any | None = None,
+        source: Any | None = None,
+        cache_values: bool = False,
+    ) -> None:
+        self.device = device
+        self._end_to_start_stop_fn = end_to_start_stop
+        self._boundaries = None
+        self._search = None
+        self._cache_storage = None
+        self._cache_key = None
+        shape = getattr(storage, "shape", None) if storage is not None else None
+        self.storage_shape = tuple(shape) if shape is not None else None
+        if cache_values and storage is not None and source is not None:
+            revision = storage._mutation_revision
+            cache_key = (
+                _freeze_boundary_cache_key(source),
+                tuple(shape) if shape is not None else None,
+                len(storage),
+                bool(storage._is_full),
+                _boundary_cursor_cache_key(
+                    getattr(storage, "_last_cursor_index", None)
+                ),
+                str(device) if device is not None else None,
+            )
+            with _REPLAY_BOUNDARY_CACHE_LOCK:
+                storage_cache = _REPLAY_BOUNDARY_CACHE.get(storage)
+                if storage_cache is None or storage_cache[0] != revision:
+                    storage_cache = (revision, {})
+                    _REPLAY_BOUNDARY_CACHE[storage] = storage_cache
+                cached = storage_cache[1].get(cache_key)
+            self._cache_storage = storage
+            self._cache_key = cache_key
+            if cached is not None:
+                self.end = None
+                self.length, self._boundaries, self._search = cached
+                return
+        end, length = _derive_end_flags(
+            trajectory=trajectory,
+            end=end,
+            at_capacity=at_capacity,
+            cursor=cursor,
+        )
+        self.end = end
+        self.length = length
+
+    def boundaries(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns canonical inclusive starts, stops, and trajectory lengths."""
+        boundaries = self._boundaries
+        if boundaries is None:
+            if self._end_to_start_stop_fn is None:
+                boundaries = _end_to_start_stop(
+                    end=self.end, length=self.length, device=self.device
+                )
+            else:
+                boundaries = self._end_to_start_stop_fn(self.end, self.length)
+            if self.device is not None and self._end_to_start_stop_fn is None:
+                boundaries = tuple(value.to(self.device) for value in boundaries)
+            self._boundaries = boundaries
+            if self._cache_storage is not None:
+                with _REPLAY_BOUNDARY_CACHE_LOCK:
+                    revision, storage_cache = _REPLAY_BOUNDARY_CACHE[
+                        self._cache_storage
+                    ]
+                    if revision == self._cache_storage._mutation_revision:
+                        storage_cache[self._cache_key] = (
+                            self.length,
+                            boundaries,
+                            self._search,
+                        )
+        return boundaries
+
+    def _update_cached_search(self) -> None:
+        if self._cache_storage is None:
+            return
+        with _REPLAY_BOUNDARY_CACHE_LOCK:
+            revision, storage_cache = _REPLAY_BOUNDARY_CACHE[self._cache_storage]
+            if revision == self._cache_storage._mutation_revision:
+                storage_cache[self._cache_key] = (
+                    self.length,
+                    self._boundaries,
+                    self._search,
+                )
+
+    def distances(self, anchor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns distances from starts and to stops for each anchor."""
+        start, stop, _ = self.boundaries()
+        start = start.to(anchor.device)
+        stop = stop.to(anchor.device)
+        if start.shape[-1] == 1:
+            return _boundary_distances_1d(anchor, start[:, 0], stop[:, 0], self.length)
+        if anchor.ndim != 2 or anchor.shape[-1] != start.shape[-1]:
+            raise RuntimeError(
+                "Multidimensional anchors must have shape [batch, storage.ndim]."
+            )
+        if self.storage_shape is None:
+            raise RuntimeError(
+                "Multidimensional boundary queries require the storage shape."
+            )
+        search = self._search
+        if search is None:
+            search = _make_boundary_search_nd(start, stop, self.storage_shape)
+            self._search = search
+            self._update_cached_search()
+        else:
+            search = tuple(value.to(anchor.device) for value in search)
+        return _boundary_distances_nd(
+            anchor,
+            start,
+            stop,
+            *search,
+            self.length,
+        )
 
 
 def _derive_end_flags(

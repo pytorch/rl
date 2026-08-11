@@ -68,6 +68,28 @@ Rebase the PR branch onto a target branch (default: `main`).
 **Requirements:**
 - The commenter must have **write** (or higher) permission on the repository.
 
+#### `reviewer`
+
+Request reviews from one or more repository collaborators.
+
+```
+@torchrlbot reviewer @user1 @user2
+```
+
+Reviewers can be space- or comma-separated, with or without a leading `@`.
+
+**Examples:**
+
+```
+@torchrlbot reviewer @vmoens
+@torchrlbot reviewer vmoens,albertbou92
+```
+
+**Requirements:**
+- The commenter must have **write** (or higher) permission on the repository.
+- Requested reviewers must be collaborators on the repository.
+- The PR author is skipped automatically (GitHub does not allow self-review).
+
 #### `help`
 
 Display the help message with all available commands.
