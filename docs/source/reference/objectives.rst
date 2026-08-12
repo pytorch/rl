@@ -52,3 +52,4 @@ Documentation Sections
    objectives_offline
    objectives_multiagent
    objectives_other
+   dreamer_v3

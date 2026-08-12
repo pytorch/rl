@@ -189,6 +189,9 @@ def _match_trailing_dim(source: torch.Tensor, reference: torch.Tensor) -> torch.
 class DreamerV3ModelLoss(LossModule):
     """DreamerV3 World Model Loss.
 
+    See :doc:`DreamerV3 in a nutshell </reference/dreamer_v3>` for an overview
+    of the world model, RSSM, and training flow.
+
     Computes three terms:
 
     1. **KL loss** — balanced KL between prior and posterior categorical
@@ -493,6 +496,9 @@ class DreamerV3ModelLoss(LossModule):
 
 class DreamerV3ActorLoss(LossModule):
     """DreamerV3 Actor Loss.
+
+    See :doc:`DreamerV3 in a nutshell </reference/dreamer_v3>` for an overview
+    of latent imagination, actor training, and DreamerV3 nomenclature.
 
     Rolls out imagined trajectories in latent space using the world model
     environment, then computes:
@@ -890,6 +896,9 @@ class DreamerV3ActorLoss(LossModule):
 
 class DreamerV3ValueLoss(LossModule):
     """DreamerV3 Value Loss.
+
+    See :doc:`DreamerV3 in a nutshell </reference/dreamer_v3>` for an overview
+    of the online critic, slow critic, and their update flow.
 
     Trains the value network to predict the lambda-target computed by
     :class:`DreamerV3ActorLoss`. Supports two loss modes:

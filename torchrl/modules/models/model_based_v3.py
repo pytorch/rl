@@ -476,6 +476,9 @@ class SymExpTwoHot(nn.Module):
 class RSSMPriorV3(nn.Module):
     """DreamerV3 prior network with discrete categorical latent state.
 
+    See :doc:`DreamerV3 in a nutshell </reference/dreamer_v3>` for the prior's
+    role in observation-conditioned filtering and latent imagination.
+
     Implements the sequence model and dynamics predictor from DreamerV3.
     The GRU updates the deterministic hidden state:
 
@@ -686,6 +689,9 @@ class RSSMPriorV3(nn.Module):
 class RSSMPosteriorV3(nn.Module):
     """DreamerV3 posterior (representation model) with discrete categorical latent.
 
+    See :doc:`DreamerV3 in a nutshell </reference/dreamer_v3>` for the
+    relationship between the posterior, prior, stochastic state, and belief.
+
     Given the deterministic hidden state ``h_t`` and an observation embedding
     ``e_t``, produces the posterior distribution over the stochastic latent:
 
@@ -831,6 +837,9 @@ class RSSMPosteriorV3(nn.Module):
 
 class RSSMRolloutV3(TensorDictModuleBase):
     """Roll out the DreamerV3 RSSM over a sequence.
+
+    See :doc:`DreamerV3 in a nutshell </reference/dreamer_v3>` for the RSSM
+    data flow and terminology used by this rollout.
 
     Given encoded observations and actions for ``T`` time steps, this module
     runs the prior (GRU + categorical) then the posterior (categorical) at each
