@@ -5,6 +5,7 @@
 
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
+from . import functional
 from .distributions import (
     Delta,
     distributions_maps,
@@ -22,6 +23,7 @@ from .distributions import (
     TanhNormal,
     TruncatedNormal,
 )
+from .functional import signed_hyperbolic, signed_parabolic, symexp, symlog
 from .models import (
     BatchRenorm1d,
     ConsistentDropout,
@@ -111,6 +113,13 @@ from .tensordict_module.exploration import (
 )
 from .utils import get_env_transforms_from_module, get_primers_from_module
 from .value_norm import PopArtValueNorm, RunningValueNorm, ValueNorm
+from .value_transforms import (
+    ComposeValueTransform,
+    IdentityValueTransform,
+    SignedHyperbolicValueTransform,
+    SymLogValueTransform,
+    ValueTransform,
+)
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
 from .mcts import (  # usort:skip
     EXP3Score,
@@ -135,6 +144,7 @@ __all__ = [
     "EXP3Score",
     "ConsistentDropout",
     "ConsistentDropoutModule",
+    "ComposeValueTransform",
     "Conv3dNet",
     "ConvNet",
     "CrossCriticGroupSpec",
@@ -163,6 +173,7 @@ __all__ = [
     "GRUModule",
     "LLMMaskedCategorical",
     "IndependentNormal",
+    "IdentityValueTransform",
     "LMHeadActorValueOperator",
     "LSTM",
     "LSTMCell",
@@ -213,7 +224,9 @@ __all__ = [
     "SafeSequential",
     "Squeeze2dLayer",
     "SqueezeLayer",
+    "SignedHyperbolicValueTransform",
     "SymExpTwoHot",
+    "SymLogValueTransform",
     "TanhDelta",
     "TanhModule",
     "TanhNormal",
@@ -225,17 +238,23 @@ __all__ = [
     "VLAWrapperBase",
     "ValueNorm",
     "ValueOperator",
+    "ValueTransform",
     "VmapModule",
     "WorldModel",
     "WorldModelWrapper",
     "distributions_maps",
+    "functional",
     "get_env_transforms_from_module",
     "get_primers_from_module",
     "get_recurrent_matmul_precision",
     "recurrent_mode",
     "reset_noise",
+    "signed_hyperbolic",
+    "signed_parabolic",
     "set_exploration_modules_spec_from_env",
     "set_recurrent_matmul_precision",
     "set_recurrent_mode",
+    "symexp",
+    "symlog",
     "RandomPolicy",
 ]

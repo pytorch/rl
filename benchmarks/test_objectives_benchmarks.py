@@ -20,7 +20,14 @@ from tensordict.nn import (
 )
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded, Unbounded
-from torchrl.modules import MLP, QValueActor, SymExpTwoHot, TanhNormal
+from torchrl.modules import (
+    MLP,
+    QValueActor,
+    SignedHyperbolicValueTransform,
+    SymExpTwoHot,
+    SymLogValueTransform,
+    TanhNormal,
+)
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
@@ -167,6 +174,22 @@ def _maybe_compile(fn, compile, td, fullgraph=FULLGRAPH, warmup=3):
             fn(td)
 
     return fn
+
+
+@pytest.mark.parametrize(
+    "transform",
+    [SymLogValueTransform(), SignedHyperbolicValueTransform()],
+    ids=["symlog", "signed-hyperbolic"],
+)
+@pytest.mark.parametrize("compile", [False, True])
+def test_value_transform_speed(benchmark, transform, compile, batch=2**20):
+    value = torch.randn(batch)
+
+    def round_trip(value):
+        return transform.inverse(transform(value))
+
+    round_trip = _maybe_compile(round_trip, compile, value)
+    benchmark(round_trip, value)
 
 
 @pytest.mark.parametrize("compile", [False, True])
