@@ -1857,6 +1857,15 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.OnlineDTActor.html">OnlineDTActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.DTActor.html">DTActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.DecisionTransformer.html">DecisionTransformer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.ValueTransform.html">ValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.IdentityValueTransform.html">IdentityValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.SymLogValueTransform.html">SymLogValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.SignedHyperbolicValueTransform.html">SignedHyperbolicValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.ComposeValueTransform.html">ComposeValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.functional.symlog.html">symlog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.functional.symexp.html">symexp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.functional.signed_hyperbolic.html">signed_hyperbolic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.functional.signed_parabolic.html">signed_parabolic</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../modules_rnn.html">Recurrent modules</a></li>
@@ -2471,23 +2480,31 @@ document.write(`
 <h1>torchrl.objectives.symexp<a class="headerlink" href="#torchrl-objectives-symexp" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.objectives.symexp">
-<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">symexp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based_v3.html#symexp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.symexp" title="Link to this definition">#</a></dt>
-<dd><p>Apply the inverse of <a class="reference internal" href="torchrl.objectives.symlog.html#torchrl.objectives.symlog" title="torchrl.objectives.symlog"><code class="xref py py-func docutils literal notranslate"><span class="pre">symlog()</span></code></a> element-wise.</p>
+<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">symexp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/functional.html#symexp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.symexp" title="Link to this definition">#</a></dt>
+<dd><p>Apply the inverse symmetric exponential transform element-wise.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – Input tensor.</p>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – Input tensor in symmetric-log space.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A tensor with the same shape, dtype, and device as <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
+<dd class="field-even"><p>A tensor with the same shape, dtype, and device as <code class="docutils literal notranslate"><span class="pre">value</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">symexp</span><span class="p">,</span> <span class="n">symlog</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">1000.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1000.0</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">symexp</span><span class="p">(</span><span class="n">symlog</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span> <span class="n">x</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">)</span>
-<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">value</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">transformed</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">symlog</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">transformed</span>
+<span class="go">tensor([-4.6151,  0.0000,  4.6151])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">F</span><span class="o">.</span><span class="n">symexp</span><span class="p">(</span><span class="n">transformed</span><span class="p">)</span>
+<span class="go">tensor([-100.0000,    0.0000,  100.0000])</span>
 </pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="torchrl.objectives.symlog.html#torchrl.objectives.symlog" title="torchrl.objectives.symlog"><code class="xref py py-func docutils literal notranslate"><span class="pre">symlog()</span></code></a> for the forward operation and
+<a class="reference internal" href="torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform" title="torchrl.modules.SymLogValueTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">SymLogValueTransform</span></code></a> for the module form.</p>
 </div>
 </dd></dl>
 
@@ -2863,7 +2880,7 @@ document.write(`
        "headline": "torchrl.objectives.symexp",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.objectives.symexp.html",
-       "articleBody": "torchrl.objectives.symexp# torchrl.objectives.symexp(x: Tensor) \u2192 Tensor[source]# Apply the inverse of symlog() element-wise. Parameters: x (torch.Tensor) \u2013 Input tensor. Returns: A tensor with the same shape, dtype, and device as x. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import symexp, symlog \u003e\u003e\u003e x = torch.tensor([-1000.0, 0.0, 1000.0]) \u003e\u003e\u003e torch.allclose(symexp(symlog(x)), x, atol=1e-4) True",
+       "articleBody": "torchrl.objectives.symexp# torchrl.objectives.symexp(value: Tensor) \u2192 Tensor[source]# Apply the inverse symmetric exponential transform element-wise. Parameters: value (torch.Tensor) \u2013 Input tensor in symmetric-log space. Returns: A tensor with the same shape, dtype, and device as value. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.modules import functional as F \u003e\u003e\u003e value = torch.tensor([-100.0, 0.0, 100.0]) \u003e\u003e\u003e transformed = F.symlog(value) \u003e\u003e\u003e transformed tensor([-4.6151, 0.0000, 4.6151]) \u003e\u003e\u003e F.symexp(transformed) tensor([-100.0000, 0.0000, 100.0000]) See also symlog() for the forward operation and SymLogValueTransform for the module form.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -90,7 +90,7 @@ Memory-Efficient RL Training
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7f2630c84150>
+    <torch._C.Generator object at 0x7f8466348490>
 
 
 

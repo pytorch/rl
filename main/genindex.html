@@ -4221,6 +4221,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.ComposeConfig.html#torchrl.trainers.algorithms.configs.transforms.ComposeConfig">ComposeConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
 </li>
+      <li><a href="reference/generated/torchrl.modules.ComposeValueTransform.html#torchrl.modules.ComposeValueTransform">ComposeValueTransform (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/glossary.html#term-Composite"><strong>Composite</strong></a>
 
       <ul>
@@ -7164,6 +7166,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.AdditiveGaussianModule.html#torchrl.modules.AdditiveGaussianModule.forward">(torchrl.modules.AdditiveGaussianModule method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.ComposeValueTransform.html#torchrl.modules.ComposeValueTransform.forward">(torchrl.modules.ComposeValueTransform method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.ConsistentDropoutModule.html#torchrl.modules.ConsistentDropoutModule.forward">(torchrl.modules.ConsistentDropoutModule method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.ConvNet.html#torchrl.modules.ConvNet.forward">(torchrl.modules.ConvNet method)</a>
@@ -7195,6 +7199,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.modules.GPWorldModel.html#torchrl.modules.GPWorldModel.forward">(torchrl.modules.GPWorldModel method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule.forward">(torchrl.modules.GRUModule method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.IdentityValueTransform.html#torchrl.modules.IdentityValueTransform.forward">(torchrl.modules.IdentityValueTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.inference_server.PolicyClientModule.html#torchrl.modules.inference_server.PolicyClientModule.forward">(torchrl.modules.inference_server.PolicyClientModule method)</a>
 </li>
@@ -7232,11 +7238,17 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout.forward">(torchrl.modules.RSSMRollout method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.SignedHyperbolicValueTransform.html#torchrl.modules.SignedHyperbolicValueTransform.forward">(torchrl.modules.SignedHyperbolicValueTransform method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.SymExpTwoHot.html#torchrl.modules.SymExpTwoHot.forward">(torchrl.modules.SymExpTwoHot method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform.forward">(torchrl.modules.SymLogValueTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.tensordict_module.MultiStepActorWrapper.html#torchrl.modules.tensordict_module.MultiStepActorWrapper.forward">(torchrl.modules.tensordict_module.MultiStepActorWrapper method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.tensordict_module.TanhModule.html#torchrl.modules.tensordict_module.TanhModule.forward">(torchrl.modules.tensordict_module.TanhModule method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.ValueTransform.html#torchrl.modules.ValueTransform.forward">(torchrl.modules.ValueTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.vla.VLAWrapperBase.html#torchrl.modules.vla.VLAWrapperBase.forward">(torchrl.modules.vla.VLAWrapperBase method)</a>
 </li>
@@ -10025,6 +10037,8 @@ document.write(`
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="reference/generated/torchrl.modules.IdentityValueTransform.html#torchrl.modules.IdentityValueTransform">IdentityValueTransform (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.llm.IFEvalEnv.html#torchrl.envs.llm.IFEvalEnv">IFEvalEnv (class in torchrl.envs.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData">IFEvalScoreData (class in torchrl.envs.llm)</a>
@@ -10603,6 +10617,18 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage.inv">(torchrl.objectives.llm.MCAdvantage method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.llm.RayMCAdvantage.html#torchrl.objectives.llm.RayMCAdvantage.inv">(torchrl.objectives.llm.RayMCAdvantage method)</a>
+</li>
+      </ul></li>
+      <li><a href="reference/generated/torchrl.modules.ComposeValueTransform.html#torchrl.modules.ComposeValueTransform.inverse">inverse() (torchrl.modules.ComposeValueTransform method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.modules.IdentityValueTransform.html#torchrl.modules.IdentityValueTransform.inverse">(torchrl.modules.IdentityValueTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.SignedHyperbolicValueTransform.html#torchrl.modules.SignedHyperbolicValueTransform.inverse">(torchrl.modules.SignedHyperbolicValueTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform.inverse">(torchrl.modules.SymLogValueTransform method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.ValueTransform.html#torchrl.modules.ValueTransform.inverse">(torchrl.modules.ValueTransform method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.objectives.multiagent.IPPOLoss.html#torchrl.objectives.multiagent.IPPOLoss">IPPOLoss (class in torchrl.objectives.multiagent)</a>
@@ -19171,6 +19197,12 @@ document.write(`
         <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme.shutdown">(torchrl.weight_update.WeightSyncScheme method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.functional.signed_hyperbolic.html#torchrl.modules.functional.signed_hyperbolic">signed_hyperbolic (class in torchrl.modules.functional)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.functional.signed_parabolic.html#torchrl.modules.functional.signed_parabolic">signed_parabolic (class in torchrl.modules.functional)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.SignedHyperbolicValueTransform.html#torchrl.modules.SignedHyperbolicValueTransform">SignedHyperbolicValueTransform (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.SignTransform.html#torchrl.envs.transforms.SignTransform">SignTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.SignTransformConfig.html#torchrl.trainers.algorithms.configs.transforms.SignTransformConfig">SignTransformConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -20121,11 +20153,17 @@ document.write(`
         <li><a href="reference/generated/torchrl.render.backends.RenderBackend.html#torchrl.render.backends.RenderBackend.supports">(torchrl.render.backends.RenderBackend method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.functional.symexp.html#torchrl.modules.functional.symexp">symexp (class in torchrl.modules.functional)</a>
+</li>
       <li><a href="reference/generated/torchrl.objectives.symexp.html#torchrl.objectives.symexp">symexp() (in module torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.SymExpTwoHot.html#torchrl.modules.SymExpTwoHot">SymExpTwoHot (class in torchrl.modules)</a>
 </li>
+      <li><a href="reference/generated/torchrl.modules.functional.symlog.html#torchrl.modules.functional.symlog">symlog (class in torchrl.modules.functional)</a>
+</li>
       <li><a href="reference/generated/torchrl.objectives.symlog.html#torchrl.objectives.symlog">symlog() (in module torchrl.objectives)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform">SymLogValueTransform (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.helpers.sync_async_collector.html#torchrl.trainers.helpers.sync_async_collector">sync_async_collector() (in module torchrl.trainers.helpers)</a>
 </li>
@@ -22241,6 +22279,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.StackedComposite.html#torchrl.data.StackedComposite.values">(torchrl.data.StackedComposite method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.ValueTransform.html#torchrl.modules.ValueTransform">ValueTransform (class in torchrl.modules)</a>
+</li>
       <li><a href="reference/generated/torchrl.collectors.VanillaWeightUpdater.html#torchrl.collectors.VanillaWeightUpdater">VanillaWeightUpdater (class in torchrl.collectors)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.VC1Transform.html#torchrl.envs.transforms.VC1Transform">VC1Transform (class in torchrl.envs.transforms)</a>

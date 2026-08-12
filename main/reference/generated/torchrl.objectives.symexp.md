@@ -1,23 +1,31 @@
 # torchrl.objectives.symexp
 
-torchrl.objectives.symexp(*x: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#symexp)
+torchrl.objectives.symexp(*value: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/functional.html#symexp)
 
-Apply the inverse of [`symlog()`](torchrl.objectives.symlog.html#torchrl.objectives.symlog) element-wise.
+Apply the inverse symmetric exponential transform element-wise.
 
 Parameters:
 
-**x** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - Input tensor.
+**value** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - Input tensor in symmetric-log space.
 
 Returns:
 
-A tensor with the same shape, dtype, and device as `x`.
+A tensor with the same shape, dtype, and device as `value`.
 
 Examples
 
 ```
 >>> import torch
->>> from torchrl.objectives import symexp, symlog
->>> x = torch.tensor([-1000.0, 0.0, 1000.0])
->>> torch.allclose(symexp(symlog(x)), x, atol=1e-4)
-True
+>>> from torchrl.modules import functional as F
+>>> value = torch.tensor([-100.0, 0.0, 100.0])
+>>> transformed = F.symlog(value)
+>>> transformed
+tensor([-4.6151, 0.0000, 4.6151])
+>>> F.symexp(transformed)
+tensor([-100.0000, 0.0000, 100.0000])
 ```
+
+See also
+
+[`symlog()`](torchrl.objectives.symlog.html#torchrl.objectives.symlog) for the forward operation and
+[`SymLogValueTransform`](torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform) for the module form.

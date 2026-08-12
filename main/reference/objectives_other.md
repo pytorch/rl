@@ -28,9 +28,9 @@ Key differences from V1: discrete categorical latent state, KL balancing, symlog
 
 ### DreamerV3 Utilities
 
-| [`symlog`](generated/torchrl.objectives.symlog.html#torchrl.objectives.symlog)(x) | Apply the element-wise symmetric logarithm transform. |
+| [`symlog`](generated/torchrl.objectives.symlog.html#torchrl.objectives.symlog)(value) | Apply the element-wise symmetric logarithm transform. |
 | --- | --- |
-| [`symexp`](generated/torchrl.objectives.symexp.html#torchrl.objectives.symexp)(x) | Apply the inverse of [`symlog()`](generated/torchrl.objectives.symlog.html#torchrl.objectives.symlog) element-wise. |
+| [`symexp`](generated/torchrl.objectives.symexp.html#torchrl.objectives.symexp)(value) | Apply the inverse symmetric exponential transform element-wise. |
 | [`two_hot_encode`](generated/torchrl.objectives.two_hot_encode.html#torchrl.objectives.two_hot_encode)(x, bins) | Encode raw scalar values on a sorted two-hot support. |
 | [`two_hot_decode`](generated/torchrl.objectives.two_hot_decode.html#torchrl.objectives.two_hot_decode)(logits, bins) | Decode logits over a raw-value support to their scalar expectation. |
 | [`two_hot_cross_entropy`](generated/torchrl.objectives.two_hot_cross_entropy.html#torchrl.objectives.two_hot_cross_entropy)(logits, target, bins) | Return two-hot cross entropy for raw scalar targets. |

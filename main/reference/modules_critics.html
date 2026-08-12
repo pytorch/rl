@@ -1857,6 +1857,15 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.OnlineDTActor.html">OnlineDTActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.DTActor.html">DTActor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.DecisionTransformer.html">DecisionTransformer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.ValueTransform.html">ValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.IdentityValueTransform.html">IdentityValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.SymLogValueTransform.html">SymLogValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.SignedHyperbolicValueTransform.html">SignedHyperbolicValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.ComposeValueTransform.html">ComposeValueTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.functional.symlog.html">symlog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.functional.symexp.html">symexp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.functional.signed_hyperbolic.html">signed_hyperbolic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.functional.signed_parabolic.html">signed_parabolic</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="modules_rnn.html">Recurrent modules</a></li>
@@ -2527,6 +2536,44 @@ document.write(`
 </tbody>
 </table>
 </div>
+<section id="value-transforms">
+<h2>Value transforms<a class="headerlink" href="#value-transforms" title="Link to this heading">#</a></h2>
+<p>Value transforms compress large reward and return scales into a numerically
+convenient prediction space and provide the inverse mapping needed before
+bootstrapping. They can be composed to build custom invertible mappings.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.ValueTransform.html#torchrl.modules.ValueTransform" title="torchrl.modules.ValueTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ValueTransform</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Abstract base class for invertible scalar value transforms.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.IdentityValueTransform.html#torchrl.modules.IdentityValueTransform" title="torchrl.modules.IdentityValueTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IdentityValueTransform</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Leave scalar values unchanged.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform" title="torchrl.modules.SymLogValueTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SymLogValueTransform</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Symmetric-log value transform used by DreamerV3.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.SignedHyperbolicValueTransform.html#torchrl.modules.SignedHyperbolicValueTransform" title="torchrl.modules.SignedHyperbolicValueTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SignedHyperbolicValueTransform</span></code></a>([epsilon])</p></td>
+<td><p>Signed-hyperbolic transform for large-magnitude value targets.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.ComposeValueTransform.html#torchrl.modules.ComposeValueTransform" title="torchrl.modules.ComposeValueTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ComposeValueTransform</span></code></a>(*transforms)</p></td>
+<td><p>Compose value transforms while preserving the inverse mapping.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.functional.symlog.html#torchrl.modules.functional.symlog" title="torchrl.modules.functional.symlog"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.symlog</span></code></a>(value)</p></td>
+<td><p>Apply the element-wise symmetric logarithm transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.functional.symexp.html#torchrl.modules.functional.symexp" title="torchrl.modules.functional.symexp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.symexp</span></code></a>(value)</p></td>
+<td><p>Apply the inverse symmetric exponential transform element-wise.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.functional.signed_hyperbolic.html#torchrl.modules.functional.signed_hyperbolic" title="torchrl.modules.functional.signed_hyperbolic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.signed_hyperbolic</span></code></a>(value[, epsilon])</p></td>
+<td><p>Apply the signed hyperbolic value transform.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.functional.signed_parabolic.html#torchrl.modules.functional.signed_parabolic" title="torchrl.modules.functional.signed_parabolic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">functional.signed_parabolic</span></code></a>(value[, epsilon])</p></td>
+<td><p>Apply the inverse of <code class="xref py py-func docutils literal notranslate"><span class="pre">signed_hyperbolic()</span></code> element-wise.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -2637,6 +2684,18 @@ document.write(`
               
                 <div class="bd-sidebar-secondary bd-toc">
 <div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#value-transforms">Value transforms</a></li>
+</ul>
+  </nav></div>
     
        <div class="sidebar-secondary-item">
 
@@ -2887,7 +2946,7 @@ document.write(`
        "headline": "Value Networks and Critics",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_critics.html",
-       "articleBody": "Value Networks and Critics# Value networks estimate the value of states or state-action pairs. ValueOperator(*args, **kwargs) General class for value functions in RL. ValueNorm(*[, shape, epsilon, device]) Abstract base class for value normalisers. PopArtValueNorm(*[, shape, beta, epsilon, ...]) PopArt-style EMA value normaliser. RunningValueNorm(*[, shape, epsilon, device]) Exact running mean / variance (Welford\u0027s online algorithm). DuelingCnnDQNet(out_features[, ...]) Dueling CNN Q-network. DistributionalDQNnet(*args, **kwargs) Distributional Deep Q-Network softmax layer. ConvNet(in_features, depth, num_cells, ...) A convolutional neural network. CrossCriticGroupSpec(obs_dim, n_agents, ...) Specification for one agent group used by CrossGroupCritic. CrossGroupCritic(*args, **kwargs) Centralised critic that conditions on observations from multiple agent groups. MLP(in_features, out_features, depth, ...) A multi-layer perceptron. DdpgCnnActor(action_dim[, conv_net_kwargs, ...]) DDPG Convolutional Actor class. DdpgCnnQNet([conv_net_kwargs, ...]) DDPG Convolutional Q-value class. DdpgMlpActor(action_dim[, mlp_net_kwargs, ...]) DDPG Actor class. DdpgMlpQNet([mlp_net_kwargs_net1, ...]) DDPG Q-value MLP class. LSTMModule(*args, **kwargs) An embedder for an LSTM module. GRUModule(*args, **kwargs) An embedder for an GRU module. canonicalize_rnn_subset(data, modules, *[, ...]) Canonicalize only the union of RNN keys used by modules. set_recurrent_mode([mode]) Context manager for setting RNNs recurrent mode. OnlineDTActor(state_dim, action_dim[, ...]) Online Decision Transformer Actor class. DTActor(state_dim, action_dim[, ...]) Decision Transformer Actor class. DecisionTransformer(state_dim, action_dim[, ...]) Online Decision Transformer.",
+       "articleBody": "Value Networks and Critics# Value networks estimate the value of states or state-action pairs. ValueOperator(*args, **kwargs) General class for value functions in RL. ValueNorm(*[, shape, epsilon, device]) Abstract base class for value normalisers. PopArtValueNorm(*[, shape, beta, epsilon, ...]) PopArt-style EMA value normaliser. RunningValueNorm(*[, shape, epsilon, device]) Exact running mean / variance (Welford\u0027s online algorithm). DuelingCnnDQNet(out_features[, ...]) Dueling CNN Q-network. DistributionalDQNnet(*args, **kwargs) Distributional Deep Q-Network softmax layer. ConvNet(in_features, depth, num_cells, ...) A convolutional neural network. CrossCriticGroupSpec(obs_dim, n_agents, ...) Specification for one agent group used by CrossGroupCritic. CrossGroupCritic(*args, **kwargs) Centralised critic that conditions on observations from multiple agent groups. MLP(in_features, out_features, depth, ...) A multi-layer perceptron. DdpgCnnActor(action_dim[, conv_net_kwargs, ...]) DDPG Convolutional Actor class. DdpgCnnQNet([conv_net_kwargs, ...]) DDPG Convolutional Q-value class. DdpgMlpActor(action_dim[, mlp_net_kwargs, ...]) DDPG Actor class. DdpgMlpQNet([mlp_net_kwargs_net1, ...]) DDPG Q-value MLP class. LSTMModule(*args, **kwargs) An embedder for an LSTM module. GRUModule(*args, **kwargs) An embedder for an GRU module. canonicalize_rnn_subset(data, modules, *[, ...]) Canonicalize only the union of RNN keys used by modules. set_recurrent_mode([mode]) Context manager for setting RNNs recurrent mode. OnlineDTActor(state_dim, action_dim[, ...]) Online Decision Transformer Actor class. DTActor(state_dim, action_dim[, ...]) Decision Transformer Actor class. DecisionTransformer(state_dim, action_dim[, ...]) Online Decision Transformer. Value transforms# Value transforms compress large reward and return scales into a numerically convenient prediction space and provide the inverse mapping needed before bootstrapping. They can be composed to build custom invertible mappings. ValueTransform(*args, **kwargs) Abstract base class for invertible scalar value transforms. IdentityValueTransform(*args, **kwargs) Leave scalar values unchanged. SymLogValueTransform(*args, **kwargs) Symmetric-log value transform used by DreamerV3. SignedHyperbolicValueTransform([epsilon]) Signed-hyperbolic transform for large-magnitude value targets. ComposeValueTransform(*transforms) Compose value transforms while preserving the inverse mapping. functional.symlog(value) Apply the element-wise symmetric logarithm transform. functional.symexp(value) Apply the inverse symmetric exponential transform element-wise. functional.signed_hyperbolic(value[, epsilon]) Apply the signed hyperbolic value transform. functional.signed_parabolic(value[, epsilon]) Apply the inverse of signed_hyperbolic() element-wise.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

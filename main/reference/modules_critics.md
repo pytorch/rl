@@ -24,3 +24,20 @@ Value networks estimate the value of states or state-action pairs.
 | [`OnlineDTActor`](generated/torchrl.modules.OnlineDTActor.html#torchrl.modules.OnlineDTActor)(state_dim, action_dim[, ...]) | Online Decision Transformer Actor class. |
 | [`DTActor`](generated/torchrl.modules.DTActor.html#torchrl.modules.DTActor)(state_dim, action_dim[, ...]) | Decision Transformer Actor class. |
 | [`DecisionTransformer`](generated/torchrl.modules.DecisionTransformer.html#torchrl.modules.DecisionTransformer)(state_dim, action_dim[, ...]) | Online Decision Transformer. |
+
+## Value transforms
+
+Value transforms compress large reward and return scales into a numerically
+convenient prediction space and provide the inverse mapping needed before
+bootstrapping. They can be composed to build custom invertible mappings.
+
+| [`ValueTransform`](generated/torchrl.modules.ValueTransform.html#torchrl.modules.ValueTransform)(*args, **kwargs) | Abstract base class for invertible scalar value transforms. |
+| --- | --- |
+| [`IdentityValueTransform`](generated/torchrl.modules.IdentityValueTransform.html#torchrl.modules.IdentityValueTransform)(*args, **kwargs) | Leave scalar values unchanged. |
+| [`SymLogValueTransform`](generated/torchrl.modules.SymLogValueTransform.html#torchrl.modules.SymLogValueTransform)(*args, **kwargs) | Symmetric-log value transform used by DreamerV3. |
+| [`SignedHyperbolicValueTransform`](generated/torchrl.modules.SignedHyperbolicValueTransform.html#torchrl.modules.SignedHyperbolicValueTransform)([epsilon]) | Signed-hyperbolic transform for large-magnitude value targets. |
+| [`ComposeValueTransform`](generated/torchrl.modules.ComposeValueTransform.html#torchrl.modules.ComposeValueTransform)(*transforms) | Compose value transforms while preserving the inverse mapping. |
+| [`functional.symlog`](generated/torchrl.modules.functional.symlog.html#torchrl.modules.functional.symlog)(value) | Apply the element-wise symmetric logarithm transform. |
+| [`functional.symexp`](generated/torchrl.modules.functional.symexp.html#torchrl.modules.functional.symexp)(value) | Apply the inverse symmetric exponential transform element-wise. |
+| [`functional.signed_hyperbolic`](generated/torchrl.modules.functional.signed_hyperbolic.html#torchrl.modules.functional.signed_hyperbolic)(value[, epsilon]) | Apply the signed hyperbolic value transform. |
+| [`functional.signed_parabolic`](generated/torchrl.modules.functional.signed_parabolic.html#torchrl.modules.functional.signed_parabolic)(value[, epsilon]) | Apply the inverse of `signed_hyperbolic()` element-wise. |

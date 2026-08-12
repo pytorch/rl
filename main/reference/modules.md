@@ -73,6 +73,7 @@ actor = ProbabilisticActor(
 - [OnlineDTActor](generated/torchrl.modules.OnlineDTActor.html)
 - [DTActor](generated/torchrl.modules.DTActor.html)
 - [DecisionTransformer](generated/torchrl.modules.DecisionTransformer.html)
+- [Value transforms](modules_critics.html#value-transforms)
 - [Recurrent modules](modules_rnn.html)
 
 - [Execution modes](modules_rnn.html#execution-modes)
