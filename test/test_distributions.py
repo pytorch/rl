@@ -57,6 +57,12 @@ class TestDelta:
         dist = Delta(param, batch_shape=(2,), event_shape=(3, 4))
 
         assert dist.log_prob(dist.param).shape == (2,)
+        mismatched = dist.param.clone()
+        mismatched[1, 0, 0] = 1
+        torch.testing.assert_close(
+            dist.log_prob(mismatched),
+            torch.tensor([float("inf"), -float("inf")], device=device),
+        )
 
         expanded = dist.expand((5, 2))
 
@@ -64,6 +70,11 @@ class TestDelta:
         assert expanded.batch_shape == (5, 2)
         assert expanded.event_shape == (3, 4)
         assert expanded.log_prob(expanded.param).shape == (5, 2)
+        expanded_mismatched = expanded.param.clone()
+        expanded_mismatched[3, 1, 0, 0] = 1
+        expected = torch.full((5, 2), float("inf"), device=device)
+        expected[3, 1] = -float("inf")
+        torch.testing.assert_close(expanded.log_prob(expanded_mismatched), expected)
 
     @pytest.mark.parametrize("div_up", [1, 2])
     @pytest.mark.parametrize("div_down", [1, 2])
