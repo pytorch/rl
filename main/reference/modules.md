@@ -94,6 +94,8 @@ actor = ProbabilisticActor(
 - [RSSMPosterior](generated/torchrl.modules.RSSMPosterior.html)
 - [RSSMPrior](generated/torchrl.modules.RSSMPrior.html)
 - [RSSMRollout](generated/torchrl.modules.RSSMRollout.html)
+- [SymExpTwoHot](generated/torchrl.modules.SymExpTwoHot.html)
+- [DreamerV3MLP](generated/torchrl.modules.DreamerV3MLP.html)
 - [PILCO](modules_models.html#pilco)
 - [Distribution Classes](modules_distributions.html)
 

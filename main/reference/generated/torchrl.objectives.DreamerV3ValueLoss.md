@@ -4,6 +4,9 @@
 
 DreamerV3 Value Loss.
 
+See [DreamerV3 in a nutshell](../dreamer_v3.html) for an overview
+of the online critic, slow critic, and their update flow.
+
 Trains the value network to predict the lambda-target computed by
 [`DreamerV3ActorLoss`](torchrl.objectives.DreamerV3ActorLoss.html#torchrl.objectives.DreamerV3ActorLoss). Supports two loss modes:
 
@@ -17,6 +20,10 @@ pass the actor loss to the constructor via `actor_loss=`: the value loss
 will then read `gamma` from the actor's value estimator at every forward
 call. The legacy `gamma=` kwarg + `sync_gamma_with_actor_loss()`
 pattern is still supported.
+
+Setting `slow_critic_regularization` to a positive value creates a
+checkpointed target critic. Associate a `SoftUpdate`
+and step it after each critic optimizer step.
 
 Reference: [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104)
 
@@ -34,6 +41,9 @@ Default: 255.
 - **actor_loss** ([*DreamerV3ActorLoss*](torchrl.objectives.DreamerV3ActorLoss.html#torchrl.objectives.DreamerV3ActorLoss)*,**optional*) - If provided, `gamma` is
 read from this actor loss's value estimator on every forward call,
 avoiding any chance of a mismatch. Default: `None`.
+- **slow_critic_regularization** (*float**,**optional*) - Weight of the auxiliary
+loss that trains the online critic toward decoded target-critic
+predictions. Default: `0.0`.
 
 Examples
 

@@ -1,28 +1,22 @@
 # torchrl.objectives.symlog
 
-torchrl.objectives.symlog(*x: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#symlog)
+torchrl.objectives.symlog(*x: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#symlog)
 
-Symmetric logarithm: `sign(x) * log(|x| + 1)`.
-
-Used by DreamerV3 to compress the dynamic range of targets and
-predictions before computing reconstruction losses.
-
-Reference: [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104)
+Apply the element-wise symmetric logarithm transform.
 
 Parameters:
 
-**x** - Input tensor.
+**x** ([*torch.Tensor*](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)) - Input tensor.
 
 Returns:
 
-Tensor of the same shape as `x`.
+A tensor with the same shape, dtype, and device as `x`.
 
 Examples
 
 ```
 >>> import torch
 >>> from torchrl.objectives import symlog
->>> x = torch.tensor([-100.0, 0.0, 100.0])
->>> symlog(x)
+>>> symlog(torch.tensor([-100.0, 0.0, 100.0]))
 tensor([-4.6151, 0.0000, 4.6151])
 ```

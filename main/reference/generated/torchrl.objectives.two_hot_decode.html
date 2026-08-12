@@ -51,7 +51,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Rendering applications" href="../render.html" />
+    <link rel="next" title="torchrl.objectives.two_hot_cross_entropy" href="torchrl.objectives.two_hot_cross_entropy.html" />
     <link rel="prev" title="torchrl.objectives.two_hot_encode" href="torchrl.objectives.two_hot_encode.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1988,8 +1988,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.symexp.html">torchrl.objectives.symexp</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_encode.html">torchrl.objectives.two_hot_encode</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">torchrl.objectives.two_hot_decode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_cross_entropy.html">torchrl.objectives.two_hot_cross_entropy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2468,26 +2471,27 @@ document.write(`
 <h1>torchrl.objectives.two_hot_decode<a class="headerlink" href="#torchrl-objectives-two-hot-decode" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.objectives.two_hot_decode">
-<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">two_hot_decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/dreamer_v3.html#two_hot_decode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.two_hot_decode" title="Link to this definition">#</a></dt>
-<dd><p>Decode a distribution over <code class="docutils literal notranslate"><span class="pre">bins</span></code> to a scalar expectation.</p>
-<p>Reference: <a class="reference external" href="https://arxiv.org/abs/2301.04104">https://arxiv.org/abs/2301.04104</a></p>
+<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">two_hot_decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">logits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based_v3.html#two_hot_decode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.two_hot_decode" title="Link to this definition">#</a></dt>
+<dd><p>Decode logits over a raw-value support to their scalar expectation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>logits</strong> – Raw logits, shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">num_bins]</span></code>.</p></li>
-<li><p><strong>bins</strong> – Sorted bin centers, shape <code class="docutils literal notranslate"><span class="pre">[num_bins]</span></code>.</p></li>
+<li><p><strong>logits</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – Categorical logits whose trailing dimension
+matches the support size.</p></li>
+<li><p><strong>bins</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – One-dimensional support in raw value space.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Scalar expected values, shape <code class="docutils literal notranslate"><span class="pre">[...]</span></code>.</p>
+<dd class="field-even"><p>The softmax-weighted expectation with the trailing category dimension
+removed, preserving the dtype and device of <code class="docutils literal notranslate"><span class="pre">logits</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">two_hot_decode</span><span class="p">,</span> <span class="n">two_hot_encode</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">probs</span> <span class="o">=</span> <span class="n">two_hot_encode</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">0.25</span><span class="p">]),</span> <span class="n">bins</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">two_hot_decode</span><span class="p">((</span><span class="n">probs</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">(),</span> <span class="n">bins</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">encoded</span> <span class="o">=</span> <span class="n">two_hot_encode</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">0.25</span><span class="p">]),</span> <span class="n">bins</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">two_hot_decode</span><span class="p">((</span><span class="n">encoded</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span><span class="o">.</span><span class="n">log</span><span class="p">(),</span> <span class="n">bins</span><span class="p">)</span>
 <span class="go">tensor([0.2500])</span>
 </pre></div>
 </div>
@@ -2547,11 +2551,11 @@ document.write(`
       </div>
     </a>
     <a class="right-next"
-       href="../render.html"
+       href="torchrl.objectives.two_hot_cross_entropy.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Rendering applications</p>
+        <p class="prev-next-title">torchrl.objectives.two_hot_cross_entropy</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2586,11 +2590,11 @@ document.write(`
       </div>
     </a>
     <a class="right-next"
-       href="../render.html"
+       href="torchrl.objectives.two_hot_cross_entropy.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Rendering applications</p>
+        <p class="prev-next-title">torchrl.objectives.two_hot_cross_entropy</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2865,7 +2869,7 @@ document.write(`
        "headline": "torchrl.objectives.two_hot_decode",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.objectives.two_hot_decode.html",
-       "articleBody": "torchrl.objectives.two_hot_decode# torchrl.objectives.two_hot_decode(logits: Tensor, bins: Tensor) \u2192 Tensor[source]# Decode a distribution over bins to a scalar expectation. Reference: https://arxiv.org/abs/2301.04104 Parameters: logits \u2013 Raw logits, shape [..., num_bins]. bins \u2013 Sorted bin centers, shape [num_bins]. Returns: Scalar expected values, shape [...]. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import two_hot_decode, two_hot_encode \u003e\u003e\u003e bins = torch.linspace(-1.0, 1.0, 5) \u003e\u003e\u003e probs = two_hot_encode(torch.tensor([0.25]), bins) \u003e\u003e\u003e two_hot_decode((probs + 1e-8).log(), bins) tensor([0.2500])",
+       "articleBody": "torchrl.objectives.two_hot_decode# torchrl.objectives.two_hot_decode(logits: Tensor, bins: Tensor) \u2192 Tensor[source]# Decode logits over a raw-value support to their scalar expectation. Parameters: logits (torch.Tensor) \u2013 Categorical logits whose trailing dimension matches the support size. bins (torch.Tensor) \u2013 One-dimensional support in raw value space. Returns: The softmax-weighted expectation with the trailing category dimension removed, preserving the dtype and device of logits. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import two_hot_decode, two_hot_encode \u003e\u003e\u003e bins = torch.tensor([-1.0, 0.0, 1.0]) \u003e\u003e\u003e encoded = two_hot_encode(torch.tensor([0.25]), bins) \u003e\u003e\u003e two_hot_decode((encoded + 1e-8).log(), bins) tensor([0.2500])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

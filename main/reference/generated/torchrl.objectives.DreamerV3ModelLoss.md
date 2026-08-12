@@ -4,6 +4,9 @@
 
 DreamerV3 World Model Loss.
 
+See [DreamerV3 in a nutshell](../dreamer_v3.html) for an overview
+of the world model, RSSM, and training flow.
+
 Computes three terms:
 
 1. **KL loss** -- balanced KL between prior and posterior categorical
@@ -28,6 +31,19 @@ RSSM prior/posterior logits.
 - **lambda_reward** (*float**,**optional*) - Reward prediction loss weight. Default: 1.0.
 - **lambda_continue** (*float**,**optional*) - Continue prediction loss weight.
 Default: 0.0 (disabled).
+- **continue_target_scale** (*float**,**optional*) - Multiplier applied to
+non-terminal continuation targets, for encoding the finite-horizon
+discount in the continuation model. Defaults to 1.0.
+- **kl_mode** (*"balanced"**or**"separate"**,**optional*) - KL formulation.
+`"balanced"` preserves the historical weighted aggregate;
+`"separate"` emits the reference dynamics and representation
+losses. Defaults to `"balanced"`.
+- **lambda_dynamic** (*float**,**optional*) - Dynamics KL weight in separate mode.
+Defaults to 1.0.
+- **lambda_representation** (*float**,**optional*) - Representation KL weight in
+separate mode. Defaults to 0.1.
+- **unimix** (*float**,**optional*) - Uniform mixture used by the categorical KL
+distributions. Defaults to 0.0 for compatibility.
 - **kl_alpha** (*float**,**optional*) - KL balancing factor (alpha in the paper).
 Default: 0.8.
 - **free_bits** (*float**,**optional*) - Minimum KL per categorical in nats.
@@ -50,23 +66,26 @@ Examples
 >>> import torch
 >>> from tensordict import TensorDict
 >>> from torch import nn
+>>> from torchrl.modules import SymExpTwoHot
 >>> from torchrl.objectives import DreamerV3ModelLoss
 >>> class StubWorldModel(nn.Module):
 ... def __init__(self):
 ... super().__init__()
 ... self.head = nn.LazyLinear(4 * 4)
 ... self.reward_head = nn.LazyLinear(16)
+... self.reward_decoder = SymExpTwoHot(16)
 ... self.decoder = nn.LazyLinear(3 * 8 * 8)
 ... def forward(self, td):
 ... B, T = td.shape
 ... x = torch.cat([td["state"], td["belief"]], dim=-1)
 ... logits = self.head(x).view(B, T, 4, 4)
 ... reco = self.decoder(x).view(B, T, 3, 8, 8)
-... reward = self.reward_head(x)
+... reward_logits = self.reward_head(x)
 ... td.set(("next", "prior_logits"), logits)
 ... td.set(("next", "posterior_logits"), logits)
 ... td.set(("next", "reco_pixels"), reco)
-... td.set(("next", "reward"), reward)
+... td.set(("next", "reward_logits"), reward_logits)
+... td.set(("next", "reward"), self.reward_decoder(reward_logits))
 ... return td
 >>> wm = StubWorldModel()
 >>> td = TensorDict({

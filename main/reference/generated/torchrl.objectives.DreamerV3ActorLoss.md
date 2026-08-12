@@ -4,6 +4,9 @@
 
 DreamerV3 Actor Loss.
 
+See [DreamerV3 in a nutshell](../dreamer_v3.html) for an overview
+of latent imagination, actor training, and DreamerV3 nomenclature.
+
 Rolls out imagined trajectories in latent space using the world model
 environment, then computes:
 
@@ -24,6 +27,9 @@ Parameters:
 - **actor_model** (*TensorDictModule*) - The actor / policy network.
 - **value_model** (*TensorDictModule*) - The value network.
 - **model_based_env** (*DreamerEnv*) - The imagination environment.
+- **continuation_model** (*TensorDictModuleBase**,**optional*) - Shared trained
+model that writes continuation probabilities for imagined states.
+Defaults to `None`.
 - **imagination_horizon** (*int**,**optional*) - Rollout length inside imagination.
 Default: 15.
 - **discount_loss** (*bool**,**optional*) - If `True`, discount the actor loss
@@ -34,6 +40,14 @@ term `eta`. Default: `3e-4`.
 * stop-gradient advantage). If `False`, uses the straight
 reparameterization gradient (suitable for continuous Gaussian
 actors). Default: `False`.
+- **return_normalization** (*bool**,**optional*) - Normalize detached REINFORCE
+advantages by an EMA return-percentile span. Default: `True`.
+- **return_normalization_rate** (*float**,**optional*) - EMA update rate for the
+return statistics. Default: `0.01`.
+- **return_normalization_quantiles** (*tuple**of**float**,**optional*) - Lower and
+upper return quantiles. Default: `(0.05, 0.95)`.
+- **return_normalization_min_scale** (*float**,**optional*) - Minimum divisor for
+REINFORCE advantages. Default: `1.0`.
 
 Examples
 

@@ -1988,8 +1988,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.symexp.html">torchrl.objectives.symexp</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.two_hot_encode.html">torchrl.objectives.two_hot_encode</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.two_hot_decode.html">torchrl.objectives.two_hot_decode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.two_hot_cross_entropy.html">torchrl.objectives.two_hot_cross_entropy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="dreamer_v3.html">DreamerV3 in a nutshell</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2464,7 +2467,9 @@ document.write(`
 </section>
 <section id="world-models-and-model-based-rl">
 <h1>World Models and Model-Based RL<a class="headerlink" href="#world-models-and-model-based-rl" title="Link to this heading">#</a></h1>
-<p>Modules for model-based reinforcement learning, including world models and dynamics models.</p>
+<p>Modules for model-based reinforcement learning, including world models and dynamics models.
+For an overview of how the DreamerV3 components fit together, see
+<a class="reference internal" href="dreamer_v3.html"><span class="doc">DreamerV3 in a nutshell</span></a>.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel" title="torchrl.modules.WorldModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WorldModel</span></code></a>(*args, **kwargs)</p></td>
@@ -2490,6 +2495,12 @@ document.write(`
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout" title="torchrl.modules.RSSMRollout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RSSMRollout</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Rollout the RSSM network.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.SymExpTwoHot.html#torchrl.modules.SymExpTwoHot" title="torchrl.modules.SymExpTwoHot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SymExpTwoHot</span></code></a>([num_bins])</p></td>
+<td><p>DreamerV3 categorical scalar representation.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP" title="torchrl.modules.DreamerV3MLP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DreamerV3MLP</span></code></a>(in_features, out_features[, ...])</p></td>
+<td><p>RMS-normalized multilayer perceptron used by DreamerV3 heads.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2886,7 +2897,7 @@ document.write(`
        "headline": "Robot Learning",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_models.html",
-       "articleBody": "Robot Learning# Policy architectures for robot manipulation and imitation learning. World Models and Model-Based RL# Modules for model-based reinforcement learning, including world models and dynamics models. WorldModel(*args, **kwargs) A general, composable world model for model-based RL. WorldModelWrapper(*args, **kwargs) World model wrapper. DreamerActor(out_features[, depth, ...]) Dreamer actor network. ObsEncoder([channels, num_layers, ...]) Observation encoder network. ObsDecoder([channels, num_layers, ...]) Observation decoder network. RSSMPosterior([hidden_dim, state_dim, ...]) The posterior network of the RSSM. RSSMPrior(action_spec[, hidden_dim, ...]) The prior network of the RSSM. RSSMRollout(*args, **kwargs) Rollout the RSSM network. PILCO# Components for moment-matching model-based policy search (PILCO). GPWorldModel(obs_dim, action_dim[, in_keys, ...]) Gaussian Process world model with moment-matching uncertainty propagation. RBFController(input_dim, output_dim, max_action) Radial Basis Function controller for moment-matching policy search.",
+       "articleBody": "Robot Learning# Policy architectures for robot manipulation and imitation learning. World Models and Model-Based RL# Modules for model-based reinforcement learning, including world models and dynamics models. For an overview of how the DreamerV3 components fit together, see DreamerV3 in a nutshell. WorldModel(*args, **kwargs) A general, composable world model for model-based RL. WorldModelWrapper(*args, **kwargs) World model wrapper. DreamerActor(out_features[, depth, ...]) Dreamer actor network. ObsEncoder([channels, num_layers, ...]) Observation encoder network. ObsDecoder([channels, num_layers, ...]) Observation decoder network. RSSMPosterior([hidden_dim, state_dim, ...]) The posterior network of the RSSM. RSSMPrior(action_spec[, hidden_dim, ...]) The prior network of the RSSM. RSSMRollout(*args, **kwargs) Rollout the RSSM network. SymExpTwoHot([num_bins]) DreamerV3 categorical scalar representation. DreamerV3MLP(in_features, out_features[, ...]) RMS-normalized multilayer perceptron used by DreamerV3 heads. PILCO# Components for moment-matching model-based policy search (PILCO). GPWorldModel(obs_dim, action_dim[, in_keys, ...]) Gaussian Process world model with moment-matching uncertainty propagation. RBFController(input_dim, output_dim, max_action) Radial Basis Function controller for moment-matching policy search.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

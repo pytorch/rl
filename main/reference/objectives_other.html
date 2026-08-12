@@ -1988,8 +1988,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.symexp.html">torchrl.objectives.symexp</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.two_hot_encode.html">torchrl.objectives.two_hot_encode</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.two_hot_decode.html">torchrl.objectives.two_hot_decode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.two_hot_cross_entropy.html">torchrl.objectives.two_hot_cross_entropy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="dreamer_v3.html">DreamerV3 in a nutshell</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2520,16 +2523,22 @@ Key differences from V1: discrete categorical latent state, KL balancing, symlog
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.symlog.html#torchrl.objectives.symlog" title="torchrl.objectives.symlog"><code class="xref py py-obj docutils literal notranslate"><span class="pre">symlog</span></code></a>(x)</p></td>
-<td><p>Symmetric logarithm: <code class="docutils literal notranslate"><span class="pre">sign(x)</span> <span class="pre">*</span> <span class="pre">log(|x|</span> <span class="pre">+</span> <span class="pre">1)</span></code>.</p></td>
+<td><p>Apply the element-wise symmetric logarithm transform.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.symexp.html#torchrl.objectives.symexp" title="torchrl.objectives.symexp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">symexp</span></code></a>(x)</p></td>
-<td><p>Symmetric exponential: <code class="docutils literal notranslate"><span class="pre">sign(x)</span> <span class="pre">*</span> <span class="pre">(exp(|x|)</span> <span class="pre">-</span> <span class="pre">1)</span></code>.</p></td>
+<td><p>Apply the inverse of <a class="reference internal" href="generated/torchrl.objectives.symlog.html#torchrl.objectives.symlog" title="torchrl.objectives.symlog"><code class="xref py py-func docutils literal notranslate"><span class="pre">symlog()</span></code></a> element-wise.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.two_hot_encode.html#torchrl.objectives.two_hot_encode" title="torchrl.objectives.two_hot_encode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">two_hot_encode</span></code></a>(x, bins)</p></td>
-<td><p>Encode a scalar tensor as a two-hot distribution over <code class="docutils literal notranslate"><span class="pre">bins</span></code>.</p></td>
+<td><p>Encode raw scalar values on a sorted two-hot support.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.two_hot_decode.html#torchrl.objectives.two_hot_decode" title="torchrl.objectives.two_hot_decode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">two_hot_decode</span></code></a>(logits, bins)</p></td>
-<td><p>Decode a distribution over <code class="docutils literal notranslate"><span class="pre">bins</span></code> to a scalar expectation.</p></td>
+<td><p>Decode logits over a raw-value support to their scalar expectation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.two_hot_cross_entropy.html#torchrl.objectives.two_hot_cross_entropy" title="torchrl.objectives.two_hot_cross_entropy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">two_hot_cross_entropy</span></code></a>(logits, target, bins)</p></td>
+<td><p>Return two-hot cross entropy for raw scalar targets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.categorical_kl_terms.html#torchrl.objectives.categorical_kl_terms" title="torchrl.objectives.categorical_kl_terms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">categorical_kl_terms</span></code></a>(posterior_logits, ...)</p></td>
+<td><p>Return DreamerV3 dynamics and representation KL losses.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2911,7 +2920,7 @@ Key differences from V1: discrete categorical latent state, KL balancing, symlog
        "headline": "Other Loss Modules",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_other.html",
-       "articleBody": "Other Loss Modules# Additional loss modules for specialized algorithms. ACTLoss(*args, **kwargs) Loss module for Action Chunking with Transformers (ACT). BCLoss(*args, **kwargs) Behavior Cloning Loss Module. DiffusionBCLoss(*args, **kwargs) Behavioural Cloning loss for diffusion-based policies. GAILLoss(*args, **kwargs) TorchRL implementation of the Generative Adversarial Imitation Learning (GAIL) loss. DTLoss(*args, **kwargs) TorchRL implementation of the Online Decision Transformer loss. OnlineDTLoss(*args, **kwargs) TorchRL implementation of the Online Decision Transformer loss. DreamerActorLoss(*args, **kwargs) Dreamer Actor Loss. DreamerModelLoss(*args, **kwargs) Dreamer Model Loss. DreamerValueLoss(*args, **kwargs) Dreamer Value Loss. WorldModelLoss(*args, **kwargs) A general loss module for model-based world models. ExponentialQuadraticCost(*args, **kwargs) Computes the expected saturating cost for a Gaussian-distributed state. RNDLoss(*args, **kwargs) Loss module for training the predictor network in Random Network Distillation. DreamerV3# Loss modules for DreamerV3 (Mastering Diverse Domains in World Models, Hafner et al. 2023). Key differences from V1: discrete categorical latent state, KL balancing, symlog transforms, and two-hot value distributions. DreamerV3ActorLoss(*args, **kwargs) DreamerV3 Actor Loss. DreamerV3ModelLoss(*args, **kwargs) DreamerV3 World Model Loss. DreamerV3ValueLoss(*args, **kwargs) DreamerV3 Value Loss. DreamerV3 Utilities# symlog(x) Symmetric logarithm: sign(x) * log(|x| + 1). symexp(x) Symmetric exponential: sign(x) * (exp(|x|) - 1). two_hot_encode(x, bins) Encode a scalar tensor as a two-hot distribution over bins. two_hot_decode(logits, bins) Decode a distribution over bins to a scalar expectation.",
+       "articleBody": "Other Loss Modules# Additional loss modules for specialized algorithms. ACTLoss(*args, **kwargs) Loss module for Action Chunking with Transformers (ACT). BCLoss(*args, **kwargs) Behavior Cloning Loss Module. DiffusionBCLoss(*args, **kwargs) Behavioural Cloning loss for diffusion-based policies. GAILLoss(*args, **kwargs) TorchRL implementation of the Generative Adversarial Imitation Learning (GAIL) loss. DTLoss(*args, **kwargs) TorchRL implementation of the Online Decision Transformer loss. OnlineDTLoss(*args, **kwargs) TorchRL implementation of the Online Decision Transformer loss. DreamerActorLoss(*args, **kwargs) Dreamer Actor Loss. DreamerModelLoss(*args, **kwargs) Dreamer Model Loss. DreamerValueLoss(*args, **kwargs) Dreamer Value Loss. WorldModelLoss(*args, **kwargs) A general loss module for model-based world models. ExponentialQuadraticCost(*args, **kwargs) Computes the expected saturating cost for a Gaussian-distributed state. RNDLoss(*args, **kwargs) Loss module for training the predictor network in Random Network Distillation. DreamerV3# Loss modules for DreamerV3 (Mastering Diverse Domains in World Models, Hafner et al. 2023). Key differences from V1: discrete categorical latent state, KL balancing, symlog transforms, and two-hot value distributions. DreamerV3ActorLoss(*args, **kwargs) DreamerV3 Actor Loss. DreamerV3ModelLoss(*args, **kwargs) DreamerV3 World Model Loss. DreamerV3ValueLoss(*args, **kwargs) DreamerV3 Value Loss. DreamerV3 Utilities# symlog(x) Apply the element-wise symmetric logarithm transform. symexp(x) Apply the inverse of symlog() element-wise. two_hot_encode(x, bins) Encode raw scalar values on a sorted two-hot support. two_hot_decode(logits, bins) Decode logits over a raw-value support to their scalar expectation. two_hot_cross_entropy(logits, target, bins) Return two-hot cross entropy for raw scalar targets. categorical_kl_terms(posterior_logits, ...) Return DreamerV3 dynamics and representation KL losses.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

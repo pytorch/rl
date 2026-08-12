@@ -1988,8 +1988,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.symexp.html">torchrl.objectives.symexp</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">torchrl.objectives.two_hot_encode</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_decode.html">torchrl.objectives.two_hot_decode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_cross_entropy.html">torchrl.objectives.two_hot_cross_entropy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2468,28 +2471,29 @@ document.write(`
 <h1>torchrl.objectives.two_hot_encode<a class="headerlink" href="#torchrl-objectives-two-hot-encode" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.objectives.two_hot_encode">
-<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">two_hot_encode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/dreamer_v3.html#two_hot_encode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.two_hot_encode" title="Link to this definition">#</a></dt>
-<dd><p>Encode a scalar tensor as a two-hot distribution over <code class="docutils literal notranslate"><span class="pre">bins</span></code>.</p>
-<p>The scalar is split between the two nearest bin centers proportionally so
-that <code class="docutils literal notranslate"><span class="pre">E[bins]</span> <span class="pre">=</span> <span class="pre">x</span></code>.</p>
-<p>Reference: <a class="reference external" href="https://arxiv.org/abs/2301.04104">https://arxiv.org/abs/2301.04104</a></p>
+<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">two_hot_encode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based_v3.html#two_hot_encode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.two_hot_encode" title="Link to this definition">#</a></dt>
+<dd><p>Encode raw scalar values on a sorted two-hot support.</p>
+<p>Values between adjacent support points are represented by linear
+interpolation in raw value space. Values outside the support saturate at
+its endpoints.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> – Values to encode, shape <code class="docutils literal notranslate"><span class="pre">[...]</span></code>.</p></li>
-<li><p><strong>bins</strong> – Sorted bin centers, shape <code class="docutils literal notranslate"><span class="pre">[num_bins]</span></code>.</p></li>
+<li><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – Raw scalar targets.</p></li>
+<li><p><strong>bins</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – One-dimensional, ascending support.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Two-hot vectors, shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">num_bins]</span></code>.</p>
+<dd class="field-even"><p>A tensor with shape <code class="docutils literal notranslate"><span class="pre">(*x.shape,</span> <span class="pre">bins.numel())</span></code> on the dtype and
+device of <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">two_hot_encode</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bins</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">two_hot_encode</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">0.25</span><span class="p">]),</span> <span class="n">bins</span><span class="p">)</span>
-<span class="go">tensor([[0.0000, 0.0000, 0.5000, 0.5000, 0.0000]])</span>
+<span class="go">tensor([[0.0000, 0.7500, 0.2500]])</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2866,7 +2870,7 @@ that <code class="docutils literal notranslate"><span class="pre">E[bins]</span>
        "headline": "torchrl.objectives.two_hot_encode",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.objectives.two_hot_encode.html",
-       "articleBody": "torchrl.objectives.two_hot_encode# torchrl.objectives.two_hot_encode(x: Tensor, bins: Tensor) \u2192 Tensor[source]# Encode a scalar tensor as a two-hot distribution over bins. The scalar is split between the two nearest bin centers proportionally so that E[bins] = x. Reference: https://arxiv.org/abs/2301.04104 Parameters: x \u2013 Values to encode, shape [...]. bins \u2013 Sorted bin centers, shape [num_bins]. Returns: Two-hot vectors, shape [..., num_bins]. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import two_hot_encode \u003e\u003e\u003e bins = torch.linspace(-1.0, 1.0, 5) \u003e\u003e\u003e two_hot_encode(torch.tensor([0.25]), bins) tensor([[0.0000, 0.0000, 0.5000, 0.5000, 0.0000]])",
+       "articleBody": "torchrl.objectives.two_hot_encode# torchrl.objectives.two_hot_encode(x: Tensor, bins: Tensor) \u2192 Tensor[source]# Encode raw scalar values on a sorted two-hot support. Values between adjacent support points are represented by linear interpolation in raw value space. Values outside the support saturate at its endpoints. Parameters: x (torch.Tensor) \u2013 Raw scalar targets. bins (torch.Tensor) \u2013 One-dimensional, ascending support. Returns: A tensor with shape (*x.shape, bins.numel()) on the dtype and device of x. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import two_hot_encode \u003e\u003e\u003e bins = torch.tensor([-1.0, 0.0, 1.0]) \u003e\u003e\u003e two_hot_encode(torch.tensor([0.25]), bins) tensor([[0.0000, 0.7500, 0.2500]])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

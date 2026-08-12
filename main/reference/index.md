@@ -122,6 +122,7 @@
 - [Offline RL Methods](objectives_offline.html)
 - [Multi-Agent Objectives](objectives_multiagent.html)
 - [Other Loss Modules](objectives_other.html)
+- [DreamerV3 in a nutshell](dreamer_v3.html)
 - [Rendering applications](render.html)
 
 - [Core API](render.html#core-api)

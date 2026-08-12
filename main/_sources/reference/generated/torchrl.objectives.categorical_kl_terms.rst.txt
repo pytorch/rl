@@ -1,0 +1,6 @@
+﻿torchrl.objectives.categorical\_kl\_terms
+=========================================
+
+.. currentmodule:: torchrl.objectives
+
+.. autofunction:: categorical_kl_terms

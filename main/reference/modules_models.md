@@ -5,6 +5,8 @@ Policy architectures for robot manipulation and imitation learning.
 # World Models and Model-Based RL
 
 Modules for model-based reinforcement learning, including world models and dynamics models.
+For an overview of how the DreamerV3 components fit together, see
+[DreamerV3 in a nutshell](dreamer_v3.html).
 
 | [`WorldModel`](generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel)(*args, **kwargs) | A general, composable world model for model-based RL. |
 | --- | --- |
@@ -15,6 +17,8 @@ Modules for model-based reinforcement learning, including world models and dynam
 | [`RSSMPosterior`](generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior)([hidden_dim, state_dim, ...]) | The posterior network of the RSSM. |
 | [`RSSMPrior`](generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior)(action_spec[, hidden_dim, ...]) | The prior network of the RSSM. |
 | [`RSSMRollout`](generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout)(*args, **kwargs) | Rollout the RSSM network. |
+| [`SymExpTwoHot`](generated/torchrl.modules.SymExpTwoHot.html#torchrl.modules.SymExpTwoHot)([num_bins]) | DreamerV3 categorical scalar representation. |
+| [`DreamerV3MLP`](generated/torchrl.modules.DreamerV3MLP.html#torchrl.modules.DreamerV3MLP)(in_features, out_features[, ...]) | RMS-normalized multilayer perceptron used by DreamerV3 heads. |
 
 ## PILCO
 

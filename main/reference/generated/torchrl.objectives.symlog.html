@@ -1988,8 +1988,11 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.symexp.html">torchrl.objectives.symexp</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_encode.html">torchrl.objectives.two_hot_encode</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_decode.html">torchrl.objectives.two_hot_decode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.two_hot_cross_entropy.html">torchrl.objectives.two_hot_cross_entropy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.objectives.categorical_kl_terms.html">torchrl.objectives.categorical_kl_terms</a></li>
 </ul>
 </details></li>
+<li class="toctree-l2"><a class="reference internal" href="../dreamer_v3.html">DreamerV3 in a nutshell</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../render.html">Rendering applications</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2468,24 +2471,20 @@ document.write(`
 <h1>torchrl.objectives.symlog<a class="headerlink" href="#torchrl-objectives-symlog" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrl.objectives.symlog">
-<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">symlog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/objectives/dreamer_v3.html#symlog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.symlog" title="Link to this definition">#</a></dt>
-<dd><p>Symmetric logarithm: <code class="docutils literal notranslate"><span class="pre">sign(x)</span> <span class="pre">*</span> <span class="pre">log(|x|</span> <span class="pre">+</span> <span class="pre">1)</span></code>.</p>
-<p>Used by DreamerV3 to compress the dynamic range of targets and
-predictions before computing reconstruction losses.</p>
-<p>Reference: <a class="reference external" href="https://arxiv.org/abs/2301.04104">https://arxiv.org/abs/2301.04104</a></p>
+<span class="sig-prename descclassname"><span class="pre">torchrl.objectives.</span></span><span class="sig-name descname"><span class="pre">symlog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/modules/models/model_based_v3.html#symlog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.objectives.symlog" title="Link to this definition">#</a></dt>
+<dd><p>Apply the element-wise symmetric logarithm transform.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>x</strong> – Input tensor.</p>
+<dd class="field-odd"><p><strong>x</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>torch.Tensor</em></a>) – Input tensor.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Tensor of the same shape as <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
+<dd class="field-even"><p>A tensor with the same shape, dtype, and device as <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.objectives</span> <span class="kn">import</span> <span class="n">symlog</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">symlog</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">symlog</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">]))</span>
 <span class="go">tensor([-4.6151,  0.0000,  4.6151])</span>
 </pre></div>
 </div>
@@ -2863,7 +2862,7 @@ predictions before computing reconstruction losses.</p>
        "headline": "torchrl.objectives.symlog",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.objectives.symlog.html",
-       "articleBody": "torchrl.objectives.symlog# torchrl.objectives.symlog(x: Tensor) \u2192 Tensor[source]# Symmetric logarithm: sign(x) * log(|x| + 1). Used by DreamerV3 to compress the dynamic range of targets and predictions before computing reconstruction losses. Reference: https://arxiv.org/abs/2301.04104 Parameters: x \u2013 Input tensor. Returns: Tensor of the same shape as x. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import symlog \u003e\u003e\u003e x = torch.tensor([-100.0, 0.0, 100.0]) \u003e\u003e\u003e symlog(x) tensor([-4.6151, 0.0000, 4.6151])",
+       "articleBody": "torchrl.objectives.symlog# torchrl.objectives.symlog(x: Tensor) \u2192 Tensor[source]# Apply the element-wise symmetric logarithm transform. Parameters: x (torch.Tensor) \u2013 Input tensor. Returns: A tensor with the same shape, dtype, and device as x. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.objectives import symlog \u003e\u003e\u003e symlog(torch.tensor([-100.0, 0.0, 100.0])) tensor([-4.6151, 0.0000, 4.6151])",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
