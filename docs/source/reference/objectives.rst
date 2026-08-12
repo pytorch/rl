@@ -45,6 +45,7 @@ Documentation Sections
 .. toctree::
    :maxdepth: 2
 
+   dreamer_v3
    objectives_common
    objectives_value
    objectives_policy
