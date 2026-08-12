@@ -174,7 +174,10 @@ class SymLogValueTransform(ValueTransform):
         >>> from torchrl.modules import SymLogValueTransform
         >>> transform = SymLogValueTransform()
         >>> value = torch.tensor([-100.0, 0.0, 100.0])
-        >>> torch.allclose(transform.inverse(transform(value)), value)
+        >>> transformed = transform(value)
+        >>> transformed
+        tensor([-4.6151,  0.0000,  4.6151])
+        >>> torch.allclose(transform.inverse(transformed), value)
         True
 
     .. note::
@@ -203,7 +206,10 @@ class SignedHyperbolicValueTransform(ValueTransform):
         >>> from torchrl.modules import SignedHyperbolicValueTransform
         >>> transform = SignedHyperbolicValueTransform(epsilon=1e-3)
         >>> value = torch.tensor([-100.0, 0.0, 100.0])
-        >>> torch.allclose(transform.inverse(transform(value)), value, atol=1e-4)
+        >>> transformed = transform(value)
+        >>> transformed
+        tensor([-9.1499,  0.0000,  9.1499])
+        >>> torch.allclose(transform.inverse(transformed), value, atol=1e-4)
         True
 
     .. note::
@@ -246,7 +252,10 @@ class ComposeValueTransform(ValueTransform):
         ...     SignedHyperbolicValueTransform(), SymLogValueTransform()
         ... )
         >>> value = torch.tensor([-100.0, 0.0, 100.0])
-        >>> torch.allclose(transform.inverse(transform(value)), value, atol=1e-4)
+        >>> transformed = transform(value)
+        >>> transformed
+        tensor([-2.3175,  0.0000,  2.3175])
+        >>> torch.allclose(transform.inverse(transformed), value, atol=1e-4)
         True
     """
 
