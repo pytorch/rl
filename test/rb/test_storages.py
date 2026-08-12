@@ -317,8 +317,8 @@ class TestStorages:
         sys.version_info >= (3, 14),
         reason="torch.compile is not supported on Python 3.14+",
     )
-    # This test checks if the `torch._dynamo.disable` wrapper around
-    # `TensorStorage._rand_given_ndim` is still necessary.
+    # This test checks that mutable storage bookkeeping does not cause
+    # excessive recompilation when writes and sampling are compiled together.
     def test__rand_given_ndim_recompile(self):
         torch._dynamo.reset_code_caches()
 
@@ -353,12 +353,38 @@ class TestStorages:
             torch._logging.set_logs()
 
         assert len(storage) == num_extend * data_size
+        assert storage._mutation_revision == num_extend
+        assert storage._last_cursor_index == num_extend * data_size - 1
         assert len(records) <= 8, (
             "Excessive recompilations detected. Expected 8 or fewer, but got "
-            f"{len(records)}. This suggests the `torch.compiler.disable` "
-            "decorators may not be working properly or new recompilation "
-            "sources have been introduced."
+            f"{len(records)}. Mutable storage state may be guarded or a compiled "
+            "graph may no longer be reusable."
         )
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="torch.compile is not supported on Python 3.14+",
+    )
+    def test_compilable_storage_set_fullgraph(self):
+        storage = LazyTensorStorage(100, compilable=True)
+        data = torch.arange(25).unsqueeze(-1)
+        storage.set(torch.arange(25), data)
+
+        @torch.compile(fullgraph=True)
+        def write(cursor, value):
+            storage.set(cursor, value)
+
+        write(torch.arange(25, 50), data)
+        write(torch.arange(50, 75), data)
+
+        assert len(storage) == 75
+        assert storage._mutation_revision == 3
+        assert storage._last_cursor_index == 74
+        torch.testing.assert_close(storage[:75], data.repeat(3, 1))
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack(self, storage_type):
