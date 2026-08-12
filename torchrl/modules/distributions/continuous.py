@@ -638,6 +638,8 @@ class Delta(D.Distribution):
                 self.param.expand((*batch_shape, *self.event_shape)),
                 atol=self.atol,
                 rtol=self.rtol,
+                batch_shape=batch_shape,
+                event_shape=self.event_shape,
             )
         return self
 
@@ -647,8 +649,8 @@ class Delta(D.Distribution):
     def _is_equal(self, value: torch.Tensor) -> torch.Tensor:
         param = self.param.expand_as(value)
         is_equal = abs(value - param) < self.atol + self.rtol * abs(param)
-        for i in range(-1, -len(self.event_shape) - 1, -1):
-            is_equal = is_equal.all(i)
+        for _ in self.event_shape:
+            is_equal = is_equal.all(-1)
         return is_equal
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
