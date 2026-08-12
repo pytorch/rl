@@ -45,7 +45,6 @@ Documentation Sections
 .. toctree::
    :maxdepth: 2
 
-   dreamer_v3
    objectives_common
    objectives_value
    objectives_policy
@@ -53,3 +52,4 @@ Documentation Sections
    objectives_offline
    objectives_multiagent
    objectives_other
+   dreamer_v3
