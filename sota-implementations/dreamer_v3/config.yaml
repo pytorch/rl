@@ -20,7 +20,8 @@ networks:
   num_categoricals: 4
   num_classes: 4
   obs_embed_dim: 32
-  num_reward_bins: 41
+  num_reward_bins: 255
+  num_value_bins: 255
   hidden_dim: 64
   depth: 2
 
