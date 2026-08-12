@@ -5,6 +5,7 @@
 
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
+from . import functional
 from .distributions import (
     Delta,
     distributions_maps,
@@ -22,6 +23,7 @@ from .distributions import (
     TanhNormal,
     TruncatedNormal,
 )
+from .functional import signed_hyperbolic, signed_parabolic, symexp, symlog
 from .models import (
     BatchRenorm1d,
     ConsistentDropout,
@@ -114,11 +116,7 @@ from .value_norm import PopArtValueNorm, RunningValueNorm, ValueNorm
 from .value_transforms import (
     ComposeValueTransform,
     IdentityValueTransform,
-    signed_hyperbolic,
-    signed_parabolic,
     SignedHyperbolicValueTransform,
-    symexp,
-    symlog,
     SymLogValueTransform,
     ValueTransform,
 )
@@ -245,6 +243,7 @@ __all__ = [
     "WorldModel",
     "WorldModelWrapper",
     "distributions_maps",
+    "functional",
     "get_env_transforms_from_module",
     "get_primers_from_module",
     "get_recurrent_matmul_precision",

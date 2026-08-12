@@ -29,6 +29,7 @@ from tensordict.utils import NestedKey, unravel_key
 from torchrl._utils import _maybe_record_function_decorator
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.modules.functional import symexp as _symexp, symlog as symlog
 from torchrl.modules.models.model_based_v3 import (  # noqa: F401
     _default_bins,
     _DEFAULT_NUM_BINS,
@@ -37,7 +38,6 @@ from torchrl.modules.models.model_based_v3 import (  # noqa: F401
     two_hot_decode as _two_hot_decode,
     two_hot_encode as _two_hot_encode,
 )
-from torchrl.modules.value_transforms import symexp as _symexp, symlog as symlog
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,

@@ -16,7 +16,7 @@ from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch.nn import GRUCell
 
-from torchrl.modules.value_transforms import symexp, symlog  # noqa: F401
+from torchrl.modules.functional import symexp, symlog  # noqa: F401
 
 
 _DEFAULT_NUM_BINS = 255

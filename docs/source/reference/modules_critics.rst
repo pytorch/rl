@@ -47,7 +47,7 @@ bootstrapping. They can be composed to build custom invertible mappings.
     SymLogValueTransform
     SignedHyperbolicValueTransform
     ComposeValueTransform
-    symlog
-    symexp
-    signed_hyperbolic
-    signed_parabolic
+    functional.symlog
+    functional.symexp
+    functional.signed_hyperbolic
+    functional.signed_parabolic

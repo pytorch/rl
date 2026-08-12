@@ -10,116 +10,7 @@ from abc import ABCMeta, abstractmethod
 import torch
 from torch import nn
 
-
-def symlog(value: torch.Tensor) -> torch.Tensor:
-    """Apply the element-wise symmetric logarithm transform.
-
-    The transform is defined as
-    ``sign(value) * log(1 + abs(value))`` and compresses both positive and
-    negative values while remaining approximately linear around zero.
-
-    Args:
-        value (torch.Tensor): Input tensor.
-
-    Returns:
-        A tensor with the same shape, dtype, and device as ``value``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.modules import symlog
-        >>> symlog(torch.tensor([-100.0, 0.0, 100.0]))
-        tensor([-4.6151,  0.0000,  4.6151])
-    """
-    transformed = value.sign() * value.abs().log1p()
-    # ``sign`` has a zero derivative at the origin even though symlog has a
-    # derivative of one there. Keep the mathematically correct local gradient.
-    return torch.where(value == 0, value, transformed)
-
-
-def symexp(value: torch.Tensor) -> torch.Tensor:
-    """Apply the inverse symmetric exponential transform element-wise.
-
-    Args:
-        value (torch.Tensor): Input tensor in symmetric-log space.
-
-    Returns:
-        A tensor with the same shape, dtype, and device as ``value``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.modules import symexp, symlog
-        >>> value = torch.tensor([-1000.0, 0.0, 1000.0])
-        >>> torch.allclose(symexp(symlog(value)), value, atol=1e-4)
-        True
-    """
-    transformed = value.sign() * value.abs().expm1()
-    return torch.where(value == 0, value, transformed)
-
-
-def signed_hyperbolic(value: torch.Tensor, epsilon: float = 1e-3) -> torch.Tensor:
-    """Apply the signed hyperbolic value transform.
-
-    This is the scale-compressing transform introduced by Pohlen et al. and
-    used by algorithms in the MuZero and Muesli families:
-
-    ``sign(value) * (sqrt(abs(value) + 1) - 1) + epsilon * value``.
-
-    Args:
-        value (torch.Tensor): Input tensor.
-        epsilon (float, optional): Positive linear correction that keeps the
-            inverse Lipschitz continuous. Defaults to ``1e-3``.
-
-    Returns:
-        A tensor with the same shape, dtype, and device as ``value``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.modules import signed_hyperbolic
-        >>> signed_hyperbolic(torch.tensor([-100.0, 0.0, 100.0]))
-        tensor([-9.1499,  0.0000,  9.1499])
-
-    .. note::
-        See `Observe and Look Further: Achieving Consistent Performance on
-        Atari <https://arxiv.org/abs/1805.11593>`_ (Pohlen et al., 2018).
-    """
-    if epsilon <= 0:
-        raise ValueError(f"epsilon must be positive, got {epsilon}.")
-    transformed = value.sign() * (torch.sqrt(value.abs() + 1) - 1) + epsilon * value
-    origin = value * (0.5 + epsilon)
-    return torch.where(value == 0, origin, transformed)
-
-
-def signed_parabolic(value: torch.Tensor, epsilon: float = 1e-3) -> torch.Tensor:
-    """Apply the inverse of :func:`signed_hyperbolic` element-wise.
-
-    Args:
-        value (torch.Tensor): Input tensor in signed-hyperbolic space.
-        epsilon (float, optional): Positive linear correction used by the
-            corresponding :func:`signed_hyperbolic` call. Defaults to
-            ``1e-3``.
-
-    Returns:
-        A tensor with the same shape, dtype, and device as ``value``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.modules import signed_hyperbolic, signed_parabolic
-        >>> value = torch.tensor([-1000.0, 0.0, 1000.0])
-        >>> torch.allclose(
-        ...     signed_parabolic(signed_hyperbolic(value)), value, atol=1e-3
-        ... )
-        True
-    """
-    if epsilon <= 0:
-        raise ValueError(f"epsilon must be positive, got {epsilon}.")
-    magnitude = value.abs()
-    discriminant = torch.sqrt(1 + 4 * epsilon * (magnitude + 1 + epsilon))
-    # This rationalized form of (discriminant - 1) / (2 * epsilon)
-    # avoids cancellation when epsilon is small.
-    root = 2 * (magnitude + 1 + epsilon) / (discriminant + 1)
-    transformed = value.sign() * (root.square() - 1)
-    origin = value / (0.5 + epsilon)
-    return torch.where(value == 0, origin, transformed)
+from . import functional as F
 
 
 class ValueTransform(nn.Module, metaclass=ABCMeta):
@@ -131,6 +22,27 @@ class ValueTransform(nn.Module, metaclass=ABCMeta):
 
     Subclasses implement :meth:`forward` and :meth:`inverse` as element-wise
     tensor operations.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import ValueTransform
+        >>> class ScaleValueTransform(ValueTransform):
+        ...     def forward(self, value):
+        ...         return value * 2
+        ...     def inverse(self, value):
+        ...         return value / 2
+        >>> transform = ScaleValueTransform()
+        >>> value = torch.tensor([-2.0, 0.0, 2.0])
+        >>> transformed = transform(value)
+        >>> transformed
+        tensor([-4.,  0.,  4.])
+        >>> transform.inverse(transformed)
+        tensor([-2.,  0.,  2.])
+
+    .. seealso::
+        :class:`IdentityValueTransform`, :class:`SymLogValueTransform`,
+        :class:`SignedHyperbolicValueTransform`, and
+        :class:`ComposeValueTransform`.
     """
 
     @abstractmethod
@@ -150,8 +62,15 @@ class IdentityValueTransform(ValueTransform):
         >>> from torchrl.modules import IdentityValueTransform
         >>> transform = IdentityValueTransform()
         >>> value = torch.tensor([-1.0, 0.0, 1.0])
-        >>> torch.equal(transform(value), transform.inverse(value))
-        True
+        >>> transformed = transform(value)
+        >>> transformed
+        tensor([-1.,  0.,  1.])
+        >>> transform.inverse(transformed)
+        tensor([-1.,  0.,  1.])
+
+    .. seealso::
+        :class:`ValueTransform` for the interface and
+        :class:`ComposeValueTransform` for composing transforms.
     """
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
@@ -166,8 +85,9 @@ class IdentityValueTransform(ValueTransform):
 class SymLogValueTransform(ValueTransform):
     """Symmetric-log value transform used by DreamerV3.
 
-    This transform applies :func:`symlog` in the forward direction and
-    :func:`symexp` in the inverse direction.
+    This transform applies :func:`torchrl.modules.functional.symlog` in the
+    forward direction and :func:`torchrl.modules.functional.symexp` in the
+    inverse direction.
 
     Examples:
         >>> import torch
@@ -177,8 +97,14 @@ class SymLogValueTransform(ValueTransform):
         >>> transformed = transform(value)
         >>> transformed
         tensor([-4.6151,  0.0000,  4.6151])
-        >>> torch.allclose(transform.inverse(transformed), value)
-        True
+        >>> transform.inverse(transformed)
+        tensor([-100.0000,    0.0000,  100.0000])
+
+    .. seealso::
+        :func:`torchrl.modules.functional.symlog` and
+        :func:`torchrl.modules.functional.symexp` for the functional form,
+        and :class:`SignedHyperbolicValueTransform` for an alternative
+        nonlinear transform.
 
     .. note::
         See `Mastering Diverse Domains through World Models
@@ -186,12 +112,12 @@ class SymLogValueTransform(ValueTransform):
     """
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
-        """Apply :func:`symlog` to ``value``."""
-        return symlog(value)
+        """Apply :func:`torchrl.modules.functional.symlog` to ``value``."""
+        return F.symlog(value)
 
     def inverse(self, value: torch.Tensor) -> torch.Tensor:
-        """Apply :func:`symexp` to ``value``."""
-        return symexp(value)
+        """Apply :func:`torchrl.modules.functional.symexp` to ``value``."""
+        return F.symexp(value)
 
 
 class SignedHyperbolicValueTransform(ValueTransform):
@@ -209,8 +135,14 @@ class SignedHyperbolicValueTransform(ValueTransform):
         >>> transformed = transform(value)
         >>> transformed
         tensor([-9.1499,  0.0000,  9.1499])
-        >>> torch.allclose(transform.inverse(transformed), value, atol=1e-4)
-        True
+        >>> transform.inverse(transformed)
+        tensor([-100.0000,    0.0000,  100.0000])
+
+    .. seealso::
+        :func:`torchrl.modules.functional.signed_hyperbolic` and
+        :func:`torchrl.modules.functional.signed_parabolic` for the functional
+        form, and :class:`SymLogValueTransform` for an alternative nonlinear
+        transform.
 
     .. note::
         See `Observe and Look Further: Achieving Consistent Performance on
@@ -224,12 +156,12 @@ class SignedHyperbolicValueTransform(ValueTransform):
         self.epsilon = epsilon
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
-        """Apply :func:`signed_hyperbolic` to ``value``."""
-        return signed_hyperbolic(value, self.epsilon)
+        """Apply the signed-hyperbolic transform to ``value``."""
+        return F.signed_hyperbolic(value, self.epsilon)
 
     def inverse(self, value: torch.Tensor) -> torch.Tensor:
-        """Apply :func:`signed_parabolic` to ``value``."""
-        return signed_parabolic(value, self.epsilon)
+        """Apply the signed-parabolic inverse to ``value``."""
+        return F.signed_parabolic(value, self.epsilon)
 
 
 class ComposeValueTransform(ValueTransform):
@@ -255,8 +187,13 @@ class ComposeValueTransform(ValueTransform):
         >>> transformed = transform(value)
         >>> transformed
         tensor([-2.3175,  0.0000,  2.3175])
-        >>> torch.allclose(transform.inverse(transformed), value, atol=1e-4)
-        True
+        >>> transform.inverse(transformed)
+        tensor([-100.0000,    0.0000,  100.0000])
+
+    .. seealso::
+        :class:`ValueTransform` for the component interface,
+        :class:`SymLogValueTransform`, and
+        :class:`SignedHyperbolicValueTransform`.
     """
 
     def __init__(self, *transforms: ValueTransform) -> None:

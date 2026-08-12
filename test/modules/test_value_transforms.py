@@ -7,14 +7,12 @@ from __future__ import annotations
 import pytest
 import torch
 
+import torchrl.modules as modules
 from torchrl.modules import (
     ComposeValueTransform,
+    functional as F,
     IdentityValueTransform,
-    signed_hyperbolic,
-    signed_parabolic,
     SignedHyperbolicValueTransform,
-    symexp,
-    symlog,
     SymLogValueTransform,
     ValueTransform,
 )
@@ -66,12 +64,16 @@ def test_value_transform_is_monotonic_and_compresses(transform):
 def test_value_transform_functional_api():
     value = torch.tensor([-100.0, -1.0, 0.0, 1.0, 100.0])
 
-    torch.testing.assert_close(SymLogValueTransform()(value), symlog(value))
-    torch.testing.assert_close(symexp(symlog(value)), value)
+    torch.testing.assert_close(SymLogValueTransform()(value), F.symlog(value))
+    torch.testing.assert_close(F.symexp(F.symlog(value)), value)
     torch.testing.assert_close(
-        SignedHyperbolicValueTransform()(value), signed_hyperbolic(value)
+        SignedHyperbolicValueTransform()(value), F.signed_hyperbolic(value)
     )
-    torch.testing.assert_close(signed_parabolic(signed_hyperbolic(value)), value)
+    torch.testing.assert_close(F.signed_parabolic(F.signed_hyperbolic(value)), value)
+    assert modules.symlog is F.symlog
+    assert modules.symexp is F.symexp
+    assert modules.signed_hyperbolic is F.signed_hyperbolic
+    assert modules.signed_parabolic is F.signed_parabolic
 
 
 def test_compose_value_transform_order():
@@ -106,7 +108,7 @@ def test_value_transform_errors():
     with pytest.raises(ValueError, match="epsilon must be positive"):
         SignedHyperbolicValueTransform(epsilon=0)
     with pytest.raises(ValueError, match="epsilon must be positive"):
-        signed_hyperbolic(torch.zeros(1), epsilon=-1)
+        F.signed_hyperbolic(torch.zeros(1), epsilon=-1)
     with pytest.raises(ValueError, match="at least one"):
         ComposeValueTransform()
     with pytest.raises(TypeError, match="ValueTransform"):
