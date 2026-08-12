@@ -420,7 +420,7 @@ required by the env);
 - Compare this to the usage of transformers with the Decision Transformers
 examples (see the `example` directory on GitHub).
 
-**Total running time of the script:** (0 minutes 0.073 seconds)
+**Total running time of the script:** (0 minutes 0.075 seconds)
 
 [`Download Jupyter notebook: getting-started-1.ipynb`](../_downloads/c4e061fa0d0af4f742988ea6303991f1/getting-started-1.ipynb)
 
