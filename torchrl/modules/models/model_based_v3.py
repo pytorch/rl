@@ -16,6 +16,8 @@ from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch.nn import GRUCell
 
+from torchrl.modules.value_transforms import symexp, symlog  # noqa: F401
+
 
 _DEFAULT_NUM_BINS = 255
 _DEFAULT_BIN_RANGE = 20.0
@@ -230,43 +232,6 @@ class DreamerV3MLP(nn.Module):
     def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
         value = inputs[0] if len(inputs) == 1 else torch.cat(inputs, -1)
         return self.model(value)
-
-
-def symlog(x: torch.Tensor) -> torch.Tensor:
-    """Apply the element-wise symmetric logarithm transform.
-
-    Args:
-        x (torch.Tensor): Input tensor.
-
-    Returns:
-        A tensor with the same shape, dtype, and device as ``x``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import symlog
-        >>> symlog(torch.tensor([-100.0, 0.0, 100.0]))
-        tensor([-4.6151,  0.0000,  4.6151])
-    """
-    return x.sign() * (x.abs() + 1).log()
-
-
-def symexp(x: torch.Tensor) -> torch.Tensor:
-    """Apply the inverse of :func:`symlog` element-wise.
-
-    Args:
-        x (torch.Tensor): Input tensor.
-
-    Returns:
-        A tensor with the same shape, dtype, and device as ``x``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import symexp, symlog
-        >>> x = torch.tensor([-1000.0, 0.0, 1000.0])
-        >>> torch.allclose(symexp(symlog(x)), x, atol=1e-4)
-        True
-    """
-    return x.sign() * x.abs().expm1()
 
 
 def _default_bins(

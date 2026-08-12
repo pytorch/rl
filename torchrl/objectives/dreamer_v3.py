@@ -33,12 +33,11 @@ from torchrl.modules.models.model_based_v3 import (  # noqa: F401
     _default_bins,
     _DEFAULT_NUM_BINS,
     _unimix_probs,
-    symexp as _symexp,
-    symlog as symlog,
     two_hot_cross_entropy as two_hot_cross_entropy,
     two_hot_decode as _two_hot_decode,
     two_hot_encode as _two_hot_encode,
 )
+from torchrl.modules.value_transforms import symexp as _symexp, symlog as symlog
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
