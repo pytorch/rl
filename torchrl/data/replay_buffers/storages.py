@@ -196,11 +196,15 @@ class Storage:
         self.checkpointer = checkpointer
         self._compilable = compilable
         self._attached_entities_list = []
-        self._mutation_revision_value = 0 if compilable else mp.Value("q", 0)
-        self._last_cursor_index_value = -1 if compilable else mp.Value("q", -1)
+        self._mutation_revision_value = (
+            torch.zeros((), dtype=torch.int64) if compilable else mp.Value("q", 0)
+        )
+        self._last_cursor_index_value = (
+            torch.full((), -1, dtype=torch.int64) if compilable else mp.Value("q", -1)
+        )
 
     @property
-    def _mutation_revision(self) -> int:
+    def _mutation_revision(self) -> int | torch.Tensor:
         """Monotonic storage-content revision shared with spawned processes."""
         revision = getattr(self, "_mutation_revision_value", None)
         if not self._compilable:
@@ -208,8 +212,10 @@ class Storage:
                 revision = self._mutation_revision_value = mp.Value("q", 0)
             return revision.value
         if revision is None:
-            revision = self._mutation_revision_value = 0
-        return revision
+            revision = self._mutation_revision_value = torch.zeros(
+                (), dtype=torch.int64
+            )
+        return revision if is_compiling() else int(revision.item())
 
     def _bump_mutation_revision(self) -> None:
         """Invalidates process-local metadata derived from storage contents."""
@@ -220,41 +226,55 @@ class Storage:
             with revision.get_lock():
                 revision.value += 1
         else:
-            self._mutation_revision_value = self._mutation_revision + 1
+            if revision is None:
+                revision = self._mutation_revision_value = torch.zeros(
+                    (), dtype=torch.int64
+                )
+            revision.add_(1)
 
     @property
-    def _last_cursor_index(self) -> int | None:
+    def _last_cursor_index(self) -> int | torch.Tensor | None:
         """Last written time coordinate, shared with spawned processes."""
         cursor = getattr(self, "_last_cursor_index_value", None)
         if cursor is None:
             return None
-        cursor = cursor if self._compilable else cursor.value
+        if self._compilable:
+            if is_compiling():
+                return cursor
+            cursor = int(cursor.item())
+        else:
+            cursor = cursor.value
         return None if cursor < 0 else cursor
 
     def _set_last_cursor(self, cursor: Any) -> None:
         self._last_cursor = cursor
         if isinstance(cursor, torch.Tensor):
             cursor = cursor.reshape(-1)
-            cursor = int(cursor[-1].item()) if cursor.numel() else -1
+            cursor = cursor[-1] if cursor.numel() else -1
         elif isinstance(cursor, range):
             cursor = int(cursor[-1]) if len(cursor) else -1
         elif isinstance(cursor, (tuple, list)):
             time_cursor = cursor[0]
             if isinstance(time_cursor, torch.Tensor):
                 time_cursor = time_cursor.reshape(-1)
-                cursor = int(time_cursor[-1].item()) if time_cursor.numel() else -1
+                cursor = time_cursor[-1] if time_cursor.numel() else -1
             else:
                 cursor = int(time_cursor)
         elif cursor is None:
             cursor = -1
         else:
             cursor = int(cursor)
-        shared_cursor = self._last_cursor_index_value
         if self._compilable:
-            self._last_cursor_index_value = cursor
-        else:
-            with shared_cursor.get_lock():
-                shared_cursor.value = cursor
+            if isinstance(cursor, torch.Tensor):
+                self._last_cursor_index_value = cursor
+            else:
+                self._last_cursor_index_value.fill_(cursor)
+            return
+        if isinstance(cursor, torch.Tensor):
+            cursor = int(cursor.item())
+        shared_cursor = self._last_cursor_index_value
+        with shared_cursor.get_lock():
+            shared_cursor.value = cursor
 
     @property
     def checkpointer(self):
@@ -427,18 +447,28 @@ class Storage:
         state.setdefault("_compilable", compilable)
         if revision is not None:
             if compilable:
-                state["_mutation_revision_value"] = revision
+                state["_mutation_revision_value"] = torch.tensor(
+                    revision, dtype=torch.int64
+                )
             else:
                 state["_mutation_revision_value"] = mp.Value("q", revision)
         if last_cursor is not None:
             if compilable:
-                state["_last_cursor_index_value"] = last_cursor
+                state["_last_cursor_index_value"] = torch.tensor(
+                    last_cursor, dtype=torch.int64
+                )
             else:
                 state["_last_cursor_index_value"] = mp.Value("q", last_cursor)
         elif "_last_cursor_index_value" not in state:
-            state["_last_cursor_index_value"] = -1 if compilable else mp.Value("q", -1)
+            state["_last_cursor_index_value"] = (
+                torch.full((), -1, dtype=torch.int64)
+                if compilable
+                else mp.Value("q", -1)
+            )
         if "_mutation_revision_value" not in state:
-            state["_mutation_revision_value"] = 0 if compilable else mp.Value("q", 0)
+            state["_mutation_revision_value"] = (
+                torch.zeros((), dtype=torch.int64) if compilable else mp.Value("q", 0)
+            )
         self.__dict__.update(state)
 
     def __contains__(self, item):
