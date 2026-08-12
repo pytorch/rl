@@ -100,6 +100,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
         action_dim=action_dim,
+        unimix=cfg.networks.unimix,
     )
     rssm_prior = TensorDictModule(
         prior_net,
@@ -117,6 +118,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
         num_classes=cfg.networks.num_classes,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
         obs_embed_dim=cfg.networks.obs_embed_dim,
+        unimix=cfg.networks.unimix,
     )
     rssm_posterior = TensorDictModule(
         posterior_net,
@@ -314,7 +316,10 @@ def main(cfg: DictConfig):
         world_model,
         num_reward_bins=cfg.networks.num_reward_bins,
         free_bits=cfg.optimization.free_bits,
-        kl_alpha=cfg.optimization.kl_alpha,
+        kl_mode="separate",
+        lambda_dynamic=cfg.optimization.dynamic_loss_weight,
+        lambda_representation=cfg.optimization.representation_loss_weight,
+        unimix=cfg.networks.unimix,
         global_average=True,  # state-based obs, not (C, H, W) pixels
     )
     model_loss.set_keys(pixels="observation")
@@ -433,10 +438,9 @@ def main(cfg: DictConfig):
             )
 
             m_td, model_out = model_loss(sample)
+            model_kl = m_td["loss_model_dynamic"] + m_td["loss_model_representation"]
             total_m = (
-                m_td["loss_model_kl"]
-                + m_td["loss_model_reco"]
-                + m_td["loss_model_reward"]
+                model_kl + m_td["loss_model_reco"] + m_td["loss_model_reward"]
             ).squeeze()
             opt_model.zero_grad(set_to_none=True)
             total_m.backward()
@@ -475,7 +479,7 @@ def main(cfg: DictConfig):
             opt_value.step()
             value_target_updater.step()
 
-            loss_hist["kl"].append(m_td["loss_model_kl"].detach())
+            loss_hist["kl"].append(model_kl.detach())
             loss_hist["reco"].append(m_td["loss_model_reco"].detach())
             loss_hist["reward"].append(m_td["loss_model_reward"].detach())
             loss_hist["actor"].append(a_td["loss_actor"].detach())

@@ -46,6 +46,7 @@ from torchrl.objectives.dreamer_v3 import (
     _default_bins,
     _match_trailing_dim,
     categorical_kl_balanced,
+    categorical_kl_terms,
     symexp,
     symlog,
     two_hot_cross_entropy,
@@ -480,6 +481,68 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         kl.backward()
         assert prior_logits.grad.abs().max().item() == pytest.approx(0.0, abs=1e-6)
         assert posterior_logits.grad.abs().max().item() == pytest.approx(0.0, abs=1e-6)
+
+    def test_dreamer_v3_reference_kl_fixture_and_gradients(self, device):
+        posterior_logits = torch.tensor(
+            [[[2.0, -1.0, 0.5], [-0.5, 1.5, 0.0]]],
+            device=device,
+            requires_grad=True,
+        )
+        prior_logits = torch.tensor(
+            [[[0.0, 1.0, -1.0], [1.0, -0.5, 0.5]]],
+            device=device,
+            requires_grad=True,
+        )
+
+        dynamics, representation = categorical_kl_terms(
+            posterior_logits,
+            prior_logits,
+            free_nats=0.0,
+            unimix=0.01,
+        )
+        assert dynamics.item() == pytest.approx(1.9163513, abs=1e-6)
+        assert representation.item() == pytest.approx(1.9163513, abs=1e-6)
+
+        dynamics.backward(retain_graph=True)
+        assert posterior_logits.grad is None
+        assert prior_logits.grad is not None and prior_logits.grad.norm() > 0
+        prior_logits.grad = None
+        representation.backward()
+        assert posterior_logits.grad is not None and posterior_logits.grad.norm() > 0
+        assert prior_logits.grad is None
+
+    def test_dreamer_v3_reference_kl_aggregates_before_free_nats(self, device):
+        logits = torch.randn(3, 4, 8, device=device, requires_grad=True)
+        dynamics, representation = categorical_kl_terms(
+            logits,
+            logits,
+            free_nats=1.0,
+            unimix=0.01,
+        )
+        assert dynamics.item() == pytest.approx(1.0)
+        assert representation.item() == pytest.approx(1.0)
+
+    def test_dreamer_v3_model_loss_reference_kl_keys(self, device):
+        tensordict = self._create_world_model_data().to(device)
+        world_model = self._create_world_model(reward_two_hot=True).to(device)
+        loss_module = DreamerV3ModelLoss(
+            world_model,
+            kl_mode="separate",
+            lambda_dynamic=1.0,
+            lambda_representation=0.1,
+            unimix=0.01,
+            free_bits=0.0,
+            num_reward_bins=self.num_reward_bins,
+        )
+        loss_td, _ = loss_module(tensordict)
+        assert "loss_model_kl" not in loss_td.keys()
+        assert "loss_model_dynamic" in loss_td.keys()
+        assert "loss_model_representation" in loss_td.keys()
+        dynamic = loss_td["loss_model_dynamic"]
+        representation = loss_td["loss_model_representation"]
+        assert dynamic.shape == torch.Size([1])
+        assert representation.shape == torch.Size([1])
+        (dynamic + representation).backward()
 
     def test_dreamer_v3_model_tensor_keys(self, device):
         world_model = self._create_world_model()

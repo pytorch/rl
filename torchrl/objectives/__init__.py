@@ -20,6 +20,7 @@ from torchrl.objectives.dreamer import (
 )
 from torchrl.objectives.dreamer_v3 import (
     categorical_kl_balanced,
+    categorical_kl_terms,
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
@@ -99,6 +100,7 @@ __all__ = [
     "add_random_module",
     "AUTO_LOSS_MASK_KEYS",
     "categorical_kl_balanced",
+    "categorical_kl_terms",
     "default_value_kwargs",
     "distance_loss",
     "group_optimizers",
