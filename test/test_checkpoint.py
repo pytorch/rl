@@ -21,6 +21,7 @@ from torchrl.checkpoint import (
     CheckpointAdapter,
     CheckpointError,
     CheckpointOptions,
+    CheckpointRotation,
     GlobalRNGState,
     StateDictCheckpointAdapter,
 )
@@ -500,6 +501,181 @@ def test_interrupted_write_preserves_checkpoint(tmp_path, format):
     value = {}
     Checkpoint(value=value).load(path)
     assert value == {"version": 1}
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_checkpoint_rotation_keeps_latest_and_loads_newest(tmp_path, format):
+    rotation = CheckpointRotation(tmp_path / "checkpoints", keep_last=3)
+    for step in range(1, 6):
+        rotation.save(
+            Checkpoint(format=format, value={"step": step}),
+            step=step,
+        )
+
+    paths = rotation.checkpoints()
+    assert [path.stem for path in paths] == [
+        "checkpoint-000000000003",
+        "checkpoint-000000000004",
+        "checkpoint-000000000005",
+    ]
+    assert rotation.latest() == paths[-1]
+
+    value = {}
+    result = rotation.load_latest(Checkpoint(value=value))
+    assert result.loaded == {"value"}
+    assert value == {"step": 5}
+
+
+@pytest.mark.parametrize("mode", ["min", "max"])
+def test_checkpoint_rotation_keeps_best_outside_latest(tmp_path, mode):
+    scores = [5.0, 1.0, 3.0, 4.0] if mode == "min" else [1.0, 5.0, 3.0, 2.0]
+    rotation = CheckpointRotation(
+        tmp_path / "checkpoints",
+        keep_last=2,
+        keep_best=("score", mode),
+    )
+    for step, score in enumerate(scores, 1):
+        rotation.save(
+            Checkpoint(value={"step": step}),
+            step=step,
+            metadata={"score": score},
+        )
+
+    assert [path.name for path in rotation.checkpoints()] == [
+        "checkpoint-000000000002",
+        "checkpoint-000000000003",
+        "checkpoint-000000000004",
+    ]
+    assert rotation.best().name == "checkpoint-000000000002"
+    assert rotation.latest().name == "checkpoint-000000000004"
+
+
+@pytest.mark.parametrize("mode", ["min", "max"])
+def test_checkpoint_rotation_best_tie_prefers_latest(tmp_path, mode):
+    rotation = CheckpointRotation(
+        tmp_path,
+        keep_last=1,
+        keep_best=("score", mode),
+    )
+    rotation.save(Checkpoint(value=1), step=1, metadata={"score": 2.0})
+    rotation.save(Checkpoint(value=2), step=2, metadata={"score": 2.0})
+
+    assert rotation.checkpoints() == (rotation.latest(),)
+    assert rotation.best() == rotation.latest()
+
+
+@pytest.mark.parametrize(
+    "metadata,error",
+    [
+        ({}, KeyError),
+        ({"score": True}, TypeError),
+        ({"score": "high"}, TypeError),
+        ({"score": float("nan")}, ValueError),
+        ({"score": float("inf")}, ValueError),
+    ],
+)
+def test_checkpoint_rotation_rejects_invalid_best_metric(tmp_path, metadata, error):
+    rotation = CheckpointRotation(
+        tmp_path / "checkpoints",
+        keep_last=1,
+        keep_best=("score", "max"),
+    )
+
+    with pytest.raises(error):
+        rotation.save(Checkpoint(value=1), step=1, metadata=metadata)
+
+    assert not rotation.directory.exists()
+
+
+def test_checkpoint_rotation_ignores_unrecognized_entries(tmp_path):
+    rotation = CheckpointRotation(tmp_path, keep_last=1)
+    (tmp_path / "notes.txt").write_text("unrelated")
+    (tmp_path / "checkpoint-invalid").mkdir()
+    (tmp_path / "checkpoint-000000000001").mkdir()
+    (tmp_path / ".checkpoint-000000000002.delete-deadbeef").mkdir()
+
+    assert rotation.checkpoints() == ()
+    assert rotation.latest() is None
+    assert rotation.best() is None
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_checkpoint_rotation_failed_save_does_not_prune(tmp_path, format):
+    rotation = CheckpointRotation(tmp_path, keep_last=1)
+    original = rotation.save(Checkpoint(format=format, value=1), step=1)
+    failing = Checkpoint(format=format).register(
+        "value", Box(2), adapter=FailingAdapter()
+    )
+
+    with pytest.raises(RuntimeError, match="interrupted"):
+        rotation.save(failing, step=2)
+
+    assert rotation.checkpoints() == (original,)
+    assert Checkpoint.is_checkpoint(original)
+
+
+@pytest.mark.parametrize("format", ["directory", "archive"])
+def test_checkpoint_rotation_replaces_same_step(tmp_path, format):
+    rotation = CheckpointRotation(tmp_path, keep_last=2)
+    path = rotation.save(Checkpoint(format=format, value={"version": 1}), step=4)
+    replacement = rotation.save(Checkpoint(format=format, value={"version": 2}), step=4)
+
+    assert replacement == path
+    assert rotation.checkpoints() == (path,)
+    value = {}
+    rotation.load_latest(Checkpoint(value=value))
+    assert value == {"version": 2}
+
+
+def test_checkpoint_rotation_replaces_same_step_across_formats(tmp_path):
+    rotation = CheckpointRotation(tmp_path, keep_last=2)
+    directory = rotation.save(Checkpoint(value={"format": "directory"}), step=4)
+    archive = rotation.save(
+        Checkpoint(format="archive", value={"format": "archive"}), step=4
+    )
+
+    assert not directory.exists()
+    assert rotation.checkpoints() == (archive,)
+    value = {}
+    rotation.load_latest(Checkpoint(value=value))
+    assert value == {"format": "archive"}
+
+
+def test_checkpoint_rotation_prune_returns_removed_paths(tmp_path):
+    rotation = CheckpointRotation(tmp_path, keep_last=3)
+    paths = [rotation.save(Checkpoint(value=step), step=step) for step in range(1, 4)]
+    rotation.keep_last = 1
+
+    assert rotation.prune() == tuple(paths[:2])
+    assert rotation.checkpoints() == (paths[-1],)
+
+
+@pytest.mark.parametrize(
+    "kwargs,error",
+    [
+        ({"keep_last": 0}, ValueError),
+        ({"keep_last": True}, TypeError),
+        ({"keep_last": 1, "prefix": "bad/name"}, ValueError),
+        ({"keep_last": 1, "keep_best": ("score", "median")}, ValueError),
+    ],
+)
+def test_checkpoint_rotation_validates_configuration(tmp_path, kwargs, error):
+    with pytest.raises(error):
+        CheckpointRotation(tmp_path, **kwargs)
+
+
+def test_checkpoint_rotation_validates_step(tmp_path):
+    rotation = CheckpointRotation(tmp_path, keep_last=1)
+    with pytest.raises(TypeError):
+        rotation.save(Checkpoint(value=1), step=True)
+    with pytest.raises(ValueError):
+        rotation.save(Checkpoint(value=1), step=-1)
+
+
+def test_checkpoint_rotation_load_latest_requires_checkpoint(tmp_path):
+    rotation = CheckpointRotation(tmp_path, keep_last=1)
+    with pytest.raises(FileNotFoundError, match="No checkpoints"):
+        rotation.load_latest(Checkpoint(value={}))
 
 
 @pytest.mark.parametrize("format", ["directory", "archive"])

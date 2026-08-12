@@ -86,6 +86,30 @@ registered with a component are the baseline; operation-level keyword arguments
 override matching entries and explicitly supplied positional arguments replace
 the baseline tuple.
 
+Checkpoint rotation
+-------------------
+
+:class:`CheckpointRotation` retains the newest checkpoints and can preserve an
+older checkpoint with the best recorded metric. Metrics are read from manifest
+metadata.
+
+.. code-block:: python
+
+    from torchrl.checkpoint import Checkpoint, CheckpointRotation
+
+    checkpoint = Checkpoint(policy=policy, optimizer=optimizer)
+    rotation = CheckpointRotation(
+        "run/checkpoints",
+        keep_last=3,
+        keep_best=("eval_reward", "max"),
+    )
+    rotation.save(
+        checkpoint,
+        step=100_000,
+        metadata={"eval_reward": 42.5},
+    )
+    rotation.load_latest(checkpoint)
+
 Compatibility
 -------------
 
@@ -123,6 +147,7 @@ API
     CheckpointError
     CheckpointLoadResult
     CheckpointOptions
+    CheckpointRotation
     CheckpointFormat
     CheckpointStrictness
     DumpLoadCheckpointAdapter

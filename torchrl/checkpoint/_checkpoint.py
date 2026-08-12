@@ -7,6 +7,7 @@ from __future__ import annotations
 import abc
 import base64
 import json
+import math
 import os
 import random
 import shutil
@@ -18,6 +19,7 @@ from collections.abc import Callable, Collection, Mapping, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from numbers import Real
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
@@ -33,6 +35,8 @@ CheckpointFormat = Literal["directory", "archive"]
 CheckpointStrictness = Literal["error", "warn", "ignore"]
 ArchiveCompression = Literal["stored", "deflate"]
 StateDictFormat = Literal["directory", "archive", "consolidated", "torch"]
+CheckpointMetricMode = Literal["min", "max"]
+CheckpointBest = tuple[str, CheckpointMetricMode]
 
 _MANIFEST_NAME = "manifest.json"
 _FORMAT_NAME = "torchrl.checkpoint"
@@ -1331,3 +1335,239 @@ class Checkpoint:
         except (TypeError, ValueError, OverflowError):
             return False
         return True
+
+
+@dataclass(frozen=True)
+class _RotatedCheckpoint:
+    path: Path
+    step: int
+    metric: float | None
+
+
+class CheckpointRotation:
+    """Manage a directory of retained TorchRL checkpoints.
+
+    Args:
+        directory: Directory containing the rotated checkpoints.
+        keep_last: Number of newest checkpoints to retain.
+        keep_best: Optional ``(metadata_key, mode)`` pair. The best checkpoint
+            is retained in addition to the newest checkpoints.
+        prefix: Filename prefix for checkpoint entries.
+
+    Examples:
+        >>> import tempfile
+        >>> from torchrl.checkpoint import Checkpoint, CheckpointRotation
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     checkpoint = Checkpoint(value={"step": 1})
+        ...     rotation = CheckpointRotation(tmpdir, keep_last=2)
+        ...     path = rotation.save(checkpoint, step=1)
+        ...     rotation.latest() == path
+        True
+    """
+
+    def __init__(
+        self,
+        directory: str | Path,
+        *,
+        keep_last: int,
+        keep_best: CheckpointBest | None = None,
+        prefix: str = "checkpoint",
+    ) -> None:
+        if isinstance(keep_last, bool) or not isinstance(keep_last, int):
+            raise TypeError("keep_last must be an integer.")
+        if keep_last < 1:
+            raise ValueError("keep_last must be greater than zero.")
+        if not isinstance(prefix, str):
+            raise TypeError("prefix must be a string.")
+        if not prefix or prefix in (".", ".."):
+            raise ValueError("prefix must be a non-empty filename prefix.")
+        if "/" in prefix or "\\" in prefix:
+            raise ValueError("prefix cannot contain path separators.")
+        if keep_best is not None:
+            if not isinstance(keep_best, tuple) or len(keep_best) != 2:
+                raise TypeError("keep_best must be a (metadata_key, mode) tuple.")
+            key, mode = keep_best
+            if not isinstance(key, str) or not key:
+                raise ValueError("The keep_best metadata key must be non-empty.")
+            if mode not in ("min", "max"):
+                raise ValueError("The keep_best mode must be 'min' or 'max'.")
+        self.directory = Checkpoint._local_path(directory)
+        self.keep_last = keep_last
+        self.keep_best = keep_best
+        self.prefix = prefix
+
+    def save(
+        self,
+        checkpoint: Checkpoint,
+        *,
+        step: int,
+        metadata: Mapping[str, Any] | None = None,
+        components: Collection[str] | None = None,
+        component_options: Mapping[str, CheckpointOptions] | None = None,
+    ) -> Path:
+        """Save a checkpoint at ``step`` and apply the retention policy."""
+        if not isinstance(checkpoint, Checkpoint):
+            raise TypeError("checkpoint must be a Checkpoint instance.")
+        self._validate_step(step)
+        metadata = dict(metadata or {})
+        self._validate_metric(metadata)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        destination = self._checkpoint_path(step, checkpoint.format)
+        checkpoint.save(
+            destination,
+            components=components,
+            component_options=component_options,
+            metadata=metadata,
+        )
+        alternate_format = (
+            "archive" if checkpoint.format == "directory" else "directory"
+        )
+        alternate = self._checkpoint_path(step, alternate_format)
+        if alternate.exists():
+            self._remove_atomically(alternate)
+        self.prune()
+        return destination
+
+    def checkpoints(self) -> tuple[Path, ...]:
+        """Return recognized checkpoints ordered by step."""
+        return tuple(record.path for record in self._records())
+
+    def latest(self) -> Path | None:
+        """Return the newest recognized checkpoint, if any."""
+        records = self._records()
+        return records[-1].path if records else None
+
+    def best(self) -> Path | None:
+        """Return the best recognized checkpoint, if configured and available."""
+        record = self._select_best(self._records())
+        return record.path if record is not None else None
+
+    def prune(self) -> tuple[Path, ...]:
+        """Apply the retention policy and return the removed paths."""
+        records = self._records()
+        retained = {record.path for record in records[-self.keep_last :]}
+        best = self._select_best(records)
+        if best is not None:
+            retained.add(best.path)
+        removed = []
+        for record in records:
+            if record.path not in retained:
+                self._remove_atomically(record.path)
+                removed.append(record.path)
+        return tuple(removed)
+
+    def load_latest(
+        self,
+        checkpoint: Checkpoint,
+        *,
+        components: Collection[str] | None = None,
+        component_options: Mapping[str, CheckpointOptions] | None = None,
+        map_location: Any = None,
+        tensor_load_kwargs: Mapping[str, Any] | None = None,
+        strict: CheckpointStrictness | None = None,
+    ) -> CheckpointLoadResult:
+        """Restore the newest recognized checkpoint."""
+        if not isinstance(checkpoint, Checkpoint):
+            raise TypeError("checkpoint must be a Checkpoint instance.")
+        latest = self.latest()
+        if latest is None:
+            raise FileNotFoundError(
+                f"No checkpoints were found in rotation directory {self.directory}."
+            )
+        return checkpoint.load(
+            latest,
+            components=components,
+            component_options=component_options,
+            map_location=map_location,
+            tensor_load_kwargs=tensor_load_kwargs,
+            strict=strict,
+        )
+
+    def _records(self) -> list[_RotatedCheckpoint]:
+        if not self.directory.exists():
+            return []
+        if not self.directory.is_dir():
+            raise NotADirectoryError(
+                f"Checkpoint rotation path is not a directory: {self.directory}."
+            )
+        records = []
+        name_prefix = f"{self.prefix}-"
+        for path in self.directory.iterdir():
+            name = path.name
+            if name.endswith(".torchrl"):
+                name = name[: -len(".torchrl")]
+            if not name.startswith(name_prefix):
+                continue
+            step_text = name[len(name_prefix) :]
+            if not step_text.isdigit():
+                continue
+            try:
+                manifest = Checkpoint.manifest(path)
+            except (CheckpointError, OSError, TypeError, ValueError):
+                continue
+            records.append(
+                _RotatedCheckpoint(
+                    path=path,
+                    step=int(step_text),
+                    metric=self._read_metric(manifest),
+                )
+            )
+        records.sort(key=lambda record: (record.step, record.path.name))
+        return records
+
+    def _checkpoint_path(self, step: int, format: CheckpointFormat) -> Path:
+        suffix = ".torchrl" if format == "archive" else ""
+        return self.directory / f"{self.prefix}-{step:012d}{suffix}"
+
+    def _select_best(
+        self, records: Collection[_RotatedCheckpoint]
+    ) -> _RotatedCheckpoint | None:
+        if self.keep_best is None:
+            return None
+        candidates = [record for record in records if record.metric is not None]
+        if not candidates:
+            return None
+        if self.keep_best[1] == "max":
+            return max(candidates, key=lambda record: (record.metric, record.step))
+        return min(candidates, key=lambda record: (record.metric, -record.step))
+
+    def _read_metric(self, manifest: Mapping[str, Any]) -> float | None:
+        if self.keep_best is None:
+            return None
+        metadata = manifest.get("metadata")
+        if not isinstance(metadata, Mapping) or self.keep_best[0] not in metadata:
+            return None
+        try:
+            return self._metric_value(metadata[self.keep_best[0]])
+        except (TypeError, ValueError):
+            return None
+
+    def _validate_metric(self, metadata: Mapping[str, Any]) -> None:
+        if self.keep_best is None:
+            return
+        key = self.keep_best[0]
+        if key not in metadata:
+            raise KeyError(f"Checkpoint metadata is missing keep_best metric {key!r}.")
+        self._metric_value(metadata[key])
+
+    @staticmethod
+    def _metric_value(value: Any) -> float:
+        value = _to_json_value(value)
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError("Checkpoint retention metrics must be numeric scalars.")
+        value = float(value)
+        if not math.isfinite(value):
+            raise ValueError("Checkpoint retention metrics must be finite.")
+        return value
+
+    def _remove_atomically(self, path: Path) -> None:
+        tombstone = path.with_name(f".{path.name}.delete-{uuid.uuid4().hex}")
+        os.replace(path, tombstone)
+        Checkpoint._remove_path(tombstone)
+
+    @staticmethod
+    def _validate_step(step: int) -> None:
+        if isinstance(step, bool) or not isinstance(step, int):
+            raise TypeError("step must be an integer.")
+        if step < 0:
+            raise ValueError("step must be non-negative.")
