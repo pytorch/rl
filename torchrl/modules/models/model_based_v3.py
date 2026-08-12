@@ -8,6 +8,8 @@ Reference: https://arxiv.org/abs/2301.04104
 """
 from __future__ import annotations
 
+from typing import Literal
+
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from torch import nn
@@ -16,6 +18,161 @@ from torch.nn import GRUCell
 
 _DEFAULT_NUM_BINS = 255
 _DEFAULT_BIN_RANGE = 20.0
+
+
+def _dreamer_v3_init(module: nn.Module) -> None:
+    """Initialize linear modules like the reference DreamerV3 implementation."""
+    if isinstance(module, nn.Linear):
+        std = 1.1368 / module.in_features**0.5
+        nn.init.trunc_normal_(module.weight, std=std, a=-2 * std, b=2 * std)
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
+
+
+class _DreamerV3RMSNorm(nn.Module):
+    """RMS normalization with learned scale and shift."""
+
+    def __init__(self, features: int, eps: float = 1e-4, device=None):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(features, device=device))
+        self.bias = nn.Parameter(torch.zeros(features, device=device))
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        dtype = value.dtype
+        value = value.float()
+        value = value * torch.rsqrt(value.square().mean(-1, keepdim=True) + self.eps)
+        return (value * self.weight.float() + self.bias.float()).to(dtype)
+
+
+class _DreamerV3BlockLinear(nn.Module):
+    """Independent linear projections over equally sized feature blocks."""
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        num_blocks: int,
+        *,
+        device=None,
+    ):
+        super().__init__()
+        if in_features % num_blocks or out_features % num_blocks:
+            raise ValueError(
+                "in_features and out_features must be divisible by num_blocks, "
+                f"got {in_features}, {out_features}, and {num_blocks}."
+            )
+        self.in_features = in_features
+        self.out_features = out_features
+        self.num_blocks = num_blocks
+        block_in = in_features // num_blocks
+        block_out = out_features // num_blocks
+        self.weight = nn.Parameter(
+            torch.empty(num_blocks, block_in, block_out, device=device)
+        )
+        self.bias = nn.Parameter(torch.zeros(out_features, device=device))
+        std = 1.1368 / block_in**0.5
+        nn.init.trunc_normal_(self.weight, std=std, a=-2 * std, b=2 * std)
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        value = value.reshape(
+            *value.shape[:-1], self.num_blocks, self.in_features // self.num_blocks
+        )
+        value = torch.einsum("...bi,bio->...bo", value, self.weight)
+        return value.flatten(-2) + self.bias
+
+
+class _DreamerV3BlockGRU(nn.Module):
+    """Grouped gated recurrent core used by the reference DreamerV3 RSSM."""
+
+    def __init__(
+        self,
+        *,
+        state_dim: int,
+        action_dim: int,
+        hidden_dim: int,
+        belief_dim: int,
+        num_blocks: int,
+        num_layers: int,
+        norm_eps: float,
+        device=None,
+    ):
+        super().__init__()
+        if belief_dim % num_blocks:
+            raise ValueError(
+                "rnn_hidden_dim must be divisible by num_blocks, got "
+                f"{belief_dim} and {num_blocks}."
+            )
+        self.belief_dim = belief_dim
+        self.num_blocks = num_blocks
+        self.belief_projection = nn.Sequential(
+            nn.Linear(belief_dim, hidden_dim, device=device),
+            _DreamerV3RMSNorm(hidden_dim, norm_eps, device=device),
+            nn.SiLU(),
+        )
+        self.state_projection = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim, device=device),
+            _DreamerV3RMSNorm(hidden_dim, norm_eps, device=device),
+            nn.SiLU(),
+        )
+        self.action_projection = nn.Sequential(
+            nn.Linear(action_dim, hidden_dim, device=device),
+            _DreamerV3RMSNorm(hidden_dim, norm_eps, device=device),
+            nn.SiLU(),
+        )
+        layer_in = belief_dim + 3 * hidden_dim * num_blocks
+        layers = []
+        for _ in range(num_layers):
+            layers.extend(
+                [
+                    _DreamerV3BlockLinear(
+                        layer_in, belief_dim, num_blocks, device=device
+                    ),
+                    _DreamerV3RMSNorm(belief_dim, norm_eps, device=device),
+                    nn.SiLU(),
+                ]
+            )
+            layer_in = belief_dim
+        self.hidden_layers = nn.Sequential(*layers)
+        self.gates = _DreamerV3BlockLinear(
+            belief_dim, 3 * belief_dim, num_blocks, device=device
+        )
+        self.apply(_dreamer_v3_init)
+
+    def forward(
+        self,
+        state: torch.Tensor,
+        belief: torch.Tensor,
+        action: torch.Tensor,
+    ) -> torch.Tensor:
+        action = action / action.detach().abs().clamp_min(1)
+        features = torch.cat(
+            [
+                self.belief_projection(belief),
+                self.state_projection(state),
+                self.action_projection(action),
+            ],
+            -1,
+        )
+        grouped_belief = belief.reshape(
+            *belief.shape[:-1], self.num_blocks, self.belief_dim // self.num_blocks
+        )
+        repeated_features = features.unsqueeze(-2).expand(
+            *features.shape[:-1], self.num_blocks, features.shape[-1]
+        )
+        hidden = torch.cat([grouped_belief, repeated_features], -1).flatten(-2)
+        hidden = self.hidden_layers(hidden)
+        gates = self.gates(hidden).reshape(
+            *hidden.shape[:-1],
+            self.num_blocks,
+            3,
+            self.belief_dim // self.num_blocks,
+        )
+        reset, candidate, update = gates.unbind(-2)
+        reset = reset.flatten(-2).sigmoid()
+        candidate = (reset * candidate.flatten(-2)).tanh()
+        update = (update.flatten(-2) - 1).sigmoid()
+        return update * candidate + (1 - update) * belief
 
 
 def symlog(x: torch.Tensor) -> torch.Tensor:
@@ -283,6 +440,18 @@ class RSSMPriorV3(nn.Module):
         action_dim (int, optional): Action dimension. If provided (along with
             ``num_categoricals * num_classes``), uses explicit ``nn.Linear``
             instead of ``nn.LazyLinear``. Defaults to None.
+        recurrent_model ("gru" or "block_gru", optional): Recurrent core.
+            ``"gru"`` preserves the historical TorchRL implementation while
+            ``"block_gru"`` selects the grouped DreamerV3 core. Defaults to
+            ``"gru"``.
+        num_blocks (int, optional): Number of groups in the block GRU.
+            Defaults to 8.
+        num_layers (int, optional): Number of block-linear dynamics layers.
+            Defaults to 1.
+        prior_num_layers (int, optional): Number of prior predictor layers in
+            block-GRU mode. Defaults to 2.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to
+            ``1e-4``.
         device (torch.device, optional): Device. Defaults to None.
 
     Examples:
@@ -315,6 +484,11 @@ class RSSMPriorV3(nn.Module):
         device=None,
         *,
         action_shape: torch.Size | tuple[int, ...] | None = None,
+        recurrent_model: Literal["gru", "block_gru"] = "gru",
+        num_blocks: int = 8,
+        num_layers: int = 1,
+        prior_num_layers: int = 2,
+        norm_eps: float = 1e-4,
     ):
         super().__init__()
         if action_spec is not None and action_shape is not None:
@@ -333,20 +507,60 @@ class RSSMPriorV3(nn.Module):
         self.rnn_hidden_dim = rnn_hidden_dim
         state_dim = num_categoricals * num_classes
 
-        self.rnn = GRUCell(hidden_dim, rnn_hidden_dim, device=device)
+        if recurrent_model not in ("gru", "block_gru"):
+            raise ValueError(
+                "recurrent_model must be 'gru' or 'block_gru', got "
+                f"{recurrent_model!r}."
+            )
+        if recurrent_model == "block_gru" and action_dim is None:
+            raise ValueError("block_gru requires an explicit action_dim.")
+        self.recurrent_model = recurrent_model
 
-        if action_dim is not None:
-            projector_in = state_dim + action_dim
-            first_linear = nn.Linear(projector_in, hidden_dim, device=device)
+        if recurrent_model == "block_gru":
+            self.rnn = _DreamerV3BlockGRU(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dim=hidden_dim,
+                belief_dim=rnn_hidden_dim,
+                num_blocks=num_blocks,
+                num_layers=num_layers,
+                norm_eps=norm_eps,
+                device=device,
+            )
+            prior_layers = []
+            prior_in = rnn_hidden_dim
+            for _ in range(prior_num_layers):
+                prior_layers.extend(
+                    [
+                        nn.Linear(prior_in, hidden_dim, device=device),
+                        _DreamerV3RMSNorm(hidden_dim, norm_eps, device=device),
+                        nn.SiLU(),
+                    ]
+                )
+                prior_in = hidden_dim
+            prior_layers.append(
+                nn.Linear(
+                    prior_in,
+                    num_categoricals * num_classes,
+                    device=device,
+                )
+            )
+            self.rnn_to_prior_projector = nn.Sequential(*prior_layers)
+            self.rnn_to_prior_projector.apply(_dreamer_v3_init)
+            self.action_state_projector = None
         else:
-            first_linear = nn.LazyLinear(hidden_dim, device=device)
-        self.action_state_projector = nn.Sequential(first_linear, nn.SiLU())
-
-        self.rnn_to_prior_projector = nn.Sequential(
-            nn.Linear(rnn_hidden_dim, hidden_dim, device=device),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, num_categoricals * num_classes, device=device),
-        )
+            self.rnn = GRUCell(hidden_dim, rnn_hidden_dim, device=device)
+            if action_dim is not None:
+                projector_in = state_dim + action_dim
+                first_linear = nn.Linear(projector_in, hidden_dim, device=device)
+            else:
+                first_linear = nn.LazyLinear(hidden_dim, device=device)
+            self.action_state_projector = nn.Sequential(first_linear, nn.SiLU())
+            self.rnn_to_prior_projector = nn.Sequential(
+                nn.Linear(rnn_hidden_dim, hidden_dim, device=device),
+                nn.SiLU(),
+                nn.Linear(hidden_dim, num_categoricals * num_classes, device=device),
+            )
 
     def forward(
         self,
@@ -369,18 +583,21 @@ class RSSMPriorV3(nn.Module):
             belief (torch.Tensor): Updated GRU hidden state, shape
                 ``[..., rnn_hidden_dim]``.
         """
-        projector_input = torch.cat([state, action], dim=-1)
-        action_state = self.action_state_projector(projector_input)
+        if self.recurrent_model == "block_gru":
+            belief = self.rnn(state, belief, action)
+        else:
+            projector_input = torch.cat([state, action], dim=-1)
+            action_state = self.action_state_projector(projector_input)
 
-        # Run GRU in fp32 to avoid cuBLAS dispatch issues under autocast
-        dtype = action_state.dtype
-        device_type = action_state.device.type
-        with torch.amp.autocast(device_type=device_type, enabled=False):
-            belief = self.rnn(
-                action_state.float(),
-                belief.float() if belief is not None else None,
-            )
-        belief = belief.to(dtype)
+            # Run GRU in fp32 to avoid cuBLAS dispatch issues under autocast
+            dtype = action_state.dtype
+            device_type = action_state.device.type
+            with torch.amp.autocast(device_type=device_type, enabled=False):
+                belief = self.rnn(
+                    action_state.float(),
+                    belief.float() if belief is not None else None,
+                )
+            belief = belief.to(dtype)
 
         prior_logits_flat = self.rnn_to_prior_projector(belief)
         prior_logits = prior_logits_flat.view(
@@ -416,6 +633,13 @@ class RSSMPosteriorV3(nn.Module):
             ``obs_embed_dim``, uses explicit ``nn.Linear``. Defaults to None.
         obs_embed_dim (int, optional): Observation embedding dimension. If provided
             along with ``rnn_hidden_dim``, uses explicit ``nn.Linear``. Defaults to None.
+        use_rms_norm (bool, optional): Build the observation predictor from
+            RMS-normalized DreamerV3 layers. Defaults to ``False`` for checkpoint
+            compatibility.
+        num_layers (int, optional): Number of observation predictor layers when
+            ``use_rms_norm=True``. Defaults to 1.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to
+            ``1e-4``.
         device (torch.device, optional): Device. Defaults to None.
 
     Examples:
@@ -443,10 +667,20 @@ class RSSMPosteriorV3(nn.Module):
         rnn_hidden_dim: int | None = None,
         obs_embed_dim: int | None = None,
         device=None,
+        *,
+        use_rms_norm: bool = False,
+        num_layers: int = 1,
+        norm_eps: float = 1e-4,
     ):
         super().__init__()
         self.num_categoricals = num_categoricals
         self.num_classes = num_classes
+
+        if use_rms_norm and (rnn_hidden_dim is None or obs_embed_dim is None):
+            raise ValueError(
+                "use_rms_norm=True requires explicit rnn_hidden_dim and "
+                "obs_embed_dim."
+            )
 
         if rnn_hidden_dim is not None and obs_embed_dim is not None:
             projector_in = rnn_hidden_dim + obs_embed_dim
@@ -454,11 +688,38 @@ class RSSMPosteriorV3(nn.Module):
         else:
             first_linear = nn.LazyLinear(hidden_dim, device=device)
 
-        self.obs_rnn_to_post_projector = nn.Sequential(
-            first_linear,
-            nn.SiLU(),
-            nn.Linear(hidden_dim, num_categoricals * num_classes, device=device),
-        )
+        if use_rms_norm:
+            layers = []
+            layer_in = projector_in
+            for layer_index in range(num_layers):
+                linear = (
+                    first_linear
+                    if layer_index == 0
+                    else nn.Linear(layer_in, hidden_dim, device=device)
+                )
+                layers.extend(
+                    [
+                        linear,
+                        _DreamerV3RMSNorm(hidden_dim, norm_eps, device=device),
+                        nn.SiLU(),
+                    ]
+                )
+                layer_in = hidden_dim
+            layers.append(
+                nn.Linear(
+                    layer_in,
+                    num_categoricals * num_classes,
+                    device=device,
+                )
+            )
+            self.obs_rnn_to_post_projector = nn.Sequential(*layers)
+            self.obs_rnn_to_post_projector.apply(_dreamer_v3_init)
+        else:
+            self.obs_rnn_to_post_projector = nn.Sequential(
+                first_linear,
+                nn.SiLU(),
+                nn.Linear(hidden_dim, num_categoricals * num_classes, device=device),
+            )
 
     def forward(
         self,
