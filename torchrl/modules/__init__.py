@@ -36,6 +36,7 @@ from .models import (
     DdpgMlpQNet,
     DecisionTransformer,
     DreamerActor,
+    DreamerV3MLP,
     DTActor,
     DuelingCnnDQNet,
     GPWorldModel,
@@ -56,6 +57,7 @@ from .models import (
     RSSMRollout,
     Squeeze2dLayer,
     SqueezeLayer,
+    SymExpTwoHot,
     VDNMixer,
 )
 from .tensordict_module import (
@@ -150,6 +152,7 @@ __all__ = [
     "DistributionalQValueHook",
     "DistributionalQValueModule",
     "DreamerActor",
+    "DreamerV3MLP",
     "DuelingCnnDQNet",
     "EGreedyModule",
     "GPWorldModel",
@@ -210,6 +213,7 @@ __all__ = [
     "SafeSequential",
     "Squeeze2dLayer",
     "SqueezeLayer",
+    "SymExpTwoHot",
     "TanhDelta",
     "TanhModule",
     "TanhNormal",

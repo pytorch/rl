@@ -338,10 +338,15 @@ commands = {
   logger.eval_episodes=1 \
   logger.output_plot= \
   networks.hidden_dim=8 \
-  networks.depth=1 \
+  networks.encoder_layers=1 \
+  networks.decoder_layers=1 \
+  networks.reward_layers=1 \
+  networks.actor_layers=1 \
+  networks.value_layers=1 \
   networks.num_categoricals=2 \
   networks.num_classes=2 \
   networks.num_reward_bins=11 \
+  networks.num_value_bins=11 \
   networks.rnn_hidden_dim=8 \
   networks.obs_embed_dim=8
 """,

@@ -28,7 +28,13 @@ from .model_based import (
     RSSMPrior,
     RSSMRollout,
 )
-from .model_based_v3 import RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3
+from .model_based_v3 import (
+    DreamerV3MLP,
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+    RSSMRolloutV3,
+    SymExpTwoHot,
+)
 from .models import (
     Conv2dNet,
     Conv3dNet,
@@ -70,6 +76,7 @@ __all__ = [
     "DecisionTransformer",
     "DistributionalDQNnet",
     "DreamerActor",
+    "DreamerV3MLP",
     "DTActor",
     "DuelingCnnDQNet",
     "DuelingMlpDQNet",
@@ -94,6 +101,7 @@ __all__ = [
     "RSSMRolloutV3",
     "Squeeze2dLayer",
     "SqueezeLayer",
+    "SymExpTwoHot",
     "VDNMixer",
     "reset_noise",
 ]

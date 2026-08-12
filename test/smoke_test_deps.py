@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import runpy
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +20,8 @@ _has_ale_py = importlib.util.find_spec("ale_py") is not None
 _has_dm_control = importlib.util.find_spec("dm_control") is not None
 _has_dm_env = importlib.util.find_spec("dm_env") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_hydra = importlib.util.find_spec("hydra") is not None
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 _has_tensorboard = importlib.util.find_spec("tensorboard") is not None
 
 
@@ -35,6 +39,35 @@ def test_dm_control():
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
     env.reset()
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="dm_control not available on Python 3.13+ (labmaze lacks wheels)",
+)
+@pytest.mark.skipif(
+    not (_has_hydra and _has_omegaconf),
+    reason="requires hydra and omegaconf",
+)
+def test_dreamer_v3_dmc_walker_env():
+    from omegaconf import OmegaConf
+
+    repo_root = Path(__file__).parents[1]
+    example = runpy.run_path(
+        repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
+        run_name="dreamer_v3_dmc_smoke",
+    )
+    base = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
+    walker = OmegaConf.load(
+        repo_root / "sota-implementations/dreamer_v3/config_dmc_walker.yaml"
+    )
+    del walker.defaults
+    cfg = OmegaConf.merge(base, walker)
+    env = example["make_env"](cfg, seed=0)
+    tensordict = env.reset()
+    assert tensordict["observation"].ndim == 1
+    assert env.action_spec.shape[-1] > 0
+    env.close()
 
 
 @pytest.mark.skipif(
