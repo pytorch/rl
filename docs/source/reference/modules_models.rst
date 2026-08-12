@@ -32,6 +32,7 @@ Modules for model-based reinforcement learning, including world models and dynam
     RSSMRollout
     RSSMRolloutV3
     SymExpTwoHot
+    DreamerV3MLP
 
 PILCO
 -----

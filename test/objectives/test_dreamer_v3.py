@@ -595,6 +595,52 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         assert grad_total > 0, "All gradients are zero after actor backward"
 
+    def test_dreamer_v3_continuation_lambda_and_weights(self, device):
+        class _ConstantContinuation(nn.Module):
+            def forward(self_, state, belief):
+                return torch.full_like(state[..., :1], 0.5)
+
+        continuation_model = TensorDictModule(
+            _ConstantContinuation(),
+            in_keys=["state", "belief"],
+            out_keys=["continuation"],
+        ).to(device)
+        value_model = self._create_value_model().to(device)
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model().to(device),
+            value_model,
+            self._create_mb_env().to(device),
+            continuation_model=continuation_model,
+            imagination_horizon=3,
+            discount_loss=True,
+        )
+        loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5)
+
+        reward = torch.tensor([[[1.0], [2.0], [3.0]]], device=device)
+        value = torch.tensor([[[10.0], [20.0], [30.0]]], device=device)
+        continuation = torch.full_like(reward, 0.5)
+        torch.testing.assert_close(
+            loss_module.lambda_target(reward, value, continuation),
+            torch.tensor([[[6.375], [11.5], [18.0]]], device=device),
+        )
+
+        _, fake_data = loss_module(self._create_actor_data().to(device).reshape(-1))
+        expected_weight = torch.tensor([1.0, 0.5, 0.25], device=device)
+        torch.testing.assert_close(
+            fake_data["discount_weight"][0, :, 0], expected_weight
+        )
+        torch.testing.assert_close(
+            fake_data["next", "continuation"],
+            torch.full_like(fake_data["next", "continuation"], 0.5),
+        )
+
+        value_loss = DreamerV3ValueLoss(
+            value_model,
+            discount_loss=True,
+            actor_loss=loss_module,
+        )
+        value_loss(fake_data.detach())
+
     # ------------------------------------------------------------------ #
     # Value loss tests
     # ------------------------------------------------------------------ #
@@ -749,15 +795,34 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         cfg = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
         cfg.networks.num_reward_bins = self.num_reward_bins
-        world_model, prior, reward_head, reward_decoder = example["build_world_model"](
-            cfg=cfg, obs_dim=3, action_dim=self.action_dim
-        )
+        (world_model, prior, reward_head, reward_decoder, continuation_head,) = example[
+            "build_world_model"
+        ](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
         imagination_model = example["build_imagination_model"](
             prior_net=prior,
             reward_net=reward_head,
             reward_decoder=reward_decoder,
         ).to(device)
+        continuation_model = example["build_continuation_model"](
+            continuation_net=continuation_head
+        ).to(device)
         world_model = world_model.to(device)
+        observation = torch.tensor(
+            [[[0.0, 1.0, -3.0], [2.0, -1.0, 0.5]]], device=device
+        )
+        world_input = TensorDict(
+            {
+                "state": torch.zeros(1, 2, self.state_dim, device=device),
+                "belief": torch.zeros(1, 2, cfg.networks.rnn_hidden_dim, device=device),
+                "action": torch.zeros(1, 2, self.action_dim, device=device),
+                "next": {"observation": observation},
+            },
+            [1, 2],
+        )
+        world_model(world_input)
+        torch.testing.assert_close(
+            world_input["next", "symlog_observation"], symlog(observation)
+        )
         shared_parameters = tuple(prior.parameters()) + tuple(reward_head.parameters())
         world_parameters = tuple(world_model.parameters())
         imagination_parameters = tuple(imagination_model.parameters())
@@ -765,6 +830,13 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             any(parameter is candidate for candidate in world_parameters)
             and any(parameter is candidate for candidate in imagination_parameters)
             for parameter in shared_parameters
+        )
+        assert all(
+            any(parameter is candidate for candidate in world_parameters)
+            and any(
+                parameter is candidate for candidate in continuation_model.parameters()
+            )
+            for parameter in continuation_head.parameters()
         )
 
         reward_td = TensorDict(
@@ -777,6 +849,13 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         imagination_model.get_reward_operator()(reward_td)
         assert reward_td["reward_logits"].shape == (2, self.num_reward_bins)
         assert reward_td["reward"].shape == (2, 1)
+        continuation_model(reward_td)
+        assert reward_td["continuation"].shape == (2, 1)
+
+        parameter = nn.Parameter(torch.tensor([3.0, 4.0], device=device))
+        parameter.grad = torch.tensor([30.0, 40.0], device=device)
+        example["adaptive_grad_clip_"]([parameter], clip=0.3)
+        assert parameter.grad.norm().item() == pytest.approx(1.5)
 
     def test_dreamer_v3_value_invalid_loss_type(self, device):
         value_model = self._create_value_model()
@@ -988,6 +1067,26 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         assert prior_logits.shape == (B, T, self.num_cats, self.num_classes)
         assert post_logits.shape == (B, T, self.num_cats, self.num_classes)
 
+        reset = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        reset[:, 2] = True
+        td_a = td.clone().set("is_init", reset)
+        td_b = td.clone().set("is_init", reset)
+        td_b["action"][:, :2] = torch.randn_like(td_b["action"][:, :2])
+        td_b["next", "encoded_latents"][:, :2] = torch.randn_like(
+            td_b["next", "encoded_latents"][:, :2]
+        )
+        torch.manual_seed(0)
+        out_a = rollout(td_a)
+        torch.manual_seed(0)
+        out_b = rollout(td_b)
+        for key in (
+            ("next", "prior_logits"),
+            ("next", "posterior_logits"),
+            ("next", "state"),
+            ("next", "belief"),
+        ):
+            torch.testing.assert_close(out_a[key][:, 2:], out_b[key][:, 2:])
+
     # ------------------------------------------------------------------ #
     # Coverage for previously untested branches
     # ------------------------------------------------------------------ #
@@ -1041,6 +1140,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         loss_module = DreamerV3ModelLoss(
             world_model,
             lambda_continue=1.0,
+            continue_target_scale=0.75,
             num_reward_bins=self.num_reward_bins,
         )
         # state/belief in the default data are zeros, so the continue_head
@@ -1050,8 +1150,13 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         base_td["belief"] = torch.randn_like(base_td["belief"])
         # seed a mix of done / not-done so the BCE target is non-degenerate
         base_td["next", "done"][0, 0] = True
-        loss_td, _ = loss_module(base_td)
+        loss_td, model_out = loss_module(base_td)
         assert "loss_model_continue" in loss_td.keys()
+        target = (~base_td["next", "terminated"]).float() * 0.75
+        expected = torch.nn.functional.binary_cross_entropy_with_logits(
+            model_out["next", "continue_pred"], target
+        )
+        torch.testing.assert_close(loss_td["loss_model_continue"].squeeze(), expected)
         loss_td["loss_model_continue"].backward()
         assert world_model.continue_head.weight.grad.abs().sum() > 0
         assert base_td.shape == (B, T)

@@ -12,6 +12,7 @@ from typing import Literal
 
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch.nn import GRUCell
 
@@ -173,6 +174,62 @@ class _DreamerV3BlockGRU(nn.Module):
         candidate = (reset * candidate.flatten(-2)).tanh()
         update = (update.flatten(-2) - 1).sigmoid()
         return update * candidate + (1 - update) * belief
+
+
+class DreamerV3MLP(nn.Module):
+    """RMS-normalized multilayer perceptron used by DreamerV3 heads.
+
+    Args:
+        in_features (int): Input feature count.
+        out_features (int): Output feature count.
+        depth (int, optional): Number of hidden layers. Defaults to 3.
+        num_cells (int, optional): Hidden feature count. Defaults to 1024.
+        outscale (float, optional): Multiplicative initialization scale for the
+            output layer. Defaults to 1.0.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to
+            ``1e-4``.
+        device (torch.device, optional): Device on which to create parameters.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import DreamerV3MLP
+        >>> module = DreamerV3MLP(6, 4, depth=2, num_cells=8)
+        >>> module(torch.randn(3, 2), torch.randn(3, 4)).shape
+        torch.Size([3, 4])
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        depth: int = 3,
+        num_cells: int = 1024,
+        outscale: float = 1.0,
+        norm_eps: float = 1e-4,
+        device=None,
+    ):
+        super().__init__()
+        layers = []
+        layer_in = in_features
+        for _ in range(depth):
+            layers.extend(
+                [
+                    nn.Linear(layer_in, num_cells, device=device),
+                    _DreamerV3RMSNorm(num_cells, norm_eps, device=device),
+                    nn.SiLU(),
+                ]
+            )
+            layer_in = num_cells
+        output = nn.Linear(layer_in, out_features, device=device)
+        layers.append(output)
+        self.model = nn.Sequential(*layers)
+        self.model.apply(_dreamer_v3_init)
+        with torch.no_grad():
+            output.weight.mul_(outscale)
+
+    def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
+        value = inputs[0] if len(inputs) == 1 else torch.cat(inputs, -1)
+        return self.model(value)
 
 
 def symlog(x: torch.Tensor) -> torch.Tensor:
@@ -788,6 +845,9 @@ class RSSMRolloutV3(TensorDictModuleBase):
         rssm_prior (TensorDictModule): Prior module wrapping :class:`RSSMPriorV3`.
         rssm_posterior (TensorDictModule): Posterior module wrapping
             :class:`RSSMPosteriorV3`.
+        reset_key (NestedKey or None, optional): Boolean key marking the first
+            transition of an episode. State, belief, and action are zeroed at
+            those positions. Defaults to ``"is_init"``.
 
     Examples:
         >>> import torch
@@ -825,6 +885,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         self,
         rssm_prior: TensorDictModule,
         rssm_posterior: TensorDictModule,
+        reset_key: NestedKey | None = "is_init",
     ):
         super().__init__()
         _module = TensorDictSequential(rssm_prior, rssm_posterior)
@@ -832,6 +893,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         self.out_keys = _module.out_keys
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
+        self.reset_key = unravel_key(reset_key) if reset_key is not None else None
 
     def forward(self, tensordict):
         """Roll out the RSSM for one episode chunk.
@@ -855,6 +917,20 @@ class RSSMRolloutV3(TensorDictModuleBase):
         ) + list(self.out_keys)
 
         for t in range(time_steps):
+            reset = (
+                _tensordict.get(self.reset_key, None)
+                if self.reset_key is not None
+                else None
+            )
+            if reset is not None:
+                state = _tensordict.get("state")
+                belief = _tensordict.get("belief")
+                action = _tensordict.get("action")
+                while reset.ndim < state.ndim:
+                    reset = reset.unsqueeze(-1)
+                _tensordict.set("state", torch.where(reset, 0, state))
+                _tensordict.set("belief", torch.where(reset, 0, belief))
+                _tensordict.set("action", torch.where(reset, 0, action))
             self.rssm_prior(_tensordict)
             self.rssm_posterior(_tensordict)
 

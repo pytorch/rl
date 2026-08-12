@@ -20,7 +20,11 @@ from torchrl.modules.models.model_based import (
     RSSMPrior,
     RSSMRollout,
 )
-from torchrl.modules.models.model_based_v3 import RSSMPosteriorV3, RSSMPriorV3
+from torchrl.modules.models.model_based_v3 import (
+    DreamerV3MLP,
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+)
 
 from torchrl.testing import get_default_devices
 
@@ -261,6 +265,17 @@ class TestDreamerComponents:
 
 
 class TestDreamerV3Components:
+    def test_mlp_output_scale_and_multiple_inputs(self):
+        module = DreamerV3MLP(
+            6,
+            4,
+            depth=2,
+            num_cells=8,
+            outscale=0.0,
+        )
+        output = module(torch.randn(3, 2), torch.randn(3, 4))
+        torch.testing.assert_close(output, torch.zeros_like(output))
+
     @pytest.mark.parametrize("device", get_default_devices())
     def test_block_gru_reference_fixture(self, device):
         prior = RSSMPriorV3(
