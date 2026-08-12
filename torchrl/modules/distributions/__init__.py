@@ -23,6 +23,7 @@ from .discrete import (
     Ordinal,
     ReparamGradientStrategy,
 )
+from .utils import ensure_rsample_and_log_prob
 
 distributions_maps = {
     str(dist).lower(): dist
@@ -70,4 +71,5 @@ __all__ = [
     "LLMMaskedCategorical",
     "Ordinal",
     "ReparamGradientStrategy",
+    "ensure_rsample_and_log_prob",
 ]

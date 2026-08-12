@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import math
+import pickle
 import sys
 import warnings
 from functools import partial
@@ -48,6 +49,7 @@ from torchrl.modules.distributions.discrete import (
 )
 from torchrl.modules.distributions.utils import (
     composite_entropy,
+    ensure_rsample_and_log_prob,
     rsample_and_log_prob,
     sample_and_log_prob,
 )
@@ -55,6 +57,80 @@ from torchrl.modules.distributions.utils import (
 from torchrl.testing import get_default_devices
 
 _has_scipy = importlib.util.find_spec("scipy", None) is not None
+
+
+class TestJointSampleLogProbAdapter:
+    def test_native_distribution_preserves_identity(self):
+        dist = TanhNormal(torch.zeros(2), torch.ones(2))
+
+        assert ensure_rsample_and_log_prob(dist) is dist
+
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_reparameterized_fallback_preserves_sample_and_gradients(self, compiled):
+        if compiled and sys.version_info >= (3, 14):
+            pytest.skip("torch.compile requires Python < 3.14")
+
+        actual_loc = torch.tensor([0.2, -0.4], requires_grad=True)
+        actual_scale = torch.tensor([0.7, 1.1], requires_grad=True)
+        expected_loc = actual_loc.detach().clone().requires_grad_()
+        expected_scale = actual_scale.detach().clone().requires_grad_()
+
+        def joint_sample(loc, scale):
+            dist = ensure_rsample_and_log_prob(torch.distributions.Normal(loc, scale))
+            return dist.rsample_and_log_prob((3,))
+
+        if compiled:
+            joint_sample = torch.compile(joint_sample, backend="eager", fullgraph=True)
+
+        torch.manual_seed(0)
+        sample, log_prob = joint_sample(actual_loc, actual_scale)
+        torch.manual_seed(0)
+        expected_dist = torch.distributions.Normal(expected_loc, expected_scale)
+        expected_sample = expected_dist.rsample((3,))
+        expected_log_prob = expected_dist.log_prob(expected_sample)
+
+        torch.testing.assert_close(sample, expected_sample)
+        torch.testing.assert_close(log_prob, expected_log_prob)
+        grads = torch.autograd.grad(log_prob.sum(), (actual_loc, actual_scale))
+        expected_grads = torch.autograd.grad(
+            expected_log_prob.sum(), (expected_loc, expected_scale)
+        )
+        for grad, expected_grad in zip(grads, expected_grads):
+            torch.testing.assert_close(grad, expected_grad)
+
+    def test_proxy_preserves_distribution_api_and_serialization(self):
+        base_dist = torch.distributions.Normal(torch.zeros(2), torch.ones(2))
+        dist = ensure_rsample_and_log_prob(base_dist)
+
+        assert dist is ensure_rsample_and_log_prob(dist)
+        assert dist is not base_dist
+        assert isinstance(dist, torch.distributions.Normal)
+        assert dist.loc is base_dist.loc
+        torch.testing.assert_close(dist.mean, base_dist.mean)
+        assert dist.expand((3, 2)).batch_shape == torch.Size([3, 2])
+
+        restored = pickle.loads(pickle.dumps(dist))
+        assert isinstance(restored, torch.distributions.Normal)
+        torch.testing.assert_close(restored.loc, base_dist.loc)
+        for p, q in (
+            (dist, restored),
+            (dist, base_dist),
+            (base_dist, restored),
+        ):
+            torch.testing.assert_close(
+                torch.distributions.kl_divergence(p, q),
+                torch.zeros(2),
+            )
+
+    def test_non_reparameterized_distribution_rejects_joint_rsample(self):
+        dist = ensure_rsample_and_log_prob(
+            torch.distributions.Categorical(logits=torch.zeros(3))
+        )
+
+        sample, log_prob = dist.sample_and_log_prob((4,))
+        torch.testing.assert_close(log_prob, dist.log_prob(sample))
+        with pytest.raises(NotImplementedError):
+            dist.rsample_and_log_prob()
 
 
 @pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")
@@ -237,9 +313,10 @@ class TestTanhNormal:
     @pytest.mark.parametrize(
         "reparameterize, sample_shape", [(False, ()), (True, (3,))]
     )
+    @pytest.mark.parametrize("interface", ["function", "method"])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_composite_sample_and_log_prob(
-        self, reparameterize, sample_shape, monkeypatch, device
+        self, reparameterize, sample_shape, interface, monkeypatch, device
     ):
         loc = torch.tensor([[20.0], [-20.0]], device=device, requires_grad=True)
         scale = torch.full_like(loc, 0.1, requires_grad=True)
@@ -265,18 +342,28 @@ class TestTanhNormal:
             },
             extra_kwargs={"squashed": {"event_dims": 1}},
         )
+        adapted_dist = ensure_rsample_and_log_prob(dist)
+        assert adapted_dist is not dist
+        assert isinstance(adapted_dist, CompositeDistribution)
 
         def fail_log_prob(*args, **kwargs):
             raise AssertionError("a freshly sampled TanhNormal was inverse-scored")
 
         monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
         helper = rsample_and_log_prob if reparameterize else sample_and_log_prob
+
+        def joint_sample(aggregate):
+            with set_composite_lp_aggregate(aggregate):
+                if interface == "function":
+                    return helper(dist, sample_shape)
+                if reparameterize:
+                    return adapted_dist.rsample_and_log_prob(sample_shape)
+                return adapted_dist.sample_and_log_prob(sample_shape)
+
         torch.manual_seed(0)
-        with set_composite_lp_aggregate(False):
-            sample, component_log_prob = helper(dist, sample_shape)
+        sample, component_log_prob = joint_sample(False)
         torch.manual_seed(0)
-        with set_composite_lp_aggregate(True):
-            aggregate_sample, aggregate_log_prob = helper(dist, sample_shape)
+        aggregate_sample, aggregate_log_prob = joint_sample(True)
 
         expected_batch = torch.Size(sample_shape) + torch.Size([2])
         assert sample.batch_size == expected_batch

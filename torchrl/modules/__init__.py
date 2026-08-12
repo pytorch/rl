@@ -9,6 +9,7 @@ from . import functional
 from .distributions import (
     Delta,
     distributions_maps,
+    ensure_rsample_and_log_prob,
     IndependentNormal,
     LLMMaskedCategorical,
     MaskedCategorical,
@@ -157,6 +158,7 @@ __all__ = [
     "DecisionTransformer",
     "DecisionTransformerInferenceWrapper",
     "Delta",
+    "ensure_rsample_and_log_prob",
     "DistributionalDQNnet",
     "DistributionalQValueActor",
     "DistributionalQValueHook",

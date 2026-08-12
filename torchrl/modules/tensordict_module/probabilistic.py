@@ -28,7 +28,7 @@ from tensordict.utils import NestedKey
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.modules.distributions import Delta
-from torchrl.modules.distributions.utils import sample_and_log_prob
+from torchrl.modules.distributions.utils import ensure_rsample_and_log_prob
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
@@ -283,6 +283,16 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                 )
             self.register_forward_hook(_forward_hook_safe_action)
 
+    def get_dist(self, tensordict: TensorDictBase) -> torch.distributions.Distribution:
+        """Build a distribution with TorchRL's joint sample-and-score contract."""
+        return ensure_rsample_and_log_prob(super().get_dist(tensordict))
+
+    def build_dist_from_params(
+        self, tensordict: TensorDictBase
+    ) -> torch.distributions.Distribution:
+        """Build an adapted distribution from precomputed parameters."""
+        return self.get_dist(tensordict)
+
     @dispatch(auto_batch_size=False)
     @set_skip_existing_none()
     def forward(
@@ -321,9 +331,10 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                 )
             aggregate_context = set_composite_lp_aggregate(False)
         with use_generator(generator), aggregate_context:
-            sample, log_prob = sample_and_log_prob(
-                dist, sample_shape, reparameterize=dist.has_rsample
-            )
+            if dist.has_rsample:
+                sample, log_prob = dist.rsample_and_log_prob(sample_shape)
+            else:
+                sample, log_prob = dist.sample_and_log_prob(sample_shape)
         if writeback is not None:
             writeback(generator)
         if self.num_samples is not None:
@@ -422,3 +433,20 @@ class SafeProbabilisticTensorDictSequential(
         super(ProbabilisticTensorDictSequential, self).__init__(
             *modules, partial_tolerant=partial_tolerant
         )
+
+    def get_dist(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: TensorDictBase | None = None,
+        **kwargs,
+    ) -> torch.distributions.Distribution:
+        """Return the sequence distribution with joint sampling methods."""
+        return ensure_rsample_and_log_prob(
+            super().get_dist(tensordict, tensordict_out, **kwargs)
+        )
+
+    def build_dist_from_params(
+        self, tensordict: TensorDictBase
+    ) -> torch.distributions.Distribution:
+        """Build an adapted distribution from precomputed parameters."""
+        return ensure_rsample_and_log_prob(super().build_dist_from_params(tensordict))

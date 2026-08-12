@@ -11,11 +11,198 @@ from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.nn import composite_lp_aggregate, CompositeDistribution
 from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
+from torch.distributions.kl import register_kl
 
 try:
     from torch.compiler import is_dynamo_compiling
 except ImportError:
     from torch._dynamo import is_compiling as is_dynamo_compiling
+
+
+class _JointSampleLogProbWrapper(d.Distribution):
+    """Transparent proxy adding joint sample-and-score methods."""
+
+    def __init__(self, distribution: d.Distribution) -> None:
+        self.distribution = distribution
+        super().__init__(
+            batch_shape=distribution.batch_shape,
+            event_shape=getattr(distribution, "event_shape", torch.Size()),
+            validate_args=False,
+        )
+
+    @property
+    def __class__(self):
+        # Preserve isinstance-based checks against the wrapped distribution.
+        distribution = object.__getattribute__(self, "__dict__").get("distribution")
+        if distribution is None:
+            return _JointSampleLogProbWrapper
+        return distribution.__class__
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "distribution":
+            raise AttributeError(name)
+        distribution = object.__getattribute__(self, "__dict__").get("distribution")
+        if distribution is None:
+            raise AttributeError(name)
+        return getattr(distribution, name)
+
+    def __repr__(self) -> str:
+        return repr(self.distribution)
+
+    def __reduce__(self):
+        return type(self), (self.distribution,)
+
+    def __iter__(self):
+        return iter(self.distribution)
+
+    def __len__(self) -> int:
+        return len(self.distribution)
+
+    def __getitem__(self, item):
+        return self.distribution[item]
+
+    @property
+    def arg_constraints(self):
+        return self.distribution.arg_constraints
+
+    @property
+    def support(self):
+        return self.distribution.support
+
+    @property
+    def has_rsample(self) -> bool:
+        return self.distribution.has_rsample
+
+    @property
+    def has_enumerate_support(self) -> bool:
+        return self.distribution.has_enumerate_support
+
+    @property
+    def mean(self):
+        return self.distribution.mean
+
+    @property
+    def mode(self):
+        return self.distribution.mode
+
+    @property
+    def variance(self):
+        return self.distribution.variance
+
+    @property
+    def stddev(self):
+        return self.distribution.stddev
+
+    def sample(self, sample_shape: torch.Size | tuple[int, ...] = ()) -> Any:
+        return self.distribution.sample(torch.Size(sample_shape))
+
+    def rsample(self, sample_shape: torch.Size | tuple[int, ...] = ()) -> Any:
+        return self.distribution.rsample(torch.Size(sample_shape))
+
+    def sample_n(self, n: int) -> Any:
+        return self.distribution.sample_n(n)
+
+    def log_prob(self, value: Any, *values: Any) -> torch.Tensor | TensorDictBase:
+        if values:
+            return self.distribution.log_prob(value, *values)
+        if isinstance(value, torch.Tensor) or is_tensor_collection(value):
+            return self.distribution.log_prob(value)
+        return self.distribution.log_prob(*value)
+
+    def entropy(self) -> torch.Tensor | TensorDictBase:
+        return self.distribution.entropy()
+
+    def enumerate_support(self, expand: bool = True) -> Any:
+        return self.distribution.enumerate_support(expand=expand)
+
+    def cdf(self, value: Any) -> torch.Tensor:
+        return self.distribution.cdf(value)
+
+    def icdf(self, value: Any) -> torch.Tensor:
+        return self.distribution.icdf(value)
+
+    def perplexity(self) -> torch.Tensor:
+        return self.distribution.perplexity()
+
+    def expand(
+        self,
+        batch_shape: torch.Size | tuple[int, ...],
+        _instance: d.Distribution | None = None,
+    ) -> d.Distribution:
+        distribution = self.distribution.expand(batch_shape)
+        if _instance is None:
+            return ensure_rsample_and_log_prob(distribution)
+        if not isinstance(_instance, _JointSampleLogProbWrapper):
+            raise TypeError("_instance must be a joint sample-and-score adapter.")
+        _JointSampleLogProbWrapper.__init__(_instance, distribution)
+        return _instance
+
+    def sample_and_log_prob(
+        self, sample_shape: torch.Size | tuple[int, ...] = ()
+    ) -> tuple[Any, torch.Tensor | TensorDictBase]:
+        return sample_and_log_prob(self.distribution, sample_shape)
+
+    def rsample_and_log_prob(
+        self, sample_shape: torch.Size | tuple[int, ...] = ()
+    ) -> tuple[Any, torch.Tensor | TensorDictBase]:
+        return rsample_and_log_prob(self.distribution, sample_shape)
+
+
+@register_kl(_JointSampleLogProbWrapper, _JointSampleLogProbWrapper)
+def _kl_joint_sample_log_prob_wrappers(
+    p: _JointSampleLogProbWrapper,
+    q: _JointSampleLogProbWrapper,
+) -> torch.Tensor:
+    """Delegate KL dispatch to the concrete wrapped distribution types."""
+    return d.kl_divergence(p.distribution, q.distribution)
+
+
+@register_kl(_JointSampleLogProbWrapper, d.Distribution)
+def _kl_joint_sample_log_prob_wrapper_left(
+    p: _JointSampleLogProbWrapper,
+    q: d.Distribution,
+) -> torch.Tensor:
+    """Delegate KL dispatch when only the left distribution is adapted."""
+    return d.kl_divergence(p.distribution, q)
+
+
+@register_kl(d.Distribution, _JointSampleLogProbWrapper)
+def _kl_joint_sample_log_prob_wrapper_right(
+    p: d.Distribution,
+    q: _JointSampleLogProbWrapper,
+) -> torch.Tensor:
+    """Delegate KL dispatch when only the right distribution is adapted."""
+    return d.kl_divergence(p, q.distribution)
+
+
+def ensure_rsample_and_log_prob(distribution: d.Distribution) -> d.Distribution:
+    """Return a distribution exposing joint sample-and-score methods.
+
+    Distributions with a native ``rsample_and_log_prob`` method are returned
+    unchanged. All others are wrapped in a transparent proxy whose joint
+    methods delegate to :func:`sample_and_log_prob` and
+    :func:`rsample_and_log_prob`.
+
+    Args:
+        distribution (Distribution): distribution to adapt.
+
+    Returns:
+        The original distribution when it already implements atomic
+        reparameterized sampling, or an adapted distribution otherwise.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules.distributions.utils import ensure_rsample_and_log_prob
+        >>> dist = ensure_rsample_and_log_prob(
+        ...     torch.distributions.Normal(torch.zeros(2), torch.ones(2))
+        ... )
+        >>> sample, log_prob = dist.rsample_and_log_prob()
+        >>> sample.shape == log_prob.shape
+        True
+    """
+    if callable(getattr(distribution, "rsample_and_log_prob", None)):
+        return distribution
+    return _JointSampleLogProbWrapper(distribution)
 
 
 def sample_and_log_prob(

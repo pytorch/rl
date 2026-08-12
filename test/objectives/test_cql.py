@@ -34,10 +34,24 @@ from torchrl.testing import (  # noqa
 )
 
 
+def _make_independent_normal(loc, scale):
+    return torch.distributions.Independent(
+        torch.distributions.Normal(loc, scale),
+        1,
+    )
+
+
 class TestCQL(LossModuleTestBase):
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        distribution_class=TanhNormal,
+    ):
         # Actor
         action_spec = Bounded(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
@@ -50,7 +64,7 @@ class TestCQL(LossModuleTestBase):
             module=module,
             in_keys=["loc", "scale"],
             spec=action_spec,
-            distribution_class=TanhNormal,
+            distribution_class=distribution_class,
         )
         return actor.to(device)
 
@@ -148,18 +162,30 @@ class TestCQL(LossModuleTestBase):
         )
         self.reset_parameters_recursive_test(loss_fn)
 
-    def test_cql_actor_uses_joint_sample_log_prob(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "distribution_class", [TanhNormal, _make_independent_normal]
+    )
+    def test_cql_actor_uses_joint_sample_log_prob(
+        self, distribution_class, monkeypatch
+    ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_cql()
+        actor = self._create_mock_actor(distribution_class=distribution_class)
         loss_fn = CQLLoss(
-            actor_network=self._create_mock_actor(),
+            actor_network=actor,
             qvalue_network=self._create_mock_qvalue(),
         )
 
-        def fail_log_prob(*args, **kwargs):
-            raise AssertionError("CQL inverse-scored a freshly sampled TanhNormal")
+        if distribution_class is TanhNormal:
 
-        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+            def fail_log_prob(*args, **kwargs):
+                raise AssertionError("CQL inverse-scored a freshly sampled TanhNormal")
+
+            monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        else:
+            dist = actor.get_dist(td)
+            assert isinstance(dist, torch.distributions.Independent)
+
         actor_loss, metadata = loss_fn.actor_loss(td)
         assert actor_loss.isfinite().all()
         assert metadata[loss_fn.tensor_keys.log_prob].isfinite().all()

@@ -17,7 +17,7 @@ from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.modules.distributions.utils import rsample_and_log_prob
+from torchrl.modules.distributions.utils import ensure_rsample_and_log_prob
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -526,7 +526,8 @@ class REDQLoss(LossModule):
             sample_key = self.tensor_keys.action
             sample_key_lp = self.tensor_keys.sample_log_prob
             tensordict_actor_dist = self.actor_network.build_dist_from_params(td_params)
-            sample, sample_log_prob = rsample_and_log_prob(tensordict_actor_dist)
+            tensordict_actor_dist = ensure_rsample_and_log_prob(tensordict_actor_dist)
+            sample, sample_log_prob = tensordict_actor_dist.rsample_and_log_prob()
             tensordict_actor.set(sample_key, sample)
             tensordict_actor.set(sample_key_lp, sample_log_prob)
 

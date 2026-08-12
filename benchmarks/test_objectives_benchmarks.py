@@ -28,6 +28,10 @@ from torchrl.modules import (
     SymLogValueTransform,
     TanhNormal,
 )
+from torchrl.modules.distributions.utils import (
+    ensure_rsample_and_log_prob,
+    rsample_and_log_prob,
+)
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
@@ -67,6 +71,26 @@ FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.par
 #     torch.set_default_device(device)
 #     yield
 #     torch.set_default_device(cur_device)
+
+
+@pytest.mark.parametrize("interface", ["function", "method"])
+def test_joint_sample_log_prob_interface(benchmark, interface):
+    dist = torch.distributions.Independent(
+        torch.distributions.Normal(torch.zeros(256, 4), torch.ones(256, 4)),
+        1,
+    )
+    if interface == "method":
+        dist = ensure_rsample_and_log_prob(dist)
+
+        def joint_sample():
+            return dist.rsample_and_log_prob()
+
+    else:
+
+        def joint_sample():
+            return rsample_and_log_prob(dist)
+
+    benchmark.pedantic(joint_sample, iterations=10, rounds=100)
 
 
 class setup_value_fn:

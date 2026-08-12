@@ -31,6 +31,7 @@ from torchrl.modules import (
     ProbabilisticActor,
     SafeModule,
     SafeProbabilisticModule,
+    SafeProbabilisticTensorDictSequential,
     TanhDelta,
     TanhModule,
     TanhNormal,
@@ -78,6 +79,37 @@ def test_probabilistic_module_tanhnormal_joint_log_prob(
     monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
     result = module(TensorDict({"loc": loc, "scale": scale}, batch_size=[1]))
 
+    torch.testing.assert_close(result["action"], expected_action)
+    torch.testing.assert_close(result["sample_log_prob"], expected_log_prob)
+
+
+def test_probabilistic_module_adapts_standard_distribution():
+    loc = torch.tensor([[0.2, -0.4]], requires_grad=True)
+    scale = torch.tensor([[0.7, 1.1]], requires_grad=True)
+    module = SafeProbabilisticModule(
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
+        distribution_class=torch.distributions.Normal,
+        default_interaction_type=InteractionType.RANDOM,
+        return_log_prob=True,
+        log_prob_key="sample_log_prob",
+    )
+    sequence = SafeProbabilisticTensorDictSequential(module)
+    data = TensorDict({"loc": loc, "scale": scale}, batch_size=[1])
+
+    direct_dist = module.get_dist(data)
+    sequence_dist = sequence.get_dist(data)
+    rebuilt_dist = sequence.build_dist_from_params(data)
+    for adapted_dist in (direct_dist, sequence_dist, rebuilt_dist):
+        assert isinstance(adapted_dist, torch.distributions.Normal)
+        assert callable(adapted_dist.rsample_and_log_prob)
+        assert callable(adapted_dist.sample_and_log_prob)
+
+    torch.manual_seed(0)
+    expected_action = torch.distributions.Normal(loc, scale).rsample()
+    expected_log_prob = torch.distributions.Normal(loc, scale).log_prob(expected_action)
+    torch.manual_seed(0)
+    result = module(data.clone())
     torch.testing.assert_close(result["action"], expected_action)
     torch.testing.assert_close(result["sample_log_prob"], expected_log_prob)
 

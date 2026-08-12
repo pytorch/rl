@@ -37,7 +37,10 @@ from torch import distributions as d
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs.transforms.ray_service import _maybe_clear_device, _maybe_to_device
 from torchrl.envs.transforms.transforms import Transform
-from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
+from torchrl.modules.distributions.utils import (
+    composite_entropy,
+    ensure_rsample_and_log_prob,
+)
 from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _sum_td_features, _validate_clip_epsilon
@@ -810,6 +813,7 @@ class GRPOLoss(LossModule):
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
+        dist = ensure_rsample_and_log_prob(dist)
         try:
             entropy = (
                 composite_entropy(dist, self.samples_mc_entropy)
@@ -826,16 +830,15 @@ class GRPOLoss(LossModule):
         except NotImplementedError:
             if VERBOSE:
                 torchrl_logger.warning(
-                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
+                    f"Entropy not implemented for {dist.__class__} or is not finite. Using Monte Carlo sampling."
                 )
             with set_composite_lp_aggregate(False) if isinstance(
                 dist, CompositeDistribution
             ) else contextlib.nullcontext():
-                _, log_prob = sample_and_log_prob(
-                    dist,
-                    (self.samples_mc_entropy,),
-                    reparameterize=getattr(dist, "has_rsample", False),
-                )
+                if dist.has_rsample:
+                    _, log_prob = dist.rsample_and_log_prob((self.samples_mc_entropy,))
+                else:
+                    _, log_prob = dist.sample_and_log_prob((self.samples_mc_entropy,))
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)

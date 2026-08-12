@@ -26,7 +26,7 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.distributions.utils import rsample_and_log_prob
+from torchrl.modules.distributions.utils import ensure_rsample_and_log_prob
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -53,7 +53,7 @@ def compute_rsample_log_prob(
 ) -> tuple[torch.Tensor | TensorDictBase, torch.Tensor]:
     """Draw and score an action, aggregating composite log-probabilities."""
     with set_composite_lp_aggregate(True):
-        return rsample_and_log_prob(action_dist)
+        return ensure_rsample_and_log_prob(action_dist).rsample_and_log_prob()
 
 
 class SACLoss(LossModule):

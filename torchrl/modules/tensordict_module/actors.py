@@ -25,6 +25,7 @@ from torch.distributions import Categorical
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
+from torchrl.modules.distributions.utils import ensure_rsample_and_log_prob
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet, SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
@@ -140,7 +141,7 @@ class Actor(SafeModule):
         td_out = self(tensordict)
         action = td_out.get(self.out_keys[0])
 
-        return Delta(action)
+        return ensure_rsample_and_log_prob(Delta(action))
 
 
 class ProbabilisticActor(SafeProbabilisticTensorDictSequential):

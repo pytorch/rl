@@ -29,7 +29,10 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
-from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
+from torchrl.modules.distributions.utils import (
+    composite_entropy,
+    ensure_rsample_and_log_prob,
+)
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -662,6 +665,7 @@ class PPOLoss(LossModule):
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
+        dist = ensure_rsample_and_log_prob(dist)
         try:
             entropy = (
                 composite_entropy(dist, self.samples_mc_entropy)
@@ -678,18 +682,17 @@ class PPOLoss(LossModule):
         except NotImplementedError:
             if VERBOSE:
                 torchrl_logger.warning(
-                    f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
+                    f"Entropy not implemented for {dist.__class__} or is not finite. Using Monte Carlo sampling."
                 )
             with (
                 set_composite_lp_aggregate(False)
                 if isinstance(dist, CompositeDistribution)
                 else contextlib.nullcontext()
             ):
-                _, log_prob = sample_and_log_prob(
-                    dist,
-                    (self.samples_mc_entropy,),
-                    reparameterize=getattr(dist, "has_rsample", False),
-                )
+                if dist.has_rsample:
+                    _, log_prob = dist.rsample_and_log_prob((self.samples_mc_entropy,))
+                else:
+                    _, log_prob = dist.sample_and_log_prob((self.samples_mc_entropy,))
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
@@ -1706,6 +1709,7 @@ class KLPENPPOLoss(PPOLoss):
                 "The parameters of the distribution were not found. "
                 f"Make sure they are provided to {type(self).__name__}."
             ) from err
+        previous_dist = ensure_rsample_and_log_prob(previous_dist)
         advantage = tensordict_copy.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
@@ -1741,17 +1745,21 @@ class KLPENPPOLoss(PPOLoss):
             else contextlib.nullcontext()
         ):
             current_dist = self.actor_network.get_dist(tensordict_copy)
+        current_dist = ensure_rsample_and_log_prob(current_dist)
         is_composite = isinstance(current_dist, CompositeDistribution)
         try:
-            kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
+            kl = torch.distributions.kl.kl_divergence(
+                previous_dist,
+                current_dist,
+            )
         except NotImplementedError:
             with (
                 set_composite_lp_aggregate(False)
                 if is_composite
                 else contextlib.nullcontext()
             ):
-                x, previous_log_prob = sample_and_log_prob(
-                    previous_dist, (self.samples_mc_kl,)
+                x, previous_log_prob = previous_dist.sample_and_log_prob(
+                    (self.samples_mc_kl,)
                 )
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
