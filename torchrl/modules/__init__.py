@@ -56,6 +56,7 @@ from .models import (
     RSSMRollout,
     Squeeze2dLayer,
     SqueezeLayer,
+    SymExpTwoHot,
     VDNMixer,
 )
 from .tensordict_module import (
@@ -210,6 +211,7 @@ __all__ = [
     "SafeSequential",
     "Squeeze2dLayer",
     "SqueezeLayer",
+    "SymExpTwoHot",
     "TanhDelta",
     "TanhModule",
     "TanhNormal",

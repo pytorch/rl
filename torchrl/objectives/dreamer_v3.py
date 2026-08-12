@@ -11,8 +11,9 @@ World Models, Hafner et al. 2023, https://arxiv.org/abs/2301.04104):
 - :class:`DreamerV3ActorLoss` — actor (REINFORCE + entropy bonus)
 - :class:`DreamerV3ValueLoss` — value function (symlog MSE or two-hot CE)
 
-Utility functions :func:`symlog`, :func:`symexp`, :func:`two_hot_encode` and
-:func:`two_hot_decode` are also exported for use in custom models.
+Utility functions :func:`symlog`, :func:`symexp`, :func:`two_hot_encode`,
+:func:`two_hot_decode`, and :func:`two_hot_cross_entropy` are also exported for
+use in custom models.
 """
 from __future__ import annotations
 
@@ -26,6 +27,15 @@ from tensordict.utils import NestedKey
 from torchrl._utils import _maybe_record_function_decorator
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.modules.models.model_based_v3 import (  # noqa: F401
+    _default_bins,
+    _DEFAULT_NUM_BINS,
+    symexp as symexp,
+    symlog as symlog,
+    two_hot_cross_entropy as two_hot_cross_entropy,
+    two_hot_decode as two_hot_decode,
+    two_hot_encode as two_hot_encode,
+)
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -34,145 +44,6 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import ValueEstimatorBase
-
-# ---------------------------------------------------------------------------
-# Symlog / symexp transforms
-# ---------------------------------------------------------------------------
-
-
-def symlog(x: torch.Tensor) -> torch.Tensor:
-    """Symmetric logarithm: ``sign(x) * log(|x| + 1)``.
-
-    Used by DreamerV3 to compress the dynamic range of targets and
-    predictions before computing reconstruction losses.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        x: Input tensor.
-
-    Returns:
-        Tensor of the same shape as ``x``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import symlog
-        >>> x = torch.tensor([-100.0, 0.0, 100.0])
-        >>> symlog(x)
-        tensor([-4.6151,  0.0000,  4.6151])
-    """
-    return x.sign() * (x.abs() + 1).log()
-
-
-def symexp(x: torch.Tensor) -> torch.Tensor:
-    """Symmetric exponential: ``sign(x) * (exp(|x|) - 1)``.
-
-    Inverse of :func:`symlog`.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        x: Input tensor.
-
-    Returns:
-        Tensor of the same shape as ``x``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import symexp, symlog
-        >>> x = torch.tensor([-1000.0, -1.0, 0.0, 1.0, 1000.0])
-        >>> torch.allclose(symexp(symlog(x)), x, atol=1e-4)
-        True
-    """
-    return x.sign() * (x.abs().exp() - 1)
-
-
-# ---------------------------------------------------------------------------
-# Two-hot encoding (for reward / value distributions)
-# ---------------------------------------------------------------------------
-
-# Default 255-bin linspace in symlog space: roughly covers [-20, 20] raw scale
-_DEFAULT_NUM_BINS: int = 255
-_DEFAULT_BIN_RANGE: float = 20.0
-
-
-def _default_bins(num_bins: int = _DEFAULT_NUM_BINS, device=None) -> torch.Tensor:
-    return torch.linspace(
-        -_DEFAULT_BIN_RANGE, _DEFAULT_BIN_RANGE, num_bins, device=device
-    )
-
-
-def two_hot_encode(
-    x: torch.Tensor,
-    bins: torch.Tensor,
-) -> torch.Tensor:
-    """Encode a scalar tensor as a two-hot distribution over ``bins``.
-
-    The scalar is split between the two nearest bin centers proportionally so
-    that ``E[bins] = x``.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        x: Values to encode, shape ``[...]``.
-        bins: Sorted bin centers, shape ``[num_bins]``.
-
-    Returns:
-        Two-hot vectors, shape ``[..., num_bins]``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import two_hot_encode
-        >>> bins = torch.linspace(-1.0, 1.0, 5)
-        >>> two_hot_encode(torch.tensor([0.25]), bins)
-        tensor([[0.0000, 0.0000, 0.5000, 0.5000, 0.0000]])
-    """
-    bins = bins.to(x.device)
-    x_clamped = x.clamp(bins[0], bins[-1])
-
-    # Index of the lower bin
-    lower_idx = (x_clamped.unsqueeze(-1) >= bins).sum(-1) - 1
-    lower_idx = lower_idx.clamp(0, bins.shape[0] - 2)
-    upper_idx = lower_idx + 1
-
-    lower_val = bins[lower_idx]
-    upper_val = bins[upper_idx]
-    span = upper_val - lower_val
-    upper_weight = torch.where(
-        span > 0, (x_clamped - lower_val) / span, torch.zeros_like(x_clamped)
-    )
-    lower_weight = 1.0 - upper_weight
-
-    two_hot = torch.zeros(*x.shape, bins.shape[0], device=x.device, dtype=x.dtype)
-    two_hot.scatter_(-1, lower_idx.unsqueeze(-1), lower_weight.unsqueeze(-1))
-    two_hot.scatter_(-1, upper_idx.unsqueeze(-1), upper_weight.unsqueeze(-1))
-    return two_hot
-
-
-def two_hot_decode(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
-    """Decode a distribution over ``bins`` to a scalar expectation.
-
-    Reference: https://arxiv.org/abs/2301.04104
-
-    Args:
-        logits: Raw logits, shape ``[..., num_bins]``.
-        bins: Sorted bin centers, shape ``[num_bins]``.
-
-    Returns:
-        Scalar expected values, shape ``[...]``.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.objectives import two_hot_decode, two_hot_encode
-        >>> bins = torch.linspace(-1.0, 1.0, 5)
-        >>> probs = two_hot_encode(torch.tensor([0.25]), bins)
-        >>> two_hot_decode((probs + 1e-8).log(), bins)
-        tensor([0.2500])
-    """
-    bins = bins.to(logits.device)
-    probs = torch.softmax(logits, dim=-1)
-    return (probs * bins).sum(-1)
-
 
 # ---------------------------------------------------------------------------
 # KL balancing for categorical distributions (DreamerV3 §3)
@@ -458,8 +329,9 @@ class DreamerV3ModelLoss(LossModule):
                     f"logits over {self.num_reward_bins} bins, got trailing "
                     f"dim {pred_reward.shape[-1]}."
                 )
-            targets = two_hot_encode(symlog(true_reward.squeeze(-1)), self.reward_bins)
-            reward_loss = -(targets * torch.log_softmax(pred_reward, dim=-1)).sum(-1)
+            reward_loss = two_hot_cross_entropy(
+                pred_reward, true_reward, self.reward_bins
+            )
         else:
             reward_loss = (symlog(true_reward) - symlog(pred_reward)).pow(2).squeeze(-1)
         reward_loss = reward_loss.mean().unsqueeze(-1)
@@ -916,8 +788,7 @@ class DreamerV3ValueLoss(LossModule):
                     f"logits over {self.value_bins.shape[0]} bins, got trailing "
                     f"dim {value_pred.shape[-1]}."
                 )
-            targets = two_hot_encode(symlog(target_sq), self.value_bins)
-            loss = -(targets * torch.log_softmax(value_pred, dim=-1)).sum(-1)
+            loss = two_hot_cross_entropy(value_pred, target_sq, self.value_bins)
         else:
             # symlog MSE
             loss = (symlog(value_pred.squeeze(-1)) - symlog(target_sq)).pow(2)
