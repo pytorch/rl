@@ -52,7 +52,7 @@ from torchrl.objectives.dreamer_v3 import (
     two_hot_decode,
     two_hot_encode,
 )
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import SoftUpdate, ValueEstimators
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
 
@@ -719,6 +719,114 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         value_model = self._create_value_model()
         with pytest.raises(ValueError, match="symlog_mse.*two_hot"):
             DreamerV3ValueLoss(value_model, value_loss="bad_loss_type")
+
+    def test_dreamer_v3_slow_critic_regularization_and_update(self, device):
+        value_model = self._create_value_model(out_features=self.num_reward_bins).to(
+            device
+        )
+        loss_module = DreamerV3ValueLoss(
+            value_model,
+            value_loss="two_hot",
+            discount_loss=False,
+            num_value_bins=self.num_reward_bins,
+            slow_critic_regularization=1.0,
+        ).to(device)
+        updater = SoftUpdate(loss_module, tau=0.02)
+        tensordict = self._create_value_data().to(device)
+
+        online_td = tensordict.select(*value_model.in_keys, strict=False)
+        with loss_module.value_model_params.to_module(
+            loss_module.value_model, preserve_module_state=False
+        ):
+            loss_module.value_model(online_td)
+        target_td = tensordict.select(*value_model.in_keys, strict=False)
+        with torch.no_grad(), loss_module.target_value_model_params.to_module(
+            loss_module.value_model, preserve_module_state=False
+        ):
+            loss_module.value_model(target_td)
+        expected_slow_loss = two_hot_cross_entropy(
+            online_td["state_value_logits"],
+            target_td["state_value"].squeeze(-1),
+            loss_module.value_bins,
+        ).mean()
+
+        loss_td, _ = loss_module(tensordict)
+        torch.testing.assert_close(loss_td["value_slow_loss"], expected_slow_loss)
+        loss_td["loss_value"].backward()
+        assert any(
+            parameter.grad is not None
+            for parameter in loss_module.value_model_params.values(True, True)
+            if parameter.requires_grad
+        )
+        assert all(
+            not parameter.requires_grad and parameter.grad is None
+            for parameter in loss_module.target_value_model_params.values(True, True)
+        )
+
+        source = next(
+            parameter
+            for parameter in loss_module.value_model_params.values(True, True)
+            if parameter.requires_grad
+        )
+        target = next(
+            parameter
+            for parameter in loss_module.target_value_model_params.values(True, True)
+            if parameter.shape == source.shape
+        )
+        target_before = target.clone()
+        with torch.no_grad():
+            source.add_(1.0)
+        updater.step()
+        torch.testing.assert_close(target, target_before.lerp(source.detach(), 0.02))
+
+    def test_dreamer_v3_slow_critic_checkpoint_and_online_bootstrap(self, device):
+        value_model = self._create_value_model(out_features=self.num_reward_bins).to(
+            device
+        )
+        actor_loss = DreamerV3ActorLoss(
+            self._create_actor_model().to(device),
+            value_model,
+            self._create_mb_env().to(device),
+        )
+        value_loss = DreamerV3ValueLoss(
+            value_model,
+            value_loss="two_hot",
+            num_value_bins=self.num_reward_bins,
+            actor_loss=actor_loss,
+            slow_critic_regularization=1.0,
+        ).to(device)
+        SoftUpdate(value_loss, tau=0.02)
+
+        actor_parameters = tuple(actor_loss.__dict__["value_model"].parameters())
+        online_parameters = tuple(value_loss.value_model_params.values(True, True))
+        target_parameters = tuple(
+            value_loss.target_value_model_params.values(True, True)
+        )
+        assert all(
+            any(parameter is online for online in online_parameters)
+            for parameter in actor_parameters
+        )
+        assert all(
+            all(parameter is not target for target in target_parameters)
+            for parameter in actor_parameters
+        )
+
+        checkpoint = {
+            key: value.detach().clone()
+            for key, value in value_loss.state_dict().items()
+        }
+        target_keys = [key for key in checkpoint if key.startswith("target_value")]
+        assert target_keys
+        expected_target = tuple(parameter.clone() for parameter in target_parameters)
+        with torch.no_grad():
+            for parameter in target_parameters:
+                parameter.add_(10.0)
+        value_loss.load_state_dict(checkpoint)
+        for actual, expected in zip(
+            value_loss.target_value_model_params.values(True, True),
+            expected_target,
+        ):
+            torch.testing.assert_close(actual, expected)
 
     # ------------------------------------------------------------------ #
     # RSSM component tests

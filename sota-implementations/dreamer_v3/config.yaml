@@ -33,6 +33,8 @@ optimization:
   use_reinforce: true
   return_normalization_rate: 0.01
   return_normalization_min_scale: 1.0
+  slow_critic_regularization: 1.0
+  slow_critic_tau: 0.02
   free_bits: 1.0
   kl_alpha: 0.8
   gamma: 0.99
