@@ -8,14 +8,15 @@ from __future__ import annotations
 import pathlib
 import warnings
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from functools import partial
+from typing import Any
 
 from tensordict import TensorDict, TensorDictBase
 from torch import optim
 
-from torchrl.checkpoint import Checkpoint
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -98,6 +99,8 @@ class CQLTrainer(Trainer):
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
         checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         replay_buffer: ReplayBuffer | None = None,
         enable_logging: bool = True,
         log_rewards: bool = True,
@@ -145,6 +148,8 @@ class CQLTrainer(Trainer):
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
             checkpoint=checkpoint,
+            checkpoint_rotation=checkpoint_rotation,
+            checkpoint_metadata=checkpoint_metadata,
             async_collection=async_collection,
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,

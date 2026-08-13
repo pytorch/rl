@@ -86,6 +86,56 @@ registered with a component are the baseline; operation-level keyword arguments
 override matching entries and explicitly supplied positional arguments replace
 the baseline tuple.
 
+Checkpoint rotation
+-------------------
+
+:class:`CheckpointRotation` retains the newest checkpoints and can preserve an
+older checkpoint with the best recorded metric. Metrics are read from manifest
+metadata.
+
+.. code-block:: python
+
+    from torchrl.checkpoint import Checkpoint, CheckpointRotation
+
+    checkpoint = Checkpoint(policy=policy, optimizer=optimizer)
+    rotation = CheckpointRotation(
+        "run/checkpoints",
+        keep_last=3,
+        keep_best=("eval_reward", "max"),
+    )
+    rotation.save(
+        checkpoint,
+        step=100_000,
+        metadata={"eval_reward": 42.5},
+    )
+    rotation.load_latest(checkpoint)
+
+Trainer integration
+-------------------
+
+Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
+checkpoints. The Trainer uses ``collected_frames`` as the checkpoint step and
+adds ``collected_frames`` and ``optim_steps`` to the manifest metadata.
+
+.. code-block:: python
+
+    trainer = SACTrainer(
+        ...,
+        checkpoint=Checkpoint(),
+        checkpoint_rotation=CheckpointRotation(
+            "run/checkpoints",
+            keep_last=3,
+            keep_best=("eval_reward", "max"),
+        ),
+        checkpoint_metadata=lambda trainer: {
+            "eval_reward": evaluation_state["reward"]
+        },
+    )
+
+The metadata callback runs immediately before each save. Metrics used by
+``keep_best`` should describe the checkpoint being saved rather than an older
+evaluation.
+
 Compatibility
 -------------
 
@@ -123,6 +173,7 @@ API
     CheckpointError
     CheckpointLoadResult
     CheckpointOptions
+    CheckpointRotation
     CheckpointFormat
     CheckpointStrictness
     DumpLoadCheckpointAdapter

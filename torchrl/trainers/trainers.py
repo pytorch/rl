@@ -37,7 +37,7 @@ from torchrl._utils import (
     VERBOSE,
 )
 
-from torchrl.checkpoint import Checkpoint
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -365,6 +365,12 @@ class Trainer:
             scheduled saves and restores. The trainer registers any missing
             standard components on this object. When omitted, the legacy
             ``CKPT_BACKEND`` path is retained during the compatibility window.
+        checkpoint_rotation (CheckpointRotation, optional): retention policy used
+            for scheduled unified checkpoints. Requires ``checkpoint`` and cannot
+            be combined with ``save_trainer_file``.
+        checkpoint_metadata (Callable, optional): function called with the trainer
+            before each rotated save. Its returned mapping is added to the
+            checkpoint manifest metadata.
         async_collection (bool, optional): Whether to collect data asynchronously.
             This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
@@ -429,6 +435,8 @@ class Trainer:
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
         checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
@@ -490,6 +498,18 @@ class Trainer:
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
         self.checkpoint = checkpoint
+        if checkpoint_rotation is not None and checkpoint is None:
+            raise ValueError("checkpoint_rotation requires checkpoint.")
+        if checkpoint_rotation is not None and save_trainer_file is not None:
+            raise ValueError(
+                "checkpoint_rotation and save_trainer_file cannot both be set."
+            )
+        if checkpoint_metadata is not None and checkpoint_rotation is None:
+            raise ValueError("checkpoint_metadata requires checkpoint_rotation.")
+        if checkpoint_metadata is not None and not callable(checkpoint_metadata):
+            raise TypeError("checkpoint_metadata must be callable.")
+        self.checkpoint_rotation = checkpoint_rotation
+        self.checkpoint_metadata = checkpoint_metadata
         self._checkpoint_state = _TrainerCheckpointState(self)
         self._execution_checkpoint_state = _ExecutionCheckpointState(self)
         self._checkpoint_skip_warnings: set[str] = set()
@@ -814,7 +834,15 @@ class Trainer:
 
     def _save_trainer(self) -> None:
         if self.checkpoint is not None:
-            self._sync_checkpoint_components().save(self.save_trainer_file)
+            checkpoint = self._sync_checkpoint_components()
+            if self.checkpoint_rotation is not None:
+                self.checkpoint_rotation.save(
+                    checkpoint,
+                    step=self.collected_frames,
+                    metadata=self._checkpoint_manifest_metadata(),
+                )
+            else:
+                checkpoint.save(self.save_trainer_file)
             return
         warnings.warn(
             "The default Trainer checkpoint format will change from the legacy "
@@ -870,13 +898,31 @@ class Trainer:
                 f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
             )
 
+    def _has_checkpoint_destination(self) -> bool:
+        return (
+            self.checkpoint_rotation is not None or self.save_trainer_file is not None
+        )
+
+    def _checkpoint_manifest_metadata(self) -> dict[str, Any]:
+        metadata = {}
+        if self.checkpoint_metadata is not None:
+            custom_metadata = self.checkpoint_metadata(self)
+            if not isinstance(custom_metadata, Mapping):
+                raise TypeError("checkpoint_metadata must return a mapping.")
+            metadata.update(custom_metadata)
+        metadata.update(
+            collected_frames=self.collected_frames,
+            optim_steps=self._optim_count,
+        )
+        return metadata
+
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
-        if self.save_trainer_file is not None:
+        if self._has_checkpoint_destination():
             if (self.collected_frames - self._last_save) > self.save_trainer_interval:
                 self._last_save = self.collected_frames
                 _save = True
-        if _save and self.save_trainer_file:
+        if _save and self._has_checkpoint_destination():
             self._save_trainer()
 
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
@@ -1506,7 +1552,7 @@ class Trainer:
     def _save_execution_checkpoint(
         self, *, force_save: bool = False, resume_collection: bool = True
     ) -> None:
-        if self.save_trainer_file is None:
+        if not self._has_checkpoint_destination():
             return
         if (
             not force_save
