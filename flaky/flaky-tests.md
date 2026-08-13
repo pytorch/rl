@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-08-11
+# Flaky Test Report - 2026-08-13
 
 ## Summary
 
-- **Flaky tests**: 20
-- **Newly flaky** (last 7 days): 20
+- **Flaky tests**: 3
+- **Newly flaky** (last 7 days): 3
 - **Resolved**: 0
-- **Total tests analyzed**: 31295
+- **Total tests analyzed**: 31382
 - **CI runs analyzed**: 45
 
 ---
@@ -14,50 +14,16 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...test_configs.py::TestHydraParsing::test_simple_env_config` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...est_configs.py::TestHydraParsing::test_batched_env_config` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...py::TestHydraParsing::test_batched_env_with_one_transform` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...y::TestHydraParsing::test_batched_env_with_two_transforms` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...gs.py::TestHydraParsing::test_simple_config_instantiation` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `test/test_configs.py::TestHydraParsing::test_env_parsing` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `..._configs.py::TestHydraParsing::test_env_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...gs.py::TestHydraParsing::test_collector_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...figs.py::TestHydraParsing::test_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `....py::TestHydraParsing::test_a2c_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...estHydraParsing::test_reinforce_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `....py::TestHydraParsing::test_dqn_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...stHydraParsing::test_dqn_trainer_parsing_with_hook_config` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...ydraParsing::test_dqn_trainer_iql_style_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...draParsing::test_dqn_trainer_qmix_style_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...py::TestHydraParsing::test_ddpg_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `....py::TestHydraParsing::test_iql_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `....py::TestHydraParsing::test_cql_trainer_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...:TestHydraParsing::test_transformed_env_parsing_with_file` 🆕 | 46.4% (70/151) | 70 | 0.93 | 2026-08-07 |
-| `...test_wrapped_class_kwargs_have_config_fields[LBFGSConfig]` 🆕 | 53.9% (76/141) | 76 | 0.92 | 2026-08-07 |
+| `...torages.py::TestStorages::test__rand_given_ndim_recompile` 🆕 | 24.4% (40/164) | 40 | 0.49 | 2026-08-12 |
+| `...py::TestDreamerV3Components::test_block_gru_torch_compile` 🆕 | 9.1% (4/44) | 4 | 0.15 | 2026-08-12 |
+| `...s_kwargs_have_config_fields[TensorDictReplayBufferConfig]` 🆕 | 5.5% (9/164) | 9 | 0.11 | 2026-08-12 |
 
 
 ### Newly Flaky Tests
 
-- `test/test_configs.py::TestHydraParsing::test_simple_env_config`
-- `test/test_configs.py::TestHydraParsing::test_batched_env_config`
-- `test/test_configs.py::TestHydraParsing::test_batched_env_with_one_transform`
-- `test/test_configs.py::TestHydraParsing::test_batched_env_with_two_transforms`
-- `test/test_configs.py::TestHydraParsing::test_simple_config_instantiation`
-- `test/test_configs.py::TestHydraParsing::test_env_parsing`
-- `test/test_configs.py::TestHydraParsing::test_env_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_collector_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_a2c_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_reinforce_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_dqn_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_dqn_trainer_parsing_with_hook_config`
-- `test/test_configs.py::TestHydraParsing::test_dqn_trainer_iql_style_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_dqn_trainer_qmix_style_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_ddpg_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_iql_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_cql_trainer_parsing_with_file`
-- `test/test_configs.py::TestHydraParsing::test_transformed_env_parsing_with_file`
-- `test/test_configs.py::TestConfigClassParity::test_wrapped_class_kwargs_have_config_fields[LBFGSConfig]`
+- `test/rb/test_storages.py::TestStorages::test__rand_given_ndim_recompile`
+- `test/modules/test_dreamer_components.py::TestDreamerV3Components::test_block_gru_torch_compile`
+- `test/test_configs.py::TestConfigClassParity::test_wrapped_class_kwargs_have_config_fields[TensorDictReplayBufferConfig]`
 
 ---
 
@@ -70,4 +36,4 @@
 
 ---
 
-*Generated at 2026-08-11T06:23:40.390482+00:00*
+*Generated at 2026-08-13T06:39:30.747584+00:00*
