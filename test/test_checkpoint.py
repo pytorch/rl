@@ -661,9 +661,7 @@ def test_checkpoint_rotation_recovers_interrupted_cross_format_replacement(
 
     monkeypatch.setattr(rotation, "_remove_atomically", interrupted_remove)
     with pytest.raises(RuntimeError, match="interrupted"):
-        rotation.save(
-            Checkpoint(format=new_format, value={"version": 2}), step=4
-        )
+        rotation.save(Checkpoint(format=new_format, value={"version": 2}), step=4)
     monkeypatch.setattr(rotation, "_remove_atomically", remove_atomically)
 
     new_path = rotation._checkpoint_path(4, new_format)
