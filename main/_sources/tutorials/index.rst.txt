@@ -240,6 +240,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: TorchRL contributors">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_trl_interop_thumb.png
+    :alt:
+
+  :doc:`/tutorials/trl_interop`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
 
 .. only:: html
@@ -516,6 +533,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/multi_task
    /tutorials/vla
    /tutorials/checkpointing
+   /tutorials/trl_interop
    /tutorials/dqn_with_rnn
    /tutorials/memory_efficient_rl
    /tutorials/recurrent_sequence_training

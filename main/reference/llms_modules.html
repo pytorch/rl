@@ -1554,6 +1554,22 @@ input/output formats across training and inference pipelines.</p>
 </table>
 </div>
 </section>
+<section id="trl-interoperability-adapters">
+<h2>TRL Interoperability Adapters<a class="headerlink" href="#trl-interoperability-adapters" title="Link to this heading">#</a></h2>
+<p>Thin adapters enabling seamless interoperability between TorchRL and
+Hugging Face <code class="docutils literal notranslate"><span class="pre">trl</span></code>.  See also <a class="reference internal" href="../tutorials/trl_interop.html#trl-interop-tutorial"><span class="std std-ref">TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together</span></a>.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.TorchRLBufferDataset.html#torchrl.modules.llm.TorchRLBufferDataset" title="torchrl.modules.llm.TorchRLBufferDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TorchRLBufferDataset</span></code></a>(replay_buffer, ...[, ...])</p></td>
+<td><p>An <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.IterableDataset</span></code></a> backed by a TorchRL <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer" title="torchrl.data.ReplayBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBuffer</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.llm.HFRewardModelWrapper.html#torchrl.modules.llm.HFRewardModelWrapper" title="torchrl.modules.llm.HFRewardModelWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HFRewardModelWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a> that wraps a Hugging Face reward model.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -1640,6 +1656,7 @@ input/output formats across training and inference pipelines.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wrappers">Wrappers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-structure-classes">Data Structure Classes</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#utilities">Utilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trl-interoperability-adapters">TRL Interoperability Adapters</a></li>
 </ul>
   </nav></div>
     
@@ -1892,7 +1909,7 @@ input/output formats across training and inference pipelines.</p>
        "headline": "LLM Wrappers",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/llms_modules.html",
-       "articleBody": "LLM Wrappers# The LLM wrapper API provides unified interfaces for different LLM backends, ensuring consistent input/output formats across training and inference pipelines. Wrappers# LLMWrapperBase(*args, **kwargs) A LLM wrapper base class. TransformersWrapper(*args, **kwargs) A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation. vLLMWrapper(*args, **kwargs) A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation. SGLangWrapper(*args, **kwargs) A wrapper class for SGLang models, providing a consistent interface for text generation. RemoteTransformersWrapper(model[, ...]) A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface. AsyncVLLM(engine_args[, num_replicas, ...]) A service that manages multiple async vLLM engine actors for distributed inference. AsyncSGLang([server_url, model_path, ...]) Server-based SGLang inference service for TorchRL. Data Structure Classes# ChatHistory([prompt, response, full, ...]) Text([prompt, response, full, device, names]) LogProbs([prompt, response, full, padded, ...]) Masks([all_attention_mask, ...]) Tokens([prompt, response, full, padded, ...]) Utilities# make_async_vllm_engine(*, model_name[, ...]) Create an async vLLM engine service. stateless_init_process_group_async(...) Initializes a stateless process group for distributed communication (async version). make_vllm_worker(*, model_name[, devices, ...]) Creates a vLLM inference engine with tensor parallelism support. stateless_init_process_group(master_address, ...) Initializes a stateless process group for distributed communication.",
+       "articleBody": "LLM Wrappers# The LLM wrapper API provides unified interfaces for different LLM backends, ensuring consistent input/output formats across training and inference pipelines. Wrappers# LLMWrapperBase(*args, **kwargs) A LLM wrapper base class. TransformersWrapper(*args, **kwargs) A wrapper class for Hugging Face Transformers models, providing a consistent interface for text generation and log probability computation. vLLMWrapper(*args, **kwargs) A wrapper class for vLLM models, providing a consistent interface for text generation and log probability computation. SGLangWrapper(*args, **kwargs) A wrapper class for SGLang models, providing a consistent interface for text generation. RemoteTransformersWrapper(model[, ...]) A remote Ray actor wrapper for TransformersWrapper that provides a simplified interface. AsyncVLLM(engine_args[, num_replicas, ...]) A service that manages multiple async vLLM engine actors for distributed inference. AsyncSGLang([server_url, model_path, ...]) Server-based SGLang inference service for TorchRL. Data Structure Classes# ChatHistory([prompt, response, full, ...]) Text([prompt, response, full, device, names]) LogProbs([prompt, response, full, padded, ...]) Masks([all_attention_mask, ...]) Tokens([prompt, response, full, padded, ...]) Utilities# make_async_vllm_engine(*, model_name[, ...]) Create an async vLLM engine service. stateless_init_process_group_async(...) Initializes a stateless process group for distributed communication (async version). make_vllm_worker(*, model_name[, devices, ...]) Creates a vLLM inference engine with tensor parallelism support. stateless_init_process_group(master_address, ...) Initializes a stateless process group for distributed communication. TRL Interoperability Adapters# Thin adapters enabling seamless interoperability between TorchRL and Hugging Face trl. See also TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together. TorchRLBufferDataset(replay_buffer, ...[, ...]) An torch.utils.data.IterableDataset backed by a TorchRL ReplayBuffer. HFRewardModelWrapper(*args, **kwargs) A TensorDictModuleBase that wraps a Hugging Face reward model.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

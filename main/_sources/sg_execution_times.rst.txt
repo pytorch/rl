@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 28 files **from all galleries**:
+**00:00.000** total execution time for 29 files **from all galleries**:
 
 .. container::
 
@@ -111,6 +111,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_torchrl_envs.py` (``reference/generated/tutorials/torchrl_envs.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_trl_interop.py` (``reference/generated/tutorials/trl_interop.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_vla.py` (``reference/generated/tutorials/vla.py``)

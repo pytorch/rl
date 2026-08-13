@@ -92,6 +92,7 @@
 - [GRPO, DAPO, CISPO](llms.html#grpo-dapo-cispo)
 - [SFT](llms.html#sft)
 - [Distillation](llms.html#distillation)
+- [TRL Interoperability](llms.html#trl-interoperability)
 - [torchrl.modules package](modules.html)
 
 - [Key Features](modules.html#key-features)

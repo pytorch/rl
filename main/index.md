@@ -160,6 +160,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Documentation Sections](reference/llms.html#documentation-sections)
 - [Environments](reference/llms.html#environments)
 - [Objectives](reference/llms.html#objectives)
+- [TRL Interoperability](reference/llms.html#trl-interoperability)
 - [torchrl.modules package](reference/modules.html)
 
 - [Key Features](reference/modules.html#key-features)

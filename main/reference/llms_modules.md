@@ -30,3 +30,12 @@ input/output formats across training and inference pipelines.
 | [`stateless_init_process_group_async`](generated/torchrl.modules.llm.stateless_init_process_group_async.html#torchrl.modules.llm.stateless_init_process_group_async)(...) | Initializes a stateless process group for distributed communication (async version). |
 | [`make_vllm_worker`](generated/torchrl.modules.llm.make_vllm_worker.html#torchrl.modules.llm.make_vllm_worker)(*, model_name[, devices, ...]) | Creates a vLLM inference engine with tensor parallelism support. |
 | [`stateless_init_process_group`](generated/torchrl.modules.llm.stateless_init_process_group.html#torchrl.modules.llm.stateless_init_process_group)(master_address, ...) | Initializes a stateless process group for distributed communication. |
+
+## TRL Interoperability Adapters
+
+Thin adapters enabling seamless interoperability between TorchRL and
+Hugging Face `trl`. See also [TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](../tutorials/trl_interop.html#trl-interop-tutorial).
+
+| [`TorchRLBufferDataset`](generated/torchrl.modules.llm.TorchRLBufferDataset.html#torchrl.modules.llm.TorchRLBufferDataset)(replay_buffer, ...[, ...]) | An [`torch.utils.data.IterableDataset`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset) backed by a TorchRL [`ReplayBuffer`](generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer). |
+| --- | --- |
+| [`HFRewardModelWrapper`](generated/torchrl.modules.llm.HFRewardModelWrapper.html#torchrl.modules.llm.HFRewardModelWrapper)(*args, **kwargs) | A [`TensorDictModuleBase`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase) that wraps a Hugging Face reward model. |

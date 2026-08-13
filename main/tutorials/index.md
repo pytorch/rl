@@ -67,6 +67,11 @@ Vision-Language-Action (VLA) policies with TorchRL
 [Unified checkpointing in TorchRL](checkpointing.html)
 
 Unified checkpointing in TorchRL
+![](../_images/sphx_glr_trl_interop_thumb.png)
+
+[TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together](trl_interop.html)
+
+TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 ![](../_images/sphx_glr_dqn_with_rnn_thumb.png)
 
 [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html)
