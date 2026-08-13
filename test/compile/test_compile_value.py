@@ -3,16 +3,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """Tests for torch.compile compatibility of value estimation functions."""
+
 from __future__ import annotations
 
 import sys
 
 import pytest
 import torch
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
+from torchrl.modules.value_transforms import SymLogValueTransform
 from torchrl.objectives.value.advantages import TDLambdaEstimator
-
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     td_lambda_return_estimate,
@@ -245,6 +247,36 @@ class TestTDLambdaEstimatorCompile:
 
         assert estimator.vectorized is True
         assert estimator._vectorized is True
+
+    def test_value_transform_compiles_fullgraph(self):
+        transform = SymLogValueTransform()
+        estimator = TDLambdaEstimator(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=None,
+            value_transform=transform,
+            vectorized=False,
+        )
+        raw_value = torch.linspace(-100.0, 100.0, 16).reshape(2, 8, 1)
+        raw_next_value = raw_value.flip(1)
+        tensordict = TensorDict(
+            {
+                "state_value": transform(raw_value),
+                "next": {
+                    "state_value": transform(raw_next_value),
+                    "reward": torch.randn(2, 8, 1),
+                    "done": torch.zeros(2, 8, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(2, 8, 1, dtype=torch.bool),
+                },
+            },
+            [2, 8],
+        )
+
+        expected = estimator(tensordict.clone())
+        compiled = torch.compile(estimator, backend="eager", fullgraph=True)
+        result = compiled(tensordict.clone())
+        torch.testing.assert_close(result["advantage"], expected["advantage"])
+        torch.testing.assert_close(result["value_target"], expected["value_target"])
 
     def test_vectorized_property_returns_false_in_eager_mode_when_set_false(self):
         """Test that TDLambdaEstimator.vectorized returns False in eager mode when set to False."""

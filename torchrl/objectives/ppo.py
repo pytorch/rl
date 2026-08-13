@@ -27,9 +27,9 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey
 from torch import distributions as d
-
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
 from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
+from torchrl.modules.value_transforms import ValueTransform
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -168,6 +168,11 @@ class PPOLoss(LossModule):
             loss from the forward outputs.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        value_transform (ValueTransform, optional): invertible transform used by
+            the critic prediction space. Returns, advantages, value clipping,
+            and diagnostics remain in raw value space. Defaults to ``None``.
+            See also :class:`~torchrl.modules.ValueOperator` and
+            :class:`~torchrl.objectives.value.ValueEstimatorBase`.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
         normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
@@ -471,6 +476,7 @@ class PPOLoss(LossModule):
         log_explained_variance: bool = True,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
+        value_transform: ValueTransform | None = None,
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float | None = None,
@@ -517,6 +523,7 @@ class PPOLoss(LossModule):
         self._in_keys = None
         self._out_keys = None
         super().__init__()
+        self._set_value_transform(value_transform)
         if functional:
             self.convert_to_functional(actor_network, "actor_network")
         else:
@@ -859,13 +866,22 @@ class PPOLoss(LossModule):
                 f"Make sure that the 'value_key' passed to PPO is accurate."
             )
 
-        # Subclass hook: lets e.g. MAPPOLoss inject PopArt-style value
-        # normalisation uniformly across target_return / state_value /
-        # old_state_value so the MSE and the clip radius both live in
-        # normalised space.
-        target_return, state_value, old_state_value = self._critic_loss_inputs(
-            target_return, state_value, old_state_value
-        )
+        if self.value_transform is None:
+            # Subclass hook: lets e.g. MAPPOLoss inject PopArt-style value
+            # normalisation uniformly across target_return / state_value /
+            # old_state_value so the MSE and the clip radius both live in
+            # normalised space.
+            target_return, state_value, old_state_value = self._critic_loss_inputs(
+                target_return, state_value, old_state_value
+            )
+            target_return_raw = target_return
+            state_value_raw = state_value
+        else:
+            target_return_raw = target_return
+            state_value_raw = self._inverse_value_transform(state_value)
+            if old_state_value is not None:
+                old_state_value = self._inverse_value_transform(old_state_value)
+            target_return = self._transform_value(target_return_raw)
 
         loss_value = distance_loss(
             target_return,
@@ -877,18 +893,19 @@ class PPOLoss(LossModule):
         if self.clip_value:
             loss_value, clip_fraction = _clip_value_loss(
                 old_state_value,
-                state_value,
+                state_value_raw,
                 self.clip_value,
                 target_return,
                 loss_value,
                 self.loss_critic_type,
+                value_transform=self.value_transform,
             )
 
         explained_variance = None
         if self.log_explained_variance:
             with torch.no_grad():  # <‑‑ break grad‐flow
-                tgt = target_return.detach()
-                pred = state_value.detach()
+                tgt = target_return_raw.detach()
+                pred = state_value_raw.detach()
                 eps = torch.finfo(tgt.dtype).eps
 
                 resid = torch.var(tgt - pred, correction=0, dim=0)
@@ -991,9 +1008,11 @@ class PPOLoss(LossModule):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                self._reduce_loss(value, tensordict).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -1134,6 +1153,9 @@ class ClipPPOLoss(PPOLoss):
             loss from the forward outputs.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        value_transform (ValueTransform, optional): invertible transform used by
+            the critic prediction space. Returns, advantages, value clipping,
+            and diagnostics remain in raw value space. Defaults to ``None``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
         normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
@@ -1238,6 +1260,7 @@ class ClipPPOLoss(PPOLoss):
         entropy_coeff: float | Mapping[NestedKey, float] | None = None,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
+        value_transform: ValueTransform | None = None,
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float | None = None,
@@ -1265,6 +1288,7 @@ class ClipPPOLoss(PPOLoss):
             entropy_coeff=entropy_coeff,
             critic_coeff=critic_coeff,
             loss_critic_type=loss_critic_type,
+            value_transform=value_transform,
             normalize_advantage=normalize_advantage,
             normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
             gamma=gamma,
@@ -1440,9 +1464,11 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("max_ratio", ratio.max())
             td_out.set("mean_ratio", ratio.mean())
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                self._reduce_loss(value, tensordict).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,
@@ -1495,6 +1521,9 @@ class KLPENPPOLoss(PPOLoss):
             loss. Defaults to ``1.0``.
         loss_critic_type (str, optional): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        value_transform (ValueTransform, optional): invertible transform used by
+            the critic prediction space. Returns, advantages, value clipping,
+            and diagnostics remain in raw value space. Defaults to ``None``.
         normalize_advantage (bool, optional): if ``True``, the advantage will be normalized
             before being used. Defaults to ``False``.
         normalize_advantage_exclude_dims (Tuple[int], optional): dimensions to exclude from the advantage
@@ -1598,6 +1627,7 @@ class KLPENPPOLoss(PPOLoss):
         entropy_coeff: float | Mapping[NestedKey, float] | None = None,
         critic_coeff: float | None = None,
         loss_critic_type: str = "smooth_l1",
+        value_transform: ValueTransform | None = None,
         normalize_advantage: bool = False,
         normalize_advantage_exclude_dims: tuple[int] = (),
         gamma: float | None = None,
@@ -1615,6 +1645,7 @@ class KLPENPPOLoss(PPOLoss):
             entropy_coeff=entropy_coeff,
             critic_coeff=critic_coeff,
             loss_critic_type=loss_critic_type,
+            value_transform=value_transform,
             normalize_advantage=normalize_advantage,
             normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
             gamma=gamma,
@@ -1801,9 +1832,11 @@ class KLPENPPOLoss(PPOLoss):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, tensordict_copy).squeeze(-1)
-            if name.startswith("loss_")
-            else value,
+            lambda name, value: (
+                self._reduce_loss(value, tensordict_copy).squeeze(-1)
+                if name.startswith("loss_")
+                else value
+            ),
         )
         self._clear_weakrefs(
             tensordict,

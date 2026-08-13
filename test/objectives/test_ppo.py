@@ -19,7 +19,7 @@ from _objectives_common import (
     LossModuleTestBase,
     MARLEnv,
 )
-
+from packaging import version as pack_version
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     composite_lp_aggregate,
@@ -37,7 +37,6 @@ from tensordict.nn import (
     WrapModule,
 )
 from torch import autograd, nn
-
 from torchrl._utils import rl_warnings
 from torchrl.data import Bounded, Composite, Unbounded
 from torchrl.modules.distributions.continuous import TanhNormal
@@ -47,6 +46,7 @@ from torchrl.modules.tensordict_module.actors import (
     ProbabilisticActor,
     ValueOperator,
 )
+from torchrl.modules.value_transforms import SymLogValueTransform
 from torchrl.objectives import A2CLoss, ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.reinforce import ReinforceLoss
 from torchrl.objectives.utils import _sum_td_features, ValueEstimators
@@ -56,7 +56,6 @@ from torchrl.objectives.value.advantages import (
     TDLambdaEstimator,
     VTrace,
 )
-
 from torchrl.testing import (  # noqa
     call_value_nets as _call_value_nets,
     dtype_fixture,
@@ -134,8 +133,12 @@ class TestPPO(LossModuleTestBase):
         device="cpu",
         out_keys=None,
         observation_key="observation",
+        value_transform=None,
     ):
-        module = nn.Linear(obs_dim, 1)
+        if value_transform is None:
+            module = nn.Linear(obs_dim, 1)
+        else:
+            module = nn.Sequential(nn.Linear(obs_dim, 1), value_transform)
         value = ValueOperator(
             module=module,
             in_keys=[observation_key],
@@ -387,6 +390,63 @@ class TestPPO(LossModuleTestBase):
         value = self._create_mock_value()
         loss_fn = loss_class(actor, value)
         self.reset_parameters_recursive_test(loss_fn)
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    def test_ppo_value_transform_clips_in_raw_space(self, loss_class):
+        transform = SymLogValueTransform()
+        torch.manual_seed(self.seed)
+        raw_actor = self._create_mock_actor()
+        raw_value = self._create_mock_value()
+        torch.manual_seed(self.seed)
+        transformed_actor = self._create_mock_actor()
+        transformed_value = self._create_mock_value(value_transform=transform)
+        td = self._create_mock_data_ppo(batch=6)
+
+        with torch.no_grad():
+            current_raw = raw_value(td.clone())["state_value"]
+        offset = torch.tensor([-20.0, 20.0, -20.0, 20.0, -20.0, 20.0]).unsqueeze(-1)
+        old_raw = current_raw + offset
+        target_raw = current_raw - 5.0 * offset
+        raw_td = td.clone().set("state_value", old_raw).set("value_target", target_raw)
+        transformed_td = (
+            td.clone()
+            .set("state_value", transform(old_raw))
+            .set("value_target", target_raw)
+        )
+
+        raw_loss = loss_class(
+            raw_actor,
+            raw_value,
+            clip_value=5.0,
+            loss_critic_type="l2",
+        )
+        transformed_loss = loss_class(
+            transformed_actor,
+            transformed_value,
+            clip_value=5.0,
+            loss_critic_type="l2",
+            value_transform=transform,
+        )
+        _, raw_clip_fraction, raw_explained_variance = raw_loss.loss_critic(raw_td)
+        (
+            transformed_critic_loss,
+            clip_fraction,
+            explained_variance,
+        ) = transformed_loss.loss_critic(transformed_td)
+
+        current_transformed = transform(current_raw)
+        target_transformed = transform(target_raw)
+        clipped_raw = old_raw + (current_raw - old_raw).clamp(-5.0, 5.0)
+        expected_loss = torch.maximum(
+            (target_transformed - current_transformed).pow(2),
+            (target_transformed - transform(clipped_raw)).pow(2),
+        )
+        torch.testing.assert_close(transformed_critic_loss, expected_loss)
+        torch.testing.assert_close(clip_fraction, raw_clip_fraction)
+        torch.testing.assert_close(explained_variance, raw_explained_variance)
+
+        transformed_loss.make_value_estimator(ValueEstimators.GAE)
+        assert transformed_loss.value_estimator.value_transform is transform
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
@@ -964,9 +1024,11 @@ class TestPPO(LossModuleTestBase):
             "advantage": "advantage",
             "value_target": "value_target",
             "value": "state_value",
-            "sample_log_prob": "action_log_prob"
-            if not composite_action_dist
-            else ("action", "action1_log_prob"),
+            "sample_log_prob": (
+                "action_log_prob"
+                if not composite_action_dist
+                else ("action", "action1_log_prob")
+            ),
             "action": "action" if not composite_action_dist else ("action", "action1"),
             "reward": "reward",
             "done": "done",
@@ -2047,9 +2109,9 @@ class TestA2C(LossModuleTestBase):
         td = td.exclude(loss_fn.tensor_keys.value_target)
         if advantage is not None:
             advantage.set_keys(
-                sample_log_prob=actor.log_prob_keys
-                if composite_action_dist
-                else "action_log_prob"
+                sample_log_prob=(
+                    actor.log_prob_keys if composite_action_dist else "action_log_prob"
+                )
             )
             advantage(td)
         elif td_est is not None:

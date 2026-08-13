@@ -19,11 +19,18 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictPara
 from tensordict.utils import Buffer
 from torch import nn
 from torch.nn import Parameter
-
 from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-from torchrl.objectives.utils import _reduce, default_value_kwargs, ValueEstimators
+from torchrl.modules.value_transforms import ValueTransform
+from torchrl.objectives.utils import (
+    _inverse_value_transform,
+    _reduce,
+    _transform_value,
+    _validate_value_transform,
+    default_value_kwargs,
+    ValueEstimators,
+)
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -762,6 +769,24 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if value_type is None:
             value_type = self.default_value_estimator
 
+        if hasattr(self, "value_transform"):
+            value_transform = self.value_transform
+            requested_transform = hyperparams.get("value_transform", value_transform)
+            if requested_transform is not value_transform:
+                raise ValueError(
+                    "The loss and its value estimator must use the same "
+                    "value_transform instance."
+                )
+            hyperparams["value_transform"] = value_transform
+
+            if isinstance(value_type, ValueEstimatorBase) and (
+                value_type.value_transform is not value_transform
+            ):
+                raise ValueError(
+                    "The loss and the provided value estimator must use the same "
+                    "value_transform instance."
+                )
+
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
@@ -774,6 +799,15 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         return value_type, hp
+
+    def _set_value_transform(self, value_transform: ValueTransform | None) -> None:
+        self.value_transform = _validate_value_transform(value_transform)
+
+    def _transform_value(self, value: torch.Tensor) -> torch.Tensor:
+        return _transform_value(value, self.value_transform)
+
+    def _inverse_value_transform(self, value: torch.Tensor) -> torch.Tensor:
+        return _inverse_value_transform(value, self.value_transform)
 
     def register_coeff_buffer(
         self,
@@ -910,11 +944,28 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             value_type = self.default_value_estimator
 
         if isinstance(value_type, ValueEstimatorBase):
+            if hasattr(self, "value_transform") and (
+                value_type.value_transform is not self.value_transform
+            ):
+                raise ValueError(
+                    "The loss and the provided value estimator must use the same "
+                    "value_transform instance."
+                )
             self._value_estimator = value_type
             self.value_type = type(value_type)
             return self
 
         if isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase):
+            if hasattr(self, "value_transform"):
+                requested_transform = hyperparams.get(
+                    "value_transform", self.value_transform
+                )
+                if requested_transform is not self.value_transform:
+                    raise ValueError(
+                        "The loss and its value estimator must use the same "
+                        "value_transform instance."
+                    )
+                hyperparams["value_transform"] = self.value_transform
             if "device" not in hyperparams:
                 device = self._default_device
                 if device is not None:

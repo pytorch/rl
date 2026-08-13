@@ -22,12 +22,12 @@ from tensordict.nn import (
 )
 from tensordict.utils import expand_right, NestedKey
 from torch import Tensor
-
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
+from torchrl.modules.value_transforms import ValueTransform
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -88,6 +88,11 @@ class SACLoss(LossModule):
     Keyword Args:
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
+        value_transform (ValueTransform, optional): invertible transform used by
+            the Q- and V-network prediction spaces. Bellman targets, entropy
+            terms, and actor objectives remain in raw value space. Defaults to
+            ``None``. See also :class:`~torchrl.modules.ValueOperator` and
+            :class:`~torchrl.objectives.value.ValueEstimatorBase`.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
         alpha_init (:obj:`float`, optional): initial entropy multiplier.
@@ -326,6 +331,7 @@ class SACLoss(LossModule):
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
+        value_transform: ValueTransform | None = None,
         alpha_init: float = 1.0,
         min_alpha: float | None = None,
         max_alpha: float | None = None,
@@ -349,6 +355,7 @@ class SACLoss(LossModule):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self._set_value_transform(value_transform)
         self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -718,10 +725,11 @@ class SACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> tuple[Tensor, dict[str, Tensor]]:
         weights = self._maybe_get_priority_weight(tensordict)
-        with set_exploration_type(
-            ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(
-            self.actor_network, preserve_module_state=False
+        with (
+            set_exploration_type(ExplorationType.RANDOM),
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ),
         ):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm, log_prob = compute_rsample_log_prob(dist)
@@ -732,9 +740,10 @@ class SACLoss(LossModule):
             td_q,
             self._cached_detached_qvalue_params,  # should we clone?
         )
-        min_q_logprob = (
-            td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
+        q_value = self._inverse_value_transform(
+            td_q.get(self.tensor_keys.state_action_value)
         )
+        min_q_logprob = q_value.min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q_logprob.shape:
             raise RuntimeError(
@@ -790,6 +799,7 @@ class SACLoss(LossModule):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
+        target_value_transformed = self._transform_value(target_value)
 
         # Q-nets must be trained independently: as such, we split the data in 2
         # if required and train each q-net on one half of the data.
@@ -802,8 +812,8 @@ class SACLoss(LossModule):
         tensordict_chunks = tensordict.reshape(
             self.num_qvalue_nets, -1, *tensordict.shape[1:]
         )
-        target_chunks = target_value.reshape(
-            self.num_qvalue_nets, -1, *target_value.shape[1:]
+        target_chunks = target_value_transformed.reshape(
+            self.num_qvalue_nets, -1, *target_value_transformed.shape[1:]
         )
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
@@ -837,10 +847,11 @@ class SACLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_type(
-                ExplorationType.RANDOM
-            ), self.actor_network_params.to_module(
-                self.actor_network, preserve_module_state=False
+            with (
+                set_exploration_type(ExplorationType.RANDOM),
+                self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                ),
             ):
                 next_tensordict = tensordict.get("next").copy()
                 if self.skip_done_states:
@@ -884,8 +895,8 @@ class SACLoss(LossModule):
             next_tensordict_expand = self._vmap_qnetworkN0(
                 next_tensordict, self.target_qvalue_network_params
             )
-            state_action_value = next_tensordict_expand.get(
-                self.tensor_keys.state_action_value
+            state_action_value = self._inverse_value_transform(
+                next_tensordict_expand.get(self.tensor_keys.state_action_value)
             )
             if (
                 state_action_value.shape[-len(next_sample_log_prob.shape) :]
@@ -894,10 +905,9 @@ class SACLoss(LossModule):
                 next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
             next_state_value = state_action_value - self._alpha * next_sample_log_prob
             next_state_value = next_state_value.min(0)[0]
-            tensordict.set(
-                ("next", self.value_estimator.tensor_keys.value), next_state_value
-            )
-            target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+            target_value = self.value_estimator.value_estimate(
+                tensordict, next_value=next_state_value
+            ).squeeze(-1)
             return target_value
 
     def qvalue_v2_loss(
@@ -906,6 +916,7 @@ class SACLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
         target_value = self._compute_target_v2(tensordict)
+        target_value_transformed = self._transform_value(target_value)
 
         tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys, strict=False),
@@ -914,10 +925,10 @@ class SACLoss(LossModule):
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
             -1
         )
-        td_error = abs(pred_val - target_value)
+        td_error = abs(pred_val - target_value_transformed)
         loss_qval = distance_loss(
             pred_val,
-            target_value.expand_as(pred_val),
+            target_value_transformed.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
         loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
@@ -948,15 +959,17 @@ class SACLoss(LossModule):
             self.target_qvalue_network_params,
         )
 
-        min_qval = (
-            td_copy.get(self.tensor_keys.state_action_value).squeeze(-1).min(0)[0]
+        q_value = self._inverse_value_transform(
+            td_copy.get(self.tensor_keys.state_action_value)
         )
+        min_qval = q_value.squeeze(-1).min(0)[0]
 
         if log_p.shape != min_qval.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {min_qval.shape} and {log_p.shape}"
             )
         target_val = min_qval - self._alpha * log_p
+        target_val = self._transform_value(target_val)
 
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function

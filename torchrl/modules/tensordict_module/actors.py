@@ -22,7 +22,6 @@ from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
 from torch.distributions import Categorical
-
 from torchrl._utils import _replace_last
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _process_action_space_spec
@@ -433,6 +432,14 @@ class ValueOperator(TensorDictModule):
     ["state_action_value"], respectively and depending on whether the "action"
     key is part of the in_keys list).
 
+    ``ValueOperator`` does not transform its output. When a loss or value
+    estimator is configured with a
+    :class:`~torchrl.modules.ValueTransform`, the wrapped module must emit
+    values in that transform's prediction space. The ``"state_value"`` or
+    ``"state_action_value"`` entry remains in prediction space; the consumer
+    converts it back to raw reward-return units for Bellman, advantage, actor,
+    clipping, and diagnostic computations.
+
     Args:
         module (nn.Module): a :class:`torch.nn.Module` used to map the input to
             the output parameter space.
@@ -476,6 +483,14 @@ class ValueOperator(TensorDictModule):
             device=None,
             is_shared=False)
 
+
+    .. seealso::
+        :class:`~torchrl.modules.ValueTransform`,
+        :class:`~torchrl.objectives.value.ValueEstimatorBase`,
+        :class:`~torchrl.objectives.DDPGLoss`,
+        :class:`~torchrl.objectives.TD3Loss`,
+        :class:`~torchrl.objectives.SACLoss`, and
+        :class:`~torchrl.objectives.PPOLoss`.
 
     """
 
