@@ -76,7 +76,8 @@ def get_pr_info(repo: str, pr_number: int) -> dict:
         "--repo",
         repo,
         "--json",
-        "headRefName,baseRefName,author,title,url,labels,mergeable,reviewDecision",
+        "headRefName,baseRefName,headRepository,isCrossRepository,author,title,"
+        "url,labels,mergeable,reviewDecision",
     )
     return json.loads(result.stdout)
 
@@ -234,6 +235,18 @@ def cmd_rebase(ctx: CommandContext, args: argparse.Namespace) -> None:
         )
         return
 
+    if pr.get("isCrossRepository"):
+        head_repo = (pr.get("headRepository") or {}).get("nameWithOwner", "the fork")
+        post_comment(
+            ctx.repo,
+            ctx.pr_number,
+            f"@{ctx.comment_author} TorchRLBot cannot rebase `{head_repo}:{head}` "
+            "because its GitHub Actions token is scoped to this repository and "
+            "cannot push to forks. Rebase the branch locally and force-push it "
+            "from an account with access to the fork.",
+        )
+        return
+
     post_comment(
         ctx.repo,
         ctx.pr_number,
@@ -282,22 +295,33 @@ def normalize_reviewers(tokens: list[str]) -> list[str]:
 
 def cmd_reviewer(ctx: CommandContext, args: argparse.Namespace) -> None:
     """Handle ``@torchrlbot reviewer``."""
+    pr_author = ctx.pr_info.get("author", {}).get("login")
+    is_pr_author = (
+        pr_author is not None and pr_author.casefold() == ctx.comment_author.casefold()
+    )
+
     # Permission gate
-    if not check_write_permission(ctx.repo, ctx.comment_author):
+    if not is_pr_author and not check_write_permission(ctx.repo, ctx.comment_author):
         post_comment(
             ctx.repo,
             ctx.pr_number,
             f"@{ctx.comment_author} you don't have write permission on this repository. "
-            "Only collaborators with write access can request reviewers.",
+            "Only the PR author or collaborators with write access can request "
+            "reviewers.",
         )
         return
 
     reviewers = normalize_reviewers(args.reviewers)
 
-    pr_author = ctx.pr_info.get("author", {}).get("login")
-    skipped_author = pr_author in reviewers
+    skipped_author = pr_author is not None and any(
+        reviewer.casefold() == pr_author.casefold() for reviewer in reviewers
+    )
     if skipped_author:
-        reviewers = [r for r in reviewers if r != pr_author]
+        reviewers = [
+            reviewer
+            for reviewer in reviewers
+            if reviewer.casefold() != pr_author.casefold()
+        ]
 
     if not reviewers:
         post_comment(
@@ -314,13 +338,13 @@ def cmd_reviewer(ctx: CommandContext, args: argparse.Namespace) -> None:
 
     try:
         gh(
-            "pr",
-            "edit",
-            str(ctx.pr_number),
-            "--repo",
-            ctx.repo,
-            "--add-reviewer",
-            ",".join(reviewers),
+            "api",
+            f"repos/{ctx.repo}/pulls/{ctx.pr_number}/requested_reviewers",
+            "--method",
+            "POST",
+            "--input",
+            "-",
+            input=json.dumps({"reviewers": reviewers}),
         )
         mentions = ", ".join(f"@{r}" for r in reviewers)
         note = (
@@ -385,6 +409,9 @@ Rebase the PR branch onto a target branch.
 |------|-------------|
 | `-b`, `--branch` | Target branch (default: `main`) |
 
+Only branches in this repository can be rebased; the workflow token cannot push
+to contributor forks.
+
 ### `reviewer`
 Request reviews from one or more repository collaborators.
 
@@ -394,6 +421,7 @@ Request reviews from one or more repository collaborators.
 
 Reviewers can be space- or comma-separated, with or without a leading `@`.
 The PR author is skipped automatically.
+The command can be run by the PR author or a collaborator with write access.
 
 ### `help`
 Show this help message.
