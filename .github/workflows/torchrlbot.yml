@@ -23,8 +23,11 @@ jobs:
       contains(github.event.comment.body, '@torchrlbot')
     runs-on: ubuntu-latest
     permissions:
+      # Rebase/push same-repository branches, delete branches, and merge PRs.
       contents: write
+      # Read PR metadata, request reviewers, and merge PRs.
       pull-requests: write
+      # React to commands and post status comments on PR conversations.
       issues: write
     steps:
       - name: Checkout repository
@@ -39,8 +42,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ghstack
-        run: pip install ghstack
+      - name: Install dependencies
+        run: pip install ghstack pytest
+
+      - name: Test TorchRLBot
+        run: python -m pytest .github/torchrlbot/test_torchrlbot.py -q
 
       - name: Configure git
         run: |

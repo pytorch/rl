@@ -67,6 +67,8 @@ Rebase the PR branch onto a target branch (default: `main`).
 
 **Requirements:**
 - The commenter must have **write** (or higher) permission on the repository.
+- The PR branch must be in this repository. The workflow token is scoped to
+  `pytorch/rl` and cannot push rebased commits to a contributor's fork.
 
 #### `reviewer`
 
@@ -86,7 +88,8 @@ Reviewers can be space- or comma-separated, with or without a leading `@`.
 ```
 
 **Requirements:**
-- The commenter must have **write** (or higher) permission on the repository.
+- The commenter must be the **PR author** or have **write** (or higher)
+  permission on the repository.
 - Requested reviewers must be collaborators on the repository.
 - The PR author is skipped automatically (GitHub does not allow self-review).
 
@@ -100,9 +103,22 @@ Display the help message with all available commands.
 
 ## Permissions
 
-All commands require the commenter to have **write** access to the repository.
-This prevents external contributors from triggering merges or rebases. The bot
-checks permissions via the GitHub API before executing any action.
+The `merge` and `rebase` commands require the commenter to have **write** access
+to the repository. The `reviewer` command can also be run by the PR author, so
+external contributors can request a review on their own PR without being able to
+modify other contributors' PRs. The bot checks permissions via the GitHub API
+before executing any action.
+
+The workflow grants only the permissions used by its commands:
+
+- `contents: write` for same-repository rebases, branch deletion, and merges.
+- `pull-requests: write` for PR metadata, merges, and review requests.
+- `issues: write` for command acknowledgements and status comments.
+
+The token belongs to the GitHub Actions app and is scoped to `pytorch/rl`; it
+does not impersonate the commenter. Consequently, it cannot rebase fork branches,
+and `merge --force` can only bypass repository rules that explicitly allow the
+GitHub Actions app to bypass them.
 
 ## Architecture
 
@@ -122,8 +138,9 @@ The workflow:
 2. **Filter**: The job only runs if the comment is on a PR and contains `@torchrlbot`.
 3. **Parse**: `torchrlbot.py` reads the GitHub event payload, extracts the command
    line from the comment, and parses it with `argparse`.
-4. **Validate**: The bot checks that the commenter has write permission and that
-   the PR meets any required conditions (e.g., approval status for merge).
+4. **Validate**: The bot checks that the commenter is authorized for the command
+   and that the PR meets any required conditions (e.g., approval status for
+   merge).
 5. **Execute**: The appropriate handler runs (`ghstack land`, `gh pr merge`,
    `git rebase`, etc.) and posts status comments back on the PR.
 
