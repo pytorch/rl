@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import json
+import pickle
 import threading
 
 import pytest
@@ -1169,6 +1170,141 @@ def test_replay_buffer_prefetch_queue_length():
     assert (
         len(rb._prefetch_queue) == 2
     ), f"Expected prefetch queue to have 2 items, but got {len(rb._prefetch_queue)}."
+
+
+def _make_prefetch_replay_buffer(
+    *, prefetch=2, batch_size=3, size=20, sampler=None, seed=0, storage=None
+):
+    generator = torch.Generator().manual_seed(seed)
+    replay_buffer = ReplayBuffer(
+        storage=ListStorage(size) if storage is None else storage,
+        sampler=sampler,
+        batch_size=batch_size,
+        prefetch=prefetch,
+        generator=generator,
+    )
+    replay_buffer.extend(torch.arange(size))
+    return replay_buffer
+
+
+def _settle_prefetch_queue(replay_buffer):
+    for future in replay_buffer._prefetch_queue:
+        future.result()
+
+
+def _assert_prefetch_samples_equal(expected, actual):
+    expected_data, expected_info = expected
+    actual_data, actual_info = actual
+    assert torch.equal(expected_data, actual_data)
+    assert torch.equal(expected_info["index"], actual_info["index"])
+
+
+def test_replay_buffer_prefetch_state_dict_roundtrip():
+    source = _make_prefetch_replay_buffer()
+    source.sample()
+    _settle_prefetch_queue(source)
+    state = source.state_dict()
+
+    restored = _make_prefetch_replay_buffer(seed=1)
+    restored.sample()
+    _settle_prefetch_queue(restored)
+    restored.load_state_dict(state)
+
+    for _ in range(4):
+        _assert_prefetch_samples_equal(
+            source.sample(return_info=True), restored.sample(return_info=True)
+        )
+
+
+def test_replay_buffer_prefetch_state_dict_legacy():
+    source = _make_prefetch_replay_buffer()
+    source.sample()
+    _settle_prefetch_queue(source)
+    state = source.state_dict()
+    state.pop("_prefetch_state")
+
+    restored = _make_prefetch_replay_buffer()
+    restored.sample()
+    restored.load_state_dict(state)
+
+    assert not restored._prefetch_queue
+
+
+def test_replay_buffer_prefetch_state_dict_capacity_mismatch():
+    source = _make_prefetch_replay_buffer(prefetch=2)
+    source.sample()
+    _settle_prefetch_queue(source)
+
+    restored = _make_prefetch_replay_buffer(prefetch=1)
+    with pytest.raises(RuntimeError, match="prefetch queue with capacity 2"):
+        restored.load_state_dict(source.state_dict())
+
+
+def test_replay_buffer_prefetch_state_dict_does_not_alias_queue():
+    source = _make_prefetch_replay_buffer()
+    source.sample()
+    _settle_prefetch_queue(source)
+    state = source.state_dict()
+
+    saved_data = state["_prefetch_state"]["queue"][0][0]
+    queued_data = source._prefetch_queue[0].result()[0]
+    saved_data.fill_(-1)
+
+    assert not torch.equal(saved_data, queued_data)
+
+
+def test_replay_buffer_prefetch_dumps_roundtrip(tmp_path):
+    source = _make_prefetch_replay_buffer(storage=LazyTensorStorage(20))
+    source.sample()
+    _settle_prefetch_queue(source)
+    source.dumps(tmp_path)
+
+    restored = _make_prefetch_replay_buffer(seed=1, storage=LazyTensorStorage(20))
+    restored.sample()
+    _settle_prefetch_queue(restored)
+    restored.loads(tmp_path)
+
+    for _ in range(4):
+        _assert_prefetch_samples_equal(
+            source.sample(return_info=True), restored.sample(return_info=True)
+        )
+
+
+def test_replay_buffer_prefetch_pickle_roundtrip():
+    source = _make_prefetch_replay_buffer()
+    source.sample()
+    _settle_prefetch_queue(source)
+
+    restored = pickle.loads(pickle.dumps(source))
+
+    for _ in range(4):
+        _assert_prefetch_samples_equal(
+            source.sample(return_info=True), restored.sample(return_info=True)
+        )
+
+
+def test_replay_buffer_prefetch_without_replacement_roundtrip():
+    source = _make_prefetch_replay_buffer(
+        size=10,
+        sampler=SamplerWithoutReplacement(drop_last=False),
+    )
+    first = source.sample()
+    _settle_prefetch_queue(source)
+    state = source.state_dict()
+
+    restored = _make_prefetch_replay_buffer(
+        size=10,
+        sampler=SamplerWithoutReplacement(drop_last=False),
+    )
+    restored.load_state_dict(state)
+    expected = list(source)
+    actual = list(restored)
+
+    assert len(expected) == len(actual)
+    for expected_batch, actual_batch in zip(expected, actual):
+        assert torch.equal(expected_batch, actual_batch)
+    samples = torch.cat([first, *expected])
+    assert torch.equal(samples.sort().values, torch.arange(10))
 
 
 class TestBufferStats:

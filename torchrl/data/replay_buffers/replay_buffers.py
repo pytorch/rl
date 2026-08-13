@@ -9,11 +9,13 @@ import contextlib
 import json
 import math
 import multiprocessing
+import pickle
 import textwrap
 import threading
 import warnings
-from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from copy import deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any
@@ -1537,34 +1539,115 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             self._storage._bump_mutation_revision()
         return self
 
+    def _clone_prefetch_result(self, result):
+        return deepcopy(result)
+
+    @contextlib.contextmanager
+    def _capture_prefetch_state(self) -> Iterator[dict[str, Any]]:
+        with self._futures_lock:
+            if not self._prefetch:
+                yield {"version": 1, "capacity": 0, "queue": ()}
+                return
+            queue = tuple(
+                self._clone_prefetch_result(future.result())
+                for future in self._prefetch_queue
+            )
+            yield {
+                "version": 1,
+                "capacity": self._prefetch_cap,
+                "queue": queue,
+            }
+
+    def _clear_prefetch_queue_locked(self) -> None:
+        futures = tuple(self._prefetch_queue)
+        for future in futures:
+            future.cancel()
+        if futures:
+            wait(futures)
+        self._prefetch_queue.clear()
+
+    def _restore_prefetch_queue_locked(
+        self, prefetch_state: dict[str, Any] | None
+    ) -> None:
+        if prefetch_state is None:
+            return
+        if not isinstance(prefetch_state, dict):
+            raise TypeError("The prefetch state must be a dictionary.")
+        if prefetch_state.get("version") != 1:
+            raise RuntimeError(
+                f"Unsupported prefetch state version: {prefetch_state.get('version')}."
+            )
+        capacity = prefetch_state.get("capacity")
+        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 0:
+            raise ValueError(
+                "The saved prefetch capacity must be a non-negative integer."
+            )
+        if capacity != self._prefetch_cap:
+            raise RuntimeError(
+                f"Cannot restore a prefetch queue with capacity {capacity} into a "
+                f"replay buffer with capacity {self._prefetch_cap}."
+            )
+        queue = prefetch_state.get("queue")
+        if not isinstance(queue, (list, tuple)):
+            raise TypeError("The saved prefetch queue must be a list or tuple.")
+        if len(queue) > capacity:
+            raise ValueError(
+                f"The saved prefetch queue contains {len(queue)} entries but its "
+                f"capacity is {capacity}."
+            )
+        if queue and not self._prefetch:
+            raise RuntimeError(
+                "Cannot restore a non-empty prefetch queue when prefetching is disabled."
+            )
+        for result in queue:
+            future = Future()
+            future.set_result(self._clone_prefetch_result(result))
+            self._prefetch_queue.append(future)
+
+    def _dump_prefetch_state(self, path: Path, prefetch_state: dict[str, Any]) -> None:
+        with open(path / "prefetch.pkl", "wb") as file:
+            pickle.dump(prefetch_state, file)
+
+    def _load_prefetch_state(self, path: Path) -> dict[str, Any] | None:
+        prefetch_path = path / "prefetch.pkl"
+        if not prefetch_path.exists():
+            return None
+        with open(prefetch_path, "rb") as file:
+            return pickle.load(file)
+
     @_maybe_delay_init
     def state_dict(self) -> dict[str, Any]:
-        return {
-            "_storage": self._storage.state_dict(),
-            "_sampler": self._sampler.state_dict(),
-            "_writer": self._writer.state_dict(),
-            "_transforms": self._transform.state_dict(),
-            "_batch_size": self._batch_size,
-            "_consume_after_n_samples": self._consume_after_n_samples,
-            "_rng": (self._rng.get_state().clone(), str(self._rng.device))
-            if self._rng is not None
-            else None,
-        }
+        with self._capture_prefetch_state() as prefetch_state:
+            return {
+                "_storage": self._storage.state_dict(),
+                "_sampler": self._sampler.state_dict(),
+                "_writer": self._writer.state_dict(),
+                "_transforms": self._transform.state_dict(),
+                "_batch_size": self._batch_size,
+                "_consume_after_n_samples": self._consume_after_n_samples,
+                "_rng": (self._rng.get_state().clone(), str(self._rng.device))
+                if self._rng is not None
+                else None,
+                "_prefetch_state": prefetch_state,
+            }
 
     @_maybe_delay_init
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self._storage.load_state_dict(state_dict["_storage"])
-        self._sampler.load_state_dict(state_dict["_sampler"])
-        self._writer.load_state_dict(state_dict["_writer"])
-        self._transform.load_state_dict(state_dict["_transforms"])
-        self._batch_size = state_dict["_batch_size"]
-        self._consume_after_n_samples = state_dict.get("_consume_after_n_samples")
-        rng = state_dict.get("_rng")
-        if rng is not None:
-            state, device = rng
-            rng = torch.Generator(device=device)
-            rng.set_state(state)
-            self.set_rng(generator=rng)
+        with self._futures_lock:
+            self._clear_prefetch_queue_locked()
+            self._storage.load_state_dict(state_dict["_storage"])
+            self._sampler.load_state_dict(state_dict["_sampler"])
+            self._writer.load_state_dict(state_dict["_writer"])
+            self._transform.load_state_dict(state_dict["_transforms"])
+            self._batch_size = state_dict["_batch_size"]
+            self._consume_after_n_samples = state_dict.get("_consume_after_n_samples")
+            rng = state_dict.get("_rng")
+            if rng is not None:
+                state, device = rng
+                rng = torch.Generator(device=device)
+                rng.set_state(state)
+                self.set_rng(generator=rng)
+            self._restore_prefetch_queue_locked(state_dict.get("_prefetch_state"))
 
     @_maybe_delay_init
     def dumps(self, path):
@@ -1606,28 +1689,30 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
-        self._storage.dumps(path / "storage")
-        self._sampler.dumps(path / "sampler")
-        self._writer.dumps(path / "writer")
-        if self._rng is not None:
-            rng_state = TensorDict(
-                rng_state=self._rng.get_state().clone(),
-                device=self._rng.device,
-            )
-            rng_state.memmap(path / "rng_state")
+        with self._capture_prefetch_state() as prefetch_state:
+            self._storage.dumps(path / "storage")
+            self._sampler.dumps(path / "sampler")
+            self._writer.dumps(path / "writer")
+            if self._rng is not None:
+                rng_state = TensorDict(
+                    rng_state=self._rng.get_state().clone(),
+                    device=self._rng.device,
+                )
+                rng_state.memmap(path / "rng_state")
 
-        # fall back on state_dict for transforms
-        transform_sd = self._transform.state_dict()
-        if transform_sd:
-            torch.save(transform_sd, path / "transform.t")
-        with open(path / "buffer_metadata.json", "w") as file:
-            json.dump(
-                {
-                    "batch_size": self._batch_size,
-                    "consume_after_n_samples": self._consume_after_n_samples,
-                },
-                file,
-            )
+            # fall back on state_dict for transforms
+            transform_sd = self._transform.state_dict()
+            if transform_sd:
+                torch.save(transform_sd, path / "transform.t")
+            with open(path / "buffer_metadata.json", "w") as file:
+                json.dump(
+                    {
+                        "batch_size": self._batch_size,
+                        "consume_after_n_samples": self._consume_after_n_samples,
+                    },
+                    file,
+                )
+            self._dump_prefetch_state(path, prefetch_state)
 
     @_maybe_delay_init
     def loads(self, path):
@@ -1642,21 +1727,24 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
         """
         path = Path(path).absolute()
-        self._storage.loads(path / "storage")
-        self._sampler.loads(path / "sampler")
-        self._writer.loads(path / "writer")
-        if (path / "rng_state").exists():
-            rng_state = TensorDict.load_memmap(path / "rng_state")
-            rng = torch.Generator(device=rng_state.device)
-            rng.set_state(rng_state["rng_state"])
-            self.set_rng(rng)
-        # fall back on state_dict for transforms
-        if (path / "transform.t").exists():
-            self._transform.load_state_dict(torch.load(path / "transform.t"))
-        with open(path / "buffer_metadata.json") as file:
-            metadata = json.load(file)
-        self._batch_size = metadata["batch_size"]
-        self._consume_after_n_samples = metadata.get("consume_after_n_samples")
+        with self._futures_lock:
+            self._clear_prefetch_queue_locked()
+            self._storage.loads(path / "storage")
+            self._sampler.loads(path / "sampler")
+            self._writer.loads(path / "writer")
+            if (path / "rng_state").exists():
+                rng_state = TensorDict.load_memmap(path / "rng_state")
+                rng = torch.Generator(device=rng_state.device)
+                rng.set_state(rng_state["rng_state"])
+                self.set_rng(rng)
+            # fall back on state_dict for transforms
+            if (path / "transform.t").exists():
+                self._transform.load_state_dict(torch.load(path / "transform.t"))
+            with open(path / "buffer_metadata.json") as file:
+                metadata = json.load(file)
+            self._batch_size = metadata["batch_size"]
+            self._consume_after_n_samples = metadata.get("consume_after_n_samples")
+            self._restore_prefetch_queue_locked(self._load_prefetch_state(path))
 
     @_maybe_delay_init
     def save(self, *args, **kwargs):
@@ -2173,29 +2261,31 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:
-        state = self.__dict__.copy()
-        if getattr(self, "_rng", None) is not None:
-            rng_state = TensorDict(
-                rng_state=self._rng.get_state().clone(),
-                device=self._rng.device,
-            )
-            state["_rng"] = rng_state
-        _replay_lock = state.pop("_replay_lock", None)
-        _futures_lock = state.pop("_futures_lock", None)
-        if _replay_lock is not None:
-            state["_replay_lock_placeholder"] = None
-        if _futures_lock is not None:
-            state["_futures_lock_placeholder"] = None
-        # Remove non-picklable prefetch objects - they will be recreated on unpickle
-        _prefetch_queue = state.pop("_prefetch_queue", None)
-        _prefetch_executor = state.pop("_prefetch_executor", None)
-        if _prefetch_queue is not None:
-            state["_prefetch_queue_placeholder"] = None
-        if _prefetch_executor is not None:
-            state["_prefetch_executor_placeholder"] = None
-        return state
+        with self._capture_prefetch_state() as prefetch_state:
+            state = self.__dict__.copy()
+            if getattr(self, "_rng", None) is not None:
+                rng_state = TensorDict(
+                    rng_state=self._rng.get_state().clone(),
+                    device=self._rng.device,
+                )
+                state["_rng"] = rng_state
+            _replay_lock = state.pop("_replay_lock", None)
+            _futures_lock = state.pop("_futures_lock", None)
+            if _replay_lock is not None:
+                state["_replay_lock_placeholder"] = None
+            if _futures_lock is not None:
+                state["_futures_lock_placeholder"] = None
+            _prefetch_queue = state.pop("_prefetch_queue", None)
+            _prefetch_executor = state.pop("_prefetch_executor", None)
+            if _prefetch_queue is not None:
+                state["_prefetch_queue_placeholder"] = None
+            if _prefetch_executor is not None:
+                state["_prefetch_executor_placeholder"] = None
+            state["_prefetch_state"] = prefetch_state
+            return state
 
     def __setstate__(self, state: dict[str, Any]):
+        prefetch_state = state.pop("_prefetch_state", None)
         rngstate = None
         if "_rng" in state:
             rngstate = state["_rng"]
@@ -2223,6 +2313,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         self.__dict__.update(state)
         if rngstate is not None:
             self.set_rng(rng)
+        with self._futures_lock:
+            self._restore_prefetch_queue_locked(prefetch_state)
 
     @property
     @_maybe_delay_init
