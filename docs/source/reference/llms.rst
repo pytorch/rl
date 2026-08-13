@@ -551,3 +551,27 @@ SFT
     :template: rl_template.rst
 
     TopKRewardSelector
+
+.. _component_contracts_section:
+
+Component Contracts (WS1)
+-------------------------
+
+.. currentmodule:: torchrl.data.llm
+
+TorchRL provides formal ``typing.Protocol`` definitions for the minimal
+interfaces that external training loops must satisfy — or that TorchRL
+built-ins are guaranteed to expose.  These contracts make it possible to
+consume individual TorchRL components from TRL, NeMo-RL, or custom loops
+without depending on TorchRL's concrete classes.
+
+See the :ref:`tutorial <sphx_glr_tutorials_sphinx-tutorials_torchrl_component_contracts.py>` for a worked example.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    PostTrainingBufferProtocol
+    PostTrainingCollectorProtocol
+    PostTrainingLossOutputProtocol
+    assert_satisfies_protocol

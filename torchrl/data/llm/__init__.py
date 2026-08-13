@@ -3,6 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .contracts import (
+    PostTrainingBufferProtocol,
+    PostTrainingCollectorProtocol,
+    PostTrainingLossOutputProtocol,
+    assert_satisfies_protocol,
+)
 from .dataset import (
     create_infinite_iterator,
     get_dataloader,
@@ -17,10 +23,14 @@ from .utils import AdaptiveKLController, ConstantKLController, RolloutFromModel
 
 __all__ = [
     "AdaptiveKLController",
+    "assert_satisfies_protocol",
     "ConstantKLController",
     "ContentBase",
     "History",
     "PairwiseDataset",
+    "PostTrainingBufferProtocol",
+    "PostTrainingCollectorProtocol",
+    "PostTrainingLossOutputProtocol",
     "PromptData",
     "add_chat_template",
     "PromptTensorDictTokenizer",
