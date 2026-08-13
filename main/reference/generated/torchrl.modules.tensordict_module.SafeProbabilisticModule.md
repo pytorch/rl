@@ -111,10 +111,17 @@ Note
 if your kwargs contain tensors that you would like to transfer to device with the module, or
 tensors that should see their dtype modified when calling module.to(dtype), you can wrap the kwargs
 in a `TensorDictParams` to do this automatically.
-- **return_log_prob** (*bool**,**optional*) - keyword-only argument.
+- **return_log_prob** (*bool**,**optional*) -
+
+keyword-only argument.
 If `True`, the log-probability of the
 distribution sample will be written in the tensordict with the key
 log_prob_key. Default is `False`.
+
+Fresh random samples use a joint sample-and-score operation when
+available, including each CompositeDistribution component. Existing
+samples and deterministic interactions use regular log_prob. Other
+distributions retain separate sampling and scoring.
 - **log_prob_keys** (*List**[**NestedKey**]**,**optional*) -
 
 keys where to write the log_prob if `return_log_prob=True`.
@@ -192,6 +199,19 @@ tensor([ 1., -1., -1., 1., -1., -1., 1., 1., -1., -1.],
 >>> print(data["loc"].grad) # clamp annihilates gradients
 tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
 ```
+
+forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) = None*, *tensordict_out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *_requires_sample: bool = True*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/tensordict_module/probabilistic.html#SafeProbabilisticModule.forward)
+
+Define the computation performed at every call.
+
+Should be overridden by all subclasses.
+
+Note
+
+Although the recipe for forward pass needs to be defined within
+this function, one should call the `Module` instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.
 
 random(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/modules/tensordict_module/probabilistic.html#SafeProbabilisticModule.random)
 

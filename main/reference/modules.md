@@ -109,6 +109,11 @@ actor = ProbabilisticActor(
 - [TanhDelta](generated/torchrl.modules.TanhDelta.html)
 - [TanhNormal](generated/torchrl.modules.TanhNormal.html)
 - [TruncatedNormal](generated/torchrl.modules.TruncatedNormal.html)
+- [Sampling utilities](modules_distributions.html#sampling-utilities)
+
+- [sample_and_log_prob](generated/torchrl.modules.distributions.utils.sample_and_log_prob.html)
+- [rsample_and_log_prob](generated/torchrl.modules.distributions.utils.rsample_and_log_prob.html)
+- [composite_entropy](generated/torchrl.modules.distributions.utils.composite_entropy.html)
 - [Inference Server](modules_inference_server.html)
 
 - [Core API](modules_inference_server.html#core-api)

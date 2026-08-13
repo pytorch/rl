@@ -63,6 +63,55 @@ Returns the mean of the distribution.
 
 Returns the mode of the distribution.
 
+rsample_and_log_prob(*sample_shape: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | tuple[int, ...] = ()*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)][[source]](../../_modules/torchrl/modules/distributions/continuous.html#TanhNormal.rsample_and_log_prob)
+
+Sample and score the same pre-tanh value with pathwise gradients.
+
+Calling rsample() and log_prob() separately reconstructs the pre-tanh
+value from the rounded action. Once tanh saturates, that inverse can return
+a different Normal value and produce the wrong score and gradients. This
+method scores the exact Normal value used to create the action.
+
+Parameters:
+
+**sample_shape** - Leading sample dimensions.
+
+Returns:
+
+The action and its log probability. Their shapes are
+sample_shape + batch_shape + event_shape and
+sample_shape + batch_shape, respectively.
+
+Use log_prob() for actions not drawn by this call.
+
+Examples
+
+```
+>>> loc = torch.tensor([20.0, -20.0])
+>>> scale = torch.full_like(loc, 0.1)
+>>> dist = TanhNormal(loc, scale, event_dims=1)
+>>> action, log_prob = dist.rsample_and_log_prob()
+>>> action.shape, log_prob.shape
+(torch.Size([2]), torch.Size([]))
+```
+
+sample_and_log_prob(*sample_shape: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | tuple[int, ...] = ()*) → tuple[[Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor), [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)][[source]](../../_modules/torchrl/modules/distributions/continuous.html#TanhNormal.sample_and_log_prob)
+
+Sample and score the same pre-tanh value without pathwise gradients.
+
+The action is detached. Its log probability keeps score-function gradients
+with respect to the distribution parameters.
+
+Parameters:
+
+**sample_shape** - Leading sample dimensions.
+
+Returns:
+
+The detached action and its differentiable log probability. Their
+shapes are sample_shape + batch_shape + event_shape and
+sample_shape + batch_shape, respectively.
+
 *property*support
 
 Returns a [`Constraint`](https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.constraints.Constraint) object

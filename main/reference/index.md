@@ -106,6 +106,7 @@
 - [Robot Learning](modules_models.html)
 - [World Models and Model-Based RL](modules_models.html#world-models-and-model-based-rl)
 - [Distribution Classes](modules_distributions.html)
+- [Sampling utilities](modules_distributions.html#sampling-utilities)
 - [Inference Server](modules_inference_server.html)
 - [Utilities and Helpers](modules_utils.html)
 - [Recurrent state lifecycle](recurrent_state_lifecycle.html)

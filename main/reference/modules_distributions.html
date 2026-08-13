@@ -1892,6 +1892,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.TruncatedNormal.html">TruncatedNormal</a></li>
 </ul>
 </details></li>
+
 <li class="toctree-l2 has-children"><a class="reference internal" href="modules_inference_server.html">Inference Server</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.InferenceServer.html">InferenceServer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.modules.inference_server.InferenceServerConfig.html">InferenceServerConfig</a></li>
@@ -2501,6 +2502,23 @@ document.write(`
 </table>
 </div>
 </section>
+<section id="sampling-utilities">
+<h1>Sampling utilities<a class="headerlink" href="#sampling-utilities" title="Link to this heading">#</a></h1>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.distributions.utils.sample_and_log_prob.html#torchrl.modules.distributions.utils.sample_and_log_prob" title="torchrl.modules.distributions.utils.sample_and_log_prob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_and_log_prob</span></code></a>(distribution[, ...])</p></td>
+<td><p>Sample once and score the same draw atomically when supported.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.distributions.utils.rsample_and_log_prob.html#torchrl.modules.distributions.utils.rsample_and_log_prob" title="torchrl.modules.distributions.utils.rsample_and_log_prob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rsample_and_log_prob</span></code></a>(distribution[, ...])</p></td>
+<td><p>Reparameterize once and score the same draw atomically when supported.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.distributions.utils.composite_entropy.html#torchrl.modules.distributions.utils.composite_entropy" title="torchrl.modules.distributions.utils.composite_entropy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">composite_entropy</span></code></a>(distribution[, samples_mc])</p></td>
+<td><p>Compute component entropy without inverse-scoring Monte Carlo samples.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 
 
                 </article>
@@ -2610,6 +2628,20 @@ document.write(`
               
                 <div class="bd-sidebar-secondary bd-toc">
 <div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Distribution Classes</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#sampling-utilities">Sampling utilities</a></li>
+</ul>
+
+  </nav></div>
     
        <div class="sidebar-secondary-item">
 
@@ -2860,7 +2892,7 @@ document.write(`
        "headline": "Distribution Classes",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/modules_distributions.html",
-       "articleBody": "Distribution Classes# Custom distribution classes for RL, extending PyTorch distributions. Delta(param[, atol, rtol, batch_shape, ...]) Delta distribution. IndependentNormal(loc, scale[, upscale, ...]) Implements a Normal distribution with location scaling. MaskedCategorical([logits, probs, mask, ...]) MaskedCategorical distribution. NormalParamExtractor([scale_mapping, scale_lb]) A non-parametric nn.Module that splits its input into loc and scale parameters. OneHotCategorical([logits, probs, grad_method]) One-hot categorical distribution. ReparamGradientStrategy(value[, names, ...]) TanhDelta(param[, low, high, event_dims, ...]) Implements a Tanh transformed_in Delta distribution. TanhNormal(loc, scale[, upscale, low, high, ...]) Implements a TanhNormal distribution with location scaling. TruncatedNormal(loc, scale[, upscale, low, ...]) Implements a Truncated Normal distribution with location scaling.",
+       "articleBody": "Distribution Classes# Custom distribution classes for RL, extending PyTorch distributions. Delta(param[, atol, rtol, batch_shape, ...]) Delta distribution. IndependentNormal(loc, scale[, upscale, ...]) Implements a Normal distribution with location scaling. MaskedCategorical([logits, probs, mask, ...]) MaskedCategorical distribution. NormalParamExtractor([scale_mapping, scale_lb]) A non-parametric nn.Module that splits its input into loc and scale parameters. OneHotCategorical([logits, probs, grad_method]) One-hot categorical distribution. ReparamGradientStrategy(value[, names, ...]) TanhDelta(param[, low, high, event_dims, ...]) Implements a Tanh transformed_in Delta distribution. TanhNormal(loc, scale[, upscale, low, high, ...]) Implements a TanhNormal distribution with location scaling. TruncatedNormal(loc, scale[, upscale, low, ...]) Implements a Truncated Normal distribution with location scaling. Sampling utilities# sample_and_log_prob(distribution[, ...]) Sample once and score the same draw atomically when supported. rsample_and_log_prob(distribution[, ...]) Reparameterize once and score the same draw atomically when supported. composite_entropy(distribution[, samples_mc]) Compute component entropy without inverse-scoring Monte Carlo samples.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
