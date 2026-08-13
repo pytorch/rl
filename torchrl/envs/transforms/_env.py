@@ -1071,7 +1071,7 @@ class StepCounter(Transform):
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         if self.max_steps:
-            full_done_spec = self.parent.output_spec["full_done_spec"]
+            full_done_spec = output_spec["full_done_spec"]
             for truncated_key in self.truncated_keys:
                 truncated_key = unravel_key(truncated_key)
                 # find a matching done key (there might be more than one)
@@ -1117,7 +1117,6 @@ class StepCounter(Transform):
                     full_done_spec[done_key] = Categorical(
                         2, dtype=torch.bool, device=output_spec.device, shape=shape
                     )
-            output_spec["full_done_spec"] = full_done_spec
         return super().transform_output_spec(output_spec)
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
@@ -1479,14 +1478,13 @@ class RandomTruncationTransform(Transform):
         return self._reset(tensordict, tensordict_reset)
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
-        full_done_spec = self.parent.output_spec["full_done_spec"]
+        full_done_spec = output_spec["full_done_spec"]
         # Ensure truncated and done keys exist in the spec
         if "truncated" not in full_done_spec.keys():
             done_shape = full_done_spec["done"].shape
             full_done_spec["truncated"] = Categorical(
                 2, dtype=torch.bool, device=output_spec.device, shape=done_shape
             )
-        output_spec["full_done_spec"] = full_done_spec
         return super().transform_output_spec(output_spec)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
