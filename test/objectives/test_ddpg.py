@@ -18,7 +18,6 @@ from _objectives_common import (
     LossModuleTestBase,
 )
 from packaging import version as pkg_version
-
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     NormalParamExtractor,
@@ -28,16 +27,20 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from torch import nn
-
 from torchrl._utils import rl_warnings
 from torchrl.data import Bounded, LazyTensorStorage, TensorDictPrioritizedReplayBuffer
 from torchrl.data.postprocs.postprocs import MultiStep
 from torchrl.modules.distributions.continuous import TanhNormal
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
+from torchrl.modules.value_transforms import (
+    SignedHyperbolicValueTransform,
+    SymLogValueTransform,
+    ValueTransform,
+)
 from torchrl.objectives import DDPGLoss, TD3BCLoss, TD3Loss
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
-
+from torchrl.objectives.value import TD0Estimator
 from torchrl.testing import (  # noqa
     call_value_nets as _call_value_nets,
     dtype_fixture,
@@ -66,7 +69,14 @@ class TestDDPG(LossModuleTestBase):
         return actor.to(device)
 
     def _create_mock_value(
-        self, batch=2, obs_dim=3, action_dim=4, state_dim=8, device="cpu", out_keys=None
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        state_dim=8,
+        device="cpu",
+        out_keys=None,
+        value_transform=None,
     ):
         # Actor
         class ValueClass(nn.Module):
@@ -75,7 +85,10 @@ class TestDDPG(LossModuleTestBase):
                 self.linear = nn.Linear(obs_dim + action_dim + state_dim, 1)
 
             def forward(self, obs, state, act):
-                return self.linear(torch.cat([obs, state, act], -1))
+                value = self.linear(torch.cat([obs, state, act], -1))
+                if value_transform is not None:
+                    value = value_transform(value)
+                return value
 
         module = ValueClass()
         value = ValueOperator(
@@ -233,6 +246,104 @@ class TestDDPG(LossModuleTestBase):
         loss_fn = DDPGLoss(actor, value)
         self.reset_parameters_recursive_test(loss_fn)
 
+    def test_value_transform_state_dict_and_dtype(self):
+        class ScaleTransform(ValueTransform):
+            def __init__(self, scale):
+                super().__init__()
+                self.register_buffer("scale", torch.as_tensor(scale))
+
+            def forward(self, value):
+                return value * self.scale
+
+            def inverse(self, value):
+                return value / self.scale
+
+        transform = ScaleTransform(2.0)
+        loss = DDPGLoss(
+            self._create_mock_actor(),
+            self._create_mock_value(value_transform=transform),
+            value_transform=transform,
+        )
+        state_dict = loss.state_dict()
+        assert "value_transform.scale" in state_dict
+        assert loss.value_estimator.value_transform is transform
+
+        loss.to(dtype=torch.float64)
+        assert transform.scale.dtype is torch.float64
+
+        restored_transform = ScaleTransform(1.0)
+        restored = DDPGLoss(
+            self._create_mock_actor(),
+            self._create_mock_value(value_transform=restored_transform),
+            value_transform=restored_transform,
+        ).to(dtype=torch.float64)
+        assert restored.value_estimator.value_transform is restored_transform
+        restored.load_state_dict(loss.state_dict())
+        torch.testing.assert_close(restored_transform.scale, transform.scale)
+
+    @pytest.mark.parametrize(
+        "transform_cls", [SymLogValueTransform, SignedHyperbolicValueTransform]
+    )
+    def test_ddpg_value_transform_raw_objective_and_diagnostics(self, transform_cls):
+        transform = transform_cls()
+        torch.manual_seed(self.seed)
+        raw_actor = self._create_mock_actor()
+        raw_value = self._create_mock_value()
+        torch.manual_seed(self.seed)
+        transformed_actor = self._create_mock_actor()
+        transformed_value = self._create_mock_value(value_transform=transform)
+        td = self._create_mock_data_ddpg()
+        td[("next", "reward")][::2] = 100.0
+        td[("next", "reward")][1::2] = -100.0
+
+        raw_loss = DDPGLoss(raw_actor, raw_value, loss_function="l2")
+        transformed_loss = DDPGLoss(
+            transformed_actor,
+            transformed_value,
+            loss_function="l2",
+            value_transform=transform,
+        )
+        raw_out = raw_loss(td.clone())
+        transformed_td = td.clone()
+        transformed_out = transformed_loss(transformed_td)
+
+        torch.testing.assert_close(transformed_out["loss_actor"], raw_out["loss_actor"])
+        torch.testing.assert_close(
+            transformed_out["pred_value"], raw_out["pred_value"], atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            transformed_out["target_value"],
+            raw_out["target_value"],
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        expected_priority = (
+            transform(transformed_out["pred_value"])
+            - transform(transformed_out["target_value"])
+        ).pow(2)
+        torch.testing.assert_close(transformed_td["td_error"], expected_priority)
+        (transformed_out["loss_actor"] + transformed_out["loss_value"]).backward()
+        assert all(
+            parameter.grad is None or torch.isfinite(parameter.grad).all()
+            for parameter in transformed_loss.parameters()
+        )
+
+        mismatched_estimator = TD0Estimator(
+            gamma=0.99,
+            value_network=None,
+            value_transform=transform_cls(),
+        )
+        with pytest.raises(ValueError, match="same value_transform instance"):
+            transformed_loss.make_value_estimator(mismatched_estimator)
+
+        matching_estimator = TD0Estimator(
+            gamma=0.99,
+            value_network=None,
+            value_transform=transform,
+        )
+        transformed_loss.make_value_estimator(matching_estimator)
+        assert transformed_loss.value_estimator is matching_estimator
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
@@ -259,10 +370,13 @@ class TestDDPG(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td), (
-            pytest.warns(UserWarning, match="No target network updater has been")
-            if (delay_actor or delay_value) and rl_warnings()
-            else contextlib.nullcontext()
+        with (
+            _check_td_steady(td),
+            (
+                pytest.warns(UserWarning, match="No target network updater has been")
+                if (delay_actor or delay_value) and rl_warnings()
+                else contextlib.nullcontext()
+            ),
         ):
             loss = loss_fn(td)
 
@@ -385,9 +499,11 @@ class TestDDPG(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
         # remove warning
@@ -613,9 +729,14 @@ class TestDDPG(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            _check_td_steady(td),
+            (
+                pytest.warns(UserWarning, match="No target network updater has been")
+                if rl_warnings()
+                else contextlib.nullcontext()
+            ),
+        ):
             _ = loss_fn(td)
 
     def test_ddpg_notensordict(self):
@@ -637,9 +758,11 @@ class TestDDPG(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss_val_td = loss(td)
             loss_val = loss(**kwargs)
             for i, key in enumerate(loss.out_keys):
@@ -824,6 +947,7 @@ class TestTD3(LossModuleTestBase):
         out_keys=None,
         action_key="action",
         observation_key="observation",
+        value_transform=None,
     ):
         # Actor
         class ValueClass(nn.Module):
@@ -832,7 +956,10 @@ class TestTD3(LossModuleTestBase):
                 self.linear = nn.Linear(obs_dim + action_dim, 1)
 
             def forward(self, obs, act):
-                return self.linear(torch.cat([obs, act], -1))
+                value = self.linear(torch.cat([obs, act], -1))
+                if value_transform is not None:
+                    value = value_transform(value)
+                return value
 
         module = ValueClass()
         value = ValueOperator(
@@ -985,6 +1112,65 @@ class TestTD3(LossModuleTestBase):
             bounds=(-1, 1),
         )
         self.reset_parameters_recursive_test(loss_fn)
+
+    @pytest.mark.parametrize(
+        "transform_cls", [SymLogValueTransform, SignedHyperbolicValueTransform]
+    )
+    def test_td3_value_transform_raw_objective_and_diagnostics(self, transform_cls):
+        transform = transform_cls()
+        torch.manual_seed(self.seed)
+        raw_actor = self._create_mock_actor()
+        raw_value = self._create_mock_value()
+        torch.manual_seed(self.seed)
+        transformed_actor = self._create_mock_actor()
+        transformed_value = self._create_mock_value(value_transform=transform)
+        td = self._create_mock_data_td3()
+        td[("next", "reward")][::2] = 100.0
+        td[("next", "reward")][1::2] = -100.0
+
+        torch.manual_seed(self.seed)
+        raw_loss = TD3Loss(
+            raw_actor,
+            raw_value,
+            bounds=(-1, 1),
+            policy_noise=0.0,
+            loss_function="l2",
+        )
+        torch.manual_seed(self.seed)
+        transformed_loss = TD3Loss(
+            transformed_actor,
+            transformed_value,
+            bounds=(-1, 1),
+            policy_noise=0.0,
+            loss_function="l2",
+            value_transform=transform,
+        )
+        raw_out = raw_loss(td.clone())
+        transformed_td = td.clone()
+        transformed_out = transformed_loss(transformed_td)
+
+        for key in (
+            "loss_actor",
+            "pred_value",
+            "target_value",
+            "next_state_value",
+            "state_action_value_actor",
+        ):
+            torch.testing.assert_close(
+                transformed_out[key], raw_out[key], atol=1e-4, rtol=1e-4, msg=key
+            )
+        expected_priority = (
+            transform(transformed_out["pred_value"])
+            - transform(transformed_out["target_value"])
+        ).pow(2)
+        torch.testing.assert_close(
+            transformed_td["td_error"], expected_priority.max(0).values
+        )
+        (transformed_out["loss_actor"] + transformed_out["loss_qvalue"]).backward()
+        assert all(
+            parameter.grad is None or torch.isfinite(parameter.grad).all()
+            for parameter in transformed_loss.parameters()
+        )
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -1269,9 +1455,11 @@ class TestTD3(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
             assert all(
@@ -1547,9 +1735,11 @@ class TestTD3(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             torch.manual_seed(0)
             loss_val_td = loss(td)
             torch.manual_seed(0)
@@ -2101,9 +2291,11 @@ class TestTD3BC(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
             assert all(
@@ -2389,9 +2581,11 @@ class TestTD3BC(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             torch.manual_seed(0)
             loss_val_td = loss(td)
             torch.manual_seed(0)

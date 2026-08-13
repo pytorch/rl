@@ -13,13 +13,13 @@ References:
     - de Witt, C. S. et al. *Is Independent Learning All You Need in the
       StarCraft Multi-Agent Challenge?* 2020. https://arxiv.org/abs/2011.09533
 """
+
 from __future__ import annotations
 
 from typing import Any
 
 from tensordict.nn import TensorDictModule
 from tensordict.nn.probabilistic import ProbabilisticTensorDictSequential
-
 from torchrl.modules.value_norm import ValueNorm
 from torchrl.objectives.ppo import ClipPPOLoss
 from torchrl.objectives.utils import ValueEstimators
@@ -204,6 +204,11 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
             normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
             **kwargs,
         )
+        if value_norm is not None and self.value_transform is not None:
+            raise ValueError(
+                "value_transform and value_norm cannot be used together. "
+                "Choose one critic scaling strategy."
+            )
         # ``nn.Module.__setattr__`` registers the ``ValueNorm`` as a child
         # module automatically, so ``.to(device)`` / ``state_dict()`` / etc.
         # pick it up without us calling ``add_module`` a second time.

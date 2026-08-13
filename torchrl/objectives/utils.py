@@ -30,6 +30,7 @@ except ImportError as err:
         raise err_ft from err
 from torchrl._utils import implement_for
 from torchrl.envs.utils import step_mdp
+from torchrl.modules.value_transforms import ValueTransform
 
 try:
     from torch.compiler import is_dynamo_compiling
@@ -41,6 +42,32 @@ _GAMMA_LMBDA_DEPREC_ERROR = (
     "is a deprecated feature. To customize your value function, "
     "run `loss_module.make_value_estimator(ValueEstimators.<value_fun>, gamma=val)`."
 )
+
+
+def _validate_value_transform(
+    value_transform: ValueTransform | None,
+) -> ValueTransform | None:
+    if value_transform is not None and not isinstance(value_transform, ValueTransform):
+        raise TypeError(
+            "value_transform must be a ValueTransform instance or None, got "
+            f"{type(value_transform).__name__}."
+        )
+    return value_transform
+
+
+def _transform_value(value: Tensor, value_transform: ValueTransform | None) -> Tensor:
+    if value_transform is None:
+        return value
+    return value_transform(value)
+
+
+def _inverse_value_transform(
+    value: Tensor, value_transform: ValueTransform | None
+) -> Tensor:
+    if value_transform is None:
+        return value
+    return value_transform.inverse(value)
+
 
 RANDOM_MODULE_LIST = (dropout._DropoutNd,)
 
@@ -937,6 +964,7 @@ def _clip_value_loss(
     target_return: torch.Tensor | TensorDict,
     loss_value: torch.Tensor | TensorDict,
     loss_critic_type: str,
+    value_transform: ValueTransform | None = None,
 ) -> tuple[torch.Tensor | TensorDict, torch.Tensor]:
     """Value clipping method for loss computation.
 
@@ -949,6 +977,7 @@ def _clip_value_loss(
     with torch.no_grad():
         clip_fraction = (pre_clipped != clipped).to(state_value.dtype).mean()
     state_value_clipped = old_state_value + clipped
+    state_value_clipped = _transform_value(state_value_clipped, value_transform)
     loss_value_clipped = distance_loss(
         target_return,
         state_value_clipped,
@@ -960,7 +989,7 @@ def _clip_value_loss(
 
 
 def _validate_clip_epsilon(
-    clip_epsilon: float | tuple[float, float]
+    clip_epsilon: float | tuple[float, float],
 ) -> tuple[float, float]:
     """Normalize and validate a PPO clip threshold.
 

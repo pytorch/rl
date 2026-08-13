@@ -28,13 +28,16 @@ from tensordict.nn import (
 from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
-
 from torchrl._utils import logger, rl_warnings
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.distributions.utils import sample_and_log_prob
+from torchrl.modules.value_transforms import ValueTransform
 from torchrl.objectives.utils import (
+    _inverse_value_transform,
     _maybe_get_or_select,
     _pseudo_vmap,
+    _transform_value,
+    _validate_value_transform,
     _vmap_func,
     hold_out_net,
     register_value_estimator,
@@ -118,6 +121,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
     should be used instead.
 
     Keyword Args:
+        value_transform (ValueTransform, optional): invert value-network outputs
+            from prediction space before return and advantage arithmetic.
+            Stored value keys remain in prediction space; ``advantage`` and
+            ``value_target`` are written in raw reward-return units. Explicit
+            ``next_value=`` arguments are also interpreted as raw values.
+            Defaults to ``None``.
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along ``value_chunk_dim``.
             Defaults to ``None``.
@@ -133,6 +142,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
             boundary without dropping samples, and so on. Defaults to ``1``.
+
+    .. seealso::
+        :class:`~torchrl.modules.ValueTransform` for prediction-space
+        transforms, :class:`~torchrl.modules.ValueOperator` for the network
+        output contract, and :class:`~torchrl.objectives.PPOLoss` for an
+        on-policy consumer.
 
     """
 
@@ -291,6 +306,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        value_transform: ValueTransform | None = None,
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
@@ -306,6 +322,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         # init.
         self._device = device
         self._tensor_keys = None
+        self.value_transform = _validate_value_transform(value_transform)
         self.differentiable = differentiable
         self.deactivate_vmap = deactivate_vmap
         self.value_chunk_size = self._check_positive_int(
@@ -331,6 +348,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             raise RuntimeError(
                 "Setting 'advantage_key' via constructor is deprecated, use .set_keys(advantage_key='some_key') instead.",
             )
+
         if value_target_key is not None:
             raise RuntimeError(
                 "Setting 'value_target_key' via constructor is deprecated, use .set_keys(value_target_key='some_key') instead.",
@@ -339,6 +357,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
             raise RuntimeError(
                 "Setting 'value_key' via constructor is deprecated, use .set_keys(value_key='some_key') instead.",
             )
+
+    def _transform_value(self, value: Tensor) -> Tensor:
+        return _transform_value(value, self.value_transform)
+
+    def _inverse_value_transform(self, value: Tensor) -> Tensor:
+        return _inverse_value_transform(value, self.value_transform)
 
     @staticmethod
     def _check_positive_int(value: int | None, name: str) -> int | None:
@@ -410,14 +434,21 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @property
     def in_keys(self):
+        transition_keys = [
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
+        ]
+        if self.value_network is None:
+            return [
+                self.tensor_keys.value,
+                ("next", self.tensor_keys.value),
+                *transition_keys,
+            ]
         try:
             in_keys = (
                 self.value_network.in_keys
-                + [
-                    ("next", self.tensor_keys.reward),
-                    ("next", self.tensor_keys.done),
-                    ("next", self.tensor_keys.terminated),
-                ]
+                + transition_keys
                 + [("next", in_key) for in_key in self.value_network.in_keys]
             )
         except AttributeError:
@@ -485,7 +516,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
             target_params (TensorDictBase, optional): A nested TensorDict containing the
                 target params to be passed to the functional value network module.
             next_value (torch.Tensor, optional): the value of the next state
-                or state-action pair. Exclusive with ``target_params``.
+                or state-action pair in raw reward-return units, even when
+                ``value_transform`` is set. Exclusive with ``target_params``.
             **kwargs: the keyword arguments to be passed to the value network.
 
         Returns: a tensor corresponding to the state value.
@@ -504,10 +536,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
     def _next_value(self, tensordict, target_params, kwargs):
         step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
-            with hold_out_net(
-                self.value_network
-            ) if target_params is None else target_params.to_module(
-                self.value_network, preserve_module_state=False
+            with (
+                hold_out_net(self.value_network)
+                if target_params is None
+                else target_params.to_module(
+                    self.value_network, preserve_module_state=False
+                )
             ):
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
@@ -1025,6 +1059,10 @@ class TD0Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        value_transform (ValueTransform, optional): invert value predictions
+            before TD arithmetic. The stored value keys stay transformed and
+            the returned targets and advantages use raw units. Defaults to
+            ``None``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
@@ -1058,6 +1096,7 @@ class TD0Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        value_transform: ValueTransform | None = None,
         skip_existing: bool | None = None,
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
@@ -1074,6 +1113,7 @@ class TD0Estimator(ValueEstimatorBase):
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
+            value_transform=value_transform,
             skip_existing=skip_existing,
             device=device,
             deactivate_vmap=deactivate_vmap,
@@ -1170,9 +1210,11 @@ class TD0Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value, valid = self._call_value_nets(
@@ -1190,6 +1232,8 @@ class TD0Estimator(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
+        value = self._inverse_value_transform(value)
+        next_value = self._inverse_value_transform(next_value)
         valid = tensordict.get("shifted_valid", default=None)
         data_for_value = self._prepare_shifted_tensordict(
             tensordict, valid, self._get_time_dim(None, tensordict)
@@ -1224,7 +1268,9 @@ class TD0Estimator(ValueEstimatorBase):
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
         if next_value is None:
-            next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
+            next_value = self._inverse_value_transform(
+                self._next_value(tensordict, target_params, kwargs=kwargs)
+            )
 
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
@@ -1268,6 +1314,10 @@ class TD1Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        value_transform (ValueTransform, optional): invert value predictions
+            before TD arithmetic. The stored value keys stay transformed and
+            the returned targets and advantages use raw units. Defaults to
+            ``None``.
         shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
@@ -1345,6 +1395,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        value_transform: ValueTransform | None = None,
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
@@ -1361,6 +1412,7 @@ class TD1Estimator(ValueEstimatorBase):
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
+            value_transform=value_transform,
             shifted=shifted,
             skip_existing=skip_existing,
             device=device,
@@ -1458,9 +1510,11 @@ class TD1Estimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value, valid = self._call_value_nets(
@@ -1478,6 +1532,8 @@ class TD1Estimator(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
+        value = self._inverse_value_transform(value)
+        next_value = self._inverse_value_transform(next_value)
         valid = tensordict.get("shifted_valid", default=None)
         data_for_value = self._prepare_shifted_tensordict(
             tensordict, valid, self._get_time_dim(None, tensordict)
@@ -1513,7 +1569,9 @@ class TD1Estimator(ValueEstimatorBase):
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
         if next_value is None:
-            next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
+            next_value = self._inverse_value_transform(
+                self._next_value(tensordict, target_params, kwargs=kwargs)
+            )
 
         time_dim = self._get_time_dim(time_dim, tensordict)
         valid = tensordict.get("shifted_valid", default=None)
@@ -1567,6 +1625,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        value_transform (ValueTransform, optional): invert value predictions
+            before TD arithmetic. The stored value keys stay transformed and
+            the returned targets and advantages use raw units. Defaults to
+            ``None``.
         shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
@@ -1646,6 +1708,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        value_transform: ValueTransform | None = None,
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
@@ -1662,6 +1725,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
+            value_transform=value_transform,
             skip_existing=skip_existing,
             shifted=shifted,
             device=device,
@@ -1772,9 +1836,11 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value, valid = self._call_value_nets(
@@ -1791,6 +1857,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
+        value = self._inverse_value_transform(value)
+        next_value = self._inverse_value_transform(next_value)
         valid = tensordict.get("shifted_valid", default=None)
         data_for_value = self._prepare_shifted_tensordict(
             tensordict, valid, self._get_time_dim(None, tensordict)
@@ -1831,7 +1899,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
             )  # we must update the rewards if they are used later in the code
 
         if next_value is None:
-            next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
+            next_value = self._inverse_value_transform(
+                self._next_value(tensordict, target_params, kwargs=kwargs)
+            )
 
         time_dim = self._get_time_dim(time_dim, tensordict)
         valid = tensordict.get("shifted_valid", default=None)
@@ -1903,6 +1973,10 @@ class GAE(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        value_transform (ValueTransform, optional): invert value predictions
+            before GAE arithmetic. The stored value keys stay transformed and
+            the returned targets and advantages use raw units. Defaults to
+            ``None``.
         shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
@@ -2009,6 +2083,7 @@ class GAE(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        value_transform: ValueTransform | None = None,
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
@@ -2027,6 +2102,7 @@ class GAE(ValueEstimatorBase):
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
+            value_transform=value_transform,
             skip_existing=skip_existing,
             device=device,
             deactivate_vmap=deactivate_vmap,
@@ -2038,15 +2114,19 @@ class GAE(ValueEstimatorBase):
         )
         self.register_buffer(
             "gamma",
-            gamma.to(self._device)
-            if isinstance(gamma, Tensor)
-            else torch.tensor(gamma, device=self._device),
+            (
+                gamma.to(self._device)
+                if isinstance(gamma, Tensor)
+                else torch.tensor(gamma, device=self._device)
+            ),
         )
         self.register_buffer(
             "lmbda",
-            lmbda.to(self._device)
-            if isinstance(lmbda, Tensor)
-            else torch.tensor(lmbda, device=self._device),
+            (
+                lmbda.to(self._device)
+                if isinstance(lmbda, Tensor)
+                else torch.tensor(lmbda, device=self._device)
+            ),
         )
         self.average_gae = average_gae
         self.vectorized = vectorized
@@ -2165,9 +2245,11 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # with torch.no_grad():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
@@ -2195,6 +2277,8 @@ class GAE(ValueEstimatorBase):
                     f"The tensor with key {('next', self.tensor_keys.value)} is missing, and no value network was provided."
                 )
 
+        value = self._inverse_value_transform(value)
+        next_value = self._inverse_value_transform(next_value)
         time_dim = self._get_time_dim(time_dim, tensordict)
         valid = tensordict.get("shifted_valid", default=None)
         data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
@@ -2329,9 +2413,11 @@ class GAE(ValueEstimatorBase):
                 params = params.detach()
                 if target_params is None:
                     target_params = params.clone(False)
-            with hold_out_net(self.value_network) if (
-                params is None and target_params is None
-            ) else nullcontext():
+            with (
+                hold_out_net(self.value_network)
+                if (params is None and target_params is None)
+                else nullcontext()
+            ):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 value, next_value, valid = self._call_value_nets(
@@ -2348,6 +2434,8 @@ class GAE(ValueEstimatorBase):
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
+        value = self._inverse_value_transform(value)
+        next_value = self._inverse_value_transform(next_value)
         valid = tensordict.get("shifted_valid", default=None)
         data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
         reward = data_for_value.get(("next", self.tensor_keys.reward))
@@ -2400,12 +2488,21 @@ class MultiAgentGAE(GAE):
             the value tensor. Negative dimensions are taken modulo
             ``value.ndim``. Defaults to ``-2`` (penultimate), matching the
             convention used by :class:`~torchrl.modules.MultiAgentMLP`.
+        value_transform (ValueTransform, optional): forwarded to
+            :class:`GAE`; per-agent predictions stay in prediction space while
+            advantages and value targets use raw units. Defaults to ``None``.
 
     Other args/kwargs are forwarded to :class:`GAE`.
     """
 
-    def __init__(self, *, agent_dim: int = -2, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        *,
+        agent_dim: int = -2,
+        value_transform: ValueTransform | None = None,
+        **kwargs,
+    ):
+        super().__init__(value_transform=value_transform, **kwargs)
         self.agent_dim = agent_dim
 
     @staticmethod
@@ -2515,6 +2612,10 @@ class VTrace(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        value_transform (ValueTransform, optional): invert value predictions
+            before V-trace arithmetic. The stored value keys stay transformed
+            and the returned targets and advantages use raw units. Defaults to
+            ``None``.
         shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
@@ -2628,6 +2729,7 @@ class VTrace(ValueEstimatorBase):
         advantage_key: NestedKey | None = None,
         value_target_key: NestedKey | None = None,
         value_key: NestedKey | None = None,
+        value_transform: ValueTransform | None = None,
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
@@ -2644,6 +2746,7 @@ class VTrace(ValueEstimatorBase):
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
+            value_transform=value_transform,
             skip_existing=skip_existing,
             device=device,
             value_chunk_size=value_chunk_size,
@@ -2820,6 +2923,8 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
+        value = self._inverse_value_transform(value)
+        next_value = self._inverse_value_transform(next_value)
         lp = _maybe_get_or_select(tensordict, self.tensor_keys.sample_log_prob)
         if is_tensor_collection(lp):
             # Sum all values to match the batch size

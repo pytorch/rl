@@ -11,7 +11,6 @@ import functools
 import pytest
 import torch
 from packaging import version
-
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     set_composite_lp_aggregate,
@@ -20,13 +19,16 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 from torch import nn
-
 from torchrl.envs import GymEnv, InitTracker, SerialEnv
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.envs.transforms import TransformedEnv
 from torchrl.modules import GRUModule, LSTMModule, OneHotCategorical, set_recurrent_mode
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
+from torchrl.modules.value_transforms import (
+    SignedHyperbolicValueTransform,
+    SymLogValueTransform,
+)
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.value.advantages import (
     GAE,
@@ -46,7 +48,6 @@ from torchrl.objectives.value.functional import (
     vtrace_advantage_estimate,
 )
 from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
-
 from torchrl.testing import (  # noqa
     call_value_nets as _call_value_nets,
     dtype_fixture,
@@ -59,6 +60,164 @@ _TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class TestValues:
+    @pytest.mark.parametrize(
+        "estimator_cls,kwargs",
+        [
+            (TD0Estimator, {"gamma": 0.9}),
+            (TD1Estimator, {"gamma": 0.9}),
+            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.8}),
+            (GAE, {"gamma": 0.9, "lmbda": 0.8, "average_gae": False}),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "transform_cls", [SymLogValueTransform, SignedHyperbolicValueTransform]
+    )
+    def test_value_transform_keeps_predictions_and_returns_raw(
+        self, estimator_cls, kwargs, transform_cls
+    ):
+        transform = transform_cls()
+        raw_value = torch.linspace(-100.0, 100.0, 10).reshape(2, 5, 1)
+        raw_next_value = torch.linspace(80.0, -80.0, 10).reshape(2, 5, 1)
+        reward = torch.linspace(-50.0, 50.0, 10).reshape(2, 5, 1)
+        done = torch.zeros(2, 5, 1, dtype=torch.bool)
+        done[:, -1] = True
+        terminated = done.clone()
+        terminated[0, -1] = False
+        raw_td = TensorDict(
+            {
+                "critic": {"value": raw_value},
+                "next": {
+                    "critic": {"value": raw_next_value},
+                    "reward": reward,
+                    "done": done,
+                    "terminated": terminated,
+                },
+            },
+            batch_size=[2, 5],
+        )
+        transformed_td = raw_td.clone()
+        transformed_td.set(("critic", "value"), transform(raw_value))
+        transformed_td.set(("next", "critic", "value"), transform(raw_next_value))
+
+        raw_estimator = estimator_cls(value_network=None, **kwargs)
+        raw_estimator.set_keys(value=("critic", "value"))
+        transformed_estimator = estimator_cls(
+            value_network=None, value_transform=transform, **kwargs
+        )
+        transformed_estimator.set_keys(value=("critic", "value"))
+
+        expected = raw_estimator(raw_td.clone())
+        result = transformed_estimator(transformed_td)
+
+        torch.testing.assert_close(
+            result["advantage"], expected["advantage"], atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            result["value_target"],
+            expected["value_target"],
+            atol=1e-4,
+            rtol=1e-4,
+        )
+        torch.testing.assert_close(result[("critic", "value")], transform(raw_value))
+        torch.testing.assert_close(
+            result[("next", "critic", "value")], transform(raw_next_value)
+        )
+
+    def test_value_transform_validation(self):
+        with pytest.raises(TypeError, match="ValueTransform instance or None"):
+            TD0Estimator(gamma=0.9, value_network=None, value_transform=torch.exp)
+
+    def test_value_transform_non_tensordict_dispatch(self):
+        transform = SymLogValueTransform()
+        estimator = TD0Estimator(
+            gamma=0.9, value_network=None, value_transform=transform
+        )
+        raw_value = torch.tensor([[-100.0], [100.0]])
+        raw_next_value = torch.tensor([[50.0], [-50.0]])
+        reward = torch.tensor([[10.0], [-10.0]])
+        done = torch.zeros(2, 1, dtype=torch.bool)
+
+        advantage, value_target = estimator(
+            state_value=transform(raw_value),
+            next_state_value=transform(raw_next_value),
+            next_reward=reward,
+            next_done=done,
+            next_terminated=done,
+        )
+        expected_target = reward + 0.9 * raw_next_value
+        torch.testing.assert_close(value_target, expected_target)
+        torch.testing.assert_close(advantage, expected_target - raw_value)
+
+    def test_vtrace_value_transform_returns_raw_values(self):
+        transform = SymLogValueTransform()
+        torch.manual_seed(0)
+        raw_value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        raw_actor_net = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+        )
+        raw_actor = ProbabilisticActor(
+            module=raw_actor_net,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=OneHotCategorical,
+            return_log_prob=True,
+        )
+        torch.manual_seed(0)
+        transformed_value_net = TensorDictModule(
+            nn.Sequential(nn.Linear(3, 1), transform),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        transformed_actor_net = TensorDictModule(
+            nn.Linear(3, 4), in_keys=["obs"], out_keys=["logits"]
+        )
+        transformed_actor = ProbabilisticActor(
+            module=transformed_actor_net,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=OneHotCategorical,
+            return_log_prob=True,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(2, 5, 3),
+                "next": {
+                    "obs": torch.randn(2, 5, 3),
+                    "reward": torch.linspace(-100.0, 100.0, 10).reshape(2, 5, 1),
+                    "done": torch.zeros(2, 5, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(2, 5, 1, dtype=torch.bool),
+                },
+            },
+            [2, 5],
+        )
+        torch.manual_seed(0)
+        raw_actor(td)
+        raw_vtrace = VTrace(
+            gamma=0.9,
+            value_network=raw_value_net,
+            actor_network=raw_actor,
+        )
+        transformed_vtrace = VTrace(
+            gamma=0.9,
+            value_network=transformed_value_net,
+            actor_network=transformed_actor,
+            value_transform=transform,
+        )
+
+        expected = raw_vtrace(td.clone())
+        result = transformed_vtrace(td.clone())
+        torch.testing.assert_close(
+            result["advantage"], expected["advantage"], atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            result["value_target"],
+            expected["value_target"],
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
     @pytest.mark.parametrize(
         "estimator_cls,kwargs",
         [
@@ -532,10 +691,14 @@ class TestValues:
             vectorized=vectorized,
             deactivate_vmap=True,
         )
-        with pytest.raises(
-            NotImplementedError,
-            match="This implementation is not supported for torch<2.7",
-        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+        with (
+            pytest.raises(
+                NotImplementedError,
+                match="This implementation is not supported for torch<2.7",
+            )
+            if torch.__version__ < "2.7"
+            else contextlib.nullcontext()
+        ):
             with set_recurrent_mode(True):
                 r1 = gae(vals.copy())
             a1 = r1["advantage"]

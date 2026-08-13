@@ -7,7 +7,6 @@ import argparse
 import pytest
 import torch
 from packaging import version
-
 from tensordict import TensorDict
 from tensordict.nn import (
     composite_lp_aggregate,
@@ -58,6 +57,16 @@ TORCH_VERSION = torch.__version__
 FULLGRAPH = version.parse(".".join(TORCH_VERSION.split(".")[:3])) >= version.parse(
     "2.5.0"
 )  # Anything from 2.5, incl. nightlies, allows for fullgraph
+
+
+class _TransformedValueModule(torch.nn.Module):
+    def __init__(self, module, value_transform):
+        super().__init__()
+        self.module = module
+        self.value_transform = value_transform
+
+    def forward(self, *inputs):
+        return self.value_transform(self.module(*inputs))
 
 
 # @pytest.fixture(scope="module", autouse=True)
@@ -296,8 +305,17 @@ def test_dqn_speed(
 
 @pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+@pytest.mark.parametrize("value_transform_cls", [None, SymLogValueTransform])
 def test_ddpg_speed(
-    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark,
+    backward,
+    compile,
+    value_transform_cls,
+    n_obs=8,
+    n_act=4,
+    ncells=128,
+    batch=128,
+    n_hidden=64,
 ):
     if compile == "reduce-overhead" and backward is not None:
         pytest.skip("reduce-overhead with backward causes segfaults in CI")
@@ -325,6 +343,9 @@ def test_ddpg_speed(
         out_features=1,
         device=device,
     )
+    value_transform = value_transform_cls() if value_transform_cls is not None else None
+    if value_transform is not None:
+        value = _TransformedValueModule(value, value_transform)
     batch = [batch]
     td = TensorDict(
         {
@@ -346,7 +367,7 @@ def test_ddpg_speed(
     value = Mod(value, in_keys=["hidden", "action"], out_keys=["state_action_value"])
     value(actor(td))
 
-    loss = DDPGLoss(actor, value)
+    loss = DDPGLoss(actor, value, value_transform=value_transform)
 
     loss(td)
 
@@ -374,8 +395,17 @@ def test_ddpg_speed(
 
 @pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+@pytest.mark.parametrize("value_transform_cls", [None, SymLogValueTransform])
 def test_sac_speed(
-    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark,
+    backward,
+    compile,
+    value_transform_cls,
+    n_obs=8,
+    n_act=4,
+    ncells=128,
+    batch=128,
+    n_hidden=64,
 ):
     if compile == "reduce-overhead" and backward is not None:
         pytest.skip("reduce-overhead with backward causes segfaults in CI")
@@ -403,6 +433,9 @@ def test_sac_speed(
         out_features=1,
         device=device,
     )
+    value_transform = value_transform_cls() if value_transform_cls is not None else None
+    if value_transform is not None:
+        value = _TransformedValueModule(value, value_transform)
     batch = [batch]
     td = TensorDict(
         {
@@ -436,7 +469,12 @@ def test_sac_speed(
     value = Seq(common, value_head)
     value(actor(td.clone()))
 
-    loss = SACLoss(actor, value, action_spec=Unbounded(shape=(n_act,)))
+    loss = SACLoss(
+        actor,
+        value,
+        action_spec=Unbounded(shape=(n_act,)),
+        value_transform=value_transform,
+    )
 
     loss(td)
 
@@ -652,8 +690,17 @@ def test_redq_deprec_speed(
 
 @pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+@pytest.mark.parametrize("value_transform_cls", [None, SymLogValueTransform])
 def test_td3_speed(
-    benchmark, backward, compile, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64
+    benchmark,
+    backward,
+    compile,
+    value_transform_cls,
+    n_obs=8,
+    n_act=4,
+    ncells=128,
+    batch=128,
+    n_hidden=64,
 ):
     if compile == "reduce-overhead" and backward is not None:
         pytest.skip("reduce-overhead with backward causes segfaults in CI")
@@ -681,6 +728,9 @@ def test_td3_speed(
         out_features=1,
         device=device,
     )
+    value_transform = value_transform_cls() if value_transform_cls is not None else None
+    if value_transform is not None:
+        value = _TransformedValueModule(value, value_transform)
     batch = [batch]
     td = TensorDict(
         {
@@ -720,6 +770,7 @@ def test_td3_speed(
         actor,
         value,
         action_spec=Bounded(shape=(n_act,), low=-1, high=1),
+        value_transform=value_transform,
     )
 
     loss(td)
@@ -947,10 +998,12 @@ def test_a2c_speed(
 
 @pytest.mark.parametrize("backward", [None, "backward"])
 @pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+@pytest.mark.parametrize("value_transform_cls", [None, SymLogValueTransform])
 def test_ppo_speed(
     benchmark,
     backward,
     compile,
+    value_transform_cls,
     n_obs=8,
     n_act=4,
     n_hidden=64,
@@ -984,6 +1037,9 @@ def test_ppo_speed(
         out_features=1,
         device=device,
     )
+    value_transform = value_transform_cls() if value_transform_cls is not None else None
+    if value_transform is not None:
+        value_net = torch.nn.Sequential(value_net, value_transform)
     batch = [batch, T]
     if composite_lp_aggregate():
         raise RuntimeError(
@@ -1021,13 +1077,18 @@ def test_ppo_speed(
     actor(td.clone())
     critic(td.clone())
 
-    loss = ClipPPOLoss(actor_network=actor, critic_network=critic)
+    loss = ClipPPOLoss(
+        actor_network=actor,
+        critic_network=critic,
+        value_transform=value_transform,
+    )
     advantage = GAE(
         value_network=critic,
         gamma=0.99,
         lmbda=0.95,
         shifted=True,
         device=device,
+        value_transform=value_transform,
     )
     advantage(td)
     loss(td)
