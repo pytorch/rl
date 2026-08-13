@@ -113,6 +113,35 @@ class MLPConfig(NetworkConfig):
 
 
 @dataclass
+class DreamerV3MLPConfig(NetworkConfig):
+    """A class to configure a DreamerV3 multilayer perceptron.
+
+    Example:
+        >>> cfg = DreamerV3MLPConfig(
+        ...     in_features=6, out_features=4, depth=2, num_cells=8
+        ... )
+        >>> net = instantiate(cfg)
+        >>> y = net(torch.randn(3, 2), torch.randn(3, 4))
+        >>> assert y.shape == (3, 4)
+
+    .. seealso:: :class:`torchrl.modules.DreamerV3MLP`
+    """
+
+    in_features: int = MISSING
+    out_features: int = MISSING
+    depth: int = 3
+    num_cells: int = 1024
+    outscale: float = 1.0
+    norm_eps: float = 1e-4
+    device: Any = None
+    _target_: str = "torchrl.modules.DreamerV3MLP"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for DreamerV3 MLP configurations."""
+        super().__post_init__()
+
+
+@dataclass
 class NormConfig(ConfigBase):
     """A class to configure a normalization layer.
 

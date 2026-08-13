@@ -51,7 +51,7 @@ from torchrl.data.replay_buffers.writers import (
 )
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.modules import ConvNet, MLP, TanhModule, ValueOperator
+from torchrl.modules import ConvNet, DreamerV3MLP, MLP, TanhModule, ValueOperator
 from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.record.loggers import (
@@ -1146,6 +1146,35 @@ class TestModuleConfigs:
         mlp(torch.randn(10, 10))
         # Note: instantiate() has issues with string class names for MLP
         # This is a known limitation - the MLP constructor expects actual classes
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_dreamer_v3_mlp_config(self):
+        """Test DreamerV3MLPConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import DreamerV3MLPConfig
+
+        cfg = DreamerV3MLPConfig(
+            in_features=6,
+            out_features=4,
+            depth=2,
+            num_cells=8,
+            outscale=0.25,
+            norm_eps=1e-5,
+            device="cpu",
+        )
+        assert cfg._target_ == "torchrl.modules.DreamerV3MLP"
+        assert cfg.in_features == 6
+        assert cfg.out_features == 4
+        assert cfg.depth == 2
+        assert cfg.num_cells == 8
+        assert cfg.outscale == 0.25
+        assert cfg.norm_eps == 1e-5
+        assert cfg.device == "cpu"
+
+        module = instantiate(cfg)
+        assert isinstance(module, DreamerV3MLP)
+        output = module(torch.randn(3, 2), torch.randn(3, 4))
+        assert output.shape == (3, 4)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_convnet_config(self):

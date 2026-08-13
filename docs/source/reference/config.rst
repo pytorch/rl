@@ -347,6 +347,7 @@ Model and Network Configurations
     ModelConfig
     NetworkConfig
     MLPConfig
+    DreamerV3MLPConfig
     ConvNetConfig
     TensorDictModuleConfig
     TanhNormalModelConfig
