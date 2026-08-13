@@ -75,6 +75,11 @@ language instructions). Environments with genuinely heterogeneous specs
 should keep the default metadata path. At shutdown, workers started in this
 mode are closed one at a time to bound teardown resource spikes; the
 per-worker grace period is controlled by the `shutdown_timeout` argument.
+Convenience constructors that create a [`ParallelEnv`](generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) from
+`num_workers` (for example `GymEnv("Pendulum-v1", num_workers=4)`)
+enable worker-originated metadata automatically when the worker schemas are
+compatible. Native vectorization arguments such as `GymEnv(...,
+num_envs=4)` do not create a [`ParallelEnv`](generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) and are unaffected.
 Use one common factory with `create_env_kwargs` for
 worker-specific arguments:
 

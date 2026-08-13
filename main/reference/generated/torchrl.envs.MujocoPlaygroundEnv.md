@@ -42,9 +42,10 @@ Defaults to `torch.Size([])`.
 - **allow_done_after_reset** (*bool**,**optional*) - if `True`, it is tolerated
 for envs to be `done` just after [`reset()`](torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset) is called.
 Defaults to `False`.
-- **num_workers** (*int**,**optional*) - if greater than 1, a lazy [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv)
+- **num_workers** (*int**,**optional*) - if greater than 1, a [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv)
 will be returned instead, with each worker instantiating its own
-`MujocoPlaygroundEnv` instance. Defaults to `None`.
+`MujocoPlaygroundEnv` instance and reporting
+metadata directly to the parent. Defaults to `None`.
 
 Note
 

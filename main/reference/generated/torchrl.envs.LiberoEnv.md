@@ -26,7 +26,10 @@ Keyword Arguments:
 
 - **num_workers** (*int**,**optional*) - if greater than `1`, return a
 [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) with `num_workers` LIBERO
-workers. Defaults to `1`.
+workers. Each worker provides its metadata directly, so no temporary
+LIBERO environment is constructed in the parent process, unless
+worker-specific arguments produce different observation schemas.
+Defaults to `1`.
 - **num_envs** (*int**,**optional*) - alias for `num_workers`.
 - **camera_height** (*int**or*[*list*](torchrl.services.RayService.html#torchrl.services.RayService.list)*of**int**,**optional*) - rendered image height.
 When `num_workers > 1`, a list dispatches one value per worker

@@ -21,11 +21,10 @@ Keyword Arguments:
 will be used by default.
 - **num_workers** (*int**,**optional*) - number of top-level worker subprocesses used to create/run
 multiple `GymEnv` instances in parallel (handled by the metaclass
-`_GymAsyncMeta`). When `num_workers > 1`, a lazy
+`_GymAsyncMeta`). When `num_workers > 1`, a
 [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) is returned whose factory preserves the original
-GymEnv kwargs. You can modify the ParallelEnv construction/configuration before
-it starts by calling `configure_parallel()`
-on the returned object (for example: `env.configure_parallel(use_buffers=True, num_threads=2)`).
+GymEnv kwargs. Its workers provide their metadata directly, avoiding a temporary
+GymEnv construction in the parent process.
 When both `num_workers` and `num_envs` are greater than 1, the total number of
 environments executed in parallel is `num_workers * num_envs`. Defaults to `1`.
 - **disable_env_checker** (*bool**,**optional*) - for gym > 0.24 only. If `True` (default

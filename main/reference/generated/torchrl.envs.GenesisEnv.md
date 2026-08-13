@@ -9,9 +9,9 @@ Parameters:
 - **env_name** (*str*) - registered environment name. Currently one of
 `'franka_reach'` or `'franka_grab'`.
 - **task_name** (*str**,**optional*) - task name; unused by the built-in configs.
-- **num_workers** (*int**,**optional*) - when `> 1`, returns a lazy
+- **num_workers** (*int**,**optional*) - when `> 1`, returns a
 [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) wrapping per-worker Genesis envs.
-Defaults to `1`.
+Workers report metadata directly to the parent. Defaults to `1`.
 - **max_steps** (*int**,**optional*) - truncation horizon. Defaults to `1000`.
 - **frame_skip** (*int**,**optional*) - physics steps per env step. Defaults to `1`.
 - **from_pixels** (*bool**,**optional*) - if `True`, a default camera is added

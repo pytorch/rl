@@ -13,11 +13,10 @@ Parameters:
 - **env_name** (*str*) - name of the environment.
 - **task_name** (*str*) - name of the task.
 - **num_workers** (*int**,**optional*) - number of parallel environments. Defaults to 1.
-When `num_workers > 1`, a lazy [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) is
-returned instead of a single environment. The parallel environment
-is not started until it is actually used (e.g., via reset/step or
-accessing specs). Use `configure_parallel()`
-to set parallel execution parameters before the environment starts.
+When `num_workers > 1`, a [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) is
+returned instead of a single environment. Its workers provide their
+metadata directly, avoiding a temporary environment construction in
+the parent process.
 
 Keyword Arguments:
 
@@ -77,10 +76,7 @@ TensorDict(
  is_shared=False)
 >>> print(env.available_envs)
 [('acrobot', ['swingup', 'swingup_sparse']), ...]
->>> # For running multiple envs in parallel (returns a lazy ParallelEnv)
+>>> # Run multiple envs in parallel without parent-side construction
 >>> env = DMControlEnv("cheetah", "run", num_workers=4)
->>> # Configure parallel parameters before the env starts
->>> env.configure_parallel(use_buffers=True, num_threads=2)
->>> # Environment starts when first used
 >>> env.reset()
 ```

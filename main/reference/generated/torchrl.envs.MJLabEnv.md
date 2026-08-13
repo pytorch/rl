@@ -28,8 +28,9 @@ from an mjlab RGB `CameraSensor`.
 - **pixels_only** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
 - **pixels_key** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
 - **pixels_sensor** - See [`MJLabWrapper`](torchrl.envs.MJLabWrapper.html#torchrl.envs.MJLabWrapper).
-- **num_workers** - If greater than one, return a lazy
+- **num_workers** - If greater than one, return a
 [`ParallelEnv`](torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv) with one mjlab env per worker.
+Workers report metadata directly to the parent.
 
 See also `MJLabEnvConfig`.
 
