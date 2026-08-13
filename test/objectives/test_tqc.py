@@ -193,12 +193,15 @@ class TestTQC:
         data = self.make_data(batch_size=(1,))
         data.get(("next", "reward")).zero_()
         data.set("steps_to_next_obs", torch.ones(1, 1))
+
+        def sample_with_zero_log_prob(distribution):
+            action = distribution.rsample()
+            return action, action.new_zeros(action.shape[:-1])
+
         monkeypatch.setattr(
             tqc_objective,
-            "compute_log_prob",
-            lambda distribution, action, log_prob_key: action.new_zeros(
-                action.shape[:-1]
-            ),
+            "compute_rsample_log_prob",
+            sample_with_zero_log_prob,
         )
 
         target = loss.compute_target(data)
