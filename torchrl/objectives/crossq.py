@@ -17,6 +17,10 @@ from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.distributions.utils import (
+    rsample_and_log_prob,
+    sample_and_log_prob,
+)
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -604,8 +608,7 @@ class CrossQLoss(LossModule):
             self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
-            a_reparm = dist.rsample()
-        log_prob = dist.log_prob(a_reparm)
+            a_reparm, log_prob = rsample_and_log_prob(dist)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         self.qvalue_network.eval()
@@ -651,9 +654,8 @@ class CrossQLoss(LossModule):
             ):
                 next_tensordict = tensordict.get("next").clone(False)
                 next_dist = self.actor_network.get_dist(next_tensordict)
-                next_action = next_dist.sample()
+                next_action, next_sample_log_prob = sample_and_log_prob(next_dist)
                 next_tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
 
         combined = torch.cat(
             [

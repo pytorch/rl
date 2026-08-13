@@ -26,6 +26,7 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.modules.distributions import HAS_ENTROPY
+from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -415,10 +416,9 @@ class A2CLoss(LossModule):
         if HAS_ENTROPY.get(type(dist), False):
             entropy = dist.entropy()
         else:
-            x = dist.rsample((self.samples_mc_entropy,))
-            log_prob = dist.log_prob(x)
+            _, log_prob = rsample_and_log_prob(dist, (self.samples_mc_entropy,))
             if is_tensor_collection(log_prob):
-                log_prob = sum(log_prob.sum(dim="feature").values(True, True))
+                log_prob = log_prob.sum(dim="feature", reduce=True)
             entropy = -log_prob.mean(0)
         return entropy.unsqueeze(-1)
 

@@ -29,6 +29,7 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
+from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -662,7 +663,11 @@ class PPOLoss(LossModule):
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
         try:
-            entropy = dist.entropy()
+            entropy = (
+                composite_entropy(dist, self.samples_mc_entropy)
+                if isinstance(dist, CompositeDistribution)
+                else dist.entropy()
+            )
             if not entropy.isfinite().all():
                 del entropy
                 if VERBOSE:
@@ -675,16 +680,16 @@ class PPOLoss(LossModule):
                 torchrl_logger.warning(
                     f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
                 )
-            if getattr(dist, "has_rsample", False):
-                x = dist.rsample((self.samples_mc_entropy,))
-            else:
-                x = dist.sample((self.samples_mc_entropy,))
             with (
                 set_composite_lp_aggregate(False)
                 if isinstance(dist, CompositeDistribution)
                 else contextlib.nullcontext()
             ):
-                log_prob = dist.log_prob(x)
+                _, log_prob = sample_and_log_prob(
+                    dist,
+                    (self.samples_mc_entropy,),
+                    reparameterize=getattr(dist, "has_rsample", False),
+                )
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
@@ -1740,13 +1745,14 @@ class KLPENPPOLoss(PPOLoss):
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
-            x = previous_dist.sample((self.samples_mc_kl,))
             with (
                 set_composite_lp_aggregate(False)
                 if is_composite
                 else contextlib.nullcontext()
             ):
-                previous_log_prob = previous_dist.log_prob(x)
+                x, previous_log_prob = sample_and_log_prob(
+                    previous_dist, (self.samples_mc_kl,)
+                )
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
                 if previous_log_prob.batch_size != advantage.shape[:-1]:

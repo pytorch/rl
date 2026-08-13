@@ -18,6 +18,7 @@ from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.nn import (
     composite_lp_aggregate,
     dispatch,
+    InteractionType,
     ProbabilisticTensorDictModule,
     set_composite_lp_aggregate,
     set_skip_existing,
@@ -30,6 +31,7 @@ from torch import Tensor
 
 from torchrl._utils import logger, rl_warnings
 from torchrl.envs.utils import step_mdp
+from torchrl.modules.distributions.utils import sample_and_log_prob
 from torchrl.objectives.utils import (
     _maybe_get_or_select,
     _pseudo_vmap,
@@ -91,7 +93,16 @@ def _call_actor_net(
     log_prob_key: NestedKey,
 ):
     dist = actor_net.get_dist(data.select(*actor_net.in_keys, strict=False))
-    s = actor_net._dist_sample(dist, interaction_type=interaction_type())
+    current_interaction = interaction_type() or actor_net.default_interaction_type
+    if current_interaction is InteractionType.RANDOM:
+        sample_shape = actor_net.num_samples or torch.Size()
+        with set_composite_lp_aggregate(True):
+            _, log_prob = sample_and_log_prob(
+                dist, sample_shape, reparameterize=dist.has_rsample
+            )
+        return log_prob
+
+    s = actor_net._dist_sample(dist, interaction_type=current_interaction)
     with set_composite_lp_aggregate(True):
         return dist.log_prob(s)
 
