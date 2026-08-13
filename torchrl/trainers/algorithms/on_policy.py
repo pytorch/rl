@@ -8,15 +8,16 @@ from __future__ import annotations
 import pathlib
 import warnings
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from functools import partial
+from typing import Any
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
-from torchrl.checkpoint import Checkpoint
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -126,6 +127,8 @@ class OnPolicyTrainer(Trainer):
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
         checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         num_epochs: int | None = None,
         replay_buffer: ReplayBuffer | None = None,
         batch_size: int | None = None,
@@ -173,6 +176,8 @@ class OnPolicyTrainer(Trainer):
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
             checkpoint=checkpoint,
+            checkpoint_rotation=checkpoint_rotation,
+            checkpoint_metadata=checkpoint_metadata,
             num_epochs=num_epochs,
             async_collection=async_collection,
             log_timings=log_timings,

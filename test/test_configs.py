@@ -1928,10 +1928,12 @@ class TestTrainerConfigs:
             "TD3TrainerConfig",
         ],
     )
-    def test_checkpoint_config_parity(self, config_name):
-        field = getattr(algorithm_configs, config_name).__dataclass_fields__[
-            "checkpoint"
-        ]
+    @pytest.mark.parametrize(
+        "field_name",
+        ["checkpoint", "checkpoint_rotation", "checkpoint_metadata"],
+    )
+    def test_checkpoint_config_parity(self, config_name, field_name):
+        field = getattr(algorithm_configs, config_name).__dataclass_fields__[field_name]
         assert field.default is None
 
     def test_nested_key_normalization_for_hydra_lists(self):

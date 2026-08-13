@@ -110,6 +110,32 @@ metadata.
     )
     rotation.load_latest(checkpoint)
 
+Trainer integration
+-------------------
+
+Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
+checkpoints. The Trainer uses ``collected_frames`` as the checkpoint step and
+adds ``collected_frames`` and ``optim_steps`` to the manifest metadata.
+
+.. code-block:: python
+
+    trainer = SACTrainer(
+        ...,
+        checkpoint=Checkpoint(),
+        checkpoint_rotation=CheckpointRotation(
+            "run/checkpoints",
+            keep_last=3,
+            keep_best=("eval_reward", "max"),
+        ),
+        checkpoint_metadata=lambda trainer: {
+            "eval_reward": evaluation_state["reward"]
+        },
+    )
+
+The metadata callback runs immediately before each save. Metrics used by
+``keep_best`` should describe the checkpoint being saved rather than an older
+evaluation.
+
 Compatibility
 -------------
 

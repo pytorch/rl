@@ -23,7 +23,7 @@ from torch import nn
 _has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
-from torchrl.checkpoint import Checkpoint
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
@@ -161,6 +161,8 @@ def mocking_trainer(
     file=None,
     optimizer=_mocking_optim,
     checkpoint=None,
+    checkpoint_rotation=None,
+    checkpoint_metadata=None,
     logger=None,
     with_policy=False,
 ) -> Trainer:
@@ -178,6 +180,8 @@ def mocking_trainer(
         logger=logger,
         save_trainer_file=file,
         checkpoint=checkpoint,
+        checkpoint_rotation=checkpoint_rotation,
+        checkpoint_metadata=checkpoint_metadata,
     )
     trainer._pbar_str = OrderedDict()
     return trainer
@@ -240,6 +244,93 @@ def test_unified_trainer_default_component_selection(tmp_path):
     )
     trainer.save_trainer(force_save=True)
     assert set(Checkpoint.manifest(path)["components"]) == {"trainer_state"}
+
+
+def test_unified_trainer_checkpoint_rotation(tmp_path):
+    score = {"value": 1.0}
+    rotation = CheckpointRotation(
+        tmp_path / "checkpoints",
+        keep_last=1,
+        keep_best=("eval_reward", "max"),
+    )
+    trainer = mocking_trainer(
+        checkpoint=Checkpoint(),
+        checkpoint_rotation=rotation,
+        checkpoint_metadata=lambda trainer: {"eval_reward": score["value"]},
+    )
+
+    for frames, reward in ((10, 1.0), (20, 5.0), (30, 2.0)):
+        trainer.collected_frames = frames
+        trainer._optim_count = frames // 2
+        score["value"] = reward
+        trainer.save_trainer(force_save=True)
+
+    paths = rotation.checkpoints()
+    assert [path.name for path in paths] == [
+        "checkpoint-000000000020",
+        "checkpoint-000000000030",
+    ]
+    assert rotation.best() == paths[0]
+    assert rotation.latest() == paths[1]
+    assert Checkpoint.manifest(paths[1])["metadata"] == {
+        "collected_frames": 30,
+        "eval_reward": 2.0,
+        "optim_steps": 15,
+    }
+
+    restored = mocking_trainer(checkpoint=Checkpoint())
+    restored.load_from_file(rotation.latest())
+    assert restored.collected_frames == 30
+    assert restored._optim_count == 15
+
+
+def test_checkpoint_rotation_is_a_save_destination(tmp_path):
+    rotation = CheckpointRotation(tmp_path / "checkpoints", keep_last=1)
+    trainer = mocking_trainer(
+        checkpoint=Checkpoint(),
+        checkpoint_rotation=rotation,
+    )
+    trainer.save_trainer_interval = 10
+    trainer.collected_frames = 11
+
+    trainer.save_trainer()
+
+    assert rotation.latest() is not None
+
+
+def test_checkpoint_rotation_requires_checkpoint(tmp_path):
+    with pytest.raises(ValueError, match="requires checkpoint"):
+        mocking_trainer(
+            checkpoint_rotation=CheckpointRotation(tmp_path, keep_last=1),
+        )
+
+
+def test_checkpoint_rotation_rejects_save_trainer_file(tmp_path):
+    with pytest.raises(ValueError, match="cannot both be set"):
+        mocking_trainer(
+            file=tmp_path / "checkpoint",
+            checkpoint=Checkpoint(),
+            checkpoint_rotation=CheckpointRotation(tmp_path / "rotation", keep_last=1),
+        )
+
+
+def test_checkpoint_metadata_requires_rotation():
+    with pytest.raises(ValueError, match="requires checkpoint_rotation"):
+        mocking_trainer(
+            checkpoint=Checkpoint(),
+            checkpoint_metadata=lambda trainer: {},
+        )
+
+
+def test_checkpoint_metadata_must_return_mapping(tmp_path):
+    trainer = mocking_trainer(
+        checkpoint=Checkpoint(),
+        checkpoint_rotation=CheckpointRotation(tmp_path, keep_last=1),
+        checkpoint_metadata=lambda trainer: None,
+    )
+
+    with pytest.raises(TypeError, match="must return a mapping"):
+        trainer.save_trainer(force_save=True)
 
 
 class TestSelectKeys:
@@ -1654,9 +1745,12 @@ class TestPostOptimCompleteLog:
             TD3Trainer,
         ],
     )
-    def test_subclass_exposes_checkpoint(self, trainer_cls):
-        """Every algorithm trainer must expose the unified checkpoint argument."""
-        parameter = inspect.signature(trainer_cls.__init__).parameters["checkpoint"]
+    @pytest.mark.parametrize(
+        "parameter_name",
+        ["checkpoint", "checkpoint_rotation", "checkpoint_metadata"],
+    )
+    def test_subclass_exposes_checkpoint(self, trainer_cls, parameter_name):
+        parameter = inspect.signature(trainer_cls.__init__).parameters[parameter_name]
         assert parameter.default is None
 
 
