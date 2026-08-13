@@ -13,9 +13,21 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 from torch import nn
+
+from torchrl._utils import implement_for
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models import ConvNet, MLP
 from torchrl.modules.models.utils import _reset_parameters_recursive
+
+
+@implement_for("torch", None, "2.12", compilable=True)
+def is_exporting():
+    return False
+
+
+@implement_for("torch", "2.12", compilable=True)
+def is_exporting():  # noqa: F811
+    return torch.compiler.is_exporting()
 
 
 class MultiAgentNetBase(nn.Module):
@@ -120,9 +132,39 @@ class MultiAgentNetBase(nn.Module):
 
     @staticmethod
     def vmap_func_module(module, *args, **kwargs):
-        def exec_module(params, *input):
+        if is_exporting():
+
+            def exec_module_export(params, *inputs):
+                return torch.func.functional_call(module, params, inputs)
+
+            def exec_vmap(params, *inputs):
+                flat_params = params.flatten_keys(".").to_dict()
+                slots = []
+                try:
+                    for key in flat_params:
+                        path, name = key.rsplit(".", 1) if "." in key else ("", key)
+                        submodule = module.get_submodule(path)
+                        if (
+                            name not in submodule._parameters
+                            and name not in submodule._buffers
+                        ):
+                            slots.append((submodule, name, getattr(submodule, name)))
+                            setattr(submodule, name, None)
+                    in_dims, out_dims = args
+                    out_dim = out_dims[0] if isinstance(out_dims, tuple) else out_dims
+                    # Nonzero vmap out_dims are lifted as constants by export.
+                    return torch.vmap(exec_module_export, in_dims, 0, **kwargs)(
+                        flat_params, *inputs
+                    ).movedim(0, out_dim)
+                finally:
+                    for submodule, name, value in reversed(slots):
+                        setattr(submodule, name, value)
+
+            return exec_vmap
+
+        def exec_module(params, *inputs):
             with params.to_module(module):
-                return module(*input)
+                return module(*inputs)
 
         return torch.vmap(exec_module, *args, **kwargs)
 
@@ -146,20 +188,13 @@ class MultiAgentNetBase(nn.Module):
 
         # If parameters are not shared, each agent has its own network
         if not self.share_params:
-            if self.centralized:
-                output = self.vmap_func_module(
-                    self._empty_net,
-                    (0, None),
-                    (agent_dim_positive,),
-                    randomness=self.vmap_randomness,
-                )(self.params, inputs)
-            else:
-                output = self.vmap_func_module(
-                    self._empty_net,
-                    (0, agent_dim_positive),
-                    (agent_dim_positive,),
-                    randomness=self.vmap_randomness,
-                )(self.params, inputs)
+            input_dim = None if self.centralized else agent_dim_positive
+            output = self.vmap_func_module(
+                self._empty_net,
+                (0, input_dim),
+                (agent_dim_positive,),
+                randomness=self.vmap_randomness,
+            )(self.params, inputs)
 
         # If parameters are shared, agents use the same network
         else:
