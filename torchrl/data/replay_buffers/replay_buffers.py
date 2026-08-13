@@ -1539,24 +1539,54 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             self._storage._bump_mutation_revision()
         return self
 
-    def _clone_prefetch_result(self, result):
-        return deepcopy(result)
+    def _clone_prefetch_result(
+        self, result: tuple[Any, dict[str, Any]]
+    ) -> tuple[Any, dict[str, Any]]:
+        memo = {}
+
+        def _clone_leaf(value: Any) -> Any:
+            value_id = id(value)
+            if value_id in memo:
+                return memo[value_id]
+            if isinstance(value, Tensor):
+                # PyTorch deliberately rejects deepcopy for non-leaf tensors. A
+                # checkpoint only needs their value and requires-grad property,
+                # not the live autograd graph that produced the sample.
+                cloned = value.detach().clone()
+                if value.requires_grad:
+                    cloned.requires_grad_()
+            else:
+                cloned = deepcopy(value, memo)
+            memo[value_id] = cloned
+            return cloned
+
+        return tree_map(_clone_leaf, result)
 
     @contextlib.contextmanager
-    def _capture_prefetch_state(self) -> Iterator[dict[str, Any]]:
+    def _capture_prefetch_state(
+        self, *, clone_queue: bool = True
+    ) -> Iterator[dict[str, Any]]:
         with self._futures_lock:
-            if not self._prefetch:
-                yield {"version": 1, "capacity": 0, "queue": ()}
-                return
-            queue = tuple(
-                self._clone_prefetch_result(future.result())
-                for future in self._prefetch_queue
+            results = (
+                tuple(future.result() for future in self._prefetch_queue)
+                if self._prefetch
+                else ()
             )
-            yield {
-                "version": 1,
-                "capacity": self._prefetch_cap,
-                "queue": queue,
-            }
+            # Futures acquire the replay lock while sampling, so only take it
+            # after every queued future has settled. Holding both locks while
+            # the caller captures the remaining components keeps the queue,
+            # storage, sampler, writer and RNG at one logical point in time.
+            with self._replay_lock:
+                queue = (
+                    tuple(self._clone_prefetch_result(result) for result in results)
+                    if clone_queue
+                    else results
+                )
+                yield {
+                    "version": 1,
+                    "capacity": int(self._prefetch_cap),
+                    "queue": queue,
+                }
 
     def _clear_prefetch_queue_locked(self) -> None:
         futures = tuple(self._prefetch_queue)
@@ -1566,9 +1596,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             wait(futures)
         self._prefetch_queue.clear()
 
-    def _restore_prefetch_queue_locked(
-        self, prefetch_state: dict[str, Any] | None
-    ) -> None:
+    def _validate_prefetch_state(self, prefetch_state: dict[str, Any] | None) -> None:
         if prefetch_state is None:
             return
         if not isinstance(prefetch_state, dict):
@@ -1578,11 +1606,16 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 f"Unsupported prefetch state version: {prefetch_state.get('version')}."
             )
         capacity = prefetch_state.get("capacity")
-        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 0:
+        if (
+            isinstance(capacity, bool)
+            or not isinstance(capacity, INT_CLASSES)
+            or capacity < 0
+        ):
             raise ValueError(
                 "The saved prefetch capacity must be a non-negative integer."
             )
-        if capacity != self._prefetch_cap:
+        capacity = int(capacity)
+        if capacity != int(self._prefetch_cap):
             raise RuntimeError(
                 f"Cannot restore a prefetch queue with capacity {capacity} into a "
                 f"replay buffer with capacity {self._prefetch_cap}."
@@ -1599,9 +1632,22 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             raise RuntimeError(
                 "Cannot restore a non-empty prefetch queue when prefetching is disabled."
             )
+
+    def _restore_prefetch_queue_locked(
+        self,
+        prefetch_state: dict[str, Any] | None,
+        *,
+        clone_queue: bool = True,
+    ) -> None:
+        self._validate_prefetch_state(prefetch_state)
+        if prefetch_state is None:
+            return
+        queue = prefetch_state["queue"]
         for result in queue:
             future = Future()
-            future.set_result(self._clone_prefetch_result(result))
+            if clone_queue:
+                result = self._clone_prefetch_result(result)
+            future.set_result(result)
             self._prefetch_queue.append(future)
 
     def _dump_prefetch_state(self, path: Path, prefetch_state: dict[str, Any]) -> None:
@@ -1633,21 +1679,26 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
     @_maybe_delay_init
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        prefetch_state = state_dict.get("_prefetch_state")
+        self._validate_prefetch_state(prefetch_state)
         with self._futures_lock:
             self._clear_prefetch_queue_locked()
-            self._storage.load_state_dict(state_dict["_storage"])
-            self._sampler.load_state_dict(state_dict["_sampler"])
-            self._writer.load_state_dict(state_dict["_writer"])
-            self._transform.load_state_dict(state_dict["_transforms"])
-            self._batch_size = state_dict["_batch_size"]
-            self._consume_after_n_samples = state_dict.get("_consume_after_n_samples")
-            rng = state_dict.get("_rng")
-            if rng is not None:
-                state, device = rng
-                rng = torch.Generator(device=device)
-                rng.set_state(state)
-                self.set_rng(generator=rng)
-            self._restore_prefetch_queue_locked(state_dict.get("_prefetch_state"))
+            with self._replay_lock:
+                self._storage.load_state_dict(state_dict["_storage"])
+                self._sampler.load_state_dict(state_dict["_sampler"])
+                self._writer.load_state_dict(state_dict["_writer"])
+                self._transform.load_state_dict(state_dict["_transforms"])
+                self._batch_size = state_dict["_batch_size"]
+                self._consume_after_n_samples = state_dict.get(
+                    "_consume_after_n_samples"
+                )
+                rng = state_dict.get("_rng")
+                if rng is not None:
+                    state, device = rng
+                    rng = torch.Generator(device=device)
+                    rng.set_state(state)
+                    self.set_rng(generator=rng)
+                self._restore_prefetch_queue_locked(prefetch_state)
 
     @_maybe_delay_init
     def dumps(self, path):
@@ -1689,7 +1740,10 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         """
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
-        with self._capture_prefetch_state() as prefetch_state:
+        # The queue cannot be consumed while this context is active, so the
+        # pickle stream can read it directly without allocating another full
+        # queue-sized copy first.
+        with self._capture_prefetch_state(clone_queue=False) as prefetch_state:
             self._storage.dumps(path / "storage")
             self._sampler.dumps(path / "sampler")
             self._writer.dumps(path / "writer")
@@ -1727,24 +1781,29 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
 
         """
         path = Path(path).absolute()
+        prefetch_state = self._load_prefetch_state(path)
+        self._validate_prefetch_state(prefetch_state)
         with self._futures_lock:
             self._clear_prefetch_queue_locked()
-            self._storage.loads(path / "storage")
-            self._sampler.loads(path / "sampler")
-            self._writer.loads(path / "writer")
-            if (path / "rng_state").exists():
-                rng_state = TensorDict.load_memmap(path / "rng_state")
-                rng = torch.Generator(device=rng_state.device)
-                rng.set_state(rng_state["rng_state"])
-                self.set_rng(rng)
-            # fall back on state_dict for transforms
-            if (path / "transform.t").exists():
-                self._transform.load_state_dict(torch.load(path / "transform.t"))
-            with open(path / "buffer_metadata.json") as file:
-                metadata = json.load(file)
-            self._batch_size = metadata["batch_size"]
-            self._consume_after_n_samples = metadata.get("consume_after_n_samples")
-            self._restore_prefetch_queue_locked(self._load_prefetch_state(path))
+            with self._replay_lock:
+                self._storage.loads(path / "storage")
+                self._sampler.loads(path / "sampler")
+                self._writer.loads(path / "writer")
+                if (path / "rng_state").exists():
+                    rng_state = TensorDict.load_memmap(path / "rng_state")
+                    rng = torch.Generator(device=rng_state.device)
+                    rng.set_state(rng_state["rng_state"])
+                    self.set_rng(rng)
+                # fall back on state_dict for transforms
+                if (path / "transform.t").exists():
+                    self._transform.load_state_dict(torch.load(path / "transform.t"))
+                with open(path / "buffer_metadata.json") as file:
+                    metadata = json.load(file)
+                self._batch_size = metadata["batch_size"]
+                self._consume_after_n_samples = metadata.get("consume_after_n_samples")
+                # This method owns the freshly unpickled queue, so moving its
+                # results into completed futures avoids a redundant deep copy.
+                self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
 
     @_maybe_delay_init
     def save(self, *args, **kwargs):
@@ -2314,7 +2373,9 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
         if rngstate is not None:
             self.set_rng(rng)
         with self._futures_lock:
-            self._restore_prefetch_queue_locked(prefetch_state)
+            # __setstate__ owns prefetch_state after popping it from the pickle
+            # payload, so queue entries can be transferred without cloning.
+            self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
 
     @property
     @_maybe_delay_init

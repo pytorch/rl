@@ -1199,16 +1199,116 @@ def _assert_prefetch_samples_equal(expected, actual):
     assert torch.equal(expected_info["index"], actual_info["index"])
 
 
+class _BlockingPrefetchCollate:
+    def __init__(self):
+        self._calls = 0
+        self._lock = threading.Lock()
+        self.prefetch_started = threading.Event()
+        self.release_prefetch = threading.Event()
+
+    def __call__(self, data):
+        with self._lock:
+            self._calls += 1
+            call = self._calls
+        if call > 1:
+            self.prefetch_started.set()
+            if not self.release_prefetch.wait(timeout=5):
+                raise RuntimeError("Timed out waiting to release prefetched samples.")
+        return torch.stack(data)
+
+
+def _make_replay_buffer_with_blocked_prefetch(seed=0):
+    collate = _BlockingPrefetchCollate()
+    replay_buffer = ReplayBuffer(
+        storage=ListStorage(20),
+        collate_fn=collate,
+        batch_size=3,
+        prefetch=2,
+        generator=torch.Generator().manual_seed(seed),
+    )
+    replay_buffer.extend(torch.arange(20))
+    replay_buffer.sample()
+    assert collate.prefetch_started.wait(timeout=5)
+    return replay_buffer, collate
+
+
+def _release_prefetch_when_futures_lock_is_held(
+    replay_buffer, collate, operation_started, errors
+):
+    try:
+        if not operation_started.wait(timeout=5):
+            raise RuntimeError("Timed out waiting for the checkpoint operation.")
+        poll_delay = threading.Event()
+        for _ in range(1000):
+            if not replay_buffer._futures_lock.acquire(blocking=False):
+                return
+            replay_buffer._futures_lock.release()
+            poll_delay.wait(timeout=0.001)
+        raise RuntimeError("The checkpoint operation did not acquire the futures lock.")
+    except Exception as error:
+        errors.append(error)
+    finally:
+        collate.release_prefetch.set()
+
+
 def test_replay_buffer_prefetch_state_dict_roundtrip():
     source = _make_prefetch_replay_buffer()
     source.sample()
-    _settle_prefetch_queue(source)
     state = source.state_dict()
 
     restored = _make_prefetch_replay_buffer(seed=1)
     restored.sample()
-    _settle_prefetch_queue(restored)
     restored.load_state_dict(state)
+
+    for _ in range(4):
+        _assert_prefetch_samples_equal(
+            source.sample(return_info=True), restored.sample(return_info=True)
+        )
+
+
+def test_replay_buffer_prefetch_state_dict_waits_for_in_flight_samples():
+    source, collate = _make_replay_buffer_with_blocked_prefetch()
+    operation_started = threading.Event()
+    release_errors = []
+    release_thread = threading.Thread(
+        target=_release_prefetch_when_futures_lock_is_held,
+        args=(source, collate, operation_started, release_errors),
+        daemon=True,
+    )
+    release_thread.start()
+    operation_started.set()
+    state = source.state_dict()
+    release_thread.join(timeout=5)
+    assert not release_thread.is_alive()
+    assert not release_errors
+
+    restored = _make_prefetch_replay_buffer(seed=1)
+    restored.load_state_dict(state)
+    for _ in range(4):
+        _assert_prefetch_samples_equal(
+            source.sample(return_info=True), restored.sample(return_info=True)
+        )
+
+
+def test_replay_buffer_load_state_dict_waits_for_in_flight_samples():
+    source = _make_prefetch_replay_buffer()
+    source.sample()
+    state = source.state_dict()
+
+    restored, collate = _make_replay_buffer_with_blocked_prefetch(seed=1)
+    operation_started = threading.Event()
+    release_errors = []
+    release_thread = threading.Thread(
+        target=_release_prefetch_when_futures_lock_is_held,
+        args=(restored, collate, operation_started, release_errors),
+        daemon=True,
+    )
+    release_thread.start()
+    operation_started.set()
+    restored.load_state_dict(state)
+    release_thread.join(timeout=5)
+    assert not release_thread.is_alive()
+    assert not release_errors
 
     for _ in range(4):
         _assert_prefetch_samples_equal(
@@ -1233,11 +1333,13 @@ def test_replay_buffer_prefetch_state_dict_legacy():
 def test_replay_buffer_prefetch_state_dict_capacity_mismatch():
     source = _make_prefetch_replay_buffer(prefetch=2)
     source.sample()
-    _settle_prefetch_queue(source)
 
     restored = _make_prefetch_replay_buffer(prefetch=1)
+    restored.sample()
+    queue_before_load = tuple(restored._prefetch_queue)
     with pytest.raises(RuntimeError, match="prefetch queue with capacity 2"):
         restored.load_state_dict(source.state_dict())
+    assert tuple(restored._prefetch_queue) == queue_before_load
 
 
 def test_replay_buffer_prefetch_state_dict_does_not_alias_queue():
@@ -1256,12 +1358,10 @@ def test_replay_buffer_prefetch_state_dict_does_not_alias_queue():
 def test_replay_buffer_prefetch_dumps_roundtrip(tmp_path):
     source = _make_prefetch_replay_buffer(storage=LazyTensorStorage(20))
     source.sample()
-    _settle_prefetch_queue(source)
     source.dumps(tmp_path)
 
     restored = _make_prefetch_replay_buffer(seed=1, storage=LazyTensorStorage(20))
     restored.sample()
-    _settle_prefetch_queue(restored)
     restored.loads(tmp_path)
 
     for _ in range(4):
@@ -1273,7 +1373,6 @@ def test_replay_buffer_prefetch_dumps_roundtrip(tmp_path):
 def test_replay_buffer_prefetch_pickle_roundtrip():
     source = _make_prefetch_replay_buffer()
     source.sample()
-    _settle_prefetch_queue(source)
 
     restored = pickle.loads(pickle.dumps(source))
 
@@ -1281,6 +1380,49 @@ def test_replay_buffer_prefetch_pickle_roundtrip():
         _assert_prefetch_samples_equal(
             source.sample(return_info=True), restored.sample(return_info=True)
         )
+
+
+@pytest.mark.parametrize("checkpoint", ["state_dict", "pickle"])
+@pytest.mark.parametrize("tensordict", [False, True])
+def test_replay_buffer_prefetch_autograd_roundtrip(checkpoint, tensordict):
+    replay_buffer_cls = TensorDictReplayBuffer if tensordict else ReplayBuffer
+
+    def make_replay_buffer(seed):
+        replay_buffer = replay_buffer_cls(
+            storage=ListStorage(20),
+            batch_size=3,
+            prefetch=2,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        values = torch.arange(20.0, requires_grad=True) * 2
+        if tensordict:
+            values = TensorDict({"value": values}, [20])
+        replay_buffer.extend(values)
+        return replay_buffer
+
+    source = make_replay_buffer(seed=0)
+    source.sample()
+
+    if checkpoint == "state_dict":
+        restored = make_replay_buffer(seed=1)
+        restored.load_state_dict(source.state_dict())
+    else:
+        restored = pickle.loads(pickle.dumps(source))
+
+    queued_data = restored._prefetch_queue[0].result()[0]
+    if tensordict:
+        queued_data = queued_data["value"]
+    assert queued_data.is_leaf
+    assert queued_data.requires_grad
+
+    for _ in range(4):
+        expected_data, expected_info = source.sample(return_info=True)
+        actual_data, actual_info = restored.sample(return_info=True)
+        if tensordict:
+            assert_allclose_td(expected_data, actual_data)
+        else:
+            assert torch.equal(expected_data, actual_data)
+        assert torch.equal(expected_info["index"], actual_info["index"])
 
 
 def test_replay_buffer_prefetch_without_replacement_roundtrip():
