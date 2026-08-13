@@ -933,7 +933,11 @@ class _TEnvPostInit(_EnvPostInit):
         compile_kwargs = _pop_compile_kwargs(kwargs)
         instance: EnvBase = super(_EnvPostInit, self).__call__(*args, **kwargs)
         # we skip the materialization of the specs, because this can't be done with lazy
-        # transforms such as ObservationNorm.
+        # transforms such as ObservationNorm. The lock is only intent at this point:
+        # set_spec_lock_ records the flag, and _make_output_spec / _make_input_spec
+        # apply the real lock once the specs exist.
+        # TODO: honour a `spec_locked` kwarg, as _EnvPostInit does.
+        instance.set_spec_lock_(True)
         return _maybe_compile_env(instance, compile_kwargs)
 
 
