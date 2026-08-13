@@ -13,7 +13,7 @@ from torch import Tensor
 
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.objectives.sac import compute_log_prob, SACLoss
+from torchrl.objectives.sac import compute_rsample_log_prob, SACLoss
 from torchrl.objectives.utils import ValueEstimators
 
 
@@ -188,8 +188,7 @@ class TQCLoss(SACLoss):
             ),
         ):
             distribution = self.actor_network.get_dist(tensordict)
-            action = distribution.rsample()
-        log_prob = compute_log_prob(distribution, action, self.tensor_keys.log_prob)
+            action, log_prob = compute_rsample_log_prob(distribution)
 
         critic_input = tensordict.select(*self.qvalue_network.in_keys, strict=False)
         critic_input.set(self.tensor_keys.action, action)
@@ -235,12 +234,11 @@ class TQCLoss(SACLoss):
                     selection = ~terminated.squeeze(-1)
                     selected_tensordict = next_tensordict[selection]
             distribution = self.actor_network.get_dist(selected_tensordict)
-            action = distribution.rsample()
-            log_prob = (
-                compute_log_prob(distribution, action, self.tensor_keys.log_prob)
-                if selected_tensordict.batch_size.numel()
-                else None
-            )
+            if selected_tensordict.batch_size.numel():
+                action, log_prob = compute_rsample_log_prob(distribution)
+            else:
+                action = distribution.rsample()
+                log_prob = None
             selected_tensordict.set(self.tensor_keys.action, action)
             critic_output = self._vmap_qnetworkN0(
                 selected_tensordict, self.target_qvalue_network_params
