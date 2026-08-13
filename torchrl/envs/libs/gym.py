@@ -878,13 +878,13 @@ class _GymAsyncMeta(_EnvPostInit):
         )
 
         if cls.__name__ == "GymEnv" and num_workers > 1:
-            from torchrl.envs import EnvCreator, ParallelEnv
+            from torchrl.envs import ParallelEnv
 
             env_name = args[0] if args else kwargs.get("env_name")
             env_kwargs = kwargs.copy()
             env_kwargs.pop("env_name", None)
             make_env = partial(cls, env_name, **env_kwargs)
-            return ParallelEnv(num_workers, EnvCreator(make_env))
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
 
         instance: GymWrapper = super().__call__(*args, **kwargs)
 
@@ -1820,11 +1820,10 @@ class GymEnv(GymWrapper):
             will be used by default.
         num_workers (int, optional): number of top-level worker subprocesses used to create/run
             multiple :class:`GymEnv` instances in parallel (handled by the metaclass
-            :class:`_GymAsyncMeta`). When ``num_workers > 1``, a lazy
+            :class:`_GymAsyncMeta`). When ``num_workers > 1``, a
             :class:`~torchrl.envs.ParallelEnv` is returned whose factory preserves the original
-            `GymEnv` kwargs. You can modify the ParallelEnv construction/configuration before
-            it starts by calling :meth:`~torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`
-            on the returned object (for example: ``env.configure_parallel(use_buffers=True, num_threads=2)``).
+            `GymEnv` kwargs. Its workers provide their metadata directly, avoiding a temporary
+            `GymEnv` construction in the parent process.
             When both ``num_workers`` and ``num_envs`` are greater than 1, the total number of
             environments executed in parallel is ``num_workers * num_envs``. Defaults to ``1``.
         disable_env_checker (bool, optional): for gym > 0.24 only. If ``True`` (default

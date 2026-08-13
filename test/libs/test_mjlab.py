@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import torch
 
-from torchrl.envs import TransformedEnv
+from torchrl.envs import ParallelEnv, TransformedEnv
 from torchrl.envs.libs.mjlab import MJLabEnv, MJLabWrapper
 from torchrl.envs.transforms import InitTracker
 from torchrl.envs.utils import check_env_specs
@@ -125,6 +125,20 @@ def test_batch_size_and_pixels_validation_use_mjlab_task_cfg():
         MJLabEnv(_CARTPOLE_TASK, cfg=cfg, num_envs=3, batch_size=[2])
     with pytest.raises(ValueError, match="CameraSensor"):
         MJLabEnv(_CARTPOLE_TASK, cfg=cfg, num_envs=3, from_pixels=True)
+
+
+@pytest.mark.gpu
+@requires_mjlab_cuda
+def test_num_workers_uses_worker_metadata():
+    env = MJLabEnv(_CARTPOLE_TASK, num_workers=2, num_envs=1, device="cuda:0")
+    try:
+        assert isinstance(env, ParallelEnv)
+        assert env._metadata_from_workers
+        assert env._use_buffers is False
+        assert not env.is_closed
+        assert env.reset().batch_size == torch.Size([2, 1])
+    finally:
+        env.close()
 
 
 @pytest.mark.gpu

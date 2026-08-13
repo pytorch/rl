@@ -1748,7 +1748,7 @@ class TestGym:
         ), f"Expected False for Dict environment without pixels, got {result}"
 
     def test_num_workers_returns_parallel_env(self):
-        """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
+        """Ensure explicit TorchRL `num_workers` returns a ParallelEnv, while gym's
         native `num_envs` remains a gym-native vectorization."""
 
         # TorchRL-managed parallelism: should return ParallelEnv
@@ -1760,7 +1760,12 @@ class TestGym:
             if nworkers is None:
                 nworkers = getattr(env, "num_envs", None)
             assert nworkers == 3
-            # start workers on first use
+            assert env._metadata_from_workers
+            assert env._use_buffers is False
+            assert not any(
+                isinstance(factory, EnvCreator) for factory in env.create_env_fn
+            )
+            assert not env.is_closed
             env.reset()
             assert env.batch_size == torch.Size([3])
         finally:
@@ -1773,19 +1778,15 @@ class TestGym:
         finally:
             env_gymvec.close()
 
-    def test_num_workers_kwargs_modifiable(self):
-        """Ensure the kwargs preserved by the GymEnv factory can be modified via
-        `configure_parallel` before workers start."""
+    def test_num_workers_parallel_env_is_started(self):
+        """Worker metadata starts the generated ParallelEnv during construction."""
 
         env = GymEnv("CartPole-v1", num_workers=3)
         try:
-            # should return a lazy ParallelEnv
             assert isinstance(env, ParallelEnv)
-
-            # configure_parallel should accept kwargs and be callable before start
-            env.configure_parallel(use_buffers=True, num_threads=1)
-
-            # starting the environment should work after configuring
+            assert not env.is_closed
+            with pytest.raises(RuntimeError, match="after the environment has started"):
+                env.configure_parallel(num_threads=1)
             td = env.reset()
             assert isinstance(td, TensorDict)
         finally:
