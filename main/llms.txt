@@ -550,6 +550,7 @@
 - [SACLoss](reference/generated/torchrl.objectives.SACLoss.md)
 - [TD3BCLoss](reference/generated/torchrl.objectives.TD3BCLoss.md)
 - [TD3Loss](reference/generated/torchrl.objectives.TD3Loss.md)
+- [TQCLoss](reference/generated/torchrl.objectives.TQCLoss.md)
 - [ValueEstimators](reference/generated/torchrl.objectives.ValueEstimators.md)
 - [WorldModelLoss](reference/generated/torchrl.objectives.WorldModelLoss.md)
 - [add_random_module](reference/generated/torchrl.objectives.add_random_module.md)

@@ -1958,6 +1958,7 @@ document.write(`
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Actor-Critic Methods</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DDPGLoss.html">DDPGLoss</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.SACLoss.html">SACLoss</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.TQCLoss.html">TQCLoss</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.DiscreteSACLoss.html">DiscreteSACLoss</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.TD3Loss.html">TD3Loss</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.objectives.REDQLoss.html">REDQLoss</a></li>
@@ -2477,16 +2478,19 @@ document.write(`
 <tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.SACLoss.html#torchrl.objectives.SACLoss" title="torchrl.objectives.SACLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SACLoss</span></code></a>(*args, **kwargs)</p></td>
 <td><p>TorchRL implementation of the SAC loss.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss" title="torchrl.objectives.DiscreteSACLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteSACLoss</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.TQCLoss.html#torchrl.objectives.TQCLoss" title="torchrl.objectives.TQCLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TQCLoss</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Truncated Quantile Critics loss.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.DiscreteSACLoss.html#torchrl.objectives.DiscreteSACLoss" title="torchrl.objectives.DiscreteSACLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiscreteSACLoss</span></code></a>(*args, **kwargs)</p></td>
 <td><p>Discrete SAC Loss module.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss" title="torchrl.objectives.TD3Loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD3Loss</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss" title="torchrl.objectives.TD3Loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TD3Loss</span></code></a>(*args, **kwargs)</p></td>
 <td><p>TD3 Loss module.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.REDQLoss.html#torchrl.objectives.REDQLoss" title="torchrl.objectives.REDQLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REDQLoss</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.REDQLoss.html#torchrl.objectives.REDQLoss" title="torchrl.objectives.REDQLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REDQLoss</span></code></a>(*args, **kwargs)</p></td>
 <td><p>REDQ Loss module.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss" title="torchrl.objectives.CrossQLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CrossQLoss</span></code></a>(*args, **kwargs)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.objectives.CrossQLoss.html#torchrl.objectives.CrossQLoss" title="torchrl.objectives.CrossQLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CrossQLoss</span></code></a>(*args, **kwargs)</p></td>
 <td><p>TorchRL implementation of the CrossQ loss.</p></td>
 </tr>
 </tbody>
@@ -2852,7 +2856,7 @@ document.write(`
        "headline": "Actor-Critic Methods",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/objectives_actorcritic.html",
-       "articleBody": "Actor-Critic Methods# Loss modules for actor-critic algorithms. DDPGLoss(*args, **kwargs) The DDPG Loss class. SACLoss(*args, **kwargs) TorchRL implementation of the SAC loss. DiscreteSACLoss(*args, **kwargs) Discrete SAC Loss module. TD3Loss(*args, **kwargs) TD3 Loss module. REDQLoss(*args, **kwargs) REDQ Loss module. CrossQLoss(*args, **kwargs) TorchRL implementation of the CrossQ loss.",
+       "articleBody": "Actor-Critic Methods# Loss modules for actor-critic algorithms. DDPGLoss(*args, **kwargs) The DDPG Loss class. SACLoss(*args, **kwargs) TorchRL implementation of the SAC loss. TQCLoss(*args, **kwargs) Truncated Quantile Critics loss. DiscreteSACLoss(*args, **kwargs) Discrete SAC Loss module. TD3Loss(*args, **kwargs) TD3 Loss module. REDQLoss(*args, **kwargs) REDQ Loss module. CrossQLoss(*args, **kwargs) TorchRL implementation of the CrossQ loss.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

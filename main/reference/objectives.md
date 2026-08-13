@@ -59,6 +59,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 
 - [DDPGLoss](generated/torchrl.objectives.DDPGLoss.html)
 - [SACLoss](generated/torchrl.objectives.SACLoss.html)
+- [TQCLoss](generated/torchrl.objectives.TQCLoss.html)
 - [DiscreteSACLoss](generated/torchrl.objectives.DiscreteSACLoss.html)
 - [TD3Loss](generated/torchrl.objectives.TD3Loss.html)
 - [REDQLoss](generated/torchrl.objectives.REDQLoss.html)
