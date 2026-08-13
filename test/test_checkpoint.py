@@ -641,6 +641,41 @@ def test_checkpoint_rotation_replaces_same_step_across_formats(tmp_path):
     assert value == {"format": "archive"}
 
 
+@pytest.mark.parametrize(
+    ("old_format", "new_format"),
+    [("archive", "directory"), ("directory", "archive")],
+)
+def test_checkpoint_rotation_recovers_interrupted_cross_format_replacement(
+    tmp_path, monkeypatch, old_format, new_format
+):
+    rotation = CheckpointRotation(tmp_path, keep_last=1)
+    old_path = rotation.save(
+        Checkpoint(format=old_format, value={"version": 1}), step=4
+    )
+
+    remove_atomically = rotation._remove_atomically
+
+    def interrupted_remove(path):
+        del path
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(rotation, "_remove_atomically", interrupted_remove)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        rotation.save(
+            Checkpoint(format=new_format, value={"version": 2}), step=4
+        )
+    monkeypatch.setattr(rotation, "_remove_atomically", remove_atomically)
+
+    new_path = rotation._checkpoint_path(4, new_format)
+    assert rotation.checkpoints() == (new_path,)
+    assert rotation.latest() == new_path
+    value = {}
+    rotation.load_latest(Checkpoint(value=value))
+    assert value == {"version": 2}
+    assert rotation.prune() == (old_path,)
+    assert rotation.checkpoints() == (new_path,)
+
+
 def test_checkpoint_rotation_prune_returns_removed_paths(tmp_path):
     rotation = CheckpointRotation(tmp_path, keep_last=3)
     paths = [rotation.save(Checkpoint(value=step), step=step) for step in range(1, 4)]

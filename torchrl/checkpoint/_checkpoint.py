@@ -1342,6 +1342,7 @@ class _RotatedCheckpoint:
     path: Path
     step: int
     metric: float | None
+    created_at: datetime
 
 
 class CheckpointRotation:
@@ -1444,13 +1445,14 @@ class CheckpointRotation:
 
     def prune(self) -> tuple[Path, ...]:
         """Apply the retention policy and return the removed paths."""
-        records = self._records()
+        all_records = self._all_records()
+        records = self._latest_per_step(all_records)
         retained = {record.path for record in records[-self.keep_last :]}
         best = self._select_best(records)
         if best is not None:
             retained.add(best.path)
         removed = []
-        for record in records:
+        for record in all_records:
             if record.path not in retained:
                 self._remove_atomically(record.path)
                 removed.append(record.path)
@@ -1484,6 +1486,9 @@ class CheckpointRotation:
         )
 
     def _records(self) -> list[_RotatedCheckpoint]:
+        return self._latest_per_step(self._all_records())
+
+    def _all_records(self) -> list[_RotatedCheckpoint]:
         if not self.directory.exists():
             return []
         if not self.directory.is_dir():
@@ -1510,10 +1515,36 @@ class CheckpointRotation:
                     path=path,
                     step=int(step_text),
                     metric=self._read_metric(manifest),
+                    created_at=self._read_created_at(manifest, path),
                 )
             )
-        records.sort(key=lambda record: (record.step, record.path.name))
+        records.sort(
+            key=lambda record: (record.step, record.created_at, record.path.name)
+        )
         return records
+
+    @staticmethod
+    def _latest_per_step(
+        records: Collection[_RotatedCheckpoint],
+    ) -> list[_RotatedCheckpoint]:
+        latest = {}
+        for record in records:
+            latest[record.step] = record
+        return list(latest.values())
+
+    @staticmethod
+    def _read_created_at(manifest: Mapping[str, Any], path: Path) -> datetime:
+        created_at = manifest.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                result = datetime.fromisoformat(created_at)
+            except ValueError:
+                pass
+            else:
+                if result.tzinfo is None:
+                    return result.replace(tzinfo=timezone.utc)
+                return result.astimezone(timezone.utc)
+        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
 
     def _checkpoint_path(self, step: int, format: CheckpointFormat) -> Path:
         suffix = ".torchrl" if format == "archive" else ""
