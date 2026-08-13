@@ -22,6 +22,8 @@
 - [Basic usage](checkpoint.html#basic-usage)
 - [State-dict payload formats](checkpoint.html#state-dict-payload-formats)
 - [Custom components](checkpoint.html#custom-components)
+- [Checkpoint rotation](checkpoint.html#checkpoint-rotation)
+- [Trainer integration](checkpoint.html#trainer-integration)
 - [Compatibility](checkpoint.html#compatibility)
 - [API](checkpoint.html#api)
 
@@ -30,6 +32,7 @@
 - [CheckpointError](generated/torchrl.checkpoint.CheckpointError.html)
 - [CheckpointLoadResult](generated/torchrl.checkpoint.CheckpointLoadResult.html)
 - [CheckpointOptions](generated/torchrl.checkpoint.CheckpointOptions.html)
+- [CheckpointRotation](generated/torchrl.checkpoint.CheckpointRotation.html)
 - [CheckpointFormat](generated/torchrl.checkpoint.CheckpointFormat.html)
 - [CheckpointStrictness](generated/torchrl.checkpoint.CheckpointStrictness.html)
 - [DumpLoadCheckpointAdapter](generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.html)

@@ -50,6 +50,7 @@
 - [CheckpointFormat](reference/generated/torchrl.checkpoint.CheckpointFormat.md)
 - [CheckpointLoadResult](reference/generated/torchrl.checkpoint.CheckpointLoadResult.md)
 - [CheckpointOptions](reference/generated/torchrl.checkpoint.CheckpointOptions.md)
+- [CheckpointRotation](reference/generated/torchrl.checkpoint.CheckpointRotation.md)
 - [CheckpointStrictness](reference/generated/torchrl.checkpoint.CheckpointStrictness.md)
 - [DumpLoadCheckpointAdapter](reference/generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.md)
 - [GlobalRNGState](reference/generated/torchrl.checkpoint.GlobalRNGState.md)

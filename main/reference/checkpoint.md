@@ -80,6 +80,54 @@ registered with a component are the baseline; operation-level keyword arguments
 override matching entries and explicitly supplied positional arguments replace
 the baseline tuple.
 
+## Checkpoint rotation
+
+[`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation) retains the newest checkpoints and can preserve an
+older checkpoint with the best recorded metric. Metrics are read from manifest
+metadata.
+
+```
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
+
+checkpoint = Checkpoint(policy=policy, optimizer=optimizer)
+rotation = CheckpointRotation(
+ "run/checkpoints",
+ keep_last=3,
+ keep_best=("eval_reward", "max"),
+)
+rotation.save(
+ checkpoint,
+ step=100_000,
+ metadata={"eval_reward": 42.5},
+)
+rotation.load_latest(checkpoint)
+```
+
+## Trainer integration
+
+Pass a rotation policy with a unified checkpoint to retain scheduled Trainer
+checkpoints. The Trainer uses `collected_frames` as the checkpoint step and
+adds `collected_frames` and `optim_steps` to the manifest metadata.
+
+```
+trainer = SACTrainer(
+ ...,
+ checkpoint=Checkpoint(),
+ checkpoint_rotation=CheckpointRotation(
+ "run/checkpoints",
+ keep_last=3,
+ keep_best=("eval_reward", "max"),
+ ),
+ checkpoint_metadata=lambda trainer: {
+ "eval_reward": evaluation_state["reward"]
+ },
+)
+```
+
+The metadata callback runs immediately before each save. Metrics used by
+`keep_best` should describe the checkpoint being saved rather than an older
+evaluation.
+
 ## Compatibility
 
 The manifest records the checkpoint format version, adapter versions, component
@@ -112,6 +160,7 @@ the default changes in v0.15.
 | [`CheckpointError`](generated/torchrl.checkpoint.CheckpointError.html#torchrl.checkpoint.CheckpointError)(message[, result]) | Error raised when a checkpoint cannot be saved or restored. |
 | [`CheckpointLoadResult`](generated/torchrl.checkpoint.CheckpointLoadResult.html#torchrl.checkpoint.CheckpointLoadResult)(loaded, missing, ...) | Structured result returned by [`Checkpoint.load()`](generated/torchrl.checkpoint.Checkpoint.html#torchrl.checkpoint.Checkpoint.load). |
 | [`CheckpointOptions`](generated/torchrl.checkpoint.CheckpointOptions.html#torchrl.checkpoint.CheckpointOptions)([save_args, save_kwargs, ...]) | Arguments forwarded to a component's serialization methods. |
+| [`CheckpointRotation`](generated/torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)(directory, *, keep_last) | Manage a directory of retained TorchRL checkpoints. |
 | [`CheckpointFormat`](generated/torchrl.checkpoint.CheckpointFormat.html#torchrl.checkpoint.CheckpointFormat) | alias of `Literal`['directory', 'archive'] |
 | [`CheckpointStrictness`](generated/torchrl.checkpoint.CheckpointStrictness.html#torchrl.checkpoint.CheckpointStrictness) | alias of `Literal`['error', 'warn', 'ignore'] |
 | [`DumpLoadCheckpointAdapter`](generated/torchrl.checkpoint.DumpLoadCheckpointAdapter.html#torchrl.checkpoint.DumpLoadCheckpointAdapter)() | Adapter for objects exposing `dump(path)` and `load(path)`. |

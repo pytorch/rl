@@ -50,6 +50,12 @@ Default is None (no saving)
 scheduled saves and restores. The trainer registers any missing
 standard components on this object. When omitted, the legacy
 `CKPT_BACKEND` path is retained during the compatibility window.
+- **checkpoint_rotation** ([*CheckpointRotation*](torchrl.checkpoint.CheckpointRotation.html#torchrl.checkpoint.CheckpointRotation)*,**optional*) - retention policy used
+for scheduled unified checkpoints. Requires `checkpoint` and cannot
+be combined with `save_trainer_file`.
+- **checkpoint_metadata** (*Callable**,**optional*) - function called with the trainer
+before each rotated save. Its returned mapping is added to the
+checkpoint manifest metadata.
 - **async_collection** (*bool**,**optional*) - Whether to collect data asynchronously.
 This will only work if the replay buffer is registered within the data collector.
 If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
