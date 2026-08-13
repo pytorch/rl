@@ -153,6 +153,19 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
+    "tqc": """python sota-implementations/tqc/tqc.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device= \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  network.device= \
+  logger.backend=
+""",
     "discrete_sac": """python sota-implementations/discrete_sac/discrete_sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \

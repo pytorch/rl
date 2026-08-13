@@ -108,6 +108,31 @@ def _make_sac_loss(*args, **kwargs) -> SACLoss:
     return loss
 
 
+# Keep these fields in TQCLoss constructor order so Hydra exposes every option.
+@dataclass
+class TQCLossConfig(LossConfig):
+    """Hydra fields for :class:`~torchrl.objectives.TQCLoss`."""
+
+    actor_network: Any = None
+    qvalue_network: Any = None
+    num_qvalue_nets: int = 5
+    top_quantiles_to_drop_per_net: int = 2
+    alpha_init: float = 1.0
+    min_alpha: float | None = None
+    max_alpha: float | None = None
+    action_spec: Any = None
+    fixed_alpha: bool = False
+    target_entropy: str | float = "auto"
+    delay_qvalue: bool = True
+    separate_losses: bool = False
+    reduction: str | None = None
+    deactivate_vmap: bool = False
+    skip_done_states: bool = False
+    use_prioritized_weights: str | bool = "auto"
+    scalar_output_mode: str | None = None
+    _target_: str = "torchrl.objectives.TQCLoss"
+
+
 @dataclass
 class PPOLossConfig(LossConfig):
     """Hydra configuration for the PPO loss family.
