@@ -7,13 +7,10 @@ from __future__ import annotations
 import abc
 import multiprocessing
 import threading
-
+import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import as_completed, ThreadPoolExecutor
-
-# import queue
+from concurrent.futures import as_completed, FIRST_COMPLETED, ThreadPoolExecutor, wait
 from multiprocessing import Queue
-from queue import Empty
 from typing import Literal
 
 import torch
@@ -24,11 +21,11 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict, expand_as_right
 
 from torchrl.data.tensor_specs import NonTensor
+from torchrl.envs._async_exchange import _receive_batch, _SharedSlotExchange
 from torchrl.envs.common import _EnvPostInit, EnvBase
 
 
@@ -76,6 +73,10 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
             The backend to use for parallel execution. Defaults to `"threading"`.
         stack (Literal["dense", "maybe_dense", "lazy"], optional):
             The method to use for stacking environment outputs. Defaults to `"dense"`.
+        exchange (Literal["queue", "shm"], optional): Data exchange used by the
+            multiprocessing backend. ``"shm"`` stores fixed-shape tensor data in
+            shared slots and sends only readiness descriptors through queues.
+            Defaults to ``"queue"``.
         create_env_kwargs (dict, optional):
             Keyword arguments to pass to the environment maker. Defaults to `{}`.
 
@@ -203,6 +204,7 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         *,
         backend: Literal["threading", "multiprocessing", "asyncio"] = "threading",
         stack: Literal["dense", "maybe_dense", "lazy"] = "dense",
+        exchange: Literal["queue", "shm"] = "queue",
         create_env_kwargs: dict | list[dict] | None = None,
     ) -> None:
         if not isinstance(env_makers, Sequence):
@@ -211,6 +213,13 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self.env_makers = env_makers
         self.num_envs = len(env_makers)
         self.backend = backend
+        if exchange not in ("queue", "shm"):
+            raise ValueError(f"exchange must be 'queue' or 'shm', got {exchange!r}.")
+        if backend != "multiprocessing" and exchange != "queue":
+            raise ValueError(
+                "exchange='shm' is only supported with backend='multiprocessing'."
+            )
+        self.exchange = exchange
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if isinstance(create_env_kwargs, Mapping):
@@ -464,7 +473,12 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
     @abc.abstractmethod
     def async_step_recv(
-        self, min_get: int | None = None, env_index: int | None = None
+        self,
+        min_get: int | None = None,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> TensorDictBase:
         raise NotImplementedError
 
@@ -479,6 +493,9 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         self,
         min_get: int | None = None,
         env_index: int | list[int] | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         raise NotImplementedError
 
@@ -492,9 +509,29 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
 
     @abc.abstractmethod
     def async_reset_recv(
-        self, min_get: int | None = None, env_index: int | None = None
+        self,
+        min_get: int | None = None,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> TensorDictBase:
         raise NotImplementedError
+
+    def stats(self, *, reset: bool = False) -> dict[str, float | int]:
+        """Return shared-memory exchange statistics.
+
+        Args:
+            reset: Whether to clear the counters after taking the snapshot.
+
+        Returns:
+            Batch counts, fill rates, and exchange latency statistics. Queue
+            and threading exchanges return an empty dictionary.
+        """
+        exchange = getattr(self, "_slot_exchange", None)
+        if exchange is None:
+            return {}
+        return exchange.stats(reset=reset)
 
     def __del__(self):
         self._maybe_shutdown()
@@ -587,6 +624,18 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         specs = torch.stack(list(self._child_specs))
         output_spec = specs["output_spec"]
         input_spec = specs["input_spec"]
+        self._slot_exchange = None
+        if self.exchange == "shm":
+            for i in range(num_threads):
+                self.input_queue[i].put(("get_fake_tensordict", None))
+            fake_tensordicts = [self.output_queue[i].get() for i in range(num_threads)]
+            self._slot_exchange = _SharedSlotExchange(fake_tensordicts)
+            for i in range(num_threads):
+                self.input_queue[i].put(
+                    ("init_shm", self._slot_exchange.worker_slots(i))
+                )
+            for i in range(num_threads):
+                self.output_queue[i].get()
         return output_spec, input_spec
 
     def _get_child_specs(self) -> list:
@@ -603,6 +652,38 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             self._env_batch_sizes = batch_sizes
         return batch_sizes
 
+    def _prepare_worker_data(
+        self,
+        env_index: int,
+        tensordict: TensorDictBase,
+        *,
+        record_action: bool,
+    ):
+        if self._slot_exchange is None:
+            return tensordict
+        return self._slot_exchange.write_input(
+            env_index, tensordict, record_action=record_action
+        )
+
+    def _receive_items(
+        self,
+        result_queue,
+        min_get: int,
+        max_get: int | None,
+        timeout: float | None,
+        *,
+        track_action: bool,
+    ):
+        if self._slot_exchange is None:
+            return _receive_batch(result_queue, min_get, max_get, timeout)
+        return self._slot_exchange.receive(
+            result_queue,
+            min_get,
+            max_get,
+            timeout,
+            track_action=track_action,
+        )
+
     def async_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
@@ -618,23 +699,45 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
 
         local_tds = tensordict.unbind(0)
         for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            self.input_queue[_env_idx].put(("step", local_td, _per_env))
+            data = self._prepare_worker_data(_env_idx, local_td, record_action=True)
+            self.input_queue[_env_idx].put(("step", data, _per_env))
         if not _per_env:
             self._current_step = self._current_step + len(env_idx)
 
     def async_step_recv(
-        self, min_get: int = 1, env_index: int | None = None
+        self,
+        min_get: int = 1,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> TensorDictBase:
         if env_index is not None:
-            return self._per_env_step_queues[env_index].get()
+            if self._slot_exchange is None:
+                return self._per_env_step_queues[env_index].get()
+            descriptor = self._slot_exchange.receive_one(
+                self._per_env_step_queues[env_index], track_action=True
+            )
+            return self._slot_exchange.read_one(descriptor)
         if min_get is None:
             min_get = self.min_get
         if min_get > self._current_step:
             raise RuntimeError(
                 f"Cannot await {min_get} step when only {self._current_step} are being stepped."
             )
-        r = self._wait_for_one_and_get(self.step_queue, min_get)
+        r = self._receive_items(
+            self.step_queue,
+            min_get,
+            max_get,
+            timeout,
+            track_action=True,
+        )
         self._current_step = self._current_step - len(r)
+        if self._slot_exchange is not None:
+            idx = [item[0] for item in r]
+            result = self._slot_exchange.read(r, self._stack_func)
+            self._busy.difference_update(idx)
+            return result
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
         return self._stack_func(r)
@@ -652,7 +755,8 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
 
         local_tds = tensordict.unbind(0)
         for _env_idx, local_td in _zip_strict(env_idx, local_tds):
-            self.input_queue[_env_idx].put(("_step", local_td))
+            data = self._prepare_worker_data(_env_idx, local_td, record_action=True)
+            self.input_queue[_env_idx].put(("_step", data))
         self._current_step = self._current_step + len(env_idx)
 
     _async_private_step_recv = async_step_recv
@@ -673,21 +777,43 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         for _env_idx, local_td in _zip_strict(env_idx, local_tds):
             if not _per_env:
                 self._current_step_reset = self._current_step_reset + 1
-            self.input_queue[_env_idx].put(("step_and_maybe_reset", local_td, _per_env))
+            data = self._prepare_worker_data(_env_idx, local_td, record_action=True)
+            self.input_queue[_env_idx].put(("step_and_maybe_reset", data, _per_env))
 
     def async_step_and_maybe_reset_recv(
-        self, min_get: int = 1, env_index: int | None = None
-    ) -> TensorDictBase:
+        self,
+        min_get: int = 1,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         if env_index is not None:
-            return self._per_env_step_reset_queues[env_index].get()
+            if self._slot_exchange is None:
+                return self._per_env_step_reset_queues[env_index].get()
+            descriptor = self._slot_exchange.receive_one(
+                self._per_env_step_reset_queues[env_index], track_action=True
+            )
+            return self._slot_exchange.read_pair_one(descriptor)
         if min_get is None:
             min_get = self.min_get
         if min_get > self._current_step_reset:
             raise RuntimeError(
                 f"Cannot await {min_get} step_and_maybe_reset when only {self._current_step_reset} are being stepped."
             )
-        r = self._wait_for_one_and_get(self.step_reset_queue, min_get)
+        r = self._receive_items(
+            self.step_reset_queue,
+            min_get,
+            max_get,
+            timeout,
+            track_action=True,
+        )
         self._current_step_reset = self._current_step_reset - len(r)
+        if self._slot_exchange is not None:
+            idx = [item[0] for item in r]
+            result = self._slot_exchange.read_pair(r, self._stack_func)
+            self._busy.difference_update(idx)
+            return result
         r, r_ = zip(*r)
         r, r_, idx = self._sort_results(r, r_)
         self._busy.difference_update(idx)
@@ -711,21 +837,43 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         for _env_idx, local_td in _zip_strict(env_idx, local_tds):
             if not _per_env:
                 self._current_reset = self._current_reset + 1
-            self.input_queue[_env_idx].put(("reset", local_td, _per_env))
+            data = self._prepare_worker_data(_env_idx, local_td, record_action=False)
+            self.input_queue[_env_idx].put(("reset", data, _per_env))
 
     def async_reset_recv(
-        self, min_get: int | None = None, env_index: int | None = None
+        self,
+        min_get: int | None = None,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> TensorDictBase:
         if env_index is not None:
-            return self._per_env_reset_queues[env_index].get()
+            if self._slot_exchange is None:
+                return self._per_env_reset_queues[env_index].get()
+            descriptor = self._slot_exchange.receive_one(
+                self._per_env_reset_queues[env_index], track_action=False
+            )
+            return self._slot_exchange.read_one(descriptor)
         if min_get is None:
             min_get = self.min_get
         if min_get > self._current_reset:
             raise RuntimeError(
                 f"Cannot await {min_get} reset when only {self._current_reset} are being reset."
             )
-        r = self._wait_for_one_and_get(self.reset_queue, min_get)
+        r = self._receive_items(
+            self.reset_queue,
+            min_get,
+            max_get,
+            timeout,
+            track_action=False,
+        )
         self._current_reset = self._current_reset - len(r)
+        if self._slot_exchange is not None:
+            idx = [item[0] for item in r]
+            result = self._slot_exchange.read(r, self._stack_func)
+            self._busy.difference_update(idx)
+            return result
         r, idx = self._sort_results(r)
         self._busy.difference_update(idx)
         return self._stack_func(r)
@@ -745,26 +893,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
         local_tds = tensordict.unbind(0)
         for _env_idx, local_td in _zip_strict(env_idx, local_tds):
             self._current_reset = self._current_reset + 1
-            self.input_queue[_env_idx].put(("_reset", local_td))
+            data = self._prepare_worker_data(_env_idx, local_td, record_action=False)
+            self.input_queue[_env_idx].put(("_reset", data))
 
     _async_private_reset_recv = async_reset_recv
-
-    def _wait_for_one_and_get(self, q, min_get):
-        items = [q.get()]
-
-        try:
-            while True:
-                item = q.get_nowait()
-                items.append(item)
-        except Empty:
-            pass
-
-        # Retrieve all other available items
-        while len(items) < min_get:
-            item = q.get()
-            items.append(item)
-
-        return items
 
     def shutdown(self):
         for env_id in range(self.num_envs):
@@ -792,6 +924,7 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
             env = env_or_factory(**create_env_kwargs)
         else:
             env = env_or_factory
+        shared_slots = None
 
         while True:
             msg_data = input_queue.get()
@@ -802,40 +935,74 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                 per_env = False
             if msg == "get_specs":
                 output_queue.put(env.specs)
+            elif msg == "get_fake_tensordict":
+                output_queue.put(env.fake_tensordict())
+            elif msg == "init_shm":
+                shared_slots = data
+                output_queue.put(True)
             elif msg == "batch_size":
                 output_queue.put(env.batch_size)
             elif msg == "reset":
-                # No .copy() needed: data was deserialized from the queue
-                # and is not referenced after this call.
+                if shared_slots is not None:
+                    data = shared_slots[0].select(*data, strict=True)
                 data = env.reset(data)
-                data.set(cls._env_idx_key, NonTensorData(i))
                 target = per_env_reset_queue if per_env else reset_queue
-                target.put(data)
+                if shared_slots is None:
+                    data.set(cls._env_idx_key, NonTensorData(i))
+                    target.put(data)
+                else:
+                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
+                    target.put((i, keys, ready_ns))
             elif msg == "_reset":
+                if shared_slots is not None:
+                    data = shared_slots[0].select(*data, strict=True)
                 data = env._reset(data)
-                data.set(cls._env_idx_key, NonTensorData(i))
-                reset_queue.put(data)
+                if shared_slots is None:
+                    data.set(cls._env_idx_key, NonTensorData(i))
+                    reset_queue.put(data)
+                else:
+                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
+                    reset_queue.put((i, keys, ready_ns))
             elif msg == "step_and_maybe_reset":
+                if shared_slots is not None:
+                    data = shared_slots[0].select(*data, strict=True)
                 data, data_ = env.step_and_maybe_reset(data)
-                data.set(cls._env_idx_key, NonTensorData(i))
-                data_.set(cls._env_idx_key, NonTensorData(i))
                 target = per_env_step_reset_queue if per_env else step_reset_queue
-                target.put((data, data_))
+                if shared_slots is None:
+                    data.set(cls._env_idx_key, NonTensorData(i))
+                    data_.set(cls._env_idx_key, NonTensorData(i))
+                    target.put((data, data_))
+                else:
+                    result_keys, next_keys, ready_ns = _SharedSlotExchange.publish_pair(
+                        shared_slots[1], shared_slots[2], data, data_
+                    )
+                    target.put((i, result_keys, next_keys, ready_ns))
             elif msg == "step":
+                if shared_slots is not None:
+                    data = shared_slots[0].select(*data, strict=True)
                 data = env.step(data)
-                data.set(cls._env_idx_key, NonTensorData(i))
                 target = per_env_step_queue if per_env else step_queue
-                target.put(data)
+                if shared_slots is None:
+                    data.set(cls._env_idx_key, NonTensorData(i))
+                    target.put(data)
+                else:
+                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
+                    target.put((i, keys, ready_ns))
             elif msg == "_step":
+                if shared_slots is not None:
+                    data = shared_slots[0].select(*data, strict=True)
                 data = env._step(data)
-                data.set(cls._env_idx_key, NonTensorData(i))
-                step_queue.put(data)
+                if shared_slots is None:
+                    data.set(cls._env_idx_key, NonTensorData(i))
+                    step_queue.put(data)
+                else:
+                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
+                    step_queue.put((i, keys, ready_ns))
             elif msg == "shutdown":
                 env.close()
                 break
             else:
                 raise RuntimeError(f"Unknown msg {msg} for worker {i}")
-        return
 
 
 class ThreadingAsyncEnvPool(AsyncEnvPool):
@@ -929,6 +1096,43 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         idx = NonTensorData(idx)
         return td.set(cls._env_idx_key, idx), td_.set(cls._env_idx_key, idx)
 
+    @staticmethod
+    def _receive_futures(futures, min_get, max_get, timeout):
+        if min_get < 1:
+            raise ValueError(f"min_get must be positive, got {min_get}.")
+        if max_get is not None and max_get < min_get:
+            raise ValueError(
+                f"max_get must be greater than or equal to min_get, got "
+                f"min_get={min_get} and max_get={max_get}."
+            )
+        if timeout is not None and timeout < 0:
+            raise ValueError(f"timeout must be non-negative, got {timeout}.")
+        limit = len(futures) if max_get is None else max_get
+        pending = set(futures)
+        completed = []
+        deadline = None
+        while pending and len(completed) < min_get:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            completed.extend(list(done)[: limit - len(completed)])
+            if deadline is None and timeout is not None:
+                deadline = time.monotonic() + timeout
+        while pending and len(completed) < limit:
+            done = {future for future in pending if future.done()}
+            if not done:
+                if deadline is None:
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                done, _ = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+                if not done:
+                    break
+            room = limit - len(completed)
+            selected = list(done)[:room]
+            completed.extend(selected)
+            pending.difference_update(selected)
+        return completed
+
     def async_step_send(
         self, tensordict: TensorDictBase, env_index: int | list[int] | None = None
     ) -> None:
@@ -955,7 +1159,12 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             self._current_step = self._current_step + len(futures)
 
     def async_step_recv(
-        self, min_get: int | None = None, env_index: int | None = None
+        self,
+        min_get: int | None = None,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> TensorDictBase:
         if env_index is not None:
             future = self._per_env_step_futures.pop(env_index)
@@ -966,15 +1175,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             raise RuntimeError(
                 f"Cannot await {min_get} step when only {self._current_step_reset} are being stepped."
             )
-        results = []
         futures = self._step_futures
-        completed_futures = []
-        for future in as_completed(futures):
-            results.append(future.result())
-            completed_futures.append(future)
-            self._current_step = self._current_step - 1
-            if len(results) >= min_get and sum([f.done() for f in futures]) == 0:
-                break
+        completed_futures = self._receive_futures(futures, min_get, max_get, timeout)
+        results = [future.result() for future in completed_futures]
+        self._current_step -= len(completed_futures)
         self._step_futures = [
             f for f in self._step_futures if f not in completed_futures
         ]
@@ -1051,8 +1255,13 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             self._current_step_reset = self._current_step_reset + len(futures)
 
     def async_step_and_maybe_reset_recv(
-        self, min_get: int | None = None, env_index: int | None = None
-    ) -> TensorDictBase:
+        self,
+        min_get: int | None = None,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         if env_index is not None:
             future = self._per_env_step_reset_futures.pop(env_index)
             return future.result()
@@ -1062,15 +1271,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             raise RuntimeError(
                 f"Cannot await {min_get} step_and_maybe_reset when only {self._current_step_reset} are being stepped."
             )
-        results = []
         futures = self._step_and_maybe_reset_futures
-        completed_futures = []
-        for future in as_completed(futures):
-            results.append(future.result())
-            completed_futures.append(future)
-            self._current_step_reset = self._current_step_reset - 1
-            if len(results) >= min_get and sum([f.done() for f in futures]) == 0:
-                break
+        completed_futures = self._receive_futures(futures, min_get, max_get, timeout)
+        results = [future.result() for future in completed_futures]
+        self._current_step_reset -= len(completed_futures)
         self._step_and_maybe_reset_futures = [
             f for f in self._step_and_maybe_reset_futures if f not in completed_futures
         ]
@@ -1107,7 +1311,12 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             self._reset_futures.extend(futures)
 
     def async_reset_recv(
-        self, min_get: int | None = None, env_index: int | None = None
+        self,
+        min_get: int | None = None,
+        env_index: int | None = None,
+        *,
+        max_get: int | None = None,
+        timeout: float | None = None,
     ) -> TensorDictBase:
         if env_index is not None:
             future = self._per_env_reset_futures.pop(env_index)
@@ -1118,15 +1327,10 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
             raise RuntimeError(
                 f"Cannot await {min_get} reset when only {self._current_step_reset} are being reset."
             )
-        results = []
         futures = self._reset_futures
-        completed_futures = []
-        for future in as_completed(futures):
-            results.append(future.result())
-            completed_futures.append(future)
-            self._current_reset = self._current_reset - 1
-            if len(results) >= min_get and sum([f.done() for f in futures]) == 0:
-                break
+        completed_futures = self._receive_futures(futures, min_get, max_get, timeout)
+        results = [future.result() for future in completed_futures]
+        self._current_reset -= len(completed_futures)
         self._reset_futures = [
             f for f in self._reset_futures if f not in completed_futures
         ]

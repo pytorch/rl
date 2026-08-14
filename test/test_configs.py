@@ -418,6 +418,31 @@ class TestEnvConfigs:
         finally:
             env.close(raise_if_closed=False)
 
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_async_env_shared_exchange_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg = BatchedEnvConfig(
+            create_env_fn=GymEnvConfig(env_name="CartPole-v1"),
+            num_workers=2,
+            batched_env_type="async",
+            backend="multiprocessing",
+            exchange="shm",
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="hydra.utils.instantiate", category=UserWarning
+            )
+            env = instantiate(cfg)
+        try:
+            assert isinstance(env, AsyncEnvPool)
+            assert env.exchange == "shm"
+        finally:
+            env.close(raise_if_closed=False)
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
