@@ -562,6 +562,7 @@ The following trusted collaborators are also available for review guidance and
 contributor advice:
 
 - [`theap06`](https://github.com/theap06)
+- [`coder-jayp`](https://github.com/coder-jayp)
 
 If you would like to be added to this list, reach out to
 [Vincent Moens (`vmoens`)](https://github.com/vmoens).
