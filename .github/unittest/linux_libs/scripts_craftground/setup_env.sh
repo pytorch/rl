@@ -33,7 +33,8 @@ apt-get install -y wget \
     libglx0 \
     libegl1 \
     libgles2 \
-    libglib2.0-0
+    libglib2.0-0 \
+    python3-dev
 
 # Upgrade specific package
 apt-get upgrade -y libstdc++6
@@ -51,7 +52,11 @@ if ! command -v uv &> /dev/null; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Create virtual environment using uv
+# Create virtual environment using uv. Force a uv-managed interpreter: the
+# apt packages above (JDK/X11 stack) pull in a headerless system python3.10,
+# which uv would otherwise pick up, breaking source builds of
+# tensordict/torchrl (cmake cannot find Python3_INCLUDE_DIRS).
+export UV_PYTHON_PREFERENCE=only-managed
 printf "python: ${PYTHON_VERSION}\n"
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment with uv\n"
