@@ -1,28 +1,28 @@
 {
-  "generated_at": "2026-08-13T06:39:30.747584+00:00",
+  "generated_at": "2026-08-14T06:37:59.010370+00:00",
   "analysis_period": {
-    "start": "2026-08-08",
-    "end": "2026-08-12",
+    "start": "2026-08-11",
+    "end": "2026-08-13",
     "runs_analyzed": 45
   },
   "summary": {
-    "total_tests": 31382,
-    "flaky_count": 3,
-    "new_flaky_count": 3,
+    "total_tests": 31513,
+    "flaky_count": 7,
+    "new_flaky_count": 7,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
       "nodeid": "test/rb/test_storages.py::TestStorages::test__rand_given_ndim_recompile",
-      "executions": 164,
+      "executions": 163,
       "failures": 40,
-      "failure_rate": 0.2439,
-      "flaky_score": 0.4878,
+      "failure_rate": 0.2454,
+      "flaky_score": 0.4908,
       "passed": 80,
       "failed": 40,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 4.049,
+      "avg_duration": 3.867,
       "recent_failures": [
         "2026-08-12T17:30:35Z",
         "2026-08-12T17:30:35Z",
@@ -34,44 +34,125 @@
       "is_new": true
     },
     {
-      "nodeid": "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_block_gru_torch_compile",
-      "executions": 44,
-      "failures": 4,
-      "failure_rate": 0.0909,
-      "flaky_score": 0.1455,
-      "passed": 40,
-      "failed": 4,
+      "nodeid": "test/test_configs.py::TestConfigClassParity::test_wrapped_class_kwargs_have_config_fields[TensorDictReplayBufferConfig]",
+      "executions": 163,
+      "failures": 13,
+      "failure_rate": 0.0798,
+      "flaky_score": 0.1595,
+      "passed": 150,
+      "failed": 13,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 6.872,
+      "avg_duration": 0.001,
       "recent_failures": [
-        "2026-08-12T09:25:16Z",
-        "2026-08-12T17:27:14Z",
-        "2026-08-12T17:30:35Z",
-        "2026-08-12T17:31:01Z"
+        "2026-08-12T17:31:01Z",
+        "2026-08-13T07:37:15Z",
+        "2026-08-13T07:40:24Z",
+        "2026-08-13T09:01:11Z",
+        "2026-08-13T09:03:06Z"
+      ],
+      "first_seen_flaky": "2026-08-11T13:23:29Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_block_gru_torch_compile",
+      "executions": 108,
+      "failures": 8,
+      "failure_rate": 0.0741,
+      "flaky_score": 0.1481,
+      "passed": 100,
+      "failed": 8,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 7.646,
+      "recent_failures": [
+        "2026-08-12T17:31:01Z",
+        "2026-08-13T07:37:15Z",
+        "2026-08-13T07:40:24Z",
+        "2026-08-13T09:01:11Z",
+        "2026-08-13T09:03:06Z"
       ],
       "first_seen_flaky": "2026-08-12T09:25:16Z",
       "is_new": true
     },
     {
-      "nodeid": "test/test_configs.py::TestConfigClassParity::test_wrapped_class_kwargs_have_config_fields[TensorDictReplayBufferConfig]",
-      "executions": 164,
-      "failures": 9,
-      "failure_rate": 0.0549,
-      "flaky_score": 0.1098,
-      "passed": 155,
-      "failed": 9,
+      "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--1.0-1.0-dtype0]",
+      "executions": 64,
+      "failures": 4,
+      "failure_rate": 0.0625,
+      "flaky_score": 0.1,
+      "passed": 48,
+      "failed": 4,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.001,
+      "avg_duration": 0.769,
       "recent_failures": [
-        "2026-08-11T15:59:48Z",
-        "2026-08-12T09:25:16Z",
-        "2026-08-12T17:27:14Z",
-        "2026-08-12T17:30:35Z",
-        "2026-08-12T17:31:01Z"
+        "2026-08-13T07:37:15Z",
+        "2026-08-13T07:40:24Z",
+        "2026-08-13T09:01:11Z",
+        "2026-08-13T09:03:06Z"
       ],
-      "first_seen_flaky": "2026-08-11T13:23:29Z",
+      "first_seen_flaky": "2026-08-13T07:37:15Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--1.0-1.0-dtype1]",
+      "executions": 64,
+      "failures": 4,
+      "failure_rate": 0.0625,
+      "flaky_score": 0.1,
+      "passed": 48,
+      "failed": 4,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.382,
+      "recent_failures": [
+        "2026-08-13T07:37:15Z",
+        "2026-08-13T07:40:24Z",
+        "2026-08-13T09:01:11Z",
+        "2026-08-13T09:03:06Z"
+      ],
+      "first_seen_flaky": "2026-08-13T07:37:15Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--2.0-3.0-dtype0]",
+      "executions": 64,
+      "failures": 4,
+      "failure_rate": 0.0625,
+      "flaky_score": 0.1,
+      "passed": 48,
+      "failed": 4,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.394,
+      "recent_failures": [
+        "2026-08-13T07:37:15Z",
+        "2026-08-13T07:40:24Z",
+        "2026-08-13T09:01:11Z",
+        "2026-08-13T09:03:06Z"
+      ],
+      "first_seen_flaky": "2026-08-13T07:37:15Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--2.0-3.0-dtype1]",
+      "executions": 64,
+      "failures": 4,
+      "failure_rate": 0.0625,
+      "flaky_score": 0.1,
+      "passed": 48,
+      "failed": 4,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.284,
+      "recent_failures": [
+        "2026-08-13T07:37:15Z",
+        "2026-08-13T07:40:24Z",
+        "2026-08-13T09:01:11Z",
+        "2026-08-13T09:03:06Z"
+      ],
+      "first_seen_flaky": "2026-08-13T07:37:15Z",
       "is_new": true
     }
   ],
