@@ -573,5 +573,6 @@ See the :ref:`tutorial <sphx_glr_tutorials_sphinx-tutorials_torchrl_component_co
 
     PostTrainingBufferProtocol
     PostTrainingCollectorProtocol
-    PostTrainingLossOutputProtocol
+    GRPOLossOutputProtocol
+    SFTLossOutputProtocol
     assert_satisfies_protocol

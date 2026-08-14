@@ -19,7 +19,8 @@ from typing_extensions import Protocol
 __all__ = [
     "PostTrainingBufferProtocol",
     "PostTrainingCollectorProtocol",
-    "PostTrainingLossOutputProtocol",
+    "GRPOLossOutputProtocol",
+    "SFTLossOutputProtocol",
     "assert_satisfies_protocol",
 ]
 
@@ -33,6 +34,14 @@ class PostTrainingBufferProtocol(Protocol):
     * ``("next", "reward")`` — reward signal, shape ``[B, ...]``.
     * ``("tokens", "full")`` — full token sequence, shape ``[B, T]``.
     * ``("tokens", "response")`` — response tokens, shape ``[B, R]`` or ragged.
+
+    Example::
+
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> from torchrl.data.llm.contracts import PostTrainingBufferProtocol
+        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
+        >>> isinstance(rb, PostTrainingBufferProtocol)
+        True
     """
 
     def extend(self, data: TensorDictBase) -> None:
@@ -60,6 +69,16 @@ class PostTrainingCollectorProtocol(Protocol):
     * ``("tokens", "response")`` — response tokens, shape ``[B, R]``.
     * ``("next", "reward")`` — reward signal, shape ``[B, ...]``.
     * ``("masks", "all_attention_mask")`` — boolean mask, shape ``[B, T]``.
+
+    Example::
+
+        >>> from torchrl.data.llm.contracts import PostTrainingCollectorProtocol
+        >>> class MyCollector:
+        ...     def update_policy_weights_(self, policy_weights=None, *, worker_ids=None): ...
+        ...     def __iter__(self): return iter([])
+        ...     def __next__(self): raise StopIteration
+        >>> isinstance(MyCollector(), PostTrainingCollectorProtocol)
+        True
     """
 
     def update_policy_weights_(
@@ -78,34 +97,70 @@ class PostTrainingCollectorProtocol(Protocol):
         ...
 
 
-class PostTrainingLossOutputProtocol(Protocol):
-    """Minimal interface a loss-output object must expose.
-
-    ``GRPOLossOutput`` and ``SFTLossOutput`` satisfy this protocol structurally.
+class GRPOLossOutputProtocol(Protocol):
+    """Interface satisfied by :class:`~torchrl.objectives.llm.GRPOLossOutput`.
 
     .. note::
-        Both are ``TensorClass`` subclasses so standard ``isinstance`` checks
-        will not work. Use :func:`assert_satisfies_protocol` instead.
+        ``GRPOLossOutput`` is a ``TensorClass`` subclass whose fields live in
+        TensorDict internals rather than Python ``__dict__``.  Use
+        :func:`assert_satisfies_protocol` instead of ``isinstance``.
 
-    **Optional fields** read via ``getattr`` by ``PostTrainingLogger``:
-    ``loss_objective``, ``loss_sft``, ``clip_fraction``, ``kl_approx``,
-    ``ESS``, ``entropy``, ``loss_entropy``, ``loss_kl_to_ref``, ``kl_to_ref``,
+    **Field contract** — fields read by ``PostTrainingLogger`` via ``getattr``:
+    ``loss_objective``, ``clip_fraction``, ``kl_approx``, ``ESS``,
+    ``entropy``, ``loss_entropy``, ``loss_kl_to_ref``, ``kl_to_ref``,
     ``loss_kl_to_inference``, ``kl_to_inference``.
+
+    Example::
+
+        >>> import torch
+        >>> from torchrl.objectives.llm.grpo import GRPOLossOutput
+        >>> from torchrl.data.llm.contracts import GRPOLossOutputProtocol, assert_satisfies_protocol
+        >>> out = GRPOLossOutput(
+        ...     loss_objective=torch.tensor(0.5),
+        ...     clip_fraction=torch.tensor(0.1),
+        ...     kl_approx=torch.tensor(0.01),
+        ...     ESS=torch.tensor(32.0),
+        ... )
+        >>> assert_satisfies_protocol(out, GRPOLossOutputProtocol)
     """
 
     @property
-    def loss_objective(self) -> torch.Tensor | None:
-        """Primary policy loss (GRPO/PPO), or ``None`` if not computed."""
+    def loss_objective(self) -> torch.Tensor:
+        """Primary GRPO policy loss."""
         ...
+
+
+class SFTLossOutputProtocol(Protocol):
+    """Interface satisfied by :class:`~torchrl.objectives.llm.SFTLossOutput`.
+
+    .. note::
+        ``SFTLossOutput`` is a ``TensorClass`` subclass whose fields live in
+        TensorDict internals rather than Python ``__dict__``.  Use
+        :func:`assert_satisfies_protocol` instead of ``isinstance``.
+
+    **Field contract** — fields read by ``PostTrainingLogger`` via ``getattr``:
+    ``loss_sft``, ``kl_to_ref``, ``loss_kl_to_ref``.
+
+    Example::
+
+        >>> import torch
+        >>> from torchrl.objectives.llm.sft import SFTLossOutput
+        >>> from torchrl.data.llm.contracts import SFTLossOutputProtocol, assert_satisfies_protocol
+        >>> out = SFTLossOutput(loss_sft=torch.tensor(0.3))
+        >>> assert_satisfies_protocol(out, SFTLossOutputProtocol)
+    """
 
     @property
-    def loss_sft(self) -> torch.Tensor | None:
-        """SFT loss (SFT / Expert Iteration outputs)."""
+    def loss_sft(self) -> torch.Tensor:
+        """Supervised fine-tuning loss."""
         ...
 
 
-# Primary loss fields checked by assert_satisfies_protocol for TensorClass outputs.
-_LOSS_OUTPUT_FIELDS: tuple[str, ...] = ("loss_objective", "loss_sft")
+# Maps each loss-output protocol to the single field it requires.
+_LOSS_PROTOCOL_FIELDS: dict[type, str] = {
+    GRPOLossOutputProtocol: "loss_objective",
+    SFTLossOutputProtocol: "loss_sft",
+}
 
 
 def assert_satisfies_protocol(
@@ -136,21 +191,21 @@ def assert_satisfies_protocol(
         >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
         >>> assert_satisfies_protocol(rb, PostTrainingBufferProtocol, name="rb")
     """
-    if protocol is PostTrainingLossOutputProtocol:
+    label = f'"{name}" ' if name else ""
+
+    if protocol in _LOSS_PROTOCOL_FIELDS:
         # GRPOLossOutput / SFTLossOutput are TensorClass subclasses: their fields
         # live in TensorDict internals, not Python __dict__, so isinstance fails.
-        has_any = any(getattr(obj, f, None) is not None for f in _LOSS_OUTPUT_FIELDS)
-        if not has_any:
-            label = f'"{name}" ' if name else ""
+        required_field = _LOSS_PROTOCOL_FIELDS[protocol]
+        if getattr(obj, required_field, None) is None:
             raise TypeError(
                 f"Object {label}of type '{type(obj).__name__}' does not satisfy "
-                f"'PostTrainingLossOutputProtocol'.\n"
-                f"  Must expose at least one of: {', '.join(_LOSS_OUTPUT_FIELDS)}"
+                f"'{protocol.__name__}'.\n"
+                f"  Must expose a non-None '{required_field}' field."
             )
         return
 
     if not isinstance(obj, protocol):
-        label = f'"{name}" ' if name else ""
         protocol_name = getattr(protocol, "__name__", str(protocol))
         missing = [
             attr
