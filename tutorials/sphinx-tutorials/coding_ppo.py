@@ -41,7 +41,7 @@ We will cover six crucial components of TorchRL:
 # .. code-block:: bash
 #
 #    !pip3 install torchrl
-#    !pip3 install gym[mujoco]
+#    !pip3 install "gymnasium[mujoco]"
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
