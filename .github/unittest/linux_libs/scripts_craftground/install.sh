@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+unset PYTORCH_VERSION
+# For unittest, nightly PyTorch is used as the following section,
+# so no need to set PYTORCH_VERSION.
+# In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+
+set -e
+
+# Ensure uv is in PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+# Activate the virtual environment
+source ./env/bin/activate
+
+if [ "${CU_VERSION:-}" == cpu ] ; then
+    version="cpu"
+else
+    if [[ ${#CU_VERSION} -eq 4 ]]; then
+        CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
+    elif [[ ${#CU_VERSION} -eq 5 ]]; then
+        CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
+    fi
+    echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
+    version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
+fi
+
+# submodules
+git submodule sync && git submodule update --init --recursive
+
+printf "Installing PyTorch with cu128"
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+  else
+      uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+  fi
+elif [[ "$TORCH_VERSION" == "stable" ]]; then
+    if [ "${CU_VERSION:-}" == cpu ] ; then
+      uv pip install torch --index-url https://download.pytorch.org/whl/cpu -U
+  else
+      uv pip install torch --index-url https://download.pytorch.org/whl/cu128 -U
+  fi
+else
+  printf "Failed to install pytorch"
+  exit 1
+fi
+
+# Ensure tensordict and torchrl dependencies are installed
+# (since we use --no-deps for tensordict and torchrl)
+uv pip install numpy "pyvers>=0.2.3" packaging cloudpickle
+
+# Install build dependencies for torchrl (needed with --no-build-isolation)
+uv pip install setuptools wheel setuptools_scm ninja "pybind11[global]"
+
+# install tensordict
+if [[ "$RELEASE" == 0 ]]; then
+  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
+else
+  uv pip install --no-deps tensordict
+fi
+
+# smoke test
+python -c "import functorch;import tensordict"
+
+printf "* Installing torchrl\n"
+python -m pip install -e . --no-build-isolation --no-deps
+
+# smoke test
+python -c "import torchrl"
+
+# Install craftground without deps so the nightly torch installed above is
+# kept (craftground declares a dependency on stable torch). Its other
+# dependencies come from requirements.txt / the runtime package below.
+printf "* Installing craftground\n"
+uv pip install --no-deps craftground craftground-runtime-mc121
+
+# smoke test
+python -c "import craftground"
+
+# Pre-build the CraftGround Gradle project so the expensive part (Gradle
+# bootstrap, Minecraft client + assets download from Mojang's servers, mod
+# compilation) happens outside the test run. The downloaded game files stay
+# on this runner and are never uploaded or redistributed; users of this
+# recipe are expected to own a Minecraft: Java Edition license
+# (see knowledge_base/MINECRAFT.md).
+env_path="$(python -c "from craftground.environment.runtime_packages import resolve_runtime_env_path; print(resolve_runtime_env_path('1.21'))")"
+echo "CraftGround runtime Gradle project: ${env_path}"
+pushd "${env_path}"
+chmod +x gradlew || true
+./gradlew --no-daemon classes downloadAssets \
+  || ./gradlew --no-daemon classes \
+  || echo "WARNING: Gradle pre-build failed; the first env reset will retry the build"
+popd

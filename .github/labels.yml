@@ -131,6 +131,9 @@
 - name: Environments/brax
   description: "Triggers brax environment tests only"
   color: "0E8A16"
+- name: Environments/craftground
+  description: "Triggers craftground (Minecraft) environment tests only"
+  color: "0E8A16"
 
 - name: Environments/mujoco_playground
   description: "Triggers mujoco_playground environment tests only"
