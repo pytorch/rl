@@ -808,14 +808,18 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             return td.data
 
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
-        with param_and_buf.data.to("meta").to_module(policy):
+        with param_and_buf.data.to("meta").to_module(
+            policy, preserve_module_state=False
+        ):
             policy_new_device = deepcopy(policy)
 
         param_and_buf_new_device = param_and_buf.apply(
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         )
-        param_and_buf_new_device.to_module(policy_new_device)
+        param_and_buf_new_device.to_module(
+            policy_new_device, preserve_module_state=False
+        )
         # Sanity check
         if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(
             get_original_weights().keys(True, True)

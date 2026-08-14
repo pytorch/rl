@@ -284,7 +284,7 @@ def call_value_nets(
                 "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
             )
         if params is not None:
-            with params.to_module(value_net):
+            with params.to_module(value_net, preserve_module_state=False):
                 value_est = value_net(data_in).get(value_key)
         else:
             value_est = value_net(data_in).get(value_key)

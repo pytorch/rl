@@ -622,27 +622,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Validate cat_results
         self._validate_cat_results(cat_results)
 
-    @property
-    def postprocs(self):
-        """Deprecated: use :attr:`postproc` instead. Will be removed in v0.14."""
-        warnings.warn(
-            "MultiCollector.postprocs is deprecated, use .postproc instead. "
-            "This will be removed in v0.14.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return self.postproc
-
-    @postprocs.setter
-    def postprocs(self, value):
-        warnings.warn(
-            "MultiCollector.postprocs is deprecated, use .postproc instead. "
-            "This will be removed in v0.14.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        self.postproc = value
-
     def _setup_workers_and_env_fns(
         self,
         create_env_fn: Sequence[Callable] | Callable,
@@ -1365,7 +1344,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 else:
                     policy_to_send = policy
                     if policy is not None and policy_weights is not None:
-                        cm = policy_weights.to_module(policy)
+                        cm = policy_weights.to_module(
+                            policy, preserve_module_state=False
+                        )
                     else:
                         cm = contextlib.nullcontext()
             else:
