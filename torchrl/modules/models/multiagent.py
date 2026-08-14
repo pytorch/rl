@@ -21,12 +21,12 @@ from torchrl.modules.models.utils import _reset_parameters_recursive
 
 
 @implement_for("torch", None, "2.12", compilable=True)
-def is_exporting():
+def _is_exporting() -> bool:
     return False
 
 
 @implement_for("torch", "2.12", compilable=True)
-def is_exporting():  # noqa: F811
+def _is_exporting() -> bool:  # noqa: F811
     return torch.compiler.is_exporting()
 
 
@@ -132,7 +132,7 @@ class MultiAgentNetBase(nn.Module):
 
     @staticmethod
     def vmap_func_module(module, *args, **kwargs):
-        if is_exporting():
+        if _is_exporting():
 
             def exec_module_export(params, *inputs):
                 return torch.func.functional_call(module, params, inputs)
