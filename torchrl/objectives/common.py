@@ -8,7 +8,7 @@ from __future__ import annotations
 import abc
 import functools
 import warnings
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal
@@ -802,6 +802,17 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
     def _set_value_transform(self, value_transform: ValueTransform | None) -> None:
         self.value_transform = _validate_value_transform(value_transform)
+
+    def _set_priority_function(
+        self,
+        priority_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None,
+    ) -> None:
+        if priority_function is not None and not callable(priority_function):
+            raise TypeError(
+                "priority_function must be callable or None, got "
+                f"{type(priority_function).__name__}."
+            )
+        self.priority_function = priority_function
 
     def _transform_value(self, value: torch.Tensor) -> torch.Tensor:
         return _transform_value(value, self.value_transform)

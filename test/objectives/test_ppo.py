@@ -19,7 +19,6 @@ from _objectives_common import (
     LossModuleTestBase,
     MARLEnv,
 )
-from packaging import version as pack_version
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     composite_lp_aggregate,
