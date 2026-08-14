@@ -50,6 +50,10 @@ from torchrl.testing import (  # noqa
 )
 
 
+def _absolute_priority(prediction, target):
+    return (prediction - target).abs()
+
+
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
 )
@@ -284,7 +288,10 @@ class TestDDPG(LossModuleTestBase):
     @pytest.mark.parametrize(
         "transform_cls", [SymLogValueTransform, SignedHyperbolicValueTransform]
     )
-    def test_ddpg_value_transform_raw_objective_and_diagnostics(self, transform_cls):
+    @pytest.mark.parametrize("priority_function", [None, _absolute_priority])
+    def test_ddpg_value_transform_raw_objective_and_diagnostics(
+        self, transform_cls, priority_function
+    ):
         transform = transform_cls()
         torch.manual_seed(self.seed)
         raw_actor = self._create_mock_actor()
@@ -302,6 +309,7 @@ class TestDDPG(LossModuleTestBase):
             transformed_value,
             loss_function="l2",
             value_transform=transform,
+            priority_function=priority_function,
         )
         raw_out = raw_loss(td.clone())
         transformed_td = td.clone()
@@ -317,10 +325,14 @@ class TestDDPG(LossModuleTestBase):
             atol=1e-4,
             rtol=1e-4,
         )
+        transformed_residual = transform(transformed_out["pred_value"]) - transform(
+            transformed_out["target_value"]
+        )
         expected_priority = (
-            transform(transformed_out["pred_value"])
-            - transform(transformed_out["target_value"])
-        ).pow(2)
+            transformed_residual.pow(2)
+            if priority_function is None
+            else transformed_residual.abs()
+        )
         torch.testing.assert_close(transformed_td["td_error"], expected_priority)
         (transformed_out["loss_actor"] + transformed_out["loss_value"]).backward()
         assert all(
@@ -1116,7 +1128,10 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize(
         "transform_cls", [SymLogValueTransform, SignedHyperbolicValueTransform]
     )
-    def test_td3_value_transform_raw_objective_and_diagnostics(self, transform_cls):
+    @pytest.mark.parametrize("priority_function", [None, _absolute_priority])
+    def test_td3_value_transform_raw_objective_and_diagnostics(
+        self, transform_cls, priority_function
+    ):
         transform = transform_cls()
         torch.manual_seed(self.seed)
         raw_actor = self._create_mock_actor()
@@ -1144,6 +1159,7 @@ class TestTD3(LossModuleTestBase):
             policy_noise=0.0,
             loss_function="l2",
             value_transform=transform,
+            priority_function=priority_function,
         )
         raw_out = raw_loss(td.clone())
         transformed_td = td.clone()
@@ -1159,10 +1175,14 @@ class TestTD3(LossModuleTestBase):
             torch.testing.assert_close(
                 transformed_out[key], raw_out[key], atol=1e-4, rtol=1e-4, msg=key
             )
+        transformed_residual = transform(transformed_out["pred_value"]) - transform(
+            transformed_out["target_value"]
+        )
         expected_priority = (
-            transform(transformed_out["pred_value"])
-            - transform(transformed_out["target_value"])
-        ).pow(2)
+            transformed_residual.pow(2)
+            if priority_function is None
+            else transformed_residual.abs()
+        )
         torch.testing.assert_close(
             transformed_td["td_error"], expected_priority.max(0).values
         )

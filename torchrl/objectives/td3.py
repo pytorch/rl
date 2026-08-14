@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -62,6 +63,10 @@ class TD3Loss(LossModule):
             remain in raw value space. Defaults to ``None``. See also
             :class:`~torchrl.modules.ValueOperator` and
             :class:`~torchrl.objectives.value.ValueEstimatorBase`.
+        priority_function (Callable[[Tensor, Tensor], Tensor], optional): a
+            callable that receives each critic prediction and the Bellman target
+            in prediction space and returns their per-element replay priority.
+            Defaults to the squared residual used by TD3.
         delay_actor (bool, optional): whether to separate the target actor
             networks from the actor networks used for
             data collection. Default is ``True``.
@@ -238,6 +243,8 @@ class TD3Loss(LossModule):
         noise_clip: float = 0.5,
         loss_function: str = "smooth_l1",
         value_transform: ValueTransform | None = None,
+        priority_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | None = None,
         delay_actor: bool = True,
         delay_qvalue: bool = True,
         gamma: float | None = None,
@@ -251,6 +258,7 @@ class TD3Loss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_value_transform(value_transform)
+        self._set_priority_function(priority_function)
         self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -493,10 +501,20 @@ class TD3Loss(LossModule):
         ).squeeze(-1)
         target_value_transformed = self._transform_value(target_value)
 
-        td_error = (current_qvalue_transformed - target_value_transformed).pow(2)
+        target_value_transformed_expanded = target_value_transformed.expand_as(
+            current_qvalue_transformed
+        )
+        if self.priority_function is None:
+            td_error = (
+                current_qvalue_transformed - target_value_transformed_expanded
+            ).pow(2)
+        else:
+            td_error = self.priority_function(
+                current_qvalue_transformed, target_value_transformed_expanded
+            )
         loss_qval = distance_loss(
             current_qvalue_transformed,
-            target_value_transformed.expand_as(current_qvalue_transformed),
+            target_value_transformed_expanded,
             loss_function=self.loss_function,
         ).sum(0)
         metadata = {

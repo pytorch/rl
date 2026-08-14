@@ -66,6 +66,10 @@ from torchrl.testing import (  # noqa
 )
 
 
+def _constant_priority(prediction, target):
+    return torch.full_like(prediction, 0.25)
+
+
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
 )
@@ -434,6 +438,28 @@ class TestSAC(LossModuleTestBase):
         assert all(
             parameter.grad is None or torch.isfinite(parameter.grad).all()
             for parameter in transformed_loss.parameters()
+        )
+
+    def test_sac_priority_function(self, version):
+        transform = SymLogValueTransform()
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue(value_transform=transform)
+        value = (
+            self._create_mock_value(value_transform=transform) if version == 1 else None
+        )
+        loss = SACLoss(
+            actor,
+            qvalue,
+            value,
+            value_transform=transform,
+            priority_function=_constant_priority,
+        )
+        td = self._create_mock_data_sac()
+
+        loss(td)
+
+        torch.testing.assert_close(
+            td["td_error"], torch.full_like(td["td_error"], 0.25)
         )
 
     def test_sac_list_qvalue_networks(self, version):

@@ -235,8 +235,12 @@ Target critics emit transformed predictions just like online critics. Target
 minima and SAC entropy subtraction happen after inversion. Replay priorities
 keep each objective's historical convention (squared for DDPG, TD3, and SAC
 v1; absolute for SAC v2), but measure the residual between the transformed
-prediction and transformed target. Values intended for monitoring are
-converted back to raw units so reward-scale dashboards remain interpretable.
+prediction and transformed target. Pass ``priority_function`` to these losses
+to override that convention with a callable accepting the prediction and target
+in transformed space and returning a per-element priority, for example
+``priority_function=lambda prediction, target: (prediction - target).abs()``.
+Values intended for monitoring are converted back to raw units so reward-scale
+dashboards remain interpretable.
 
 Hydra
 -----

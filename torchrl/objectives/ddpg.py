@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -36,6 +37,10 @@ class DDPGLoss(LossModule):
             remain in raw value space. Defaults to ``None``. See also
             :class:`~torchrl.modules.ValueOperator` and
             :class:`~torchrl.objectives.value.ValueEstimatorBase`.
+        priority_function (Callable[[Tensor, Tensor], Tensor], optional): a
+            callable that receives the critic prediction and Bellman target in
+            prediction space and returns their per-element replay priority.
+            Defaults to the squared residual used by DDPG.
         delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
             data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
@@ -202,6 +207,8 @@ class DDPGLoss(LossModule):
         *,
         loss_function: str = "l2",
         value_transform: ValueTransform | None = None,
+        priority_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | None = None,
         delay_actor: bool = False,
         delay_value: bool = True,
         gamma: float | None = None,
@@ -214,6 +221,7 @@ class DDPGLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_value_transform(value_transform)
+        self._set_priority_function(priority_function)
         self.use_prioritized_weights = use_prioritized_weights
         self.delay_actor = delay_actor
         self.delay_value = delay_value
@@ -381,7 +389,12 @@ class DDPGLoss(LossModule):
             loss_function=self.loss_function,
         )
 
-        td_error = (pred_value_transformed - target_value_transformed).pow(2)
+        if self.priority_function is None:
+            td_error = (pred_value_transformed - target_value_transformed).pow(2)
+        else:
+            td_error = self.priority_function(
+                pred_value_transformed, target_value_transformed
+            )
         td_error = td_error.detach()
         if tensordict.device is not None:
             td_error = td_error.to(tensordict.device)

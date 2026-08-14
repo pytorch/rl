@@ -1604,10 +1604,6 @@ class TestLossConfigs:
                 value_network=None,
                 value_transform={"_target_": "torchrl.modules.SymLogValueTransform"},
             ),
-            _target_whitelist_=[
-                "torchrl.objectives.value.GAE",
-                "torchrl.modules.SymLogValueTransform",
-            ],
         )
         assert isinstance(gae.value_transform, SymLogValueTransform)
 
@@ -1643,18 +1639,7 @@ class TestLossConfigs:
             == "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
         )
 
-        loss = instantiate(
-            cfg,
-            _target_whitelist_=[
-                "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss",
-                "torchrl.trainers.algorithms.configs.modules._make_tanh_normal_model",
-                "torchrl.trainers.algorithms.configs.modules._make_tensordict_module",
-                "torchrl.modules.MLP",
-                "torchrl.modules.SymLogValueTransform",
-                "torch.nn.Tanh",
-                "torch.nn.Linear",
-            ],
-        )
+        loss = instantiate(cfg)
         assert isinstance(loss, PPOLoss)
         assert loss.value_transform.__class__.__name__ == "SymLogValueTransform"
         if loss_type == "clip":

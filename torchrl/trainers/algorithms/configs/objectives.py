@@ -77,6 +77,7 @@ class SACLossConfig(LossConfig):
     use_prioritized_weights: str | bool = "auto"
     scalar_output_mode: str | None = None
     value_transform: Any = None
+    priority_function: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_sac_loss"
 
     def __post_init__(self) -> None:
@@ -88,14 +89,19 @@ def _make_sac_loss(*args, **kwargs) -> SACLoss:
     discrete_loss_type = kwargs.pop("discrete", False)
     gamma = kwargs.pop("gamma", None)
     value_transform = kwargs.pop("value_transform", None)
+    priority_function = kwargs.pop("priority_function", None)
 
-    if discrete_loss_type and value_transform is not None:
+    if discrete_loss_type and (
+        value_transform is not None or priority_function is not None
+    ):
         raise ValueError(
-            "value_transform is only supported by the continuous SACLoss; "
-            "DiscreteSACLoss uses a different value representation."
+            "value_transform and priority_function are only supported by the "
+            "continuous SACLoss; DiscreteSACLoss uses a different value "
+            "representation."
         )
     if not discrete_loss_type:
         kwargs["value_transform"] = value_transform
+        kwargs["priority_function"] = priority_function
 
     # Instantiate networks if they are config objects
     actor_network = kwargs.get("actor_network")
@@ -332,6 +338,7 @@ class TD3LossConfig(LossConfig):
     deactivate_vmap: bool = False
     use_prioritized_weights: str | bool = "auto"
     value_transform: Any = None
+    priority_function: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_td3_loss"
 
 
@@ -547,6 +554,7 @@ class DDPGLossConfig(LossConfig):
     reduction: str | None = None
     use_prioritized_weights: str | bool = "auto"
     value_transform: Any = None
+    priority_function: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_ddpg_loss"
 
     def __post_init__(self) -> None:

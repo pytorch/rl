@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
 from numbers import Number
@@ -93,6 +94,11 @@ class SACLoss(LossModule):
             terms, and actor objectives remain in raw value space. Defaults to
             ``None``. See also :class:`~torchrl.modules.ValueOperator` and
             :class:`~torchrl.objectives.value.ValueEstimatorBase`.
+        priority_function (Callable[[Tensor, Tensor], Tensor], optional): a
+            callable that receives each Q-value prediction and its Bellman
+            target in prediction space and returns their per-element replay
+            priority. Defaults to the existing squared residual for SAC v1 and
+            absolute residual for SAC v2.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
         alpha_init (:obj:`float`, optional): initial entropy multiplier.
@@ -332,6 +338,7 @@ class SACLoss(LossModule):
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         value_transform: ValueTransform | None = None,
+        priority_function: Callable[[Tensor, Tensor], Tensor] | None = None,
         alpha_init: float = 1.0,
         min_alpha: float | None = None,
         max_alpha: float | None = None,
@@ -356,6 +363,7 @@ class SACLoss(LossModule):
             reduction = "mean"
         super().__init__()
         self._set_value_transform(value_transform)
+        self._set_priority_function(priority_function)
         self.use_prioritized_weights = use_prioritized_weights
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
@@ -828,7 +836,11 @@ class SACLoss(LossModule):
         loss_value = self._reduce_loss(
             loss_value, tensordict=tensordict, weights=weights
         )
-        metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
+        if self.priority_function is None:
+            td_error = (pred_val - target_chunks).pow(2)
+        else:
+            td_error = self.priority_function(pred_val, target_chunks)
+        metadata = {"td_error": td_error.flatten(0, 1)}
 
         return loss_value, metadata
 
@@ -925,10 +937,16 @@ class SACLoss(LossModule):
         pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
             -1
         )
-        td_error = abs(pred_val - target_value_transformed)
+        target_value_transformed_expanded = target_value_transformed.expand_as(pred_val)
+        if self.priority_function is None:
+            td_error = abs(pred_val - target_value_transformed_expanded)
+        else:
+            td_error = self.priority_function(
+                pred_val, target_value_transformed_expanded
+            )
         loss_qval = distance_loss(
             pred_val,
-            target_value_transformed.expand_as(pred_val),
+            target_value_transformed_expanded,
             loss_function=self.loss_function,
         ).sum(0)
         loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
