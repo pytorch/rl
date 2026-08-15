@@ -1478,14 +1478,14 @@ class _RayInferenceServerActor:
         self, weights: TensorDictBase, mark_weight_update: bool = True
     ) -> None:
         if self.server is None:
-            weights.to_module(self.model)
+            weights.to_module(self.model, preserve_module_state=False)
             if mark_weight_update:
                 self._server_kwargs["policy_version"] = (
                     int(self._server_kwargs.get("policy_version", 0)) + 1
                 )
         else:
             self.server.update_model(
-                lambda model: weights.to_module(model),
+                lambda model: weights.to_module(model, preserve_module_state=False),
                 mark_weight_update=mark_weight_update,
             )
 

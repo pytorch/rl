@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.13.0}"
+export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.14.0}"
 # PyPI rejects local versions such as X.Y.Z+cpu. CPU wheels are the
 # default PyPI artifacts, so strip only the CPU build suffix while keeping
 # CUDA/ROCm suffixes for the extra-index wheels.

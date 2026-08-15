@@ -85,10 +85,10 @@ class MultiAgentNetBase(nn.Module):
                     )
             # Remove all parameters
             TensorDict.from_module(self._empty_net).data.to("meta").to_module(
-                self._empty_net
+                self._empty_net, preserve_module_state=False
             )
         if not self.use_td_params:
-            self.params.to_module(self._empty_net)
+            self.params.to_module(self._empty_net, preserve_module_state=False)
 
     @property
     def vmap_randomness(self):
@@ -121,7 +121,7 @@ class MultiAgentNetBase(nn.Module):
     @staticmethod
     def vmap_func_module(module, *args, **kwargs):
         def exec_module(params, *input):
-            with params.to_module(module):
+            with params.to_module(module, preserve_module_state=False):
                 return module(*input)
 
         return torch.vmap(exec_module, *args, **kwargs)
@@ -163,7 +163,7 @@ class MultiAgentNetBase(nn.Module):
 
         # If parameters are shared, agents use the same network
         else:
-            with self.params.to_module(self._empty_net):
+            with self.params.to_module(self._empty_net, preserve_module_state=False):
                 output = self._empty_net(inputs)
 
             if self.centralized:
@@ -237,7 +237,7 @@ class MultiAgentNetBase(nn.Module):
                 ) from err
         else:
             net = self._empty_net
-        self.params.to_module(net)
+        self.params.to_module(net, preserve_module_state=False)
         return net
 
     def from_stateful_net(self, stateful_net: nn.Module):
@@ -263,7 +263,7 @@ class MultiAgentNetBase(nn.Module):
 
     def __repr__(self):
         empty_net = self._empty_net
-        with self.params.to_module(empty_net):
+        with self.params.to_module(empty_net, preserve_module_state=False):
             module_repr = indent(str(empty_net), 4 * " ")
         n_agents = indent(f"n_agents={self.n_agents}", 4 * " ")
         share_params = indent(f"share_params={self.share_params}", 4 * " ")
@@ -276,7 +276,7 @@ class MultiAgentNetBase(nn.Module):
 
         def vmap_reset_module(module, *args, **kwargs):
             def reset_module(params):
-                with params.to_module(module):
+                with params.to_module(module, preserve_module_state=False):
                     _reset_parameters_recursive(module)
                     return params
 
@@ -285,7 +285,7 @@ class MultiAgentNetBase(nn.Module):
         if not self.share_params:
             vmap_reset_module(self._empty_net, randomness="different")(self.params)
         else:
-            with self.params.to_module(self._empty_net):
+            with self.params.to_module(self._empty_net, preserve_module_state=False):
                 _reset_parameters_recursive(self._empty_net)
 
 
