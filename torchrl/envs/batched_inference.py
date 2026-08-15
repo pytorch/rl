@@ -1,11 +1,11 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
+﻿# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
 import bisect
-from collections.abc import Callable, Sequence
+from typing import Callable, Sequence
 
 import torch
 from tensordict import TensorDictBase
@@ -15,13 +15,13 @@ __all__ = ["FixedBatchedInference"]
 
 
 class FixedBatchedInference:
-    """Fixed-shape batched inference helper for :class:`~torchrl.envs.AsyncEnvPool`.
+    """Fixed-shape batched inference helper for :class:~torchrl.envs.AsyncEnvPool.
 
     Accepts variable-size observation batches from
-    :meth:`~torchrl.envs.AsyncEnvPool.async_step_and_maybe_reset_recv`, pads
-    them to a fixed *bucket* size, and runs the policy via a dedicated CUDA
-    stream with double-buffered pinned-memory staging.  This makes the policy
-    forward pass compatible with :func:`torch.compile` / CUDA graphs (which
+    :meth:~torchrl.envs.AsyncEnvPool.async_step_and_maybe_reset_recv, pads
+    them to a fixed *bucket* size, and runs the policy via dedicated CUDA
+    streams with double-buffered pinned-memory staging.  This makes the policy
+    forward pass compatible with :func:	orch.compile / CUDA graphs (which
     require fixed input shapes) while keeping the data-plane copy overlapped
     with the previous GPU forward pass.
 
@@ -30,28 +30,37 @@ class FixedBatchedInference:
 
     Args:
         policy (Callable): a callable that maps a batched
-            :class:`~tensordict.TensorDictBase` to a batched
-            :class:`~tensordict.TensorDictBase` (e.g. a
-            :class:`~tensordict.nn.TensorDictModule`).
+            :class:~tensordict.TensorDictBase to a batched
+            :class:~tensordict.TensorDictBase (e.g. a
+            :class:~tensordict.nn.TensorDictModule).
+            :class:~torch.nn.Module instances are automatically moved to
+            *device*.
         device (torch.device or str): the device on which the policy runs.
 
     Keyword Args:
         bucket_sizes (sequence of int): ascending list of batch sizes that the
-            helper may pad to.  The smallest bucket ``>= len(batch)`` is chosen
+            helper may pad to.  The smallest bucket `>= len(batch)` is chosen
             on every call.  Must be non-empty and strictly positive.
-            Defaults to ``[8, 16, 32, 64, 128]``.
-        double_buffer (bool): when ``True`` (default), two pinned staging
+            Defaults to `[8, 16, 32, 64, 128]`.
+        double_buffer (bool): when `True` (default), two pinned staging
             buffers are maintained per bucket so that the CPU can write
-            batch N+1 while the GPU reads batch N.  Set to ``False`` to use a
+            batch N+1 while the GPU reads batch N.  Set to `False` to use a
             single buffer (simpler, but serialises CPU and GPU).
-        add_valid_mask (bool): when ``True`` (default), a boolean tensor
-            ``"valid_mask"`` is added to the device batch before calling the
-            policy.  Rows corresponding to real observations are ``True``;
-            padding rows are ``False``.  The key is stripped from the output
+        add_valid_mask (bool): when `True` (default), a boolean tensor
+            `"valid_mask"` is added to the device batch before calling the
+            policy.  Rows corresponding to real observations are `True`;
+            padding rows are `False`.  The key is stripped from the output
             returned to the caller.
-        stream (torch.cuda.Stream or None): CUDA stream for the async H2D
-            transfer and the policy forward pass.  ``None`` (default) creates
-            a fresh dedicated stream on *device*.  Ignored when *device* is CPU.
+        stream (torch.cuda.Stream or None): CUDA stream to use for the policy
+            forward pass (the *compute* stream).  `None` (default) creates a
+            fresh dedicated stream on *device*.  A separate internal copy stream
+            is always created for the async H2D transfer so that H2D and compute
+            can genuinely overlap.  Ignored when *device* is CPU.
+
+    .. note::
+        Non-tensor metadata keys (e.g. `"env_index"`) are automatically
+        routed around the pinned staging buffer and reattached to the output,
+        so they are always preserved.
 
     .. note::
         Initialisation is *lazy*: pinned staging buffers and CUDA events are
@@ -96,29 +105,49 @@ class FixedBatchedInference:
         if bucket_sizes[0] < 1:
             raise ValueError("All bucket sizes must be >= 1.")
 
-        self.policy = policy
         self.device = torch.device(device)
         self.bucket_sizes = bucket_sizes
         self.double_buffer = double_buffer
         self.add_valid_mask = add_valid_mask
-
         self._num_buffers = 2 if double_buffer else 1
 
+        # Auto-move nn.Module policies to the target device.
+        if isinstance(policy, torch.nn.Module):
+            policy = policy.to(self.device)
+        self.policy = policy
+
         self._staging: dict[int, list[TensorDictBase]] = {}
-        self._events: dict[int, list[torch.cuda.Event | None]] = {}
+        # Tracks when it is safe to overwrite each pinned staging buffer
+        # (i.e. the H2D copy from that buffer has finished).
+        self._copy_events: dict[int, list[torch.cuda.Event | None]] = {}
         self._buf_idx: dict[int, int] = {}
 
         if self.device.type == "cuda":
-            self._stream = stream or torch.cuda.Stream(device=self.device)
+            # Separate streams so H2D copy and policy forward can overlap.
+            self._copy_stream = torch.cuda.Stream(device=self.device)
+            self._compute_stream = stream or torch.cuda.Stream(device=self.device)
         else:
-            self._stream = None
+            self._copy_stream = None
+            self._compute_stream = None
 
         self._initialized = False
 
     def _init_from_batch(self, batch: TensorDictBase) -> None:
-        """Allocate pinned staging buffers per bucket size from the first batch."""
+        """Allocate pinned staging buffers per bucket from the first batch."""
+        # Only tensor leaves go into staging; non-tensor metadata (e.g. env_index)
+        # is routed separately in __call__.
+        tensor_keys = [
+            k for k, v in batch.items(True, True) if isinstance(v, torch.Tensor)
+        ]
+        tensor_template = batch.select(*tensor_keys)[:1]
+
         for bucket in self.bucket_sizes:
-            template = batch[:1].expand(bucket).clone()
+            template = tensor_template.expand(bucket).clone()
+
+            # Pre-allocate valid_mask inside the template so it is covered by
+            # pin_memory() and copied to device in the same non-blocking call.
+            if self.add_valid_mask:
+                template.set(self._MASK_KEY, torch.zeros(bucket, dtype=torch.bool))
 
             buffers: list[TensorDictBase] = []
             events: list = []
@@ -127,17 +156,15 @@ class FixedBatchedInference:
                     buf = template.clone().pin_memory()
                     ev = torch.cuda.Event()
                     # Pre-record so the first event.synchronize() is a no-op.
-                    ev.record(self._stream)
+                    ev.record(self._copy_stream)
                 else:
                     buf = template.clone()
                     ev = None
                 buffers.append(buf)
                 events.append(ev)
-
             self._staging[bucket] = buffers
-            self._events[bucket] = events
+            self._copy_events[bucket] = events
             self._buf_idx[bucket] = 0
-
         self._initialized = True
 
     def _pick_bucket(self, batch_size: int) -> int:
@@ -154,17 +181,18 @@ class FixedBatchedInference:
         """Pad *batch*, copy to device asynchronously, run the policy.
 
         Args:
-            batch (TensorDictBase): a 1-D batch of shape ``[B]``.
+            batch (TensorDictBase): a 1-D batch of shape `[B]`.
 
         Returns:
-            TensorDictBase: the policy output on *device*, shape ``[B]``.
+            TensorDictBase: the policy output on *device*, shape `[B]`.
+            Non-tensor metadata keys (e.g. `"env_index"`) from the input are
+            reattached to the output.  `valid_mask` is stripped.
         """
         if batch.batch_dims != 1:
             raise ValueError(
                 f"FixedBatchedInference expects a 1-D TensorDict, "
                 f"got batch_dims={batch.batch_dims}."
             )
-
         B = batch.batch_size[0]
         if B == 0:
             raise ValueError("Received an empty batch (B=0).")
@@ -172,31 +200,55 @@ class FixedBatchedInference:
         if not self._initialized:
             self._init_from_batch(batch)
 
+        # Separate tensor leaves from non-tensor metadata (e.g. env_index).
+        # Non-tensor keys cannot live in pinned staging buffers.
+        tensor_keys = [
+            k for k, v in batch.items(True, True) if isinstance(v, torch.Tensor)
+        ]
+        non_tensor_keys = [k for k in batch.keys() if k not in tensor_keys]
+
         bucket = self._pick_bucket(B)
         buf_idx = self._buf_idx[bucket]
         staging = self._staging[bucket][buf_idx]
-        event = self._events[bucket][buf_idx]
+        copy_event = self._copy_events[bucket][buf_idx]
 
-        if event is not None:
-            event.synchronize()
+        # Block until the H2D copy that read from this staging buffer is done,
+        # so it is safe to overwrite the pinned CPU memory.
+        if copy_event is not None:
+            copy_event.synchronize()
 
-        staging[:B].update_(batch)
-
+        # Fill valid rows in-place with tensor leaves only (zero allocation).
+        staging[:B].update_(batch.select(*tensor_keys))
         if B < bucket:
             staging[B:].zero_()
 
+        # valid_mask lives in pinned memory; update it in-place before H2D.
         if self.add_valid_mask:
-            mask = torch.zeros(bucket, dtype=torch.bool)
+            mask = staging.get(self._MASK_KEY)
+            mask.fill_(False)
             mask[:B] = True
-            staging.set(self._MASK_KEY, mask, inplace=False)
 
-        if self._stream is not None:
-            with torch.cuda.stream(self._stream):
+        if self._copy_stream is not None:
+            # Async H2D on the copy stream.
+            with torch.cuda.stream(self._copy_stream):
                 device_batch = staging.to(self.device, non_blocking=True)
-                new_event = torch.cuda.Event()
-                new_event.record(self._stream)
-                self._events[bucket][buf_idx] = new_event
+
+            # Record after the copy so we know when the buffer is safe to reuse.
+            new_copy_event = torch.cuda.Event()
+            new_copy_event.record(self._copy_stream)
+            self._copy_events[bucket][buf_idx] = new_copy_event
+
+            # Compute stream waits for H2D to finish, then runs the policy.
+            # This separation allows the *next* H2D (double-buffer) to overlap
+            # with compute for the current batch.
+            self._compute_stream.wait_stream(self._copy_stream)
+            with torch.cuda.stream(self._compute_stream):
                 output = self.policy(device_batch)
+
+            # Make the *calling* stream wait for compute before the caller reads
+            # the result tensors — without this, reads on the default stream can
+            # race with the forward pass on _compute_stream.
+            torch.cuda.current_stream().wait_stream(self._compute_stream)
         else:
             device_batch = staging.to(self.device)
             output = self.policy(device_batch)
@@ -206,6 +258,10 @@ class FixedBatchedInference:
         result = output[:B]
         if self.add_valid_mask and self._MASK_KEY in result.keys():
             result = result.exclude(self._MASK_KEY)
+
+        # Reattach non-tensor metadata from the original batch.
+        for k in non_tensor_keys:
+            result.set(k, batch.get(k))
 
         return result
 
@@ -222,6 +278,6 @@ class FixedBatchedInference:
         loop finishes to free pinned memory promptly.
         """
         self._staging.clear()
-        self._events.clear()
+        self._copy_events.clear()
         self._buf_idx.clear()
         self._initialized = False
