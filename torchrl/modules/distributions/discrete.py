@@ -433,6 +433,13 @@ class MaskedCategorical(D.Categorical):
     def deterministic_sample(self):
         return self.mode
 
+    @property
+    def mode(self) -> torch.Tensor:
+        mode = super().mode
+        if self._sparse_mask:
+            mode = self._mask.gather(-1, mode.unsqueeze(-1)).squeeze(-1)
+        return mode
+
 
 class MaskedOneHotCategorical(MaskedCategorical):
     """MaskedCategorical distribution.
@@ -541,6 +548,8 @@ class MaskedOneHotCategorical(MaskedCategorical):
 
     @property
     def mode(self) -> torch.Tensor:
+        if self._sparse_mask:
+            return F.one_hot(super().mode, self.num_samples)
         if hasattr(self, "logits"):
             return (self.logits == self.logits.max(-1, True)[0]).to(torch.long)
         else:
