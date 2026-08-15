@@ -118,6 +118,22 @@ class TestDiffusionBCLoss:
         loss_td = loss_fn(td)
         assert loss_td["loss_diffusion_bc"].shape == torch.Size([])
 
+    @pytest.mark.parametrize("batch_size", [[], [2, 3]])
+    def test_batch_shapes(self, batch_size):
+        actor = self._make_actor()
+        loss_fn = DiffusionBCLoss(actor)
+        td = TensorDict(
+            {
+                "observation": torch.randn(*batch_size, 4),
+                "action": torch.randn(*batch_size, 2),
+            },
+            batch_size=batch_size,
+        )
+        loss = loss_fn(td)["loss_diffusion_bc"]
+        loss.backward()
+        assert loss.shape == torch.Size([])
+        assert all(parameter.grad is not None for parameter in actor.parameters())
+
     @pytest.mark.parametrize("action_dim,obs_dim", [(2, 4), (4, 8), (6, 12)])
     def test_various_dims(self, action_dim, obs_dim):
         actor = self._make_actor(action_dim=action_dim, obs_dim=obs_dim)

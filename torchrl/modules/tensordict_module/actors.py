@@ -2742,6 +2742,16 @@ class _DDPMModule(nn.Module):
         self.register_buffer("alphas", alphas)
         self.register_buffer("alphas_cumprod", alphas_cumprod)
 
+    def _schedule(
+        self, reference: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        dtype = reference.dtype
+        if dtype in (torch.float16, torch.bfloat16):
+            dtype = torch.float32
+        betas = self.betas.to(device=reference.device, dtype=dtype)
+        alphas = 1.0 - betas
+        return betas, alphas, torch.cumprod(alphas, dim=0)
+
     def add_noise(
         self, clean_action: torch.Tensor, t: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -2761,14 +2771,16 @@ class _DDPMModule(nn.Module):
             Tuple of ``(noisy_action, noise)`` both of shape
             ``(..., action_dim)``.
         """
-        alpha_bar_t = self.alphas_cumprod.to(clean_action.device)[t]  # (...)
+        _, _, alphas_cumprod = self._schedule(clean_action)
+        alpha_bar_t = alphas_cumprod[t]  # (...)
         # Broadcast scalar/batch alpha_bar_t to match action dimensions
         while alpha_bar_t.dim() < clean_action.dim():
             alpha_bar_t = alpha_bar_t.unsqueeze(-1)
         noise = torch.randn_like(clean_action)
         noisy_action = (
-            alpha_bar_t.sqrt() * clean_action + (1.0 - alpha_bar_t).sqrt() * noise
-        )
+            alpha_bar_t.sqrt() * clean_action.to(alpha_bar_t.dtype)
+            + (1.0 - alpha_bar_t).sqrt() * noise.to(alpha_bar_t.dtype)
+        ).to(clean_action.dtype)
         return noisy_action, noise
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
@@ -2786,20 +2798,20 @@ class _DDPMModule(nn.Module):
         """
         batch_shape = observation.shape[:-1]
         device = observation.device
+        dtype = observation.dtype
         deterministic = interaction_type() == InteractionType.DETERMINISTIC
 
-        # Move schedule buffers to the observation device
-        betas = self.betas.to(device)
-        alphas = self.alphas.to(device)
-        alphas_cumprod = self.alphas_cumprod.to(device)
+        betas, alphas, alphas_cumprod = self._schedule(observation)
+        schedule_dtype = betas.dtype
 
         # Start from pure Gaussian noise
-        x = torch.randn(*batch_shape, self.action_dim, device=device)
+        if deterministic:
+            x = torch.zeros(*batch_shape, self.action_dim, device=device, dtype=dtype)
+        else:
+            x = torch.randn(*batch_shape, self.action_dim, device=device, dtype=dtype)
 
         for t in reversed(range(self.num_steps)):
-            t_tensor = torch.full(
-                (*batch_shape, 1), t, dtype=torch.float32, device=device
-            )
+            t_tensor = torch.full((*batch_shape, 1), t, dtype=dtype, device=device)
             model_input = torch.cat([x, observation, t_tensor], dim=-1)
             predicted_noise = self.score_network(model_input)
 
@@ -2808,6 +2820,8 @@ class _DDPMModule(nn.Module):
             alpha_bar_t = alphas_cumprod[t]
 
             # DDPM reverse step
+            x = x.to(schedule_dtype)
+            predicted_noise = predicted_noise.to(schedule_dtype)
             x = (1.0 / alpha_t.sqrt()) * (
                 x - (beta_t / (1.0 - alpha_bar_t).sqrt()) * predicted_noise
             )
@@ -2820,6 +2834,7 @@ class _DDPMModule(nn.Module):
                     beta_t.sqrt() * noise,
                     torch.zeros_like(x),
                 )
+            x = x.to(dtype)
 
         return x
 

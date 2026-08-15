@@ -501,6 +501,26 @@ class TestDiffusionActor:
         for p in actor.parameters():
             assert p.grad is not None
 
+    @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+    def test_dtype(self, dtype):
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3).to(dtype)
+        td = TensorDict({"observation": torch.randn(4, 3, dtype=dtype)}, batch_size=[4])
+        action = actor(td)["action"]
+        assert action.dtype is dtype
+        assert action.isfinite().all()
+
+    def test_deterministic(self):
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3)
+        observation = torch.randn(4, 3)
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            action0 = actor(
+                TensorDict({"observation": observation.clone()}, batch_size=[4])
+            )["action"]
+            action1 = actor(
+                TensorDict({"observation": observation.clone()}, batch_size=[4])
+            )["action"]
+        torch.testing.assert_close(action0, action1, rtol=0, atol=0)
+
 
 @pytest.mark.parametrize("device", get_default_devices())
 def test_actorcritic(device):
