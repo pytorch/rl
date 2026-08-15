@@ -910,13 +910,16 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         action = _tensor_to_ndarray(action_tensor)
 
         # vmap expects a flat leading batch dim, so collapse [d0, d1, ...] → [d0*d1*...].
-        state = _tree_flatten(state, self.batch_size)
-        action = _tree_flatten(action, self.batch_size)
+        # A one-dimensional batch already has the expected shape.
+        if len(self.batch_size) != 1:
+            state = _tree_flatten(state, self.batch_size)
+            action = _tree_flatten(action, self.batch_size)
 
         next_state = self._vmap_jit_env_step(state, action)
 
         # Restore the original batch shape after vmap.
-        next_state = _tree_reshape(next_state, self.batch_size)
+        if len(self.batch_size) != 1:
+            next_state = _tree_reshape(next_state, self.batch_size)
         self._current_state = next_state
 
         done_shape = (*self.batch_size, 1)
