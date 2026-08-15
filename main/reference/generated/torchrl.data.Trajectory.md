@@ -1,6 +1,6 @@
 # Trajectory
 
-*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4bb3138270>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
+*class*torchrl.data.Trajectory(*data: 'TensorDictBase' = <property object at 0x7f4a9d5eaca0>*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/query.html#Trajectory)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -788,7 +788,7 @@ Loads a tensordict from disk within the current tensordict.
 
 This class method is a proxy to `load_memmap_()`.
 
-load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*) → Any
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -844,6 +844,13 @@ the leaves of a compressed archive (deflate entries are
 inflated in parallel, which scales nearly linearly). Without
 compression, loading is a metadata-only operation and this
 argument has no effect. Defaults to `0` (sequential).
+- **allow_pickle** (*bool**,**optional*) - whether pickled non-tensor fields
+may be loaded. Pickle can execute arbitrary code, so pass
+`True` only for data from a trusted source and `False`
+for untrusted data. During the 0.14 compatibility window,
+omitting this option loads pickle with a `FutureWarning`;
+the default will change to `False` in 0.15. Saves without
+a pickle sidecar do not require this option.
 
 Examples
 
@@ -1115,11 +1122,16 @@ Examples
 >>> buffer = td.memmap_like("/path/to/dataset")
 ```
 
-memmap_refresh_()
+memmap_refresh_(***, *allow_pickle: bool | None = None*)
 
 Refreshes the content of the memory-mapped tensordict if it has a [`saved_path`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.saved_path).
 
 This method will raise an exception if no path is associated with it.
+
+Parameters:
+
+**allow_pickle** (*bool**,**optional*) - whether pickled non-tensor fields
+may be loaded. See `load_memmap()`.
 
 save(*prefix: str | None = None*, *copy_existing: bool = False*, ***, *num_threads: int = 0*, *return_early: bool = False*, *share_non_tensor: bool = False*, *robust_key: bool | None = True*, *archive: bool | None = None*, *compression: str | int | None = None*) → Any
 

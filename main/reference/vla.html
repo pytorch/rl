@@ -70,7 +70,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
-<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:version" content="main (0.14.0)">
 <meta name="llm:project" content="torchrl">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
@@ -176,7 +176,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -458,7 +458,7 @@
         
         <div class="navbar-item desktop-only-version">
           
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
         </div>
       
@@ -812,7 +812,7 @@ document.write(`
     <div class="sidebar-header-items__start">
       <div class="navbar-item">
         
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
       </div>
     </div>
@@ -2464,7 +2464,7 @@ document.write(`
 <p id="ref-vla">Vision-Language-Action (VLA) models map one or more camera images,
 optional proprioceptive state, and a natural-language instruction to robot
 actions – usually emitted as a short <em>action chunk</em> of future steps. TorchRL
-treats a VLA as an ordinary TensorDict-first policy: a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>
+treats a VLA as an ordinary TensorDict-first policy: a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>
 fed by composable transforms, trained by a <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LossModule</span></code></a>,
 and rolled out by the standard collectors. This page documents the data
 schema, transforms, policies and objectives that make robot VLA workflows
@@ -2846,7 +2846,7 @@ available for ratios:</p>
 </section>
 <section id="policies">
 <h2>Policies<a class="headerlink" href="#policies" title="Link to this heading">#</a></h2>
-<p>A VLA policy is an ordinary <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a> that
+<p>A VLA policy is an ordinary <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a> that
 maps images, optional proprioceptive state and a language instruction to an
 action chunk (continuous), action tokens (discrete), or both.
 <a class="reference internal" href="generated/torchrl.modules.vla.VLAWrapperBase.html#torchrl.modules.vla.VLAWrapperBase" title="torchrl.modules.vla.VLAWrapperBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">VLAWrapperBase</span></code></a> fixes that contract with explicit

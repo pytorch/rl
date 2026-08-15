@@ -70,7 +70,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
-<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:version" content="main (0.14.0)">
 <meta name="llm:project" content="torchrl">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
@@ -176,7 +176,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -458,7 +458,7 @@
         
         <div class="navbar-item desktop-only-version">
           
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
         </div>
       
@@ -812,7 +812,7 @@ document.write(`
     <div class="sidebar-header-items__start">
       <div class="navbar-item">
         
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
       </div>
     </div>
@@ -2540,7 +2540,7 @@ with <code class="docutils literal notranslate"><span class="pre">replay_buffer.
 </section>
 <section id="the-carrier">
 <h2>The carrier<a class="headerlink" href="#the-carrier" title="Link to this heading">#</a></h2>
-<p>The <strong>carrier</strong> is the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> instance stored as
+<p>The <strong>carrier</strong> is the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> instance stored as
 <code class="docutils literal notranslate"><span class="pre">self._carrier</span></code>. It persists across calls to <code class="docutils literal notranslate"><span class="pre">next(iter(collector))</span></code> and
 holds the post-reset result of the previous environment step, which is the
 state that the next policy call must consume. It is initialized by
@@ -2683,7 +2683,7 @@ Use it to step a profiler, mark a section in NVTX, or update a
 worker-local counter.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code></dt><dd><p>Called with the batch tensordict immediately before it is yielded to the
-consumer. Receives the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> that will be
+consumer. Receives the <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> that will be
 yielded. Return value is ignored. Use it to log metrics derived from the
 batch.</p>
 </dd>

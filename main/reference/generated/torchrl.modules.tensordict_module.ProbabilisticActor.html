@@ -70,7 +70,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
-<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:version" content="main (0.14.0)">
 <meta name="llm:project" content="torchrl">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
@@ -176,7 +176,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -458,7 +458,7 @@
         
         <div class="navbar-item desktop-only-version">
           
-  <a href="../../index.html" class="version">main (0.13.0)</a>
+  <a href="../../index.html" class="version">main (0.14.0)</a>
 
         </div>
       
@@ -812,7 +812,7 @@ document.write(`
     <div class="sidebar-header-items__start">
       <div class="navbar-item">
         
-  <a href="../../index.html" class="version">main (0.13.0)</a>
+  <a href="../../index.html" class="version">main (0.14.0)</a>
 
       </div>
     </div>
@@ -2513,7 +2513,7 @@ occur because of exploration policies or numerical under/overflow
 issues. If this value is out of bounds, it is projected back onto the
 desired space using the <code class="xref py py-obj docutils literal notranslate"><span class="pre">TensorSpec.project</span></code>
 method. Default is <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>default_interaction_type</strong> (<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="(in tensordict v0.13)"><em>tensordict.nn.InteractionType</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
+<li><p><strong>default_interaction_type</strong> (<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.InteractionType.html#tensordict.nn.InteractionType" title="(in tensordict v0.14)"><em>tensordict.nn.InteractionType</em></a><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Default method to be used to retrieve
 the output value. Should be one of: <code class="docutils literal notranslate"><span class="pre">InteractionType.MODE</span></code>, <code class="docutils literal notranslate"><span class="pre">InteractionType.DETERMINISTIC</span></code>,
 <code class="docutils literal notranslate"><span class="pre">InteractionType.MEDIAN</span></code>, <code class="docutils literal notranslate"><span class="pre">InteractionType.MEAN</span></code> or
@@ -2537,10 +2537,10 @@ instances will use <cite>set_interaction_type</cite> to
 <li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> class to
 be used for sampling.
-Default is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.distributions.Delta</span></code></a>.</p>
+Default is <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.distributions.Delta</span></code></a>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>if <code class="docutils literal notranslate"><span class="pre">distribution_class</span></code> is of type <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a>,
+<p>if <code class="docutils literal notranslate"><span class="pre">distribution_class</span></code> is of type <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a>,
 the keys will be inferred from the <code class="docutils literal notranslate"><span class="pre">distribution_map</span></code> / <code class="docutils literal notranslate"><span class="pre">name_map</span></code> keyword arguments of that
 distribution. If this distribution is used with another constructor (e.g.,  partial or lambda function)
 then the out_keys will need to be provided explicitly.

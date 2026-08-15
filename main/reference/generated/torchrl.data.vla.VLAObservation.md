@@ -764,7 +764,7 @@ Loads a tensordict from disk.
 
 This class method is a proxy to `load_memmap()`.
 
-load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*) → Any
+load_memmap(*device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *non_blocking: bool = False*, ***, *out: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) | None = None*, *robust_key: bool | None = True*, *subpath: NestedKey | None = None*, *mode: str = 'r'*, *num_threads: int = 0*, *allow_pickle: bool | None = None*) → Any
 
 Loads a memory-mapped tensordict from disk.
 
@@ -820,6 +820,13 @@ the leaves of a compressed archive (deflate entries are
 inflated in parallel, which scales nearly linearly). Without
 compression, loading is a metadata-only operation and this
 argument has no effect. Defaults to `0` (sequential).
+- **allow_pickle** (*bool**,**optional*) - whether pickled non-tensor fields
+may be loaded. Pickle can execute arbitrary code, so pass
+`True` only for data from a trusted source and `False`
+for untrusted data. During the 0.14 compatibility window,
+omitting this option loads pickle with a `FutureWarning`;
+the default will change to `False` in 0.15. Saves without
+a pickle sidecar do not require this option.
 
 Examples
 

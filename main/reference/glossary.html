@@ -70,7 +70,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
-<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:version" content="main (0.14.0)">
 <meta name="llm:project" content="torchrl">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
@@ -176,7 +176,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -458,7 +458,7 @@
         
         <div class="navbar-item desktop-only-version">
           
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
         </div>
       
@@ -812,7 +812,7 @@ document.write(`
     <div class="sidebar-header-items__start">
       <div class="navbar-item">
         
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
       </div>
     </div>
@@ -2481,7 +2481,7 @@ implementations are <a class="reference internal" href="generated/torchrl.envs.S
 <code class="docutils literal notranslate"><span class="pre">BatchedEnvBase</span></code>. Their <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> is the
 leading shape of reset, step, and collector outputs.</p>
 </dd>
-<dt id="term-carrier">carrier<a class="headerlink" href="#term-carrier" title="Link to this term">#</a></dt><dd><p>The <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> stored as <code class="docutils literal notranslate"><span class="pre">self._carrier</span></code> inside
+<dt id="term-carrier">carrier<a class="headerlink" href="#term-carrier" title="Link to this term">#</a></dt><dd><p>The <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> stored as <code class="docutils literal notranslate"><span class="pre">self._carrier</span></code> inside
 <a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.rollout" title="torchrl.collectors.Collector.rollout"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rollout()</span></code></a>. It persists across
 collector batches and holds the post-reset environment output that the
 next policy call consumes. See <a class="reference internal" href="collectors_internals.html#ref-collectors-internals"><span class="std std-ref">Collector Internals</span></a> for the
@@ -2532,14 +2532,14 @@ distributed <code class="docutils literal notranslate"><span class="pre">Collect
 </dd>
 <dt id="term-functional-loss">functional (loss)<a class="headerlink" href="#term-functional-loss" title="Link to this term">#</a></dt><dd><p>A <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LossModule</span></code></a> is <em>functional</em> when it stores
 its actor / critic parameters as a stateless tensordict and invokes the
-networks with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams.to_module" title="(in tensordict v0.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a> at call time.
+networks with <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams.to_module" title="(in tensordict v0.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a> at call time.
 This is what makes soft / target update, <code class="docutils literal notranslate"><span class="pre">separate_losses=True</span></code>, and
 per-parameter optimiser groups possible without deep-copying the
 underlying <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code>. Check <code class="docutils literal notranslate"><span class="pre">loss.functional</span></code> to see which mode a
 given loss is in.</p>
 </dd>
 <dt id="term-in_keys">in_keys<a class="headerlink" href="#term-in_keys" title="Link to this term">#</a></dt><dt id="term-out_keys">out_keys<a class="headerlink" href="#term-out_keys" title="Link to this term">#</a></dt><dd><p>The list of tensordict keys a module reads from (<code class="docutils literal notranslate"><span class="pre">in_keys</span></code>) and writes
-to (<code class="docutils literal notranslate"><span class="pre">out_keys</span></code>). Both <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> and most
+to (<code class="docutils literal notranslate"><span class="pre">out_keys</span></code>). Both <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> and most
 TorchRL loss / value-estimator components expose these as constructor
 arguments. Modifying them lets you wire a module into a tensordict layout
 that differs from the defaults; see <span class="xref std std-ref">data_layout</span>

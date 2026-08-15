@@ -70,7 +70,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
-<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:version" content="main (0.14.0)">
 <meta name="llm:project" content="torchrl">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
@@ -176,7 +176,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+  document.documentElement.setAttribute('data-version', 'main (0.14.0)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -458,7 +458,7 @@
         
         <div class="navbar-item desktop-only-version">
           
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
         </div>
       
@@ -812,7 +812,7 @@ document.write(`
     <div class="sidebar-header-items__start">
       <div class="navbar-item">
         
-  <a href="../index.html" class="version">main (0.13.0)</a>
+  <a href="../index.html" class="version">main (0.14.0)</a>
 
       </div>
     </div>
@@ -2472,7 +2472,7 @@ document.write(`
 <h1>Recurrent modules<a class="headerlink" href="#recurrent-modules" title="Link to this heading">#</a></h1>
 <p>TorchRL recurrent modules wrap PyTorch RNNs in TensorDict-aware modules.
 <a class="reference internal" href="generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a> and <a class="reference internal" href="generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRUModule</span></code></a> read observations and recurrent
-state entries from a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, write features and
+state entries from a <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, write features and
 <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">...)</span></code> recurrent states back to it, and use the <code class="docutils literal notranslate"><span class="pre">is_init</span></code> key to
 reset hidden states at trajectory boundaries.</p>
 <p>The recurrent modules are designed for the contiguous trajectory layout

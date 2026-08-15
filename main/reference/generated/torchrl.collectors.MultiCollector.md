@@ -629,14 +629,6 @@ Returns:
 A callable to be executed after each rollout, receiving the collected
 TensorDict as argument, or None.
 
-*property*postprocs
-
-use `postproc` instead. Will be removed in v0.14.
-
-Type:
-
-Deprecated
-
 *property*pre_collect_hook*: Callable[[], None] | None*
 
 Get the pre-collection hook.
