@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-08-14
+# Flaky Test Report - 2026-08-15
 
 ## Summary
 
 - **Flaky tests**: 7
 - **Newly flaky** (last 7 days): 7
 - **Resolved**: 0
-- **Total tests analyzed**: 31513
+- **Total tests analyzed**: 31526
 - **CI runs analyzed**: 45
 
 ---
@@ -14,13 +14,13 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...torages.py::TestStorages::test__rand_given_ndim_recompile` 🆕 | 24.5% (40/163) | 40 | 0.49 | 2026-08-12 |
-| `...s_kwargs_have_config_fields[TensorDictReplayBufferConfig]` 🆕 | 8.0% (13/163) | 13 | 0.16 | 2026-08-13 |
-| `...py::TestDreamerV3Components::test_block_gru_torch_compile` 🆕 | 7.4% (8/108) | 8 | 0.15 | 2026-08-13 |
-| `..._rsample_and_log_prob[device0-True-False--1.0-1.0-dtype0]` 🆕 | 6.2% (4/64) | 4 | 0.10 | 2026-08-13 |
-| `..._rsample_and_log_prob[device0-True-False--1.0-1.0-dtype1]` 🆕 | 6.2% (4/64) | 4 | 0.10 | 2026-08-13 |
-| `..._rsample_and_log_prob[device0-True-False--2.0-3.0-dtype0]` 🆕 | 6.2% (4/64) | 4 | 0.10 | 2026-08-13 |
-| `..._rsample_and_log_prob[device0-True-False--2.0-3.0-dtype1]` 🆕 | 6.2% (4/64) | 4 | 0.10 | 2026-08-13 |
+| `...torages.py::TestStorages::test__rand_given_ndim_recompile` 🆕 | 19.6% (32/163) | 32 | 0.39 | 2026-08-12 |
+| `...s_kwargs_have_config_fields[TensorDictReplayBufferConfig]` 🆕 | 8.0% (13/163) | 13 | 0.16 | 2026-08-14 |
+| `...py::TestDreamerV3Components::test_block_gru_torch_compile` 🆕 | 7.9% (12/152) | 12 | 0.16 | 2026-08-14 |
+| `..._rsample_and_log_prob[device0-True-False--1.0-1.0-dtype0]` 🆕 | 7.4% (8/108) | 8 | 0.15 | 2026-08-14 |
+| `..._rsample_and_log_prob[device0-True-False--1.0-1.0-dtype1]` 🆕 | 7.4% (8/108) | 8 | 0.15 | 2026-08-14 |
+| `..._rsample_and_log_prob[device0-True-False--2.0-3.0-dtype0]` 🆕 | 7.4% (8/108) | 8 | 0.15 | 2026-08-14 |
+| `..._rsample_and_log_prob[device0-True-False--2.0-3.0-dtype1]` 🆕 | 7.4% (8/108) | 8 | 0.15 | 2026-08-14 |
 
 
 ### Newly Flaky Tests
@@ -44,4 +44,4 @@
 
 ---
 
-*Generated at 2026-08-14T06:37:59.010370+00:00*
+*Generated at 2026-08-15T06:14:42.942296+00:00*
