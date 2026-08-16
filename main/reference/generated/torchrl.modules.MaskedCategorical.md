@@ -71,6 +71,10 @@ Parameters:
 
 **value** (*Tensor*) -
 
+*property*mode*: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*
+
+Returns the mode of the distribution.
+
 *property*padding_value
 
 Padding value of the distribution mask.
