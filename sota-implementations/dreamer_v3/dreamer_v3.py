@@ -41,7 +41,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import get_available_device, logger as torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer, Unbounded
 from torchrl.data.replay_buffers.samplers import SliceSampler
@@ -108,7 +108,7 @@ def adaptive_grad_clip_(parameters, clip: float, minimum: float = 1e-3) -> None:
         parameter.grad.mul_(scale)
 
 
-def make_env(cfg: DictConfig, seed: int = 0):
+def make_env(cfg: DictConfig, seed: int = 0) -> TransformedEnv:
     if cfg.env.backend == "gym":
         base_env = GymEnv(cfg.env.name, device="cpu")
     elif cfg.env.backend == "dm_control":
@@ -366,7 +366,7 @@ def build_value(*, cfg: DictConfig):
     return value_model
 
 
-def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
+def build_mb_env(*, cfg: DictConfig, real_env, imagination_model, device: torch.device):
     """Imagination env backed by the trained prior and reward head."""
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
     primer_env = TransformedEnv(
@@ -382,6 +382,7 @@ def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
         world_model=imagination_model,
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([cfg.networks.rnn_hidden_dim]),
+        device=device,
     )
     mb_env.set_specs_from_env(primer_env)
     with torch.no_grad():
@@ -400,6 +401,7 @@ def eval_episode_reward(
                 max_steps=max_episode_steps,
                 policy=actor,
                 break_when_any_done=True,
+                auto_cast_to_device=True,
             )
             totals.append(td.get(("next", "reward")).sum())
     return torch.stack(totals).mean()
@@ -409,6 +411,11 @@ def eval_episode_reward(
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
 
+    device = (
+        torch.device(cfg.optimization.device)
+        if cfg.optimization.device
+        else get_available_device()
+    )
     real_env = make_env(cfg, cfg.env.seed)
     obs_dim = real_env.observation_spec["observation"].shape[0]
     action_dim = real_env.action_spec.shape[0]
@@ -421,18 +428,22 @@ def main(cfg: DictConfig):
         reward_decoder,
         continuation_net,
     ) = build_world_model(cfg=cfg, obs_dim=obs_dim, action_dim=action_dim)
+    world_model = world_model.to(device)
     imagination_model = build_imagination_model(
         prior_net=prior_net,
         reward_net=reward_net,
         reward_decoder=reward_decoder,
+    ).to(device)
+    continuation_model = build_continuation_model(continuation_net=continuation_net).to(
+        device
     )
-    continuation_model = build_continuation_model(continuation_net=continuation_net)
-    actor_model = build_actor(cfg=cfg, action_dim=action_dim)
-    value_model = build_value(cfg=cfg)
+    actor_model = build_actor(cfg=cfg, action_dim=action_dim).to(device)
+    value_model = build_value(cfg=cfg).to(device)
     mb_env = build_mb_env(
         cfg=cfg,
         real_env=make_env(cfg, cfg.env.seed + 1),
         imagination_model=imagination_model,
+        device=device,
     )
 
     model_loss = DreamerV3ModelLoss(
@@ -446,7 +457,7 @@ def main(cfg: DictConfig):
         lambda_continue=1.0,
         continue_target_scale=1 - 1 / cfg.optimization.continuation_horizon,
         global_average=True,  # state-based obs, not (C, H, W) pixels
-    )
+    ).to(device)
     model_loss.set_keys(pixels="observation")
     actor_loss = DreamerV3ActorLoss(
         actor_model,
@@ -463,13 +474,14 @@ def main(cfg: DictConfig):
         gamma=cfg.optimization.gamma,
         lmbda=cfg.optimization.lmbda,
     )
+    actor_loss.to(device)
     value_loss = DreamerV3ValueLoss(
         value_model,
         value_loss="two_hot",
         num_value_bins=cfg.networks.num_value_bins,
         actor_loss=actor_loss,
         slow_critic_regularization=cfg.optimization.slow_critic_regularization,
-    )
+    ).to(device)
     value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
 
     optimizer_kwargs = {
@@ -504,7 +516,9 @@ def main(cfg: DictConfig):
         actor_model,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=cfg.env.device,
+        policy_device=device,
+        env_device="cpu",
+        storing_device="cpu",
         exploration_type=ExplorationType.RANDOM
         if cfg.collector.exploration == "random"
         else ExplorationType.MODE,
@@ -560,10 +574,12 @@ def main(cfg: DictConfig):
         if len(rb) < warmup:
             continue
 
-        batch_losses = torch.empty(updates_per_batch, 4)
+        batch_losses = torch.empty(updates_per_batch, 4, device=device)
         for update_index in range(updates_per_batch):
-            sample = rb.sample().reshape(
-                cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len
+            sample = (
+                rb.sample()
+                .reshape(cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len)
+                .to(device)
             )
 
             sample.set(
@@ -572,6 +588,7 @@ def main(cfg: DictConfig):
                     cfg.replay_buffer.batch_size,
                     cfg.replay_buffer.seq_len,
                     state_dim,
+                    device=sample.device,
                 ),
             )
             sample.set(
@@ -580,6 +597,7 @@ def main(cfg: DictConfig):
                     cfg.replay_buffer.batch_size,
                     cfg.replay_buffer.seq_len,
                     cfg.networks.rnn_hidden_dim,
+                    device=sample.device,
                 ),
             )
 

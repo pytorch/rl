@@ -21,6 +21,11 @@ of length 64, a replay ratio of 1024, and 1.1 million environment steps. It logs
 evaluation return against environment steps to JSON so curves can be compared
 without relying on wall-clock-dependent training iterations.
 
+Real collection and evaluation environments run on CPU; `optimization.device`
+selects where the models, losses and policy run and defaults to `null`, which
+auto-selects an available accelerator. Pass `optimization.device=cpu` to force
+CPU execution.
+
 For a three-seed median and interquartile reproduction run:
 
 ```bash
