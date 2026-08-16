@@ -3,7 +3,6 @@ env:
   name: Pendulum-v1
   task: null
   seed: 0
-  device: cpu
   max_episode_steps: 200
 
 collector:
@@ -41,6 +40,7 @@ networks:
   policy_max_std: 1.0
 
 optimization:
+  device:            # training device (models, losses, policy). null=auto
   lr: 4.0e-5
   adam_eps: 1.0e-20
   adaptive_grad_clip: 0.3
