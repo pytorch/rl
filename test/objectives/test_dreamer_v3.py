@@ -865,9 +865,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             reward_head,
             reward_decoder,
             continuation_head,
-        ) = example["build_world_model"](
-            cfg=cfg, obs_dim=3, action_dim=self.action_dim
-        )
+        ) = example["build_world_model"](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
         imagination_model = example["build_imagination_model"](
             prior_net=prior,
             reward_net=reward_head,
@@ -876,9 +874,9 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         continuation_model = example["build_continuation_model"](
             continuation_net=continuation_head
         ).to(device)
-        actor_model = example["build_actor"](
-            cfg=cfg, action_dim=self.action_dim
-        ).to(device)
+        actor_model = example["build_actor"](cfg=cfg, action_dim=self.action_dim).to(
+            device
+        )
         real_actor = example["build_real_actor"](
             observation_encoder=observation_encoder,
             posterior_net=posterior,
@@ -933,9 +931,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         real_input = TensorDict(
             {
                 "observation": observation,
-                "belief": torch.zeros(
-                    1, cfg.networks.rnn_hidden_dim, device=device
-                ),
+                "belief": torch.zeros(1, cfg.networks.rnn_hidden_dim, device=device),
             },
             [1],
         )
@@ -1241,8 +1237,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         torch.manual_seed(0)
         out_d = rollout(td_d)
         action_effect = (
-            out_c["next", "prior_logits"][:, 2]
-            - out_d["next", "prior_logits"][:, 2]
+            out_c["next", "prior_logits"][:, 2] - out_d["next", "prior_logits"][:, 2]
         ).abs()
         assert action_effect.max() > 1e-6
 
