@@ -872,7 +872,8 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         state = self._vmap_jit_env_reset(jax.numpy.stack(keys))
         # vmap output has leading dim = batch_size.numel() (flat).
         # _tree_reshape restores the original batch shape (e.g. [4, 8]).
-        state = _tree_reshape(state, self.batch_size)
+        if len(self.batch_size) != 1:
+            state = _tree_reshape(state, self.batch_size)
         # Store JAX state directly — avoids converting MJX/pytree state to
         # TensorDict and back, which breaks MJX's metadata pytree registration.
         self._current_state = state
