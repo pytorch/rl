@@ -66,6 +66,7 @@ from torchrl.objectives import (
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
+    symexp,
     symlog,
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
@@ -146,6 +147,13 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     """
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
 
+    observation_encoder = DreamerV3MLP(
+        in_features=obs_dim,
+        out_features=cfg.networks.obs_embed_dim,
+        depth=cfg.networks.encoder_layers,
+        num_cells=cfg.networks.hidden_dim,
+        norm_eps=cfg.networks.norm_eps,
+    )
     encoder = TensorDictSequential(
         TensorDictModule(
             symlog,
@@ -153,13 +161,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
             out_keys=[("next", "symlog_observation")],
         ),
         TensorDictModule(
-            DreamerV3MLP(
-                in_features=obs_dim,
-                out_features=cfg.networks.obs_embed_dim,
-                depth=cfg.networks.encoder_layers,
-                num_cells=cfg.networks.hidden_dim,
-                norm_eps=cfg.networks.norm_eps,
-            ),
+            observation_encoder,
             in_keys=[("next", "symlog_observation")],
             out_keys=[("next", "encoded_latents")],
         ),
@@ -167,7 +169,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
 
     prior_net = RSSMPriorV3(
         action_shape=torch.Size([action_dim]),
-        hidden_dim=cfg.networks.rnn_hidden_dim,
+        hidden_dim=cfg.networks.hidden_dim,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
@@ -190,7 +192,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     )
 
     posterior_net = RSSMPosteriorV3(
-        hidden_dim=cfg.networks.rnn_hidden_dim,
+        hidden_dim=cfg.networks.hidden_dim,
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
@@ -208,16 +210,23 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
 
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior)
 
-    decoder = TensorDictModule(
-        DreamerV3MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=obs_dim,
-            depth=cfg.networks.decoder_layers,
-            num_cells=cfg.networks.hidden_dim,
-            norm_eps=cfg.networks.norm_eps,
+    decoder = TensorDictSequential(
+        TensorDictModule(
+            DreamerV3MLP(
+                in_features=state_dim + cfg.networks.rnn_hidden_dim,
+                out_features=obs_dim,
+                depth=cfg.networks.decoder_layers,
+                num_cells=cfg.networks.hidden_dim,
+                norm_eps=cfg.networks.norm_eps,
+            ),
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reco_symlog_observation")],
         ),
-        in_keys=[("next", "state"), ("next", "belief")],
-        out_keys=[("next", "reco_pixels")],
+        TensorDictModule(
+            symexp,
+            in_keys=[("next", "reco_symlog_observation")],
+            out_keys=[("next", "reco_pixels")],
+        ),
     )
 
     reward_net = DreamerV3MLP(
@@ -258,7 +267,15 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     world_model = TensorDictSequential(
         encoder, rollout, decoder, reward_head, continuation_head
     )
-    return world_model, prior_net, reward_net, reward_decoder, continuation_net
+    return (
+        world_model,
+        observation_encoder,
+        prior_net,
+        posterior_net,
+        reward_net,
+        reward_decoder,
+        continuation_net,
+    )
 
 
 def build_imagination_model(*, prior_net, reward_net, reward_decoder):
@@ -330,6 +347,33 @@ def build_actor(*, cfg: DictConfig, action_dim: int):
             )
         )
     return actor_model
+
+
+def build_real_actor(*, observation_encoder, posterior_net, prior_net, actor_model):
+    """Build the observation-conditioned recurrent policy used in real envs."""
+    return TensorDictSequential(
+        TensorDictModule(
+            symlog,
+            in_keys=["observation"],
+            out_keys=["symlog_observation"],
+        ),
+        TensorDictModule(
+            observation_encoder,
+            in_keys=["symlog_observation"],
+            out_keys=["encoded_latents"],
+        ),
+        TensorDictModule(
+            posterior_net,
+            in_keys=["belief", "encoded_latents"],
+            out_keys=["_", "state"],
+        ),
+        actor_model,
+        TensorDictModule(
+            prior_net,
+            in_keys=["state", "belief", "action"],
+            out_keys=["_", "_", ("next", "belief")],
+        ),
+    )
 
 
 def build_value(*, cfg: DictConfig):
@@ -423,7 +467,9 @@ def main(cfg: DictConfig):
 
     (
         world_model,
+        observation_encoder,
         prior_net,
+        posterior_net,
         reward_net,
         reward_decoder,
         continuation_net,
@@ -438,6 +484,12 @@ def main(cfg: DictConfig):
         device
     )
     actor_model = build_actor(cfg=cfg, action_dim=action_dim).to(device)
+    real_actor = build_real_actor(
+        observation_encoder=observation_encoder,
+        posterior_net=posterior_net,
+        prior_net=prior_net,
+        actor_model=actor_model,
+    )
     value_model = build_value(cfg=cfg).to(device)
     mb_env = build_mb_env(
         cfg=cfg,
@@ -456,7 +508,7 @@ def main(cfg: DictConfig):
         unimix=cfg.networks.unimix,
         lambda_continue=1.0,
         continue_target_scale=1 - 1 / cfg.optimization.continuation_horizon,
-        global_average=True,  # state-based obs, not (C, H, W) pixels
+        global_average=False,
     ).to(device)
     model_loss.set_keys(pixels="observation")
     actor_loss = DreamerV3ActorLoss(
@@ -513,7 +565,7 @@ def main(cfg: DictConfig):
 
     collector = Collector(
         explore_env,
-        actor_model,
+        real_actor,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         policy_device=device,
@@ -521,7 +573,7 @@ def main(cfg: DictConfig):
         storing_device="cpu",
         exploration_type=ExplorationType.RANDOM
         if cfg.collector.exploration == "random"
-        else ExplorationType.MODE,
+        else ExplorationType.DETERMINISTIC,
     )
 
     rb = ReplayBuffer(
@@ -568,7 +620,15 @@ def main(cfg: DictConfig):
         )
 
     for data in collector:
-        rb.extend(data.reshape(-1))
+        replay_data = data.select(
+            "action",
+            "is_init",
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "terminated"),
+            ("collector", "traj_ids"),
+        )
+        rb.extend(replay_data.reshape(-1))
         env_step += data.numel()
 
         if len(rb) < warmup:
@@ -634,7 +694,7 @@ def main(cfg: DictConfig):
             opt_actor.zero_grad(set_to_none=True)
             a_td["loss_actor"].backward()
             adaptive_grad_clip_(
-                actor_loss.parameters(), cfg.optimization.adaptive_grad_clip
+                actor_model.parameters(), cfg.optimization.adaptive_grad_clip
             )
             opt_actor.step()
             schedulers[1].step()
@@ -666,7 +726,7 @@ def main(cfg: DictConfig):
             latest_losses = batch_losses[-1].cpu()
             r = eval_episode_reward(
                 eval_env,
-                actor_model,
+                real_actor,
                 cfg.logger.eval_episodes,
                 cfg.env.max_episode_steps,
             )

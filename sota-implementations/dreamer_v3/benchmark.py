@@ -42,6 +42,7 @@ def main() -> None:
     parser.add_argument("overrides", nargs="*")
     args = parser.parse_args()
 
+    args.output_dir = args.output_dir.resolve()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     script = Path(__file__).with_name("dreamer_v3.py")
     metrics_paths = []

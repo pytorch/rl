@@ -820,8 +820,8 @@ class RSSMRolloutV3(TensorDictModuleBase):
         rssm_posterior (TensorDictModule): Posterior module wrapping
             :class:`RSSMPosteriorV3`.
         reset_key (NestedKey or None, optional): Boolean key marking the first
-            transition of an episode. State, belief, and action are zeroed at
-            those positions. Defaults to ``"is_init"``.
+            transition of an episode. State and belief are zeroed at those
+            positions. Defaults to ``"is_init"``.
 
     Examples:
         >>> import torch
@@ -899,12 +899,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
             if reset is not None:
                 state = _tensordict.get("state")
                 belief = _tensordict.get("belief")
-                action = _tensordict.get("action")
                 while reset.ndim < state.ndim:
                     reset = reset.unsqueeze(-1)
                 _tensordict.set("state", torch.where(reset, 0, state))
                 _tensordict.set("belief", torch.where(reset, 0, belief))
-                _tensordict.set("action", torch.where(reset, 0, action))
             self.rssm_prior(_tensordict)
             self.rssm_posterior(_tensordict)
 
