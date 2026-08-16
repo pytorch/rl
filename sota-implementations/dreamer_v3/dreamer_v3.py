@@ -522,13 +522,8 @@ def main(cfg: DictConfig):
     env_step = 0
     history_steps: list[int] = []
     history_eval: list[torch.Tensor] = []
-    loss_hist: dict[str, list[torch.Tensor]] = {
-        "kl": [],
-        "reco": [],
-        "reward": [],
-        "actor": [],
-        "value": [],
-    }
+    loss_history: list[torch.Tensor] = []
+    record_loss_history = bool(cfg.logger.output_plot and _has_matplotlib)
     next_eval = 0
 
     eval_env = TransformedEnv(
@@ -565,7 +560,8 @@ def main(cfg: DictConfig):
         if len(rb) < warmup:
             continue
 
-        for _ in range(updates_per_batch):
+        batch_losses = torch.empty(updates_per_batch, 4)
+        for update_index in range(updates_per_batch):
             sample = rb.sample().reshape(
                 cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len
             )
@@ -635,13 +631,21 @@ def main(cfg: DictConfig):
             schedulers[2].step()
             value_target_updater.step()
 
-            loss_hist["kl"].append(model_kl.detach())
-            loss_hist["reco"].append(m_td["loss_model_reco"].detach())
-            loss_hist["reward"].append(m_td["loss_model_reward"].detach())
-            loss_hist["actor"].append(a_td["loss_actor"].detach())
-            loss_hist["value"].append(v_td["loss_value"].detach())
+            batch_losses[update_index] = torch.stack(
+                (
+                    model_kl.detach().reshape(()),
+                    m_td["loss_model_reco"].detach().reshape(()),
+                    m_td["loss_model_reward"].detach().reshape(()),
+                    a_td["loss_actor"].detach().reshape(()),
+                )
+            )
+
+        if record_loss_history:
+            batch_losses = batch_losses.cpu()
+            loss_history.append(batch_losses)
 
         if env_step >= next_eval:
+            latest_losses = batch_losses[-1].cpu()
             r = eval_episode_reward(
                 eval_env,
                 actor_model,
@@ -654,10 +658,10 @@ def main(cfg: DictConfig):
                 "[env_step=%5d] eval_reward=%+.2f kl=%.3f reco=%.3f reward=%.3f actor=%.3f",
                 env_step,
                 r.item(),
-                loss_hist["kl"][-1].item(),
-                loss_hist["reco"][-1].item(),
-                loss_hist["reward"][-1].item(),
-                loss_hist["actor"][-1].item(),
+                latest_losses[0].item(),
+                latest_losses[1].item(),
+                latest_losses[2].item(),
+                latest_losses[3].item(),
             )
             next_eval = env_step + cfg.logger.eval_every
 
@@ -666,15 +670,10 @@ def main(cfg: DictConfig):
 
         eval_steps = history_steps
         eval_rewards = torch.stack(history_eval).cpu().numpy() if history_eval else []
-        kl_vals = torch.stack(loss_hist["kl"]).cpu().numpy() if loss_hist["kl"] else []
-        reco_vals = (
-            torch.stack(loss_hist["reco"]).cpu().numpy() if loss_hist["reco"] else []
-        )
-        reward_vals = (
-            torch.stack(loss_hist["reward"]).cpu().numpy()
-            if loss_hist["reward"]
-            else []
-        )
+        loss_curves = torch.cat(loss_history).numpy() if loss_history else None
+        kl_vals = loss_curves[:, 0] if loss_curves is not None else []
+        reco_vals = loss_curves[:, 1] if loss_curves is not None else []
+        reward_vals = loss_curves[:, 2] if loss_curves is not None else []
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
         axes[0].plot(eval_steps, eval_rewards, marker="o")
