@@ -911,7 +911,6 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         action = _tensor_to_ndarray(action_tensor)
 
         # vmap expects a flat leading batch dim, so collapse [d0, d1, ...] → [d0*d1*...].
-        # A one-dimensional batch already has the expected shape.
         if len(self.batch_size) != 1:
             state = _tree_flatten(state, self.batch_size)
             action = _tree_flatten(action, self.batch_size)
