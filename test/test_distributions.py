@@ -881,6 +881,16 @@ class TestMaskedCategorical:
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
 
+    def test_sparse_mode_uses_original_indices(self) -> None:
+        logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
+        indices = torch.tensor([[0, 2], [1, 3]])
+        dist = MaskedCategorical(logits=logits, indices=indices)
+        expected = torch.tensor([2, 1])
+
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        assert torch.isfinite(dist.log_prob(dist.mode)).all()
+
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     @pytest.mark.parametrize("sparse", [False, True])
     @pytest.mark.parametrize("ndim", [2, 1, 3])
@@ -1136,6 +1146,16 @@ class TestMaskedOneHotCategorical:
         samples = dist.sample([num_samples]).argmax(-1)
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
+
+    def test_sparse_mode_uses_original_indices(self) -> None:
+        logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
+        indices = torch.tensor([[0, 2], [1, 3]])
+        dist = MaskedOneHotCategorical(logits=logits, indices=indices)
+        expected = F.one_hot(torch.tensor([2, 1]), num_classes=4)
+
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        assert torch.isfinite(dist.log_prob(dist.mode)).all()
 
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     def test_sample_sparse(self, neg_inf: float) -> None:
