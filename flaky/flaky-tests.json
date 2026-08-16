@@ -1,28 +1,28 @@
 {
-  "generated_at": "2026-08-15T06:14:42.942296+00:00",
+  "generated_at": "2026-08-16T06:14:21.783597+00:00",
   "analysis_period": {
-    "start": "2026-08-11",
-    "end": "2026-08-14",
+    "start": "2026-08-12",
+    "end": "2026-08-16",
     "runs_analyzed": 45
   },
   "summary": {
     "total_tests": 31526,
-    "flaky_count": 7,
-    "new_flaky_count": 7,
+    "flaky_count": 10,
+    "new_flaky_count": 10,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
       "nodeid": "test/rb/test_storages.py::TestStorages::test__rand_given_ndim_recompile",
       "executions": 163,
-      "failures": 32,
-      "failure_rate": 0.1963,
-      "flaky_score": 0.3926,
-      "passed": 88,
-      "failed": 32,
+      "failures": 16,
+      "failure_rate": 0.0982,
+      "flaky_score": 0.1963,
+      "passed": 104,
+      "failed": 16,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 3.816,
+      "avg_duration": 3.839,
       "recent_failures": [
         "2026-08-12T17:30:35Z",
         "2026-08-12T17:30:35Z",
@@ -30,7 +30,28 @@
         "2026-08-12T17:30:35Z",
         "2026-08-12T17:30:35Z"
       ],
-      "first_seen_flaky": "2026-08-11T15:59:48Z",
+      "first_seen_flaky": "2026-08-12T17:27:14Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_block_gru_torch_compile",
+      "executions": 163,
+      "failures": 13,
+      "failure_rate": 0.0798,
+      "flaky_score": 0.1595,
+      "passed": 150,
+      "failed": 13,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 7.82,
+      "recent_failures": [
+        "2026-08-14T08:36:57Z",
+        "2026-08-14T08:41:06Z",
+        "2026-08-14T09:22:00Z",
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T18:52:36Z"
+      ],
+      "first_seen_flaky": "2026-08-12T17:27:14Z",
       "is_new": true
     },
     {
@@ -45,118 +66,151 @@
       "reruns": 0,
       "avg_duration": 0.001,
       "recent_failures": [
-        "2026-08-13T09:03:06Z",
-        "2026-08-14T08:20:19Z",
         "2026-08-14T08:36:57Z",
         "2026-08-14T08:41:06Z",
-        "2026-08-14T09:22:00Z"
+        "2026-08-14T09:22:00Z",
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T18:52:36Z"
       ],
-      "first_seen_flaky": "2026-08-11T15:59:48Z",
-      "is_new": true
-    },
-    {
-      "nodeid": "test/modules/test_dreamer_components.py::TestDreamerV3Components::test_block_gru_torch_compile",
-      "executions": 152,
-      "failures": 12,
-      "failure_rate": 0.0789,
-      "flaky_score": 0.1579,
-      "passed": 140,
-      "failed": 12,
-      "error": 0,
-      "reruns": 0,
-      "avg_duration": 7.707,
-      "recent_failures": [
-        "2026-08-13T09:03:06Z",
-        "2026-08-14T08:20:19Z",
-        "2026-08-14T08:36:57Z",
-        "2026-08-14T08:41:06Z",
-        "2026-08-14T09:22:00Z"
-      ],
-      "first_seen_flaky": "2026-08-12T09:25:16Z",
+      "first_seen_flaky": "2026-08-12T17:27:14Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--1.0-1.0-dtype0]",
-      "executions": 108,
-      "failures": 8,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.1481,
-      "passed": 80,
-      "failed": 8,
+      "executions": 130,
+      "failures": 10,
+      "failure_rate": 0.0769,
+      "flaky_score": 0.1538,
+      "passed": 96,
+      "failed": 10,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.787,
+      "avg_duration": 0.811,
       "recent_failures": [
-        "2026-08-13T09:03:06Z",
-        "2026-08-14T08:20:19Z",
         "2026-08-14T08:36:57Z",
         "2026-08-14T08:41:06Z",
-        "2026-08-14T09:22:00Z"
+        "2026-08-14T09:22:00Z",
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T18:52:36Z"
       ],
       "first_seen_flaky": "2026-08-13T07:37:15Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--1.0-1.0-dtype1]",
-      "executions": 108,
-      "failures": 8,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.1481,
-      "passed": 80,
-      "failed": 8,
+      "executions": 130,
+      "failures": 10,
+      "failure_rate": 0.0769,
+      "flaky_score": 0.1538,
+      "passed": 96,
+      "failed": 10,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.329,
+      "avg_duration": 0.322,
       "recent_failures": [
-        "2026-08-13T09:03:06Z",
-        "2026-08-14T08:20:19Z",
         "2026-08-14T08:36:57Z",
         "2026-08-14T08:41:06Z",
-        "2026-08-14T09:22:00Z"
+        "2026-08-14T09:22:00Z",
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T18:52:36Z"
       ],
       "first_seen_flaky": "2026-08-13T07:37:15Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--2.0-3.0-dtype0]",
-      "executions": 108,
-      "failures": 8,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.1481,
-      "passed": 80,
-      "failed": 8,
+      "executions": 130,
+      "failures": 10,
+      "failure_rate": 0.0769,
+      "flaky_score": 0.1538,
+      "passed": 96,
+      "failed": 10,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.366,
+      "avg_duration": 0.356,
       "recent_failures": [
-        "2026-08-13T09:03:06Z",
-        "2026-08-14T08:20:19Z",
         "2026-08-14T08:36:57Z",
         "2026-08-14T08:41:06Z",
-        "2026-08-14T09:22:00Z"
+        "2026-08-14T09:22:00Z",
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T18:52:36Z"
       ],
       "first_seen_flaky": "2026-08-13T07:37:15Z",
       "is_new": true
     },
     {
       "nodeid": "test/test_distributions.py::TestTanhNormal::test_tanhnormal_rsample_and_log_prob[device0-True-False--2.0-3.0-dtype1]",
-      "executions": 108,
-      "failures": 8,
-      "failure_rate": 0.0741,
-      "flaky_score": 0.1481,
-      "passed": 80,
-      "failed": 8,
+      "executions": 130,
+      "failures": 10,
+      "failure_rate": 0.0769,
+      "flaky_score": 0.1538,
+      "passed": 96,
+      "failed": 10,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.289,
+      "avg_duration": 0.281,
       "recent_failures": [
-        "2026-08-13T09:03:06Z",
-        "2026-08-14T08:20:19Z",
         "2026-08-14T08:36:57Z",
         "2026-08-14T08:41:06Z",
-        "2026-08-14T09:22:00Z"
+        "2026-08-14T09:22:00Z",
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T18:52:36Z"
       ],
       "first_seen_flaky": "2026-08-13T07:37:15Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/rb/test_rb_core.py::test_replay_buffer_prefetch_state_dict_roundtrip",
+      "executions": 33,
+      "failures": 2,
+      "failure_rate": 0.0606,
+      "flaky_score": 0.0485,
+      "passed": 31,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.008,
+      "recent_failures": [
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T06:24:50Z"
+      ],
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/rb/test_rb_core.py::test_replay_buffer_load_state_dict_waits_for_in_flight_samples",
+      "executions": 33,
+      "failures": 2,
+      "failure_rate": 0.0606,
+      "flaky_score": 0.0485,
+      "passed": 31,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.01,
+      "recent_failures": [
+        "2026-08-15T18:52:36Z",
+        "2026-08-15T18:52:36Z"
+      ],
+      "first_seen_flaky": "2026-08-15T18:52:36Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/rb/test_rb_core.py::test_replay_buffer_prefetch_dumps_roundtrip",
+      "executions": 33,
+      "failures": 2,
+      "failure_rate": 0.0606,
+      "flaky_score": 0.0485,
+      "passed": 31,
+      "failed": 2,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.012,
+      "recent_failures": [
+        "2026-08-15T06:24:50Z",
+        "2026-08-15T06:24:50Z"
+      ],
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     }
   ],
