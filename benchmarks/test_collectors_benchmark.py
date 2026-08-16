@@ -479,9 +479,9 @@ def test_compiled_policy_large_observation(benchmark):
             iterations=1,
             rounds=10,
         )
-        benchmark.extra_info["cuda_peak_allocated_bytes"] = (
-            torch.cuda.max_memory_allocated(device)
-        )
+        benchmark.extra_info[
+            "cuda_peak_allocated_bytes"
+        ] = torch.cuda.max_memory_allocated(device)
     finally:
         try:
             collector.shutdown()
