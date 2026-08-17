@@ -29,6 +29,8 @@ from tensordict.utils import NestedKey, unravel_key
 from torchrl._utils import _maybe_record_function_decorator
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.modules.distributions import HAS_ENTROPY
+from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.modules.functional import symexp as _symexp, symlog as symlog
 from torchrl.modules.models.model_based_v3 import (  # noqa: F401
     _default_bins,
@@ -421,7 +423,7 @@ class DreamerV3ModelLoss(LossModule):
         else:
             reco_loss = (symlog(pixels) - symlog(reco_pixels)).abs()
         if not self.global_average:
-            reco_loss = reco_loss.sum((-3, -2, -1))
+            reco_loss = reco_loss.reshape(*tensordict.batch_size, -1).sum(-1)
         reco_loss = reco_loss.mean().unsqueeze(-1)
 
         # ---- Reward loss ----
@@ -631,6 +633,7 @@ class DreamerV3ActorLoss(LossModule):
             belief (NestedKey): Deterministic GRU hidden state. Defaults to ``"belief"``.
             reward (NestedKey): Imagined reward. Defaults to ``"reward"``.
             value (NestedKey): State value. Defaults to ``"state_value"``.
+            action (NestedKey): Imagined action. Defaults to ``"action"``.
             action_log_prob (NestedKey): Log-prob of the taken action.
                 Defaults to ``"action_log_prob"``.
             done (NestedKey): Done flag. Defaults to ``"done"``.
@@ -645,6 +648,7 @@ class DreamerV3ActorLoss(LossModule):
         belief: NestedKey = "belief"
         reward: NestedKey = "reward"
         value: NestedKey = "state_value"
+        action: NestedKey = "action"
         action_log_prob: NestedKey = "action_log_prob"
         done: NestedKey = "done"
         terminated: NestedKey = "terminated"
@@ -760,11 +764,21 @@ class DreamerV3ActorLoss(LossModule):
             ).cumprod(dim=-2)
         else:
             discount = torch.ones_like(lambda_target)
-        fake_data.set(self.tensor_keys.discount_weight, discount.detach())
+        discount = discount.detach()
+        fake_data.set(self.tensor_keys.discount_weight, discount)
+
+        if self.use_reinforce or self.entropy_bonus > 0:
+            actor_inputs = fake_data.select(
+                *self.actor_model.in_keys, strict=False
+            ).detach()
+            policy_distribution = self.actor_model.get_dist(actor_inputs)
 
         if self.use_reinforce:
-            # REINFORCE: log pi(a|z) * sg(A_t)
-            log_prob = fake_data.get(self.tensor_keys.action_log_prob)
+            # REINFORCE: score a stopped action from a stopped imagined state.
+            # The rollout action is reparameterized, so its cached log-probability
+            # has a pathwise component and is not a score-function estimator.
+            action = fake_data.get(self.tensor_keys.action).detach()
+            log_prob = policy_distribution.log_prob(action)
             log_prob = _match_trailing_dim(log_prob, lambda_target)
             with hold_out_net(self.value_model):
                 baseline_td = fake_data.select(*self.value_model.in_keys, strict=False)
@@ -773,19 +787,22 @@ class DreamerV3ActorLoss(LossModule):
             advantage = (lambda_target - baseline).detach()
             return_scale = self._return_scale(lambda_target)
             advantage = advantage / return_scale
-            actor_loss = -(discount * log_prob * advantage).sum((-2, -1)).mean()
+            actor_loss = -(discount * log_prob * advantage).mean()
         else:
             # Reparameterization gradient
             return_scale = torch.ones(
                 (), dtype=lambda_target.dtype, device=lambda_target.device
             )
-            actor_loss = -(discount * lambda_target).sum((-2, -1)).mean()
+            actor_loss = -(discount * lambda_target).mean()
 
-        # Entropy bonus (if actor provides log_prob)
-        log_prob_for_entropy = fake_data.get(self.tensor_keys.action_log_prob, None)
-        if log_prob_for_entropy is not None and self.entropy_bonus > 0:
-            log_prob_for_entropy = _match_trailing_dim(log_prob_for_entropy, discount)
-            entropy = -(discount * log_prob_for_entropy).sum((-2, -1)).mean()
+        if self.entropy_bonus > 0:
+            if HAS_ENTROPY.get(type(policy_distribution), False):
+                entropy = policy_distribution.entropy()
+            else:
+                _, entropy_log_prob = rsample_and_log_prob(policy_distribution)
+                entropy = -entropy_log_prob
+            entropy = _match_trailing_dim(entropy, discount)
+            entropy = (discount * entropy).mean()
             actor_loss = actor_loss - self.entropy_bonus * entropy
 
         loss_tensordict = TensorDict(
