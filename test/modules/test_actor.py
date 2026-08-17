@@ -502,8 +502,9 @@ class TestDiffusionActor:
             assert p.grad is not None
 
     @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-    def test_dtype(self, dtype):
+    def test_reduced_precision_schedule(self, dtype):
         actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3).to(dtype)
+        assert actor.module.alphas_cumprod.dtype is torch.float32
         td = TensorDict({"observation": torch.randn(4, 3, dtype=dtype)}, batch_size=[4])
         action = actor(td)["action"]
         assert action.dtype is dtype
@@ -520,6 +521,25 @@ class TestDiffusionActor:
                 TensorDict({"observation": observation.clone()}, batch_size=[4])
             )["action"]
         torch.testing.assert_close(action0, action1, rtol=0, atol=0)
+
+    @pytest.mark.parametrize(
+        ("dtype", "num_steps"),
+        [(torch.bfloat16, 258), (torch.float16, 2050)],
+    )
+    def test_timestep_dtype_resolution(self, dtype, num_steps):
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=num_steps).to(dtype)
+        td = TensorDict({"observation": torch.randn(4, 3, dtype=dtype)}, [4])
+        with pytest.raises(ValueError, match="cannot be represented"):
+            actor(td)
+
+    def test_schedule_buffers_are_authoritative(self):
+        actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3)
+        actor.module.alphas_cumprod.fill_(1)
+        clean_action = torch.randn(4, 2)
+        noisy_action, _ = actor.module.add_noise(
+            clean_action, torch.zeros(4, dtype=torch.long)
+        )
+        torch.testing.assert_close(noisy_action, clean_action)
 
 
 @pytest.mark.parametrize("device", get_default_devices())

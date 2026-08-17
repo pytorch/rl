@@ -140,7 +140,7 @@ class DiffusionBCLoss(LossModule):
         clean_action = tensordict[self.tensor_keys.action]
         observation = tensordict[self.tensor_keys.observation]
 
-        batch_shape = tensordict.batch_size
+        batch_shape = clean_action.shape[:-1]
         device = clean_action.device
 
         with self.actor_network_params.to_module(

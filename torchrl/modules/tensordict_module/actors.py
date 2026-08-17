@@ -2742,15 +2742,40 @@ class _DDPMModule(nn.Module):
         self.register_buffer("alphas", alphas)
         self.register_buffer("alphas_cumprod", alphas_cumprod)
 
+    def _apply(self, fn, recurse=True):
+        schedule = {
+            "betas": self.betas,
+            "alphas": self.alphas,
+            "alphas_cumprod": self.alphas_cumprod,
+        }
+        super()._apply(fn, recurse=recurse)
+        for name, value in schedule.items():
+            target = getattr(self, name)
+            setattr(self, name, value.to(device=target.device))
+        return self
+
     def _schedule(
         self, reference: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         dtype = reference.dtype
         if dtype in (torch.float16, torch.bfloat16):
             dtype = torch.float32
-        betas = self.betas.to(device=reference.device, dtype=dtype)
-        alphas = 1.0 - betas
-        return betas, alphas, torch.cumprod(alphas, dim=0)
+        return (
+            self.betas.to(device=reference.device, dtype=dtype),
+            self.alphas.to(device=reference.device, dtype=dtype),
+            self.alphas_cumprod.to(device=reference.device, dtype=dtype),
+        )
+
+    def _validate_timestep_dtype(self, dtype: torch.dtype) -> None:
+        max_steps = {
+            torch.bfloat16: 257,
+            torch.float16: 2049,
+        }.get(dtype)
+        if max_steps is not None and self.num_steps > max_steps:
+            raise ValueError(
+                f"num_steps={self.num_steps} cannot be represented without duplicate "
+                f"timesteps in {dtype}. Use at most {max_steps} steps or a float32 model."
+            )
 
     def add_noise(
         self, clean_action: torch.Tensor, t: torch.Tensor
@@ -2771,6 +2796,7 @@ class _DDPMModule(nn.Module):
             Tuple of ``(noisy_action, noise)`` both of shape
             ``(..., action_dim)``.
         """
+        self._validate_timestep_dtype(clean_action.dtype)
         _, _, alphas_cumprod = self._schedule(clean_action)
         alpha_bar_t = alphas_cumprod[t]  # (...)
         # Broadcast scalar/batch alpha_bar_t to match action dimensions
@@ -2787,8 +2813,9 @@ class _DDPMModule(nn.Module):
         """Run the full DDPM reverse chain conditioned on *observation*.
 
         Respects :func:`~tensordict.nn.probabilistic.interaction_type`:
-        when the interaction type is ``DETERMINISTIC``, the stochastic noise
-        injection step is skipped, producing a deterministic (mean) trajectory.
+        when the interaction type is ``DETERMINISTIC``, the chain starts from
+        an all-zero latent and skips stochastic noise injection. This produces
+        repeatable output but does not sample from the Gaussian DDPM prior.
 
         Args:
             observation: ``(..., obs_dim)`` tensor.
@@ -2800,11 +2827,11 @@ class _DDPMModule(nn.Module):
         device = observation.device
         dtype = observation.dtype
         deterministic = interaction_type() == InteractionType.DETERMINISTIC
+        self._validate_timestep_dtype(dtype)
 
         betas, alphas, alphas_cumprod = self._schedule(observation)
         schedule_dtype = betas.dtype
 
-        # Start from pure Gaussian noise
         if deterministic:
             x = torch.zeros(*batch_shape, self.action_dim, device=device, dtype=dtype)
         else:
@@ -2850,8 +2877,9 @@ class DiffusionActor(SafeModule):
     ``out_keys=["action"]``.
 
     Respects :func:`~tensordict.nn.probabilistic.interaction_type`: setting
-    the interaction type to ``DETERMINISTIC`` disables stochastic noise
-    injection during the reverse chain, yielding a deterministic output.
+    the interaction type to ``DETERMINISTIC`` starts from an all-zero latent
+    and disables stochastic noise injection during the reverse chain. The
+    result is repeatable but is not a sample from the Gaussian DDPM prior.
 
     Args:
         action_dim (int): Dimensionality of the action space.
@@ -2864,7 +2892,10 @@ class DiffusionActor(SafeModule):
             last dimension.  If ``None``, a two-hidden-layer MLP of width 256
             with a :class:`~torch.nn.LazyLinear` first layer is constructed
             automatically (``obs_dim`` need not be specified in this case).
-        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.
+        num_steps (int): Number of DDPM denoising steps. Reduced-precision
+            models require at most 257 steps for bfloat16 and 2049 steps for
+            float16 so every raw integer timestep remains distinct. Defaults
+            to 100.
         beta_start (float): Starting beta for the linear schedule.
             Defaults to 1e-4.
         beta_end (float): Ending beta for the linear schedule.
