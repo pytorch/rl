@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -99,6 +101,23 @@ class TestDiffusionBCLoss:
         loss_td = loss_fn(td)
         assert "loss_diffusion_bc" in loss_td.keys()
 
+    def test_nested_keys(self):
+        actor = self._make_actor()
+        loss_fn = DiffusionBCLoss(actor)
+        loss_fn.set_keys(
+            action=("data", "demo_action"), observation=("data", "observation")
+        )
+        td = TensorDict(
+            {
+                "data": {
+                    "observation": torch.randn(8, 4),
+                    "demo_action": torch.randn(8, 2),
+                }
+            },
+            batch_size=[8],
+        )
+        assert loss_fn(td)["loss_diffusion_bc"].isfinite()
+
     def test_in_keys(self):
         actor = self._make_actor()
         loss_fn = DiffusionBCLoss(actor)
@@ -117,6 +136,29 @@ class TestDiffusionBCLoss:
         td = self._make_batch(batch_size=batch_size)
         loss_td = loss_fn(td)
         assert loss_td["loss_diffusion_bc"].shape == torch.Size([])
+
+    @pytest.mark.parametrize(
+        ("batch_size", "data_shape"),
+        [
+            ([], []),
+            ([8], [8]),
+            ([2, 3], [2, 3]),
+            (None, [8]),
+            ([8], [8, 5]),
+        ],
+    )
+    def test_batch_layouts(self, batch_size, data_shape):
+        actor = self._make_actor()
+        loss_fn = DiffusionBCLoss(actor)
+        data = {
+            "observation": torch.randn(*data_shape, 4),
+            "action": torch.randn(*data_shape, 2),
+        }
+        td = TensorDict(data) if batch_size is None else TensorDict(data, batch_size)
+        loss = loss_fn(td)["loss_diffusion_bc"]
+        loss.backward()
+        assert loss.shape == torch.Size([])
+        assert all(parameter.grad is not None for parameter in actor.parameters())
 
     @pytest.mark.parametrize("action_dim,obs_dim", [(2, 4), (4, 8), (6, 12)])
     def test_various_dims(self, action_dim, obs_dim):
@@ -146,3 +188,8 @@ class TestDiffusionBCLoss:
         assert (
             final_loss < initial_loss
         ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
