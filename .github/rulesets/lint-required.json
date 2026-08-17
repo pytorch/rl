@@ -1,0 +1,24 @@
+{
+  "name": "Require lint on protected branches",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main", "refs/heads/nightly", "refs/heads/release/*"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "lint-done" },
+          { "context": "Meta CLA Check", "integration_id": 1425812 }
+        ]
+      }
+    }
+  ]
+}
