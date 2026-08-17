@@ -32,11 +32,11 @@ class BatchedEnvConfig(EnvConfig):
     create_env_fn: Any = MISSING
     num_workers: int = 1
     create_env_kwargs: dict = field(default_factory=dict)
-    batched_env_type: Literal["parallel", "serial", "async"] = "parallel"
+    batched_env_type: str = "parallel"
     device: str | None = None
-    backend: Literal["threading", "multiprocessing", "asyncio"] = "threading"
-    stack: Literal["dense", "maybe_dense", "lazy"] = "dense"
-    exchange: Literal["queue", "shm"] = "queue"
+    backend: str = "threading"
+    stack: str = "dense"
+    exchange: str = "queue"
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_batched_env"
 
     def __post_init__(self) -> None:
@@ -89,6 +89,23 @@ def make_batched_env(
 
     if num_workers is None:
         raise ValueError("num_workers must be provided")
+
+    if batched_env_type not in ("parallel", "serial", "async"):
+        raise ValueError(
+            "batched_env_type must be 'parallel', 'serial', or 'async', "
+            f"got {batched_env_type!r}."
+        )
+    if backend not in ("threading", "multiprocessing", "asyncio"):
+        raise ValueError(
+            "backend must be 'threading', 'multiprocessing', or 'asyncio', "
+            f"got {backend!r}."
+        )
+    if stack not in ("dense", "maybe_dense", "lazy"):
+        raise ValueError(
+            "stack must be 'dense', 'maybe_dense', or 'lazy', " f"got {stack!r}."
+        )
+    if exchange not in ("queue", "shm"):
+        raise ValueError(f"exchange must be 'queue' or 'shm', got {exchange!r}.")
 
     # If create_env_fn is a config object, create a lambda that instantiates it each time
     if isinstance(create_env_fn, EnvBase):

@@ -189,7 +189,7 @@ class _SharedSlotExchange:
     ) -> list[tuple]:
         descriptors = _receive_batch(result_queue, min_get, max_get, timeout)
         self._record_received(descriptors, max_get=max_get, track_action=track_action)
-        return descriptors
+        return sorted(descriptors, key=lambda descriptor: descriptor[0])
 
     def receive_one(self, result_queue, *, track_action: bool) -> tuple:
         descriptor = result_queue.get()

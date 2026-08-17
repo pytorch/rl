@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import threading
 from functools import partial
 
 import numpy as np
@@ -59,6 +60,20 @@ from torchrl.testing.mocking_classes import (
     NestedCountingEnv,
     Str2StrEnv,
 )
+
+
+class _DelayedCountingEnv(CountingEnv):
+    def __init__(self, *args, delay: float, **kwargs):
+        self.delay = delay
+        super().__init__(*args, **kwargs)
+
+    def _reset(self, tensordict, **kwargs):
+        threading.Event().wait(self.delay)
+        return super()._reset(tensordict, **kwargs)
+
+    def _step(self, tensordict):
+        threading.Event().wait(self.delay)
+        return super()._step(tensordict)
 
 
 def test_callable_metadata_env_closes_when_extraction_fails(monkeypatch):
@@ -853,6 +868,31 @@ class TestAsyncEnvPool:
             stats = env.stats()
             assert stats["avg_batch_to_action_ms"] > 0
             assert stats["consumer_busy_fraction"] > 0
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_full_batch_preserves_env_order(self):
+        makers = [
+            partial(
+                _DelayedCountingEnv,
+                delay=(3 - index) * 0.05,
+                max_steps=100,
+                start_val=index,
+            )
+            for index in range(4)
+        ]
+        env = AsyncEnvPool(makers, backend="multiprocessing", exchange="shm")
+        try:
+            reset = env.reset()
+            expected = torch.arange(4, dtype=torch.int32)
+            torch.testing.assert_close(reset["observation"].squeeze(-1), expected)
+
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            step = env.step(reset)
+            torch.testing.assert_close(
+                step["next", "observation"].squeeze(-1), expected + 1
+            )
         finally:
             env._maybe_shutdown()
 

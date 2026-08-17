@@ -7,7 +7,6 @@ from __future__ import annotations
 import abc
 import multiprocessing
 import threading
-import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import as_completed, FIRST_COMPLETED, ThreadPoolExecutor, wait
 from multiprocessing import Queue
@@ -24,6 +23,7 @@ from tensordict import (
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _zip_strict, expand_as_right
 
+from torchrl._utils import timeit
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs._async_exchange import _receive_batch, _SharedSlotExchange
 from torchrl.envs.common import _EnvPostInit, EnvBase
@@ -1118,18 +1118,18 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         limit = len(futures) if max_get is None else max_get
         pending = set(futures)
         completed = []
-        deadline = None
+        deadline_timer = None
         while pending and len(completed) < min_get:
             done, pending = wait(pending, return_when=FIRST_COMPLETED)
             completed.extend(list(done)[: limit - len(completed)])
-            if deadline is None and timeout is not None:
-                deadline = time.monotonic() + timeout
+            if deadline_timer is None and timeout is not None:
+                deadline_timer = timeit("async_env_future_batch_deadline").start()
         while pending and len(completed) < limit:
             done = {future for future in pending if future.done()}
             if not done:
-                if deadline is None:
+                if deadline_timer is None:
                     break
-                remaining = deadline - time.monotonic()
+                remaining = timeout - deadline_timer.elapsed()
                 if remaining <= 0:
                     break
                 done, _ = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)

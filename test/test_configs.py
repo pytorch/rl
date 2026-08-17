@@ -443,6 +443,38 @@ class TestEnvConfigs:
         finally:
             env.close(raise_if_closed=False)
 
+    def test_batched_env_config_omegaconf_schema(self):
+        from omegaconf import OmegaConf
+        from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig
+
+        config = OmegaConf.structured(BatchedEnvConfig)
+        assert config.batched_env_type == "parallel"
+        assert config.backend == "threading"
+        assert config.stack == "dense"
+        assert config.exchange == "queue"
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("batched_env_type", "invalid"),
+            ("backend", "invalid"),
+            ("stack", "invalid"),
+            ("exchange", "invalid"),
+        ],
+    )
+    def test_batched_env_config_validation(self, field, value):
+        from torchrl.trainers.algorithms.configs.envs import make_batched_env
+
+        kwargs = {
+            "batched_env_type": "parallel",
+            "backend": "threading",
+            "stack": "dense",
+            "exchange": "queue",
+        }
+        kwargs[field] = value
+        with pytest.raises(ValueError, match=field):
+            make_batched_env(lambda: None, 1, **kwargs)
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"

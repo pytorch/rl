@@ -348,13 +348,13 @@ TensorDict payloads through queues:
 This mode requires identical child batch sizes, TensorDict keys, tensor shapes,
 and CPU devices. Queue exchange remains the default for dynamic or non-tensor
 data. Receive methods also accept ``max_get`` and ``timeout``. ``min_get`` is a
-hard lower bound. The timeout is not an overall receive deadline: the call can
-wait without a time limit for the first ``min_get`` results, then ``timeout``
-limits how long it waits to fill the batch up to ``max_get``. Exchange statistics
-are available through ``env.stats()``. Dense batches and per-environment receives
-own their tensor storage. Aggregate batches returned with ``stack="lazy"`` are
-views over the shared slots and remain valid only until actions are sent back to
-the corresponding environments.
+hard lower bound. The timeout starts when the first result arrives and does not
+limit the wait for ``min_get`` results. After ``min_get`` is reached, the call
+returns when that deadline expires or ``max_get`` results have arrived. Exchange
+statistics are available through ``env.stats()``. Dense batches and
+per-environment receives own their tensor storage. Aggregate batches returned
+with ``stack="lazy"`` are views over the shared slots and remain valid only until
+actions are sent back to the corresponding environments.
 
 .. note:: This class and its subclasses should work when nested in with :class:`~torchrl.envs.transforms.TransformedEnv` and
     batched environments, but users won't currently be able to use the async features of the base environment when
