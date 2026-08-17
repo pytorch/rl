@@ -2102,7 +2102,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     with _maybe_record_function("Collector.policy"):
                         policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
-                        policy_output = policy_output.clone()
+                        policy_output = policy_output.select(
+                            *self._policy_output_keys, strict=False
+                        ).clone()
                     if self._carrier is not policy_output:
                         # ad-hoc update carrier
                         self._carrier.update(
