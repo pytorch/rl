@@ -8,12 +8,14 @@ from torchrl._utils import logger as torchrl_logger
 
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
     TransportBackend,
     WeightStrategy,
     WeightSyncScheme,
 )
 
 
+@register_weight_sync_backend("rpc")
 class RPCWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization for torch.distributed.rpc.
 

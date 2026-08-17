@@ -43,6 +43,7 @@ from torch.utils._pytree import tree_flatten, tree_map
 from torchrl.data import (
     CompressedListStorage,
     ReplayBuffer,
+    Sequence,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -163,6 +164,50 @@ class TestStorages:
             storage2.get(range(10))
         )
 
+    @staticmethod
+    def _zero_state_dict_tensors(sd):
+        for value in sd.values():
+            if isinstance(value, torch.Tensor):
+                value.zero_()
+            elif isinstance(value, dict):
+                TestStorages._zero_state_dict_tensors(value)
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict"])
+    def test_load_state_dict_decouples_from_source(self, data_type):
+        # loading a state dict onto an uninitialized storage must clone the
+        # incoming tensors: aliasing them keeps e.g. mmap-backed tensors from
+        # torch.load(mmap=True) alive in the storage and leaks later mutations
+        # of the source state dict into the loaded data
+        if data_type == "tensor":
+            data = self._get_tensor()
+        else:
+            data = self._get_tensordict()
+        storage = TensorStorage(data)
+        sd = storage.state_dict()
+        storage2 = LazyTensorStorage(max_size=data.shape[0])
+        storage2.load_state_dict(sd)
+        before = storage2.get(range(10)).clone()
+        self._zero_state_dict_tensors(sd)
+        after = storage2.get(range(10))
+        if data_type == "tensor":
+            assert (after == before).all()
+        else:
+            assert_allclose_td(after, before)
+
+    def test_list_storage_load_state_dict_decouples_from_source(self):
+        storage = ListStorage(10)
+        storage.set(0, torch.randn(3))
+        storage.set(1, TensorDict({"a": torch.randn(3)}, [3]))
+        sd = storage.state_dict()
+        storage2 = ListStorage(10)
+        storage2.load_state_dict(sd)
+        before_tensor = storage2.get(0).clone()
+        before_td = storage2.get(1).clone()
+        sd["_storage"][0].zero_()
+        self._zero_state_dict_tensors(sd["_storage"][1])
+        assert (storage2.get(0) == before_tensor).all()
+        assert_allclose_td(storage2.get(1), before_td)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(),
@@ -272,8 +317,8 @@ class TestStorages:
         sys.version_info >= (3, 14),
         reason="torch.compile is not supported on Python 3.14+",
     )
-    # This test checks if the `torch._dynamo.disable` wrapper around
-    # `TensorStorage._rand_given_ndim` is still necessary.
+    # This test checks that mutable storage bookkeeping does not cause
+    # excessive recompilation when writes and sampling are compiled together.
     def test__rand_given_ndim_recompile(self):
         torch._dynamo.reset_code_caches()
 
@@ -308,12 +353,38 @@ class TestStorages:
             torch._logging.set_logs()
 
         assert len(storage) == num_extend * data_size
+        assert storage._mutation_revision == num_extend
+        assert storage._last_cursor_index == num_extend * data_size - 1
         assert len(records) <= 8, (
             "Excessive recompilations detected. Expected 8 or fewer, but got "
-            f"{len(records)}. This suggests the `torch.compiler.disable` "
-            "decorators may not be working properly or new recompilation "
-            "sources have been introduced."
+            f"{len(records)}. Mutable storage state may be guarded or a compiled "
+            "graph may no longer be reusable."
         )
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"), reason="requires Torch >= 2.5.0"
+    )
+    @pytest.mark.skipif(_os_is_windows, reason="windows tests do not support compile")
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="torch.compile is not supported on Python 3.14+",
+    )
+    def test_compilable_storage_set_fullgraph(self):
+        storage = LazyTensorStorage(100, compilable=True)
+        data = torch.arange(25).unsqueeze(-1)
+        storage.set(torch.arange(25), data)
+
+        @torch.compile(fullgraph=True)
+        def write(cursor, value):
+            storage.set(cursor, value)
+
+        write(torch.arange(25, 50), data)
+        write(torch.arange(50, 75), data)
+
+        assert len(storage) == 75
+        assert storage._mutation_revision == 3
+        assert storage._last_cursor_index == 74
+        torch.testing.assert_close(storage[:75], data.repeat(3, 1))
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack(self, storage_type):
@@ -839,6 +910,58 @@ class TestSharedStorageInit:
         assert (rb[index] == data).all()
         queue.put("done")
 
+    def revision_worker(self, rb, queue):
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        queue.put(rb.storage._mutation_revision)
+
+    def boundary_worker(self, rb, queue):
+        rb[1] = TensorDict(
+            {"obs": torch.tensor(1), ("next", "done"): torch.tensor(True)},
+            [],
+        )
+        queue.put(rb.storage._mutation_revision)
+
+    def test_mutation_revision_shared_across_processes(self):
+        storage = LazyTensorStorage(max_size=8)
+        rb = TensorDictReplayBuffer(storage=storage).share(True)
+        rb.extend(TensorDict({"x": torch.arange(2)}, batch_size=(2,)))
+        assert storage._mutation_revision == 1
+
+        queue = mp.Queue()
+        process = mp.Process(target=self.revision_worker, args=(rb, queue))
+        process.start()
+        process.join()
+        assert process.exitcode == 0
+        assert queue.get(timeout=5) == 2
+        assert storage._mutation_revision == 2
+        assert storage._last_cursor_index == 3
+
+    def test_sequence_boundary_cache_invalidated_across_processes(self):
+        done = torch.zeros(8, dtype=torch.bool)
+        done[[3, 7]] = True
+        storage = LazyTensorStorage(max_size=8)
+        rb = TensorDictReplayBuffer(storage=storage).share(True)
+        rb.extend(
+            TensorDict(
+                {"obs": torch.arange(8), ("next", "done"): done},
+                batch_size=(8,),
+            )
+        )
+        unit = Sequence(length=4)
+        before, _ = unit.expand(torch.tensor([0]), {}, storage)
+        assert before.tolist() == [0, 1, 2, 3]
+
+        queue = mp.Queue()
+        process = mp.Process(target=self.boundary_worker, args=(rb, queue))
+        process.start()
+        process.join()
+        assert process.exitcode == 0
+        assert queue.get(timeout=5) == 2
+
+        after, info = unit.expand(torch.tensor([0]), {}, storage)
+        assert after.tolist() == [0, 1, 1, 1]
+        assert info["validity_mask"].tolist() == [True, True, False, False]
+
     @pytest.mark.parametrize(
         "storage_cls, use_tmpdir",
         [
@@ -869,6 +992,18 @@ class TestSharedStorageInit:
         expected = {0.0, 1.0, 2.0, 3.0}
         assert expected.issubset(values)
         assert len(storage) >= 8
+
+    def test_shared_init_reconciles_non_cpu_device(self):
+        """Shared init installs a CPU memmap backing; a non-cpu storage device
+        must be reconciled (else samplers build indices on the wrong device)."""
+        storage = LazyTensorStorage(max_size=8, device="meta", shared_init=True)
+        rb = ReplayBuffer(storage=storage, batch_size=2)
+        data = TensorDict({"x": torch.arange(4, dtype=torch.float32)}, batch_size=(4,))
+        with pytest.warns(UserWarning, match="cannot be honored"):
+            rb.extend(data)
+        assert torch.device(storage.device).type == "cpu"
+        sample = rb.sample(2)
+        assert sample["x"].device.type == "cpu"
 
     def prioritized_collector_worker(self, rb, worker_id, queue):
         data = TensorDict(
@@ -926,6 +1061,18 @@ class TestSharedStorageInit:
         learner_rb.update_tensordict_priority(sample)
         sample = learner_rb.sample()
         assert sample["index"].device.type == "cpu"
+
+
+def test_compressed_storage_checkpointing_releases_staging_memmaps(tmp_path):
+    storage = CompressedListStorage(max_size=4)
+    storage.set(0, TensorDict({"observation": torch.randn(3)}, batch_size=[]))
+
+    checkpoint_path = tmp_path / "checkpoint"
+    storage.dumps(checkpoint_path)
+
+    assert (checkpoint_path / "compressed_data").is_dir()
+    assert (checkpoint_path / "metadata.json").is_file()
+    assert (checkpoint_path / "data_indices.json").is_file()
 
 
 @pytest.mark.skipif(not _has_zstandard, reason="zstandard required for this test.")

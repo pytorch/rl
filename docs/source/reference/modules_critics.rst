@@ -30,3 +30,24 @@ Value networks estimate the value of states or state-action pairs.
     OnlineDTActor
     DTActor
     DecisionTransformer
+
+Value transforms
+----------------
+
+Value transforms compress large reward and return scales into a numerically
+convenient prediction space and provide the inverse mapping needed before
+bootstrapping. They can be composed to build custom invertible mappings.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    ValueTransform
+    IdentityValueTransform
+    SymLogValueTransform
+    SignedHyperbolicValueTransform
+    ComposeValueTransform
+    functional.symlog
+    functional.symexp
+    functional.signed_hyperbolic
+    functional.signed_parabolic

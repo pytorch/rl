@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
+import sys
 import warnings
 from functools import partial
 
@@ -13,8 +15,12 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from tensordict import TensorDictBase
-from tensordict.nn import NormalParamExtractor
+from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import (
+    CompositeDistribution,
+    NormalParamExtractor,
+    set_composite_lp_aggregate,
+)
 from torch import autograd, nn
 from torch.utils._pytree import tree_map
 from torchrl.modules import (
@@ -32,10 +38,18 @@ from torchrl.modules.distributions import (
     MaskedOneHotCategorical,
     TanhDelta,
 )
-from torchrl.modules.distributions.continuous import SafeTanhTransform
+from torchrl.modules.distributions.continuous import (
+    SafeTanhTransform,
+    TORCH_VERSION_PRE_2_6,
+)
 from torchrl.modules.distributions.discrete import (
     _generate_ordinal_logits,
     LLMMaskedCategorical,
+)
+from torchrl.modules.distributions.utils import (
+    composite_entropy,
+    rsample_and_log_prob,
+    sample_and_log_prob,
 )
 
 from torchrl.testing import get_default_devices
@@ -51,6 +65,30 @@ class TestDelta:
         d = Delta(x)
         assert d.log_prob(d.mode).shape == x.shape[:-1]
         assert (d.log_prob(d.mode) == float("inf")).all()
+
+    def test_delta_multidimensional_event_shape(self, device):
+        param = torch.zeros(2, 3, 4, device=device)
+        dist = Delta(param, batch_shape=(2,), event_shape=(3, 4))
+
+        assert dist.log_prob(dist.param).shape == (2,)
+        mismatched = dist.param.clone()
+        mismatched[1, 0, 0] = 1
+        torch.testing.assert_close(
+            dist.log_prob(mismatched),
+            torch.tensor([float("inf"), -float("inf")], device=device),
+        )
+
+        expanded = dist.expand((5, 2))
+
+        assert expanded.param.shape == (5, 2, 3, 4)
+        assert expanded.batch_shape == (5, 2)
+        assert expanded.event_shape == (3, 4)
+        assert expanded.log_prob(expanded.param).shape == (5, 2)
+        expanded_mismatched = expanded.param.clone()
+        expanded_mismatched[3, 1, 0, 0] = 1
+        expected = torch.full((5, 2), float("inf"), device=device)
+        expected[3, 1] = -float("inf")
+        torch.testing.assert_close(expanded.log_prob(expanded_mismatched), expected)
 
     @pytest.mark.parametrize("div_up", [1, 2])
     @pytest.mark.parametrize("div_down", [1, 2])
@@ -138,6 +176,153 @@ class TestTanhNormal:
             assert (a <= d.high).all()
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
+    @pytest.mark.parametrize("safe_tanh", [False, True])
+    @pytest.mark.parametrize("compiled", [False, True])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_tanhnormal_rsample_and_log_prob(
+        self, dtype, low, high, safe_tanh, compiled, device
+    ):
+        if compiled and sys.version_info >= (3, 14):
+            pytest.skip("torch.compile requires Python < 3.14")
+        if compiled and safe_tanh and TORCH_VERSION_PRE_2_6:
+            pytest.skip("safe_tanh compilation requires torch 2.6+")
+
+        magnitude = 20.0 if dtype is torch.float32 else 40.0
+        loc = torch.tensor(
+            [[magnitude, -magnitude], [-magnitude, magnitude]],
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+        scale = torch.full_like(loc, 0.1, requires_grad=True)
+
+        def sample_and_log_prob(loc, scale):
+            dist = TanhNormal(
+                loc=loc,
+                scale=scale,
+                low=low,
+                high=high,
+                event_dims=1,
+                safe_tanh=safe_tanh,
+            )
+            return dist.rsample_and_log_prob()
+
+        if compiled:
+            sample_and_log_prob = torch.compile(
+                sample_and_log_prob, backend="eager", fullgraph=True
+            )
+
+        torch.manual_seed(0)
+        pre_tanh = torch.distributions.Normal(loc, scale).rsample()
+        torch.manual_seed(0)
+        sample, log_prob = sample_and_log_prob(loc, scale)
+        assert sample.isfinite().all()
+        assert (sample >= low).all() and (sample <= high).all()
+        tanh_log_det = 2.0 * (math.log(2.0) - pre_tanh - F.softplus(-2.0 * pre_tanh))
+        affine_log_det = math.log((high - low) / 2.0)
+        expected = (
+            torch.distributions.Normal(loc, scale).log_prob(pre_tanh)
+            - tanh_log_det
+            - affine_log_det
+        ).sum(-1)
+        torch.testing.assert_close(log_prob, expected)
+        log_prob_grads = torch.autograd.grad(log_prob.sum(), (loc, scale))
+        expected_grads = torch.autograd.grad(expected.sum(), (loc, scale))
+        for actual_grad, expected_grad in zip(log_prob_grads, expected_grads):
+            torch.testing.assert_close(actual_grad, expected_grad)
+
+    @pytest.mark.parametrize(
+        "reparameterize, sample_shape", [(False, ()), (True, (3,))]
+    )
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_composite_sample_and_log_prob(
+        self, reparameterize, sample_shape, monkeypatch, device
+    ):
+        loc = torch.tensor([[20.0], [-20.0]], device=device, requires_grad=True)
+        scale = torch.full_like(loc, 0.1, requires_grad=True)
+        params = TensorDict(
+            {
+                "squashed": TensorDict({"loc": loc, "scale": scale}, batch_size=[2]),
+                "normal": TensorDict(
+                    {"loc": torch.zeros_like(loc), "scale": torch.ones_like(loc)},
+                    batch_size=[2],
+                ),
+            },
+            batch_size=[2],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "squashed": TanhNormal,
+                "normal": torch.distributions.Normal,
+            },
+            name_map={
+                "squashed": ("agent", "action"),
+                "normal": ("agent", "aux"),
+            },
+            extra_kwargs={"squashed": {"event_dims": 1}},
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("a freshly sampled TanhNormal was inverse-scored")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        helper = rsample_and_log_prob if reparameterize else sample_and_log_prob
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(False):
+            sample, component_log_prob = helper(dist, sample_shape)
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(True):
+            aggregate_sample, aggregate_log_prob = helper(dist, sample_shape)
+
+        expected_batch = torch.Size(sample_shape) + torch.Size([2])
+        assert sample.batch_size == expected_batch
+        assert sample["agent", "action"].requires_grad is reparameterize
+        torch.testing.assert_close(sample, aggregate_sample)
+        assert set(component_log_prob.keys(True, True)) == {
+            ("agent", "action_log_prob"),
+            ("agent", "aux_log_prob"),
+        }
+        expected_aggregate = sum(
+            component_log_prob.sum(dim="feature").values(True, True)
+        )
+        torch.testing.assert_close(aggregate_log_prob, expected_aggregate)
+
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(False):
+            component_entropy = composite_entropy(dist, 3)
+        torch.manual_seed(0)
+        with set_composite_lp_aggregate(True):
+            aggregate_entropy = composite_entropy(dist, 3)
+        assert set(component_entropy.keys(True, True)) == {
+            ("agent", "action_entropy"),
+            ("agent", "aux_entropy"),
+        }
+        expected_entropy = sum(component_entropy.sum(dim="feature").values(True, True))
+        torch.testing.assert_close(aggregate_entropy, expected_entropy)
+
+        aggregate_log_prob.sum().backward()
+        assert loc.grad is not None and loc.grad.isfinite().all()
+        assert scale.grad is not None and scale.grad.isfinite().all()
+
+    def test_tanhnormal_log_prob_is_history_independent(self):
+        loc = torch.tensor([0.3], requires_grad=True)
+        scale = torch.tensor([0.7])
+        dist = TanhNormal(loc, scale, event_dims=0)
+        torch.manual_seed(0)
+        first = dist.rsample()
+        dist.rsample()
+        cloned = first.detach().clone().requires_grad_()
+        first_log_prob = dist.log_prob(first)
+        cloned_log_prob = dist.log_prob(cloned)
+
+        torch.testing.assert_close(first_log_prob, cloned_log_prob)
+        first_grad = torch.autograd.grad(first_log_prob.sum(), first)[0]
+        cloned_grad = torch.autograd.grad(cloned_log_prob.sum(), cloned)[0]
+        torch.testing.assert_close(first_grad, cloned_grad)
 
     def test_tanhnormal_mode(self):
         # Checks that the std of the mode computed by tanh normal is within a certain range
@@ -696,6 +881,16 @@ class TestMaskedCategorical:
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
 
+    def test_sparse_mode_uses_original_indices(self) -> None:
+        logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
+        indices = torch.tensor([[0, 2], [1, 3]])
+        dist = MaskedCategorical(logits=logits, indices=indices)
+        expected = torch.tensor([2, 1])
+
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        assert torch.isfinite(dist.log_prob(dist.mode)).all()
+
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     @pytest.mark.parametrize("sparse", [False, True])
     @pytest.mark.parametrize("ndim", [2, 1, 3])
@@ -951,6 +1146,16 @@ class TestMaskedOneHotCategorical:
         samples = dist.sample([num_samples]).argmax(-1)
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
+
+    def test_sparse_mode_uses_original_indices(self) -> None:
+        logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
+        indices = torch.tensor([[0, 2], [1, 3]])
+        dist = MaskedOneHotCategorical(logits=logits, indices=indices)
+        expected = F.one_hot(torch.tensor([2, 1]), num_classes=4)
+
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        assert torch.isfinite(dist.log_prob(dist.mode)).all()
 
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     def test_sample_sparse(self, neg_inf: float) -> None:

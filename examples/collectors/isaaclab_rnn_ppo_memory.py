@@ -5,13 +5,14 @@
 """Recurrent PPO on Isaac Lab with configurable recurrent rollout storage.
 
 Demonstrates running large-vectorized Isaac Lab environments with an LSTM
-policy through a :class:`~torchrl.collectors.MultiCollector`. Isaac Lab is
+policy through a process-backed :class:`~torchrl.collectors.Collector`. Isaac Lab is
 launched only in the worker subprocesses (the main process never imports
 ``isaaclab``) so the main process can stay light and own the trainer.
 
 Key TorchRL features exercised:
 
-- :class:`~torchrl.collectors.MultiCollector` with ``policy_factory`` (each
+- :class:`~torchrl.collectors.Collector` with ``num_collectors`` and
+  ``policy_factory`` (each
   worker builds its own policy copy and receives weights via
   :class:`~torchrl.weight_update.MultiProcessWeightSyncScheme`).
 - Optional ``compact_obs=True`` to drop the redundant ``("next", obs)``.
@@ -64,7 +65,7 @@ from isaaclab_rnn_ppo_memory_utils import (
 )
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.collectors import Evaluator, MultiCollector
+from torchrl.collectors import Collector, Evaluator
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs import ExplorationType, set_exploration_type
@@ -214,7 +215,7 @@ def parse_args() -> argparse.Namespace:
         "--sync-collector",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Synchronous MultiCollector. Async (default) yields per-worker batches.",
+        help="Synchronous process collection. Async yields per-worker batches.",
     )
     # Evaluation
     parser.add_argument(
@@ -384,8 +385,9 @@ def main() -> None:
         rnn_backend=args.rnn_backend,
         device=collector_device,
     )
-    collector = MultiCollector(
-        [make_env_fn] * args.num_collectors,
+    collector = Collector(
+        make_env_fn,
+        num_collectors=args.num_collectors,
         sync=args.sync_collector,
         policy_factory=collector_policy_factory,
         frames_per_batch=frames_per_batch,

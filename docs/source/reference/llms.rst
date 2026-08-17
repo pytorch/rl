@@ -556,6 +556,9 @@ Reward Model Training
     RewardModelLoss
     RewardModelLossOutput
     reward_model_loss
+    DistillationLoss
+    DistillationLossOutput
+    k3_kl_token_estimate
 
 .. currentmodule:: torchrl.data.llm
 
@@ -564,3 +567,79 @@ Reward Model Training
     :template: rl_template.rst
 
     TopKRewardSelector
+
+.. _trl_interop_section:
+
+TRL Interoperability
+--------------------
+
+.. currentmodule:: torchrl.modules.llm
+
+TorchRL provides adapters for interoperating with Hugging Face ``trl`` while
+keeping replay storage and reward evaluation in TorchRL.
+
+**TorchRL -> TRL** (feed a ``trl.GRPOTrainer`` from a TorchRL buffer):
+
+.. code-block:: python
+
+    from tensordict import TensorDict
+    from torchrl.data import ReplayBuffer, ListStorage
+    from torchrl.modules.llm import TorchRLBufferDataset
+    from trl import GRPOConfig, GRPOTrainer
+
+    rb = ReplayBuffer(storage=ListStorage(10_000), batch_size=32)
+    rb.add(TensorDict({"prompt": "Explain policy gradients."}, batch_size=[]))
+
+    torch_dataset = TorchRLBufferDataset(
+        rb,
+        batch_size=32,
+        keys=["prompt"],
+        num_batches=None,
+    )
+    train_dataset = torch_dataset.as_hf_dataset()
+
+    trainer = GRPOTrainer(
+        model="model-name",
+        reward_funcs=lambda completions, **kwargs: [0.0] * len(completions),
+        train_dataset=train_dataset,
+        args=GRPOConfig(max_steps=1_000),
+    )
+
+Current ``trl`` trainers require a :mod:`datasets` ``Dataset`` or
+``IterableDataset`` rather than a PyTorch ``IterableDataset``. Call
+:meth:`TorchRLBufferDataset.as_hf_dataset` for that bridge. The sampled data
+must contain the schema expected by the selected trainer: for example,
+``GRPOTrainer`` requires a top-level ``"prompt"`` field. An unbounded stream
+also requires a finite ``max_steps`` in the trainer configuration. Install the
+integration dependencies with ``pip install torchrl[llm] trl``.
+
+**TRL -> TorchRL** (use an HF reward model inside a TorchRL GRPO step):
+
+.. code-block:: python
+
+    from transformers import AutoModelForSequenceClassification
+    from torchrl.modules.llm import HFRewardModelWrapper
+    from tensordict import TensorDict
+    import torch
+
+    hf_model = AutoModelForSequenceClassification.from_pretrained(
+        "my-org/reward-model-v1", num_labels=1
+    )
+    reward_fn = HFRewardModelWrapper(
+        hf_model,
+        token_key=("tokens", "full"),
+        attention_mask_key=("masks", "all_attention_mask"),
+        reward_key="reward",
+        inference_mode=True,   # disable grad for pure reward inference
+    )
+
+    # Inside your GRPO / PPO rollout loop:
+    rollout_td = ...  # TensorDict from LLMCollector
+    reward_fn(rollout_td)  # writes "reward" key in-place
+    assert rollout_td["reward"].shape == rollout_td.batch_size
+
+.. seealso::
+
+    * :class:`TorchRLBufferDataset`
+    * :class:`HFRewardModelWrapper`
+    * Tutorial: :ref:`trl_interop_tutorial`

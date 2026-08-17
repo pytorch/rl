@@ -371,7 +371,7 @@ def _get_envs() -> list[str]:
 
 
 class _MujocoPlaygroundMeta(_EnvPostInit):
-    """Metaclass for MujocoPlaygroundEnv that returns a lazy ParallelEnv when num_workers > 1."""
+    """Metaclass returning a ParallelEnv when num_workers > 1."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         # Accept num_workers either as the explicit kwarg or via the kwargs
@@ -389,7 +389,7 @@ class _MujocoPlaygroundMeta(_EnvPostInit):
             def make_env(_env_name=env_name, _kwargs=env_kwargs):
                 return cls(_env_name, num_workers=1, **_kwargs)
 
-            return ParallelEnv(num_workers, make_env)
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
 
         return super().__call__(*args, **kwargs)
 
@@ -872,7 +872,8 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         state = self._vmap_jit_env_reset(jax.numpy.stack(keys))
         # vmap output has leading dim = batch_size.numel() (flat).
         # _tree_reshape restores the original batch shape (e.g. [4, 8]).
-        state = _tree_reshape(state, self.batch_size)
+        if len(self.batch_size) != 1:
+            state = _tree_reshape(state, self.batch_size)
         # Store JAX state directly — avoids converting MJX/pytree state to
         # TensorDict and back, which breaks MJX's metadata pytree registration.
         self._current_state = state
@@ -910,13 +911,15 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         action = _tensor_to_ndarray(action_tensor)
 
         # vmap expects a flat leading batch dim, so collapse [d0, d1, ...] → [d0*d1*...].
-        state = _tree_flatten(state, self.batch_size)
-        action = _tree_flatten(action, self.batch_size)
+        if len(self.batch_size) != 1:
+            state = _tree_flatten(state, self.batch_size)
+            action = _tree_flatten(action, self.batch_size)
 
         next_state = self._vmap_jit_env_step(state, action)
 
         # Restore the original batch shape after vmap.
-        next_state = _tree_reshape(next_state, self.batch_size)
+        if len(self.batch_size) != 1:
+            next_state = _tree_reshape(next_state, self.batch_size)
         self._current_state = next_state
 
         done_shape = (*self.batch_size, 1)
@@ -989,9 +992,10 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
-        num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`
+        num_workers (int, optional): if greater than 1, a :class:`~torchrl.envs.ParallelEnv`
             will be returned instead, with each worker instantiating its own
-            :class:`~torchrl.envs.MujocoPlaygroundEnv` instance. Defaults to ``None``.
+            :class:`~torchrl.envs.MujocoPlaygroundEnv` instance and reporting
+            metadata directly to the parent. Defaults to ``None``.
 
     .. note::
         There are two orthogonal ways to scale environment throughput:

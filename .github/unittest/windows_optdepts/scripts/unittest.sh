@@ -102,7 +102,7 @@ fi
 echo "=== Installing build dependencies ==="
 conda install anaconda::cmake -y
 python -m pip install "pybind11[global]"
-python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 
 # install tensordict
 echo "=== Installing tensordict ==="
@@ -148,6 +148,8 @@ export CKPT_BACKEND=torch
 export MAX_IDLE_COUNT=60
 export BATCHED_PIPE_TIMEOUT=60
 export LAZY_LEGACY_OP=False
+# PyTorch's Windows nightly wheel is built without libuv support.
+export USE_LIBUV=0
 
 echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env

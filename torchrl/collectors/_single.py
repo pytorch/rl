@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import abc
 import contextlib
+import inspect
 import threading
 import warnings
 import weakref
@@ -15,9 +17,13 @@ from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from torch import nn
 from torchrl import compile_with_warmup
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    normalize_service_backend,
+)
 from torchrl._utils import (
     _ends_with,
-    _make_ordinal_device,
     _maybe_record_function,
     _maybe_record_function_decorator,
     _replace_last,
@@ -49,6 +55,7 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
+from torchrl.modules.inference_server._config import _resolve_device_config
 from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
@@ -68,9 +75,238 @@ def _cuda_sync_if_initialized():
         torch.cuda.synchronize()
 
 
+class _CollectorMeta(abc.ABCMeta):
+    """Dispatch the public Collector constructor to an execution backend."""
+
+    _BACKENDS = frozenset(
+        {"direct", "process", "ray", "rpc", "distributed", "submitit"}
+    )
+    _RESERVED_OPTIONS = frozenset(
+        {"backend_options", "num_collectors", "num_workers", "sync"}
+    )
+
+    @property
+    def __signature__(cls):
+        signature = inspect.signature(cls.__init__)
+        return signature.replace(parameters=tuple(signature.parameters.values())[1:])
+
+    @staticmethod
+    def _normalize_direct_env_fn(args, kwargs):
+        if args:
+            create_env_fn = args[0]
+            set_env_fn = "args"
+        elif "create_env_fn" in kwargs:
+            create_env_fn = kwargs["create_env_fn"]
+            set_env_fn = "kwargs"
+        else:
+            return args, kwargs
+
+        is_sequence = isinstance(create_env_fn, Sequence) and not isinstance(
+            create_env_fn, (str, bytes)
+        )
+        if not is_sequence:
+            return args, kwargs
+        if len(create_env_fn) != 1:
+            raise ValueError(
+                "backend='direct' requires exactly one environment constructor."
+            )
+        create_env_fn = create_env_fn[0]
+        if set_env_fn == "args":
+            args = (create_env_fn, *args[1:])
+        else:
+            kwargs["create_env_fn"] = create_env_fn
+        return args, kwargs
+
+    @staticmethod
+    def _normalize_env_fns(args, kwargs, num_collectors):
+        if args:
+            create_env_fn = args[0]
+            set_env_fn = "args"
+        elif "create_env_fn" in kwargs:
+            create_env_fn = kwargs["create_env_fn"]
+            set_env_fn = "kwargs"
+        else:
+            return args, kwargs, num_collectors
+
+        is_sequence = isinstance(create_env_fn, Sequence) and not isinstance(
+            create_env_fn, (str, bytes)
+        )
+        if is_sequence:
+            create_env_fn = list(create_env_fn)
+            inferred_num_collectors = len(create_env_fn)
+            if not inferred_num_collectors:
+                raise ValueError("create_env_fn must contain at least one environment.")
+            if num_collectors is not None and num_collectors != inferred_num_collectors:
+                raise ValueError(
+                    "num_collectors does not match the number of environment "
+                    f"constructors: {num_collectors} != {inferred_num_collectors}."
+                )
+            num_collectors = inferred_num_collectors
+        else:
+            if num_collectors is None:
+                num_collectors = 1
+            create_env_fn = [create_env_fn] * num_collectors
+
+        if set_env_fn == "args":
+            args = (create_env_fn, *args[1:])
+        else:
+            kwargs["create_env_fn"] = create_env_fn
+        return args, kwargs, num_collectors
+
+    @staticmethod
+    def _drop_inapplicable_defaults(target, kwargs):
+        """Let a selected backend apply its defaults to generic config values.
+
+        Generic structured configs materialize every ``Collector`` default,
+        whereas concrete backends have a few different but semantically
+        equivalent defaults. Because an explicitly passed value equal to the
+        generic default is indistinguishable from a materialized config value,
+        tests pin the allowed concrete-default divergences.
+        """
+        target_parameters = inspect.signature(target.__init__).parameters
+        collector_parameters = inspect.signature(Collector.__init__).parameters
+        for name, parameter in collector_parameters.items():
+            if name not in kwargs or parameter.default is inspect.Parameter.empty:
+                continue
+            value = kwargs[name]
+            default = parameter.default
+            if value is not default and value != default:
+                continue
+            target_parameter = target_parameters.get(name)
+            if target_parameter is None or target_parameter.default != default:
+                kwargs.pop(name)
+
+    def __call__(
+        cls,
+        *args,
+        backend=None,
+        backend_options=None,
+        num_collectors=None,
+        sync=None,
+        **kwargs,
+    ):
+        if cls is not Collector:
+            if any(
+                value is not None
+                for value in (backend, backend_options, num_collectors, sync)
+            ):
+                raise TypeError(
+                    "backend, backend_options, num_collectors, and sync are "
+                    "only supported when constructing Collector directly."
+                )
+            return super().__call__(*args, **kwargs)
+
+        if len(args) > 2:
+            raise TypeError(
+                "Collector accepts at most create_env_fn and policy positionally."
+            )
+
+        if num_collectors is not None:
+            if isinstance(num_collectors, bool) or not isinstance(num_collectors, int):
+                raise TypeError("num_collectors must be a positive integer.")
+            if num_collectors < 1:
+                raise ValueError("num_collectors must be a positive integer.")
+
+        backend_from_context = False
+        if backend is not None:
+            backend = normalize_service_backend(backend)
+        else:
+            backend = _get_service_backend()
+            backend_from_context = backend is not None
+            if backend is None:
+                backend = "process" if num_collectors is not None else "direct"
+        if backend not in cls._BACKENDS:
+            raise ValueError(
+                _contextual_backend_error(
+                    f"Collector does not support backend={backend!r}. Expected one "
+                    f"of {sorted(cls._BACKENDS)}.",
+                    service=backend_from_context,
+                )
+            )
+
+        options = dict(backend_options or {})
+        reserved = cls._RESERVED_OPTIONS.intersection(options)
+        if reserved:
+            raise ValueError(
+                "backend_options contains reserved selector keys: "
+                f"{sorted(reserved)}."
+            )
+        duplicates = options.keys() & kwargs.keys()
+        positional_names = ("create_env_fn", "policy")
+        duplicates.update(options.keys() & set(positional_names[: len(args)]))
+        if duplicates:
+            raise ValueError(
+                "Backend options duplicate top-level collector arguments: "
+                f"{sorted(duplicates)}."
+            )
+
+        if backend == "direct":
+            if num_collectors not in (None, 1):
+                raise ValueError("backend='direct' supports at most one collector.")
+            if sync is not None:
+                raise ValueError("sync is only valid for non-direct collectors.")
+            if options:
+                raise ValueError(
+                    "backend_options are only valid for non-direct collectors."
+                )
+            args, kwargs = cls._normalize_direct_env_fn(args, kwargs)
+            return super().__call__(*args, **kwargs)
+
+        if sync is None:
+            sync = False
+        elif not isinstance(sync, bool):
+            raise TypeError("sync must be a boolean or None.")
+
+        kwargs.update(options)
+        args, kwargs, num_collectors = cls._normalize_env_fns(
+            args, kwargs, num_collectors
+        )
+
+        if backend == "process":
+            from torchrl.collectors._multi_base import MultiCollector
+
+            cls._drop_inapplicable_defaults(MultiCollector, kwargs)
+            return MultiCollector(*args, sync=sync, **kwargs)
+        if backend == "ray":
+            from torchrl.collectors.distributed.ray import RayCollector
+
+            cls._drop_inapplicable_defaults(RayCollector, kwargs)
+            return RayCollector(
+                *args,
+                num_collectors=num_collectors,
+                sync=sync,
+                **kwargs,
+            )
+        if backend == "rpc":
+            from torchrl.collectors.distributed.rpc import RPCCollector
+
+            cls._drop_inapplicable_defaults(RPCCollector, kwargs)
+            return RPCCollector(*args, sync=sync, **kwargs)
+
+        from torchrl.collectors.distributed.generic import DistributedCollector
+
+        cls._drop_inapplicable_defaults(DistributedCollector, kwargs)
+        if backend == "submitit":
+            launcher = kwargs.setdefault("launcher", "submitit")
+            if launcher != "submitit":
+                raise ValueError("backend='submitit' requires launcher='submitit'.")
+        return DistributedCollector(*args, sync=sync, **kwargs)
+
+
 @accept_remote_rref_udf_invocation
-class Collector(BaseCollector):
-    """Generic data collector for RL problems. Requires an environment constructor and a policy.
+class Collector(BaseCollector, metaclass=_CollectorMeta):
+    """Main construction entry point for TorchRL data collectors.
+
+    ``Collector(...)`` performs direct collection by default. ``num_collectors``
+    selects local process collection, while ``backend`` selects direct, process,
+    Ray, RPC, or distributed execution. Dispatch occurs only when constructing
+    this exact class; the returned object retains its concrete implementation
+    type. Existing concrete collector classes remain available for subclassing
+    and implementation-specific APIs. Use :class:`BaseCollector` rather than
+    ``Collector`` as the target of an ``isinstance`` check that must accept
+    every dispatched collector.
+
+    A collector requires an environment constructor and a policy.
 
     Args:
         create_env_fn (Callable or EnvBase): a callable that returns an instance of
@@ -99,6 +335,22 @@ class Collector(BaseCollector):
                 pickled directly), the ``policy_factory`` should be used instead.
 
     Keyword Args:
+        backend (str, optional): execution backend selected by this generic
+            constructor. One of ``"direct"``, ``"process"``, ``"ray"``,
+            ``"rpc"``, ``"distributed"``, or ``"submitit"``. When omitted,
+            an enclosing :func:`torchrl.service_backend` provides the default;
+            otherwise passing ``num_collectors`` selects ``"process"`` and the
+            direct collection remains the final default.
+        backend_options (dict, optional): backend-specific constructor options.
+            Keys are merged into the selected concrete collector arguments;
+            duplicates with top-level arguments are rejected.
+        num_collectors (int, optional): number of collector workers. A single
+            environment constructor is repeated this many times. A sequence of
+            constructors is validated against this value. Passing this argument
+            without a backend selects the process backend.
+        sync (bool, optional): whether a non-direct collector waits for every
+            worker before yielding. Defaults to ``False`` for non-direct
+            backends. Invalid for the direct backend.
         policy_factory (Callable[[], Callable], optional): a callable that returns
             a policy instance. This is exclusive with the `policy` argument.
 
@@ -219,6 +471,9 @@ class Collector(BaseCollector):
             trajectory identifiers at every environment step. This is useful
             when trajectory splitting or trajectory-aware replay sampling is not
             needed. Defaults to ``True``.
+            The ids are the most robust trajectory-boundary marker for
+            replay-buffer consumers; see :ref:`the trajectory-boundary
+            documentation <ref_traj_boundaries>` before disabling them.
         exploration_type (ExplorationType, optional): interaction mode to be used when
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
@@ -239,6 +494,9 @@ class Collector(BaseCollector):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            See :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            for when these markers are needed to sample trajectories from a
+            replay buffer.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -425,6 +683,11 @@ class Collector(BaseCollector):
         | (TensorDictModule | Callable[[TensorDictBase], TensorDictBase]) = None,
         *,
         policy_factory: Callable[[], Callable] | None = None,
+        backend: Literal["direct", "process", "ray", "rpc", "distributed", "submitit"]
+        | None = None,
+        backend_options: dict[str, Any] | None = None,
+        num_collectors: int | None = None,
+        sync: bool | None = None,
         frames_per_batch: int,
         total_frames: int = -1,
         device: DEVICE_TYPING | None = None,
@@ -466,6 +729,11 @@ class Collector(BaseCollector):
         compact_obs: bool = False,
         **kwargs,
     ):
+        # These arguments are consumed by _CollectorMeta for the public class.
+        # They remain in the signature so introspection and Hydra expose the
+        # complete constructor API. Subclasses reach this implementation with
+        # the defaults only.
+        del backend, backend_options, num_collectors, sync
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
@@ -1381,19 +1649,14 @@ class Collector(BaseCollector):
         env_device: torch.device,
         device: torch.device,
     ):
-        device = _make_ordinal_device(torch.device(device) if device else device)
-        storing_device = _make_ordinal_device(
-            torch.device(storing_device) if storing_device else device
+        resolved = _resolve_device_config(
+            device=device,
+            policy_device=policy_device,
+            env_device=env_device,
+            storing_device=storing_device,
+            collector_defaults=True,
         )
-        policy_device = _make_ordinal_device(
-            torch.device(policy_device) if policy_device else device
-        )
-        env_device = _make_ordinal_device(
-            torch.device(env_device) if env_device else device
-        )
-        if storing_device is None and (env_device == policy_device):
-            storing_device = env_device
-        return storing_device, policy_device, env_device
+        return resolved.storing_device, resolved.policy_device, resolved.env_device
 
     # for RPC
     def next(self):
@@ -1437,7 +1700,9 @@ class Collector(BaseCollector):
     ) -> None:
         """Copy weights from original policy to internal policy when no scheme configured."""
         if model_id is not None and model_id != "policy":
-            return
+            raise KeyError(
+                f"Collector has no local weight target for model_id={model_id!r}."
+            )
 
         # Get source weights - either from argument or from original policy
         if policy_or_weights is not None:
@@ -1445,7 +1710,10 @@ class Collector(BaseCollector):
         elif self._orig_policy is not None:
             weights = TensorDict.from_module(self._orig_policy)
         else:
-            return
+            raise RuntimeError(
+                "Collector cannot update policy weights without explicit weights "
+                "or an original policy module."
+            )
 
         # Apply to internal policy
         if (
@@ -1453,6 +1721,8 @@ class Collector(BaseCollector):
             and self._policy_w_state_dict is not None
         ):
             TensorDict.from_module(self._policy_w_state_dict).data.update_(weights.data)
+            return
+        raise RuntimeError("Collector has no mutable local policy weight target.")
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         """Sets the seeds of the environments stored in the DataCollector.
@@ -2131,6 +2401,10 @@ class Collector(BaseCollector):
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
         state_dict.update({"frames": self._frames, "iter": self._iter})
+        if self.track_traj_ids:
+            state_dict["traj_pool"] = self._traj_pool.state_dict()
+        if self.policy_version_tracker is not None:
+            state_dict["policy_version"] = self.policy_version
 
         return state_dict
 
@@ -2155,6 +2429,20 @@ class Collector(BaseCollector):
             )
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        if self.track_traj_ids:
+            traj_pool_state = state_dict.get("traj_pool")
+            if traj_pool_state is not None:
+                self._traj_pool.load_state_dict(traj_pool_state)
+            # Runtime environment state is not generally serializable. The new
+            # carrier therefore starts a fresh trajectory whose identifier must
+            # be allocated after restoring the global trajectory counter.
+            traj_ids = self._traj_pool.get_traj_and_increment(
+                self.n_env, device=self.storing_device
+            ).view(self.env.batch_size)
+            self._carrier.set(("collector", "traj_ids"), traj_ids)
+        policy_version = state_dict.get("policy_version")
+        if policy_version is not None and self.policy_version_tracker is not None:
+            self.policy_version_tracker.version = policy_version
 
     def __repr__(self) -> str:
         try:
@@ -2241,5 +2529,5 @@ class Collector(BaseCollector):
         else:
             return _resolve_model(self, model_id)
 
-    def _receive_weights_scheme(self):
-        return super()._receive_weights_scheme()
+    def _receive_weights_scheme(self, model_version: int | None = None):
+        return super()._receive_weights_scheme(model_version=model_version)

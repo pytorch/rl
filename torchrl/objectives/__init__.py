@@ -6,7 +6,7 @@
 from torchrl.objectives.a2c import A2CLoss
 from torchrl.objectives.act import ACTLoss
 from torchrl.objectives.bc import BCLoss
-from torchrl.objectives.common import add_random_module, LossModule
+from torchrl.objectives.common import add_random_module, AUTO_LOSS_MASK_KEYS, LossModule
 from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
 from torchrl.objectives.ddpg import DDPGLoss
@@ -20,11 +20,13 @@ from torchrl.objectives.dreamer import (
 )
 from torchrl.objectives.dreamer_v3 import (
     categorical_kl_balanced,
+    categorical_kl_terms,
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
     symexp,
     symlog,
+    two_hot_cross_entropy,
     two_hot_decode,
     two_hot_encode,
 )
@@ -39,6 +41,7 @@ from torchrl.objectives.rnd import RNDLoss
 from torchrl.objectives.sac import DiscreteSACLoss, SACLoss
 from torchrl.objectives.td3 import TD3Loss
 from torchrl.objectives.td3_bc import TD3BCLoss
+from torchrl.objectives.tqc import TQCLoss
 from torchrl.objectives.utils import (
     default_value_kwargs,
     distance_loss,
@@ -93,10 +96,13 @@ __all__ = [
     "TD3BCLoss",
     "TD3Loss",
     "TargetNetUpdater",
+    "TQCLoss",
     "ValueEstimators",
     "WorldModelLoss",
     "add_random_module",
+    "AUTO_LOSS_MASK_KEYS",
     "categorical_kl_balanced",
+    "categorical_kl_terms",
     "default_value_kwargs",
     "distance_loss",
     "group_optimizers",
@@ -105,6 +111,7 @@ __all__ = [
     "next_state_value",
     "symexp",
     "symlog",
+    "two_hot_cross_entropy",
     "two_hot_decode",
     "two_hot_encode",
 ]

@@ -109,6 +109,11 @@ class RPCCollector(BaseCollector):
 
     Supports sync and async data collection.
 
+    .. note::
+        Prefer ``Collector(backend="rpc", ...)`` for construction in new code.
+        Pass RPC launcher and communication settings through
+        ``backend_options``. This class remains the concrete RPC API.
+
     Args:
         create_env_fn (Callable or List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.

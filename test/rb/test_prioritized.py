@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import warnings
 
 import numpy as np
 import pytest
@@ -460,6 +461,160 @@ def test_prb(priority_key, contiguous, device):
     td2.set_("a", torch.ones_like(td2.get("a")))
     s = rb.sample()
     torch.testing.assert_close(td2[idx0].get("a").view(1), s.get("a").unique().view(1))
+
+
+@pytest.mark.parametrize("alpha", [0.4, 0.7])
+@pytest.mark.parametrize("max_priority_within_buffer", [False, True])
+def test_prb_new_item_gets_max_priority(alpha, max_priority_within_buffer):
+    """A freshly added item with no priority key must be written to the sum-tree at
+    the current max priority, transformed by ``alpha`` exactly once.
+
+    This is PER's "new experience is sampled at least once" guarantee. Regression
+    test for the double-``alpha`` transform in
+    :meth:`~torchrl.data.replay_buffers.samplers.PrioritizedSampler.default_priority`,
+    which wrote new items at ``((p + eps) ** alpha + eps) ** alpha`` and so
+    systematically under-prioritized them for ``alpha < 1``.
+    """
+    sampler = PrioritizedSampler(
+        max_capacity=10,
+        alpha=alpha,
+        beta=0.9,
+        max_priority_within_buffer=max_priority_within_buffer,
+    )
+    # index 0 receives a large TD-error priority
+    sampler.update_priority(torch.tensor([0]), torch.tensor([100.0]))
+    # index 1 is a fresh item written at the default (max) priority, as writers do
+    sampler.mark_update(torch.tensor([1]))
+    eps = sampler._eps
+    expected = (100.0 + eps) ** alpha
+    got = float(sampler._sum_tree[1])
+    assert got == pytest.approx(expected, rel=1e-4), (got, expected)
+    # the new item is exactly as sample-able as the current max item
+    assert got == pytest.approx(float(sampler._sum_tree[0]), rel=1e-4)
+
+
+def test_prb_within_buffer_max_priority_stays_raw():
+    """In ``max_priority_within_buffer`` mode, updating the current max item must keep
+    ``_max_priority`` as a raw priority (not the transformed sum-tree value), so a
+    subsequently added default item still lands at the true max tree priority.
+    """
+    alpha = 0.6
+    sampler = PrioritizedSampler(
+        max_capacity=5, alpha=alpha, beta=0.9, max_priority_within_buffer=True
+    )
+    sampler.update_priority(torch.tensor([0, 1]), torch.tensor([100.0, 10.0]))
+    # updating the current max index (0) triggers the within-buffer recompute
+    sampler.update_priority(torch.tensor([0]), torch.tensor([50.0]))
+    # _max_priority must hold the raw current max (50), not (50 + eps) ** alpha
+    assert float(sampler._max_priority[0]) == pytest.approx(50.0, rel=1e-3)
+    # a fresh default item then lands at (50 + eps) ** alpha
+    sampler.mark_update(torch.tensor([2]))
+    expected = (50.0 + sampler._eps) ** alpha
+    assert float(sampler._sum_tree[2]) == pytest.approx(expected, rel=1e-3)
+
+
+@pytest.mark.parametrize("max_priority_within_buffer", [False, True])
+def test_prb_alpha_zero_keeps_raw_max(max_priority_within_buffer):
+    """With ``alpha == 0`` every tree entry is ``(p + eps) ** 0 == 1``, so the
+    within-buffer recompute cannot recover raw priorities from the tree. It must
+    keep the previously tracked raw max rather than store the transformed value
+    (1.0) into ``_max_priority``."""
+    sampler = PrioritizedSampler(
+        max_capacity=5,
+        alpha=0.0,
+        beta=0.9,
+        max_priority_within_buffer=max_priority_within_buffer,
+    )
+    sampler.update_priority(torch.tensor([0, 1]), torch.tensor([100.0, 10.0]))
+    # updating the tracked max index triggers the within-buffer recompute
+    sampler.update_priority(torch.tensor([0]), torch.tensor([50.0]))
+    assert float(sampler._max_priority[0]) == pytest.approx(100.0)
+    assert float(sampler.default_priority) == pytest.approx(100.0)
+
+
+def test_prb_alpha_setter_validates():
+    """The alpha setter must reject negative values like ``__init__`` does, and
+    annealing alpha (e.g. via ``LinearScheduler``) must be warning-free now that
+    the trees are re-transformed on change."""
+    sampler = PrioritizedSampler(
+        max_capacity=5, alpha=0.7, beta=0.9, max_priority_within_buffer=True
+    )
+    with pytest.raises(ValueError, match="alpha must be greater or equal"):
+        sampler.alpha = -1.0
+    sampler.update_priority(torch.tensor([0]), torch.tensor([100.0]))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sampler.alpha = 0.6
+        sampler.alpha = 0.6  # same-value no-op
+        sampler.alpha = 0.5
+
+
+@pytest.mark.parametrize("max_priority_within_buffer", [False, True])
+@pytest.mark.parametrize("new_alpha", [0.5, 0.0])
+def test_prb_alpha_change_retransforms_trees(max_priority_within_buffer, new_alpha):
+    """Setting a new ``alpha`` re-transforms the ``(p + eps) ** alpha`` values
+    stored in the sum/min trees in closed form, so sampling probabilities (and
+    the within-buffer max recomputation, which inverts tree values with the
+    current ``alpha``) stay exact under alpha annealing."""
+    rb = ReplayBuffer(
+        storage=LazyTensorStorage(10),
+        sampler=PrioritizedSampler(
+            max_capacity=10,
+            alpha=1.0,
+            beta=1.0,
+            max_priority_within_buffer=max_priority_within_buffer,
+        ),
+    )
+    eps = rb.sampler._eps
+    idx = rb.extend(torch.arange(6))
+    priorities = torch.arange(1.0, 7.0)
+    rb.update_priority(idx, priorities)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        rb.sampler.alpha = new_alpha
+    assert rb.sampler.alpha == new_alpha
+    sum_tree = torch.as_tensor(
+        [rb.sampler._sum_tree[i] for i in range(rb.sampler._max_capacity)]
+    )
+    min_tree = torch.as_tensor(
+        [rb.sampler._min_tree[i] for i in range(rb.sampler._max_capacity)]
+    )
+    expected = ((priorities.double() + eps) ** new_alpha).to(sum_tree.dtype)
+    torch.testing.assert_close(sum_tree[:6], expected, rtol=1e-4, atol=1e-6)
+    torch.testing.assert_close(min_tree[:6], expected, rtol=1e-4, atol=1e-6)
+    # slots that were never written keep the sum-tree neutral value
+    assert (sum_tree[6:] == 0).all()
+    # the tracked max stays in the raw domain
+    assert float(rb.sampler._max_priority[0]) == pytest.approx(6.0, rel=1e-4)
+    rb.sample(5)
+    if max_priority_within_buffer and new_alpha != 0:
+        # the within-buffer recompute inverts the re-transformed tree values
+        # with the new alpha and recovers the raw max exactly
+        rb.update_priority(torch.tensor([5]), torch.tensor([2.0]))
+        assert float(rb.sampler._max_priority[0]) == pytest.approx(5.0, rel=1e-4)
+        assert int(rb.sampler._max_priority[1]) == 4
+
+
+def test_prb_alpha_change_from_zero_warns():
+    """With ``alpha == 0`` every written tree entry is 1.0, so the raw
+    priorities cannot be recovered when annealing away from 0: the setter warns
+    and keeps the stored (uniform) values until entries are next updated."""
+    sampler = PrioritizedSampler(max_capacity=10, alpha=0.0, beta=1.0)
+    # an empty sampler has nothing to re-transform and must not warn
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        sampler.alpha = 0.5
+        sampler.alpha = 0.0
+    sampler.update_priority(torch.tensor([0, 1]), torch.tensor([3.0, 4.0]))
+    with pytest.warns(UserWarning, match="away from 0"):
+        sampler.alpha = 0.5
+    # written entries keep their uniform value until the next priority update
+    assert float(sampler._sum_tree[0]) == 1.0
+    assert float(sampler._sum_tree[1]) == 1.0
+    sampler.update_priority(torch.tensor([0]), torch.tensor([3.0]))
+    assert float(sampler._sum_tree[0]) == pytest.approx(
+        (3.0 + sampler._eps) ** 0.5, rel=1e-4
+    )
 
 
 if __name__ == "__main__":

@@ -26,6 +26,8 @@ from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
 
+from torchrl._utils import DEFAULT_DONE_KEYS
+
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
     "update_policy_weights_ will be a no-op. Consider passing a local/weight_updater object "
@@ -139,6 +141,14 @@ def split_trajectories(
         calls. To collect batches made of complete trajectories only, pass
         ``trajs_per_batch`` to the collector instead (see
         :ref:`collectors_replay_trajs`).
+
+    .. seealso:: This function operates on contiguous *rollout batches* (fresh
+        collector output). To recover trajectory boundaries from data laid out
+        in a replay-buffer storage -- where the ring buffer can wrap and the
+        write cursor acts as an implicit truncation -- use
+        :func:`~torchrl.data.find_start_stop_traj` instead. Note that the
+        padded layout this function produces is discouraged for new code
+        unless explicitly needed; see :ref:`data-layout-split-trajectories`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -345,7 +355,11 @@ def _make_meta_policy(policy: nn.Module):
         On exit, the original parameters are restored to the policy.
     """
     param_and_buf = TensorDict.from_module(policy, as_module=True)
-    return param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy)
+    return (
+        param_and_buf.data.to("meta")
+        .apply(_cast, param_and_buf)
+        .to_module(policy, preserve_module_state=False)
+    )
 
 
 @implement_for("torch", None, "2.8")
@@ -436,6 +450,16 @@ class _TrajectoryPool:
             self._traj_id.copy_(1 + out[-1].item())
         return out
 
+    def state_dict(self) -> dict[str, torch.Tensor]:
+        """Return the next trajectory identifier without exposing shared storage."""
+        with self.lock:
+            return {"traj_id": self._traj_id.clone()}
+
+    def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
+        """Restore the next trajectory identifier in-place."""
+        with self.lock:
+            self._traj_id.copy_(state_dict["traj_id"])
+
 
 def _map_weight(
     weight,
@@ -458,8 +482,8 @@ def _map_weight(
 
 def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
     """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
-    for key in (("next", "done"), ("next", "terminated")):
-        signal = chunk.get(key, None)
+    for leaf in DEFAULT_DONE_KEYS:
+        signal = chunk.get(("next", leaf), None)
         if signal is not None and signal[-1].any().item():
             return True
     return False

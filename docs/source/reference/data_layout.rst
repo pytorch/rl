@@ -19,7 +19,7 @@ Two main patterns coexist in TorchRL:
   advantage estimator, normalizer) must mask-out the padded entries. This
   is the layout produced by
   :func:`~torchrl.collectors.utils.split_trajectories`,
-  :class:`~torchrl.collectors.MultiCollector` with ``split_trajs=True``,
+  ``Collector(num_collectors=N, split_trajs=True)``,
   and :class:`~torchrl.data.replay_buffers.SliceSampler` with
   ``pad_output=True``. It is **discouraged for new code** — see
   :ref:`data-layout-padded-discouraged` below.
@@ -66,6 +66,9 @@ Four per-step boolean keys jointly describe a trajectory:
     :class:`~torchrl.data.replay_buffers.SliceSampler` to reconstruct trajectory boundaries
     when no ``traj_ids`` key is available, and by
     :func:`~torchrl.collectors.utils.split_trajectories` (legacy).
+    Datasets sometimes carry only a subset of the three flags; consumers
+    that detect trajectory ends from flags should use the union of
+    :data:`~torchrl.data.DEFAULT_DONE_KEYS` rather than ``done`` alone.
 
 ``("next", "terminated")``
     *Trajectory ended because the MDP says so* (goal reached, agent
@@ -80,14 +83,116 @@ Four per-step boolean keys jointly describe a trajectory:
 
 ``("collector", "traj_ids")``
     *Optional integer per-step trajectory identifier.* Written by every
-    :class:`~torchrl.collectors.BaseCollector` subclass. When present,
+    :class:`~torchrl.collectors.BaseCollector` subclass by default
+    (``track_traj_ids=False`` disables it). When present,
     :class:`~torchrl.data.replay_buffers.SliceSampler` uses this directly instead of
     reconstructing boundaries from ``done``. Auto-detected on the first
     sample call when no ``traj_key`` is passed at construction.
 
 The "1-D contiguous" layout uses these keys *exclusively* — no shape-based
 padding, no mask. Every primitive in TorchRL that needs to know where
-trajectories start and stop reads them.
+trajectories start and stop reads them. The next section describes how they
+are *consumed* at read time.
+
+.. _ref_traj_boundaries:
+
+Trajectory boundaries: recovering episodes from storage
+-------------------------------------------------------
+
+A replay-buffer storage holds steps, not trajectories: nothing in the
+storage layer knows where an episode starts or ends. Components that need
+trajectories (:class:`~torchrl.data.replay_buffers.SliceSampler` and its
+variants, trajectory-aware transforms, offline dataset tooling) recover the
+boundaries at *read time* from the markers described above. The contract
+between producers and consumers is the following:
+
+- **Collectors stamp trajectory ids** under ``("collector", "traj_ids")``
+  by default (``track_traj_ids=False`` disables it). This is the most
+  robust boundary marker: a change of id between two consecutive steps in
+  storage order is a boundary, whether or not the episode ended with a
+  ``done`` flag.
+- **End flags mark trajectory ends.** A step can be the last of its
+  trajectory because of any of the :data:`~torchrl.data.DEFAULT_DONE_KEYS`
+  entries (``"done"``, ``"truncated"``, ``"terminated"``, typically read
+  under ``("next", ...)``). Consumers that reconstruct boundaries from
+  flags should use the union of these signals: a dataset that only carries
+  ``truncated=True`` ends would otherwise silently merge consecutive
+  episodes. :class:`~torchrl.data.replay_buffers.SliceSampler` reads a
+  single ``end_key`` (default ``("next", "done")``) for backward
+  compatibility; pass
+  ``end_keys=[("next", key) for key in DEFAULT_DONE_KEYS]`` to apply the
+  union convention.
+- **Collectors can mark batch ends as truncations.** Passing
+  ``set_truncated=True`` to a collector marks the last step of every
+  rollout batch as truncated. This introduces artificial trajectory ends,
+  but guarantees that batch boundaries are never silently crossed.
+  Multi-process collectors warn when a
+  :class:`~torchrl.data.replay_buffers.SliceSampler` is used and neither
+  ``trajs_per_batch`` nor ``set_truncated`` is set, because different
+  workers' batches interleave in the shared buffer and adjacent frames can
+  then belong to different episodes (see :ref:`collectors_replay_trajs`
+  for the trade-offs and the recommended ``trajs_per_batch`` alternative).
+  Single-process collectors do not need this: they write batches in
+  temporal order, so a batch boundary is not a seam — the next batch
+  continues exactly where the previous one ended, and the only
+  mid-trajectory edge is the live write cursor (handled below).
+- **Writers never mutate stored data.** No flag is written into the
+  storage when the ring buffer wraps or when a write stops mid-trajectory.
+  Instead, samplers resolve the missing boundaries at read time from the
+  storage state, as described next.
+
+**Circular-storage semantics.** Once a storage is full it behaves as a ring
+buffer, and its *physical* order (index 0 to N-1) no longer matches the
+*chronological* order in which the steps were written. Boundary recovery —
+implemented by :func:`~torchrl.data.find_start_stop_traj`, which
+:class:`~torchrl.data.replay_buffers.SliceSampler` uses under the hood —
+resolves this as follows:
+
+- The storage's ``_last_cursor`` records where the last write landed. The
+  step under the cursor is the oldest remaining step of a
+  partially-overwritten trajectory, so the cursor position is treated as an
+  implicit truncation (an end flag is forced there at read time).
+- When the storage is *not* full, the last valid element is always treated
+  as a trajectory end (the write head is an implicit truncation).
+- A trajectory with no intervening end flag can span the wrap point of a
+  full storage. The recovered ``(start, stop, lengths)`` indices represent
+  this as ``start > stop`` with ``stop`` *inclusive*: a trajectory spanning
+  rows ``[8, 9, 0, 1, 2]`` of a 10-row storage has ``start=8``, ``stop=2``
+  and ``lengths=5``.
+- If a full storage carries no end marker at all in some batch column, a
+  single trajectory ending at the last row is assumed for that column.
+
+.. warning::
+
+    There is one blind spot: if the stored data carries no trajectory ids
+    and an episode ended mid-buffer without any end flag set (e.g. data
+    collected without ``set_truncated`` and stripped of its
+    ``("collector", "traj_ids")`` entry), that boundary is unrecoverable —
+    the two episodes are indistinguishable from a single longer one, and
+    any consumer will merge them. Keep the trajectory ids, or make sure
+    every trajectory ends with one of the
+    :data:`~torchrl.data.DEFAULT_DONE_KEYS` flags set.
+
+New components that need trajectory boundaries should call
+:func:`~torchrl.data.find_start_stop_traj` rather than reimplement these
+conventions (naive reimplementations typically mishandle the wrap point and
+truncated-only episode ends). Which API to reach for:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Input / use case
+     - API
+   * - Fresh contiguous rollout, needing padded or nested per-trajectory views
+     - :func:`~torchrl.collectors.utils.split_trajectories` (padded output is
+       discouraged unless explicitly needed — see
+       :ref:`data-layout-split-trajectories`)
+   * - Physical replay-storage markers, needing boundary indices / lengths
+     - :func:`~torchrl.data.find_start_stop_traj`
+   * - Sampling contiguous trajectory slices from a buffer
+     - :class:`~torchrl.data.replay_buffers.SliceSampler` (and variants)
+   * - Collecting only complete trajectories in the first place
+     - ``trajs_per_batch`` (see :ref:`collectors_replay_trajs`)
 
 The replay buffer ``ndim`` arg and why it doesn't multi-process well
 --------------------------------------------------------------------
@@ -107,7 +212,8 @@ preserve when extending. The natural mapping is:
   :class:`~torchrl.data.replay_buffers.SliceSampler` infer one trajectory per row without
   scanning ``done`` keys.
 * ``ndim=3`` and beyond — when both an outer worker dim and an env dim
-  exist, e.g. ``MultiSyncCollector([ParallelEnv(2, …)] * 4, …)``.
+  exist, e.g. ``Collector(lambda: ParallelEnv(2, ...),
+  num_collectors=4, sync=True, ...)``.
 
 It looks attractive: the buffer stores its data in the same shape the
 collector produces, no reshape needed.
@@ -117,8 +223,8 @@ storage.** With ``ndim >= 2`` every ``extend`` call commits one row's
 worth of frames along the time axis, and that row is implicitly assumed to
 be a contiguous run of frames from a single env. When several worker
 processes write into the same storage concurrently — e.g.
-:class:`~torchrl.collectors.MultiCollector` ``(sync=False)``,
-:class:`~torchrl.collectors.distributed.RayCollector`, an external pool of
+``Collector(num_collectors=N, sync=False)``, ``Collector(backend="ray")``,
+an external pool of
 producers, or any cluster setup where a learner aggregates batches from
 many actors — the inter-worker write order is uncontrolled. Without
 boundary markers, a given row of the ``[N, T]`` storage can stitch
@@ -148,7 +254,7 @@ Two existing knobs mitigate this without giving up ``ndim >= 2``:
 
   .. code-block:: python
 
-      from torchrl.collectors import MultiCollector
+      from torchrl.collectors import Collector
       from torchrl.data import (
           LazyTensorStorage, ReplayBufferEnsemble, TensorDictReplayBuffer,
       )
@@ -165,8 +271,10 @@ Two existing knobs mitigate this without giving up ``ndim >= 2``:
       rb = ReplayBufferEnsemble(
           *buffers, sample_from_all=True, batch_size=256,
       )
-      collector = MultiCollector(
-          [make_env] * num_workers, policy,
+      collector = Collector(
+          make_env, policy,
+          num_collectors=num_workers,
+          sync=False,
           replay_buffer=rb,                              # see note below
           frames_per_batch=200, total_frames=-1,
       )
@@ -187,14 +295,14 @@ Concretely, ``ndim >= 2`` is straightforward for:
 
 * Single-process :class:`~torchrl.collectors.Collector` with a batched
   env (one process writes; the env dim is stable).
-* Synchronous :class:`~torchrl.collectors.MultiCollector` ``(sync=True)``
+* Synchronous ``Collector(num_collectors=N, sync=True)``
   with ``cat_results="stack"``, which delivers one ``[num_workers, T]``
   batch at a time *atomically*.
 
 It needs the ``set_truncated`` or ensemble mitigation above for:
 
-* :class:`~torchrl.collectors.MultiCollector` ``(sync=False)``.
-* :class:`~torchrl.collectors.distributed.RayCollector`,
+* ``Collector(num_collectors=N, sync=False)``.
+* ``Collector(backend="ray")``,
   :class:`~torchrl.collectors.distributed.DistributedSyncCollector`,
   RPC-based collectors.
 * Any setup where multiple producers ``extend`` the same shared storage
@@ -216,7 +324,7 @@ This is what passing the buffer directly to the collector and setting
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, SliceSampler, TensorDictReplayBuffer
 
     rb = TensorDictReplayBuffer(
@@ -224,9 +332,10 @@ This is what passing the buffer directly to the collector and setting
         sampler=SliceSampler(slice_len=32),         # auto-detects ("collector", "traj_ids")
         batch_size=256,
     )
-    collector = MultiCollector(
-        [make_env] * 4,
+    collector = Collector(
+        make_env,
         policy,
+        num_collectors=4,
         replay_buffer=rb,
         frames_per_batch=200,
         total_frames=-1,

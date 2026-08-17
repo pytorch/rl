@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.13.0}"
+export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.14.0}"
 # PyPI rejects local versions such as X.Y.Z+cpu. CPU wheels are the
 # default PyPI artifacts, so strip only the CPU build suffix while keeping
 # CUDA/ROCm suffixes for the extra-index wheels.
@@ -11,7 +11,7 @@ ${CONDA_RUN} pip install --upgrade setuptools packaging
 
 # Always install pybind11 - required for building C++ extensions
 ${CONDA_RUN} pip install "pybind11[global]"
-${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 
 # Check if ARCH is set to aarch64
 ARCH=${ARCH:-}  # This sets ARCH to an empty string if it's not defined

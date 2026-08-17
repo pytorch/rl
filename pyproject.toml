@@ -39,19 +39,19 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
-    "pyvers",
+    "pyvers>=0.2.3",
     "hoptorch>=0.1.4",
     "numpy",
     "packaging",
     "cloudpickle",
-    "tensordict>=0.13.0,<0.14.0",
+    "tensordict>=0.14.0,<0.15.0",
 ]
 
 [dependency-groups]
 dev = [
     "gym",
     "gymnasium",
-    "hydra-core>=1.1",
+    "hydra-core>=1.3,<1.4",
     "hydra-submitit-launcher",
     "imageio",
     "moviepy",
@@ -66,6 +66,12 @@ dev = [
 
 [tool.uv]
 prerelease = "allow"
+conflicts = [
+    [
+        { extra = "mjlab" },
+        { extra = "genesis" },
+    ],
+]
 
 [[tool.uv.index]]
 name = "pytorch-nightly"
@@ -92,7 +98,7 @@ notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
 vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
-rendering = ["moviepy", "torchcodec>=0.10.0"]
+rendering = ["moviepy", "pygame", "pyyaml", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
@@ -115,7 +121,7 @@ utils = [
     "tensorboard",
     "wandb",
     "tqdm",
-    "hydra-core>=1.1",
+    "hydra-core>=1.3,<1.4",
     "hydra-submitit-launcher",
     "pre-commit",
     "autoflake",
@@ -193,6 +199,10 @@ dev = [
     "autoflake",
 ]
 
+[project.scripts]
+rlrender = "torchrl.render.cli:main"
+torchrl-render = "torchrl.render.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/pytorch/rl"
 Documentation = "https://pytorch.org/rl"
@@ -209,7 +219,7 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "torchrl/_version.py"
-fallback_version = "0.13.0"
+fallback_version = "0.14.0"
 
 [tool.setuptools.packages.find]
 exclude = [

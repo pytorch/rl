@@ -183,8 +183,8 @@ print(
 # under ``("next", ...)`` *before* stacking per-step data.
 # ``("next", "reward")``, ``("next", "done")`` and
 # ``("next", "truncated")`` are preserved — they cannot be reconstructed
-# from the root keys. The flag works for ``MultiSyncCollector`` and
-# ``MultiAsyncCollector`` too.
+# from the root keys. The flag also works when ``Collector`` selects a process
+# or distributed backend.
 
 compact_collector = Collector(
     create_env_fn=env_maker,
@@ -230,7 +230,9 @@ print(set(data.keys(True, True)) - set(compact_data.keys(True, True)))
 # not require :class:`~torchrl.data.SliceSampler` — but
 # :class:`~torchrl.data.SliceSampler` is the natural pairing because
 # adjacent positions inside a slice are also adjacent in trajectory
-# time.
+# time. (These are the same trajectory markers every boundary-aware
+# component relies on — see
+# :ref:`Trajectory boundaries <ref_traj_boundaries>`.)
 
 rb = ReplayBuffer(
     storage=LazyTensorStorage(200),

@@ -25,6 +25,10 @@ from torchrl.collectors.utils import split_trajectories
 class MultiAsyncCollector(MultiCollector):
     """Runs a given number of DataCollectors on separate processes asynchronously.
 
+    .. note::
+        Prefer ``Collector(num_collectors=N, sync=False)`` for construction in
+        new code. This class is the concrete asynchronous result.
+
     .. aafig::
 
 
@@ -212,7 +216,7 @@ class MultiAsyncCollector(MultiCollector):
         else:
             idx = new_data
         out = self.out_tensordicts[idx]
-        if not self.replay_buffer and (j == 0 or use_buffers):
+        if self.replay_buffer is None and (j == 0 or use_buffers):
             # we clone the data to make sure that we'll be working with a fixed copy
             out = out.clone()
         return idx, j, out
@@ -307,8 +311,8 @@ class MultiAsyncCollector(MultiCollector):
                     self.pipes[idx].send((idx, "continue"))
 
     # for RPC
-    def _receive_weights_scheme(self):
-        return super()._receive_weights_scheme()
+    def _receive_weights_scheme(self, model_version: int | None = None):
+        return super()._receive_weights_scheme(model_version=model_version)
 
     # for RPC
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):

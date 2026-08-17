@@ -7,19 +7,21 @@ from __future__ import annotations
 
 import pathlib
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.offline_to_online import OfflineToOnlineReplayBuffer
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.record.loggers import Logger
 from torchrl.trainers.algorithms.sac import SACTrainer
-from torchrl.trainers.trainers import TrainerHookBase
+from torchrl.trainers.trainers import Trainer, TrainerHookBase
 
 __all__ = [
     "OfflineToOnlineReplayBufferHook",
@@ -199,6 +201,9 @@ class OfflineToOnlineTrainer(SACTrainer):
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -242,6 +247,9 @@ class OfflineToOnlineTrainer(SACTrainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
+            checkpoint_rotation=checkpoint_rotation,
+            checkpoint_metadata=checkpoint_metadata,
             replay_buffer=None,
             enable_logging=enable_logging,
             log_rewards=log_rewards,

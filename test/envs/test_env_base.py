@@ -8,6 +8,8 @@ import argparse
 import functools
 import gc
 import pickle
+import subprocess
+import sys
 import warnings
 from functools import partial
 from typing import Any
@@ -1081,6 +1083,49 @@ class TestResetSetState:
             warnings.simplefilter("error", FutureWarning)
             out = env.reset(td)
         assert (out["observation"] == 0).all()
+
+
+_MOCK_ENV_KEY_CASES = [
+    # (class name, out_key, pixel shape or None for vector obs)
+    ("DiscreteActionVecMockEnv", "observation", None),
+    ("ContinuousActionVecMockEnv", "observation", None),
+    ("DiscreteActionConvMockEnv", "pixels", (1, 7, 7)),
+    ("DiscreteActionConvMockEnvNumpy", "pixels", (7, 7, 3)),
+    ("ContinuousActionConvMockEnv", "pixels", (1, 7, 7)),
+    ("ContinuousActionConvMockEnvNumpy", "pixels", (7, 7, 3)),
+]
+
+
+@pytest.mark.parametrize("cls_name,out_key,pixel_shape", _MOCK_ENV_KEY_CASES)
+def test_mock_env_keys_first_instance_explicit_specs(cls_name, out_key, pixel_shape):
+    # Regression test: the mock envs used to set cls.out_key/_out_key inside
+    # their __new__, guarded behind `observation_spec is None`. Constructing
+    # a mock with an explicit observation_spec as the FIRST instance in the
+    # process then failed with AttributeError (exposed by pytest-xdist
+    # ordering), and unconditional assignment in a parent stomped the keys
+    # of Conv subclasses delegating to it. The keys are now class-level
+    # attributes; a subprocess guarantees true first-instance conditions.
+    shape = list(pixel_shape) if pixel_shape is not None else [7]
+    orig_key = "pixels_orig" if out_key == "pixels" else "observation_orig"
+    script = f"""
+import torch
+from torchrl.data.tensor_specs import Composite, Unbounded
+from torchrl.testing.mocking_classes import {cls_name}
+
+spec = Composite(
+    {out_key}=Unbounded(shape=torch.Size({shape})),
+    {orig_key}=Unbounded(shape=torch.Size({shape})),
+)
+env = {cls_name}(observation_spec=spec)
+assert env.out_key == {out_key!r}, env.out_key
+assert env._out_key == {orig_key!r}, env._out_key
+td = env.reset()
+assert {out_key!r} in td.keys(), list(td.keys())
+td = env.rand_step(td)
+assert ("next", {out_key!r}) in td.keys(True), list(td.keys(True))
+env.rollout(3)
+"""
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=300)
 
 
 if __name__ == "__main__":

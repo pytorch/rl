@@ -24,9 +24,8 @@ from torchrl.collectors.utils import (
     _traj_emit,
     _traj_ingest,
 )
-
 from torchrl.collectors.weight_update import WeightUpdaterBase
-from torchrl.weight_update.utils import _resolve_attr
+from torchrl.weight_update.utils import _resolve_attr, _weight_tensor_signature
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 
@@ -403,6 +402,69 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         self.post_collect_hook = hook
 
+    def stats(self) -> dict[str, int | float | bool]:
+        """Returns a cheap, serializable snapshot of the collector's progress.
+
+        The snapshot only contains scalar counters and gauges: it never
+        includes policy, environment or batch data, does not modify the
+        collector state and is safe to call while the collector is running.
+        Cumulative counters such as ``frames`` are meant to be converted into
+        rates by an external monitor such as
+        :class:`~torchrl.record.loggers.monitoring.LoggerMonitor`.
+
+        Entries are only present when the corresponding state exists on the
+        collector:
+
+        - ``"frames"``: total number of frames collected so far;
+        - ``"batches"``: number of batches delivered so far;
+        - ``"total_frames"``: requested total frames (absent for endless collectors);
+        - ``"completed"``: whether the frame budget has been reached;
+        - ``"requested_frames_per_batch"``: the per-batch frame budget;
+        - ``"policy_version"``: current policy version, when the collector
+          tracks it with an integer version.
+
+        Multi-worker collectors extend this signature with a ``workers``
+        argument controlling aggregate versus per-worker views.
+
+        Examples:
+            >>> from torchrl.collectors import Collector
+            >>> from torchrl.envs import GymEnv
+            >>> from torchrl.envs.utils import RandomPolicy
+            >>> env = GymEnv("Pendulum-v1")
+            >>> collector = Collector(
+            ...     env,
+            ...     RandomPolicy(env.action_spec),
+            ...     frames_per_batch=10,
+            ...     total_frames=20,
+            ... )
+            >>> for batch in collector:
+            ...     print(collector.stats()["frames"])
+            10
+            20
+        """
+        stats: dict[str, int | float | bool] = {}
+        frames = getattr(self, "_frames", None)
+        if frames is not None:
+            stats["frames"] = int(frames)
+        iters = getattr(self, "_iter", None)
+        if iters is not None:
+            stats["batches"] = int(iters) + 1
+        total_frames = getattr(self, "total_frames", None)
+        if isinstance(total_frames, int) and total_frames >= 0:
+            stats["total_frames"] = total_frames
+            if frames is not None:
+                stats["completed"] = bool(frames >= total_frames)
+        requested = getattr(self, "requested_frames_per_batch", None)
+        if isinstance(requested, int):
+            stats["requested_frames_per_batch"] = requested
+        try:
+            version = self.policy_version
+        except (AttributeError, RuntimeError):
+            version = None
+        if isinstance(version, int):
+            stats["policy_version"] = version
+        return stats
+
     def enable_profile(
         self,
         *,
@@ -636,6 +698,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         return _resolve_attr(self, attr)
 
+    def _dump_env_transform(self, step: int | None = None) -> None:
+        """Dump the environment transform when it supports ``dump``."""
+        env = getattr(self, "env", None)
+        transform = getattr(env, "transform", None)
+        dump = getattr(transform, "dump", None)
+        if callable(dump):
+            dump(step=step)
+
     def map_fn(
         self,
         method_name: str,
@@ -738,14 +808,18 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             return td.data
 
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
-        with param_and_buf.data.to("meta").to_module(policy):
+        with param_and_buf.data.to("meta").to_module(
+            policy, preserve_module_state=False
+        ):
             policy_new_device = deepcopy(policy)
 
         param_and_buf_new_device = param_and_buf.apply(
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         )
-        param_and_buf_new_device.to_module(policy_new_device)
+        param_and_buf_new_device.to_module(
+            policy_new_device, preserve_module_state=False
+        )
         # Sanity check
         if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(
             get_original_weights().keys(True, True)
@@ -1097,14 +1171,20 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """Fallback weight update when no scheme is configured.
 
         Override in subclasses to provide custom fallback behavior.
-        By default, this is a no-op.
+        The base implementation fails rather than silently accepting an update
+        that cannot reach a policy.
         """
+        del policy_or_weights, model_id
+        raise RuntimeError(
+            "No weight updater, WeightSyncScheme, or concrete local policy "
+            "update path is configured for this collector."
+        )
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights
         scheme.send(weights=processed_weights, worker_ids=worker_ids)
 
-    def _receive_weights_scheme(self):
+    def _receive_weights_scheme(self, model_version: int | None = None):
         """Receive weights for all registered receiver schemes.
 
         scheme.receive() handles both applying weights locally and cascading
@@ -1115,6 +1195,36 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         for scheme in self._receiver_schemes.values():
             scheme.receive()
+        self._set_received_policy_version(model_version)
+
+    def _connect_weights_scheme(self, model_version: int | None = None) -> None:
+        """Connect all registered receiver schemes for initial publication."""
+        if not hasattr(self, "_receiver_schemes"):
+            raise RuntimeError("No receiver schemes registered.")
+        for scheme in self._receiver_schemes.values():
+            if not scheme.synchronized_on_receiver:
+                scheme.connect(worker_idx=self.worker_idx)
+        self._set_received_policy_version(model_version)
+
+    def _set_received_policy_version(self, model_version: int | None) -> None:
+        """Apply the sender's semantic policy version after a weight receive."""
+        if model_version is None:
+            return
+        tracker = getattr(self, "policy_version_tracker", None)
+        if tracker is not None:
+            tracker.version = int(model_version)
+
+    def _weight_sync_signature(
+        self, model_id: str
+    ) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
+        """Return the ordered tensor schema expected by a weight receiver."""
+        get_model = getattr(self, "get_model", None)
+        if not callable(get_model):
+            raise RuntimeError(
+                f"{type(self).__name__} cannot resolve weight model {model_id!r}."
+            )
+        weights = TensorDict.from_module(get_model(model_id))
+        return _weight_tensor_signature(weights)
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload
@@ -1271,6 +1381,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         # Initialize each scheme on the receiver side
         for model_id, scheme in weight_recv_schemes.items():
+            previous_scheme = self._receiver_schemes.get(model_id)
+            if previous_scheme is not None and previous_scheme is not scheme:
+                previous_scheme.shutdown()
             if not scheme.initialized_on_receiver:
                 if scheme.initialized_on_sender:
                     raise RuntimeError(

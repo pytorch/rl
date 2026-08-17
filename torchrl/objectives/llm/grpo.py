@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import multiprocessing as mp
+import os
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.base import _is_leaf_nontensor
 from tensordict.nn import (
     CompositeDistribution,
     ProbabilisticTensorDictModule,
@@ -35,6 +37,7 @@ from torch import distributions as d
 from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs.transforms.ray_service import _maybe_clear_device, _maybe_to_device
 from torchrl.envs.transforms.transforms import Transform
+from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
 from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _sum_td_features, _validate_clip_epsilon
@@ -808,7 +811,11 @@ class GRPOLoss(LossModule):
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
         try:
-            entropy = dist.entropy()
+            entropy = (
+                composite_entropy(dist, self.samples_mc_entropy)
+                if isinstance(dist, CompositeDistribution)
+                else dist.entropy()
+            )
             if not entropy.isfinite().all():
                 del entropy
                 if VERBOSE:
@@ -821,14 +828,14 @@ class GRPOLoss(LossModule):
                 torchrl_logger.warning(
                     f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
                 )
-            if getattr(dist, "has_rsample", False):
-                x = dist.rsample((self.samples_mc_entropy,))
-            else:
-                x = dist.sample((self.samples_mc_entropy,))
             with set_composite_lp_aggregate(False) if isinstance(
                 dist, CompositeDistribution
             ) else contextlib.nullcontext():
-                log_prob = dist.log_prob(x)
+                _, log_prob = sample_and_log_prob(
+                    dist,
+                    (self.samples_mc_entropy,),
+                    reparameterize=getattr(dist, "has_rsample", False),
+                )
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
@@ -1062,6 +1069,18 @@ class MCAdvantage(Transform):
     their transform inside the replay-buffer actor; use :class:`RayMCAdvantage`
     when only the grouping transform state should be centralized in Ray.
 
+    .. note:: Setting the environment variable
+        ``TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES=1`` turns :meth:`share_memory_`
+        into a no-op: the grouping queues and counters stay process-local
+        instead of being moved to a multiprocessing manager. Use this to skip
+        the manager round-trips when a single process writes to the replay
+        buffer, or when every trajectory of a group is guaranteed to be
+        produced by the same writer process. Caveat: with multiple writer
+        processes, a GRPO group whose trajectories span several workers can
+        never complete -- each worker only sees its local fraction of the
+        group, so those trajectories are held in memory forever and never
+        written to the buffer.
+
     .. warning:: This transform will flatten the input tensordicts and therefore is not compatible yet with replay
         buffers hosting storages of more than one dimension.
 
@@ -1238,6 +1257,14 @@ class MCAdvantage(Transform):
         """Move replay-buffer write state to multiprocessing-shared objects."""
         if self.is_shared:
             return self
+        if os.environ.get("TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES") == "1":
+            torchrl_logger.info(
+                "MCAdvantage.share_memory_ skipped because "
+                "TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES=1: grouping queues stay "
+                "process-local, so GRPO groups whose trajectories span several "
+                "writer processes will never complete."
+            )
+            return self
         manager = mp.Manager()
         queues = {group: list(queue) for group, queue in self.queues.items()}
         self.queues = _MCAdvantageSharedQueues(
@@ -1274,6 +1301,24 @@ class MCAdvantage(Transform):
             self.selected_trajectories = 0
             self.unselected_trajectories = 0
 
+    def clear_queues(self) -> None:
+        """Clear incomplete Monte-Carlo trajectory groups."""
+        with self._state_lock:
+            self.queues.clear()
+
+    def get_stats(self) -> dict[str, float | int]:
+        """Return a serializable snapshot of counters and pending queues."""
+        with self._state_lock:
+            stats = {name: self._get_stat(name) for name in _MCADVANTAGE_STATS}
+            stats.update(
+                queued_groups=self.queued_groups,
+                queued_trajectories=self.queued_trajectories,
+                max_queued_trajectories_per_group=(
+                    self.max_queued_trajectories_per_group
+                ),
+            )
+            return stats
+
     @property
     def queued_groups(self) -> int:
         """Number of incomplete groups currently held in memory."""
@@ -1306,7 +1351,60 @@ class MCAdvantage(Transform):
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         return tensordict
 
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    @staticmethod
+    def _concrete_if_possible(tensordict: TensorDictBase) -> TensorDictBase:
+        """Materialize lazy inputs unless their tensor leaves are ragged.
+
+        Ragged leaves (e.g. variable-length token sequences in a lazy stack)
+        cannot be stacked into a contiguous tensordict; returning the lazy
+        input unchanged is always safe, so any ``RuntimeError`` raised by
+        ``contiguous()`` falls back to it rather than pattern-matching the
+        (version-dependent) error message.
+        """
+        try:
+            out = tensordict.contiguous()
+        except RuntimeError as err:
+            torchrl_logger.debug(
+                f"MCAdvantage: keeping lazy tensordict; contiguous() failed with: {err}"
+            )
+            return tensordict
+        # contiguous() can silently turn stacked NonTensorData entries (e.g.
+        # string prompts) into empty TensorDicts. Keep the lazy input whenever
+        # materialization would lose entries.
+        lazy_keys = set(tensordict.keys(True, True, is_leaf=_is_leaf_nontensor))
+        concrete_keys = set(out.keys(True, True, is_leaf=_is_leaf_nontensor))
+        if lazy_keys - concrete_keys:
+            torchrl_logger.debug(
+                "MCAdvantage: keeping lazy tensordict; contiguous() dropped "
+                f"entries {lazy_keys - concrete_keys}"
+            )
+            return tensordict
+        return out
+
+    @staticmethod
+    def _cat_tensordicts(
+        tensordicts: list[TensorDictBase], dim: int = 0
+    ) -> TensorDictBase:
+        """Concatenate trajectory TensorDicts with a concrete output type.
+
+        ``MCAdvantage`` may receive view/lazy TensorDicts from replay storage and
+        plain TensorDicts from direct collector writes. Queued and returned
+        trajectory groups should nevertheless have a consistent concrete
+        representation, both to avoid backend-specific lazy-stack assumptions
+        and to keep replay-buffer storage writes predictable.
+
+        Trajectories whose leaves are ragged across (but uniform within)
+        trajectories materialize individually yet cannot be concatenated into
+        a contiguous result; those fall back to a lazy concatenation.
+        """
+        concrete = [MCAdvantage._concrete_if_possible(td) for td in tensordicts]
+        try:
+            return torch.cat(concrete, dim)
+        except RuntimeError:
+            steps = [step for td in tensordicts for step in td.unbind(dim)]
+            return lazy_stack(steps, dim)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase | None:
         if self.verbose:
             torchrl_logger.info(
                 f"Invoking MCAdvantage.\nData size: {tensordict.shape}.\nCurrent queue size: {len(self.queues)}.\nTotal queue content: {sum(len(q) for q in self.queues.values())}"
@@ -1322,7 +1420,7 @@ class MCAdvantage(Transform):
                 tensordicts = tensordict.split(splits.tolist())
                 tensordicts = [self._inv_call(td) for td in tensordicts]
                 tensordicts = [td for td in tensordicts if td is not None]
-                return torch.cat(tensordicts) if tensordicts else None
+                return self._cat_tensordicts(tensordicts) if tensordicts else None
             # Then we have a single trajectory
             with self._state_lock:
                 return self._inv_call_single(tensordict)
@@ -1338,7 +1436,7 @@ class MCAdvantage(Transform):
                 continue
             result.append(td_out)
         if result:
-            return torch.cat(result, 0)
+            return self._cat_tensordicts(result, 0)
         return
 
     def _inv_call_single(self, tensordict: TensorDictBase) -> TensorDictBase | None:
@@ -1354,6 +1452,7 @@ class MCAdvantage(Transform):
             )
         if not tensordict[-1][self.done_key].all():
             raise RuntimeError("Expected the trajectory to be done.")
+        tensordict = self._concrete_if_possible(tensordict)
         group = tensordict[0][self.prompt_key]
         if isinstance(group, torch.Tensor):
             # tensor group identifiers (e.g. an integer group id stamped
@@ -1411,11 +1510,13 @@ class MCAdvantage(Transform):
             self._queue_delete(group)
             self.completed_groups += 1
             # Cat is the most robust way to combine the trajs
-            tds = torch.cat(trajs, -1)
-            # Collect rewards
+            tds = self._cat_tensordicts(trajs, -1)
+            # Collect rewards. Same-length trajectories concatenate into a
+            # regular strided tensor rather than a nested one.
             reward = tds.get(self.rewards_key, as_nested_tensor=True)
-            reward_mean = reward.values().mean()
-            reward_scale = reward.values().std()
+            reward_values = reward.values() if reward.is_nested else reward
+            reward_mean = reward_values.mean()
+            reward_scale = reward_values.std()
             advantage = (reward - reward_mean) / reward_scale.clamp_min(1e-6)
             if self.verbose:
                 torchrl_logger.info(f"Advantage: {reward_mean=} {reward_scale=}")
@@ -1493,7 +1594,7 @@ class MCAdvantage(Transform):
             torchrl_logger.info(f"Group returns: {returns=} {advantage=}")
         for traj, reward, adv in zip(trajs, rewards, advantage.unbind(0)):
             traj.set(self.advantage_key, adv.expand(reward.shape).clone())
-        return torch.cat(trajs, -1)
+        return self._cat_tensordicts(trajs, -1)
 
 
 class _MCAdvantageRayActor:

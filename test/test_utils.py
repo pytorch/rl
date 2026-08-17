@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
+import threading
 from copy import copy
 from importlib import import_module
 from unittest import mock
@@ -22,8 +24,16 @@ from torchrl import (
     cuda_memory_profile,
     cuda_memory_stats,
     reset_cuda_peak_stats,
+    service_backend,
+    transport_backend,
 )
+from torchrl._comm.backends import _get_service_backend, _get_transport_backend
 from torchrl._utils import _rng_decorator, as_remote, get_binary_env_var, implement_for
+from torchrl.data import (
+    PrioritizedReplayBuffer,
+    ReplayBuffer,
+    TensorDictPrioritizedReplayBuffer,
+)
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
 from torchrl.objectives.utils import _pseudo_vmap
@@ -31,6 +41,116 @@ from torchrl.objectives.utils import _pseudo_vmap
 from torchrl.testing import get_default_devices, gym_helpers as _gym_helpers
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
+
+
+def test_backend_contexts_are_nested_and_process_local():
+    assert _get_service_backend() is None
+    assert _get_transport_backend() is None
+
+    with service_backend("ray"), transport_backend("distributed"):
+        assert _get_service_backend() == "ray"
+        assert _get_transport_backend() == "distributed"
+        with service_backend("process"):
+            assert _get_service_backend() == "process"
+        assert _get_service_backend() == "ray"
+        with transport_backend("ray"):
+            assert _get_transport_backend() == "ray"
+        assert _get_transport_backend() == "distributed"
+
+        with mock.patch(
+            "torchrl._comm.backends.os.getpid", return_value=os.getpid() + 1
+        ):
+            assert _get_service_backend() is None
+            assert _get_transport_backend() is None
+
+    assert _get_service_backend() is None
+    assert _get_transport_backend() is None
+
+
+def test_backend_contexts_restore_after_error_and_do_not_cross_threads():
+    thread_values = []
+
+    with pytest.raises(RuntimeError, match="context failure"):
+        with service_backend("ray"), transport_backend("distributed"):
+            thread = threading.Thread(
+                target=lambda: thread_values.append(
+                    (_get_service_backend(), _get_transport_backend())
+                )
+            )
+            thread.start()
+            thread.join()
+            raise RuntimeError("context failure")
+
+    assert thread_values == [(None, None)]
+    assert _get_service_backend() is None
+    assert _get_transport_backend() is None
+
+
+def test_backend_contexts_are_isolated_between_async_tasks():
+    async def read_in_context(backend):
+        with service_backend(backend):
+            await asyncio.sleep(0)
+            return _get_service_backend()
+
+    async def gather_values():
+        return await asyncio.gather(read_in_context("ray"), read_in_context("process"))
+
+    assert asyncio.run(gather_values()) == ["ray", "process"]
+    assert _get_service_backend() is None
+
+
+def test_explicit_backend_values_override_context():
+    with service_backend("ray"), transport_backend("distributed"):
+        replay = ReplayBuffer(service_backend="direct", transport="auto")
+    try:
+        assert replay.service_backend == "direct"
+    finally:
+        replay.shutdown()
+
+
+def test_context_selected_backend_errors_report_the_context():
+    with service_backend("process"):
+        with pytest.raises(
+            ValueError, match="enclosing torchrl.service_backend context"
+        ):
+            ReplayBuffer()
+
+    with transport_backend("distributed"):
+        with pytest.raises(
+            ValueError, match="enclosing torchrl.transport_backend context"
+        ):
+            ReplayBuffer()
+
+
+@pytest.mark.parametrize(
+    "buffer_cls", [PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer]
+)
+def test_transport_default_is_not_injected_into_constructors(buffer_cls):
+    # Regression test: the service metaclass used to inject transport="auto"
+    # into every construction, breaking subclasses whose __init__ did not
+    # accept the keyword (e.g. PrioritizedReplayBuffer(alpha=..., beta=...)).
+    replay = buffer_cls(alpha=1.1, beta=1.1)
+    try:
+        assert replay.service_backend == "direct"
+    finally:
+        replay.shutdown()
+
+
+@pytest.mark.parametrize(
+    "buffer_cls", [PrioritizedReplayBuffer, TensorDictPrioritizedReplayBuffer]
+)
+def test_prioritized_buffers_accept_transport_kwargs(buffer_cls):
+    replay = buffer_cls(alpha=1.1, beta=1.1, transport="auto")
+    try:
+        assert replay.service_backend == "direct"
+    finally:
+        replay.shutdown()
+
+    with transport_backend("distributed"):
+        with pytest.raises(
+            ValueError, match="enclosing torchrl.transport_backend context"
+        ):
+            buffer_cls(alpha=1.1, beta=1.1)
 
 
 def _clear_gym_implement_for_state():

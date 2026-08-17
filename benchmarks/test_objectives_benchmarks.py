@@ -20,20 +20,30 @@ from tensordict.nn import (
 )
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded, Unbounded
-from torchrl.modules import MLP, QValueActor, TanhNormal
+from torchrl.modules import (
+    MLP,
+    QValueActor,
+    SignedHyperbolicValueTransform,
+    SymExpTwoHot,
+    SymLogValueTransform,
+    TanhNormal,
+)
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
     CQLLoss,
     DDPGLoss,
     DQNLoss,
+    DreamerV3ValueLoss,
     IQLLoss,
     REDQLoss,
     ReinforceLoss,
     SACLoss,
     TD3Loss,
+    TQCLoss,
 )
 from torchrl.objectives.deprecated import REDQLoss_deprecated
+from torchrl.objectives.utils import SoftUpdate
 from torchrl.objectives.value import GAE
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -165,6 +175,67 @@ def _maybe_compile(fn, compile, td, fullgraph=FULLGRAPH, warmup=3):
             fn(td)
 
     return fn
+
+
+@pytest.mark.parametrize(
+    "transform",
+    [SymLogValueTransform(), SignedHyperbolicValueTransform()],
+    ids=["symlog", "signed-hyperbolic"],
+)
+@pytest.mark.parametrize("compile", [False, True])
+def test_value_transform_speed(benchmark, transform, compile, batch=2**20):
+    value = torch.randn(batch)
+
+    def round_trip(value):
+        return transform.inverse(transform(value))
+
+    round_trip = _maybe_compile(round_trip, compile, value)
+    benchmark(round_trip, value)
+
+
+@pytest.mark.parametrize("compile", [False, True])
+def test_dreamer_v3_value_speed(
+    benchmark, compile, state_dim=32, belief_dim=32, bins=255, batch=128
+):
+    device = torch.device("cpu")
+    value_model = Seq(
+        Mod(
+            MLP(
+                in_features=state_dim + belief_dim,
+                out_features=bins,
+                depth=2,
+                num_cells=128,
+                device=device,
+            ),
+            in_keys=["state", "belief"],
+            out_keys=["state_value_logits"],
+        ),
+        Mod(
+            SymExpTwoHot(bins).to(device),
+            in_keys=["state_value_logits"],
+            out_keys=["state_value"],
+        ),
+    )
+    td = TensorDict(
+        {
+            "state": torch.randn(batch, state_dim, device=device),
+            "belief": torch.randn(batch, belief_dim, device=device),
+            "lambda_target": torch.randn(batch, 1, device=device),
+        },
+        [batch],
+    )
+    value_model(td.clone())
+    loss = DreamerV3ValueLoss(
+        value_model,
+        value_loss="two_hot",
+        discount_loss=False,
+        num_value_bins=bins,
+        slow_critic_regularization=1.0,
+    )
+    SoftUpdate(loss, tau=0.02)
+    loss(td)
+    loss = _maybe_compile(loss, compile, td, fullgraph=False, warmup=1)
+    benchmark(loss, td)
 
 
 @pytest.mark.parametrize("backward", [None, "backward"])
@@ -378,6 +449,111 @@ def test_sac_speed(
             losses = loss(td)
             sum(
                 [val for key, val in losses.items() if key.startswith("loss")]
+            ).backward()
+
+        benchmark.pedantic(
+            loss_and_bw,
+            args=(td,),
+            setup=loss.zero_grad,
+            iterations=1,
+            warmup_rounds=5,
+            rounds=50,
+        )
+    else:
+        benchmark(loss, td)
+
+
+@pytest.mark.parametrize("backward", [None, "backward"])
+@pytest.mark.parametrize("compile", [False, True, "reduce-overhead"])
+def test_tqc_speed(
+    benchmark,
+    backward,
+    compile,
+    n_obs=8,
+    n_act=4,
+    ncells=128,
+    batch=128,
+    n_hidden=64,
+    n_quantiles=25,
+):
+    if compile == "reduce-overhead" and backward is not None:
+        pytest.skip("reduce-overhead with backward causes segfaults in CI")
+    if compile:
+        torch._dynamo.reset_code_caches()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    common = MLP(
+        num_cells=ncells,
+        in_features=n_obs,
+        depth=3,
+        out_features=n_hidden,
+        device=device,
+    )
+    actor_net = MLP(
+        num_cells=ncells,
+        in_features=n_hidden,
+        depth=2,
+        out_features=2 * n_act,
+        device=device,
+    )
+    critic_net = MLP(
+        in_features=n_hidden + n_act,
+        num_cells=ncells,
+        depth=2,
+        out_features=n_quantiles,
+        device=device,
+    )
+    batch = [batch]
+    td = TensorDict(
+        {
+            "obs": torch.randn(*batch, n_obs),
+            "action": torch.randn(*batch, n_act),
+            "next": {
+                "obs": torch.randn(*batch, n_obs),
+                "reward": torch.randn(*batch, 1),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
+            },
+        },
+        batch,
+        device=device,
+    )
+    common = Mod(common, in_keys=["obs"], out_keys=["hidden"])
+    actor = ProbSeq(
+        common,
+        Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
+        Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+        ProbMod(
+            in_keys=["loc", "scale"],
+            out_keys=["action"],
+            distribution_class=TanhNormal,
+            distribution_kwargs={"safe_tanh": False},
+        ),
+    )
+    critic = Seq(
+        common,
+        Mod(
+            critic_net,
+            in_keys=["hidden", "action"],
+            out_keys=["state_action_value"],
+        ),
+    )
+    critic(actor(td.clone()))
+    loss = TQCLoss(
+        actor,
+        critic,
+        action_spec=Unbounded(shape=(n_act,)),
+        num_qvalue_nets=5,
+        top_quantiles_to_drop_per_net=2,
+    )
+    loss(td)
+    loss = _maybe_compile(loss, compile, td)
+
+    if backward:
+
+        def loss_and_bw(td):
+            losses = loss(td)
+            sum(
+                value for key, value in losses.items() if key.startswith("loss")
             ).backward()
 
         benchmark.pedantic(

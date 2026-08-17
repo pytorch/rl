@@ -17,7 +17,7 @@ from torch.utils._pytree import tree_map
 from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler, SliceSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
-from torchrl.envs.transforms import NextStateReconstructor
+from torchrl.envs.transforms import NextStateReconstructor, PolicyAgeFilter
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
     CatFrames,
@@ -509,6 +509,99 @@ class TestNextStateReconstructor:
         )
         with pytest.raises(ValueError, match="flat"):
             NextStateReconstructor()(td)
+
+
+class TestPolicyAgeFilter:
+    @staticmethod
+    def _data(versions):
+        versions = torch.as_tensor(versions)
+        return TensorDict(
+            {
+                "observation": torch.randn(versions.shape[0], 3),
+                "policy_version": versions,
+            },
+            batch_size=[versions.shape[0]],
+        )
+
+    def test_filters_on_extend(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100),
+            transform=PolicyAgeFilter(3, max_policy_lag=1),
+        )
+        rb.extend(self._data([0, 2, 2, 3]))
+        assert len(rb) == 3
+
+    def test_filters_dynamically_on_sample(self):
+        current = {"version": 3}
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100),
+            transform=PolicyAgeFilter(lambda: current["version"], max_policy_lag=1),
+        )
+        rb.extend(self._data([2, 2, 3, 3]))
+        assert len(rb) == 4
+        assert rb.sample(4).batch_size[0] == 4
+        # The policy moved on: version-2 data became stale since insertion.
+        # The random sampler draws with replacement, so the batch size is
+        # not deterministic; the invariant is that no stale element passes.
+        current["version"] = 4
+        sample = rb.sample(4)
+        assert (sample["policy_version"] == 3).all()
+        # Once everything is stale the batch is deterministically empty.
+        current["version"] = 10
+        sample = rb.sample(4)
+        assert sample.batch_size[0] == 0
+
+    def test_nested_version_key(self):
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100),
+            transform=PolicyAgeFilter(
+                3, max_policy_lag=0, policy_version_key=("meta", "policy_version")
+            ),
+        )
+        data = TensorDict(
+            {
+                "observation": torch.randn(3, 2),
+                ("meta", "policy_version"): torch.tensor([1, 3, 3]),
+            },
+            batch_size=[3],
+        )
+        rb.extend(data)
+        assert len(rb) == 2
+
+    def test_row_uses_oldest_element(self):
+        # [B, T] data: a single stale element marks the whole row stale
+        filt = PolicyAgeFilter(5, max_policy_lag=2)
+        td = TensorDict(
+            {
+                "observation": torch.randn(2, 4),
+                "policy_version": torch.tensor([[3, 5, 5, 5], [4, 5, 5, 2]]),
+            },
+            batch_size=[2, 4],
+        )
+        out = filt(td)
+        assert out.batch_size[0] == 1
+
+    def test_missing_key_warns_and_passes_through(self):
+        filt = PolicyAgeFilter(3, max_policy_lag=1)
+        td = TensorDict({"observation": torch.randn(4, 3)}, batch_size=[4])
+        out = filt(td)
+        assert out.batch_size[0] == 4
+        with pytest.raises(KeyError, match="PolicyAgeFilter"):
+            PolicyAgeFilter(3, max_policy_lag=1, strict=True)(td)
+
+    def test_negative_lag_rejected(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            PolicyAgeFilter(3, max_policy_lag=-1)
+
+    def test_noop_when_attached_to_env(self):
+        from torchrl.envs import TransformedEnv
+        from torchrl.testing.mocking_classes import CountingEnv
+
+        env = TransformedEnv(
+            CountingEnv(max_steps=4), PolicyAgeFilter(0, max_policy_lag=0)
+        )
+        rollout = env.rollout(3)
+        assert rollout.batch_size[0] == 3
 
 
 if __name__ == "__main__":

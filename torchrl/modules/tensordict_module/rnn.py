@@ -962,7 +962,7 @@ class LSTMModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.lstm).to_module(lstm)
+        from_module(self.lstm).to_module(lstm, preserve_module_state=False)
         self.lstm = lstm
         return self
 
@@ -988,7 +988,7 @@ class LSTMModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.lstm).to_module(lstm)
+        from_module(self.lstm).to_module(lstm, preserve_module_state=False)
         self.lstm = lstm
         return self
 
@@ -2415,7 +2415,7 @@ class GRUModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.gru).to_module(gru)
+        from_module(self.gru).to_module(gru, preserve_module_state=False)
         self.gru = gru
         return self
 
@@ -2440,7 +2440,7 @@ class GRUModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.gru).to_module(gru)
+        from_module(self.gru).to_module(gru, preserve_module_state=False)
         self.gru = gru
         return self
 

@@ -17,15 +17,19 @@ import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
 from _rb_common import _has_ray
 from tensordict import TensorDict
+from torchrl import service_backend, transport_backend
 from torchrl._utils import logger as torchrl_logger
-from torchrl.data import RayReplayBuffer
+from torchrl.data import RayReplayBuffer, ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     RandomSampler,
     SamplerWithoutReplacement,
 )
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+)
 from torchrl.objectives.llm import MCAdvantage
 
 RETRY_COUNT = 3
@@ -189,6 +193,70 @@ class TestRayRB:
         finally:
             rb.close()
 
+    def test_ray_rb_stats(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            stats = rb.stats()
+            assert stats["size"] == 0
+            assert stats["write_count"] == 0
+            rb.extend(
+                TensorDict(
+                    {"x": torch.ones(10, 2), "y": torch.ones(10, 2)}, batch_size=10
+                )
+            )
+            stats = rb.stats()
+            assert stats["size"] == 10
+            assert stats["write_count"] == 10
+            assert stats["capacity"] == 100
+            assert stats["utilization"] == 0.1
+            client = rb.client()
+            assert client.stats()["write_count"] == 10
+        finally:
+            rb.close()
+
+    def test_ray_rb_update_if_present(self):
+        """Spec: update_if_present is delegated to the actor in one RPC.
+
+        The remote buffer is a TensorDictReplayBuffer with a generation
+        tracking writer (tracking is opt-in), so samples carry the index and
+        index_generation keys; the conditional update validates and writes
+        inside the actor, and stale handles created by a wraparound are
+        skipped exactly as in the local contract.
+        """
+        rb = RayReplayBuffer(
+            replay_buffer_cls=TensorDictReplayBuffer,
+            storage=partial(LazyTensorStorage, 10),
+            writer=partial(TensorDictRoundRobinWriter, track_generations=True),
+            batch_size=4,
+            ray_init_config={"num_cpus": 1},
+        )
+        try:
+            index = rb.extend(TensorDict({"x": torch.zeros(10, 2)}, batch_size=10))
+            index = torch.as_tensor(index).reshape(-1)
+            sample = rb.sample()
+            batch = sample.batch_size[0]
+            sampled_index = sample.get("index").reshape(batch, -1)[:, 0]
+            generation = sample.get("index_generation").reshape(batch, -1)[:, 0]
+            marker = torch.full((batch, 2), 42.0)
+            result = rb.update_if_present(
+                index=sampled_index, generation=generation, patch={"x": marker}
+            )
+            assert result.updated.all()
+            assert result.updated_count == batch
+            rb.extend(TensorDict({"x": torch.ones(4, 2)}, batch_size=4))
+            stale = rb.update_if_present(
+                index=index[:4],
+                generation=torch.zeros(4, dtype=torch.int64),
+                patch={"x": torch.full((4, 2), -5.0)},
+            )
+            assert not stale.updated.any()
+            assert stale.stale_count == 4
+            assert (rb[:4]["x"] == 1.0).all()
+        finally:
+            rb.close()
+
     def test_ray_rb_iter(self):
         rb = RayReplayBuffer(
             storage=partial(LazyTensorStorage, 100),
@@ -232,10 +300,93 @@ class TestRayRB:
             storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
         )
         try:
-            remote_worker = ray.remote(Worker).remote(rb)
+            client = rb.client()
+            assert not hasattr(client, "shutdown")
+            assert not hasattr(client, "close")
+            remote_worker = ray.remote(Worker).remote(client)
             ray.get(remote_worker.run.remote())
+            assert len(rb) == 100
         finally:
             rb.close()
+
+    def test_construct_from_replay_buffer_service_backend(self):
+        import ray
+
+        with service_backend("ray"):
+            rb = ReplayBuffer(
+                storage=partial(LazyTensorStorage, 100),
+                service_backend_options={
+                    "ray_init_config": {"num_cpus": 1},
+                    "remote_config": {"num_cpus": 0},
+                },
+            )
+        try:
+            assert isinstance(rb, RayReplayBuffer)
+            assert isinstance(rb, ReplayBuffer)
+            assert rb.service_backend == "ray"
+            assert rb.transport_kind == "ray"
+            clients = rb.clients(2)
+            assert clients[0] is not clients[1]
+            rb.extend(TensorDict({"x": torch.ones(4)}, batch_size=4))
+            assert len(rb.client()) == 4
+        finally:
+            rb.shutdown()
+        assert not rb.is_alive
+        assert ray.is_initialized()
+        rb.shutdown()
+
+    def test_ray_replay_with_gloo_transport(self):
+        with service_backend("ray"), transport_backend("distributed"):
+            rb = ReplayBuffer(
+                storage=partial(LazyTensorStorage, 100),
+                batch_size=4,
+                service_backend_options={"remote_config": {"num_cpus": 0}},
+                transport_options={"timeout": 30.0},
+            )
+        try:
+            client = rb.client()
+            indices = client.extend(
+                TensorDict({"x": torch.arange(8)}, batch_size=[8]), timeout=30.0
+            )
+            assert indices.tolist() == list(range(8))
+            assert len(client) == 8
+            assert client.write_count == 8
+            assert client.sample(timeout=30.0).shape == (4,)
+            with pytest.raises((RuntimeError, ValueError)):
+                client.extend(
+                    TensorDict({"x": torch.arange(4)}, batch_size=[4]),
+                    timeout=30.0,
+                )
+            assert not hasattr(client, "shutdown")
+        finally:
+            rb.shutdown()
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_ray_replay_with_nccl_transport(self):
+        rb = ReplayBuffer(
+            storage=partial(LazyTensorStorage, 100, device="cuda"),
+            batch_size=4,
+            service_backend="ray",
+            service_backend_options={"remote_config": {"num_gpus": 1}},
+            transport="distributed",
+            transport_options={"backend": "nccl", "timeout": 30.0},
+        )
+        try:
+            client = rb.client()
+            client.extend(
+                TensorDict(
+                    {"x": torch.arange(8, device="cuda")},
+                    batch_size=[8],
+                    device="cuda",
+                ),
+                timeout=30.0,
+            )
+            sample = client.sample(timeout=30.0)
+            assert sample.shape == (4,)
+            assert sample.device.type == "cuda"
+        finally:
+            rb.shutdown()
 
     def test_ray_rb_mcadvantage_transform_factory(self):
         rb = RayReplayBuffer(

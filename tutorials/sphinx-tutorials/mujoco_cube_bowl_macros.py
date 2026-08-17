@@ -23,6 +23,8 @@ What you will learn
 - how to use :class:`~torchrl.envs.transforms.RobotMacroAction` as a readable action object;
 - how :class:`~torchrl.envs.transforms.URScriptPrimitiveTransform` lets ``env.step(td)``
   consume those actions directly;
+- how to hold the end effector still for gripper-only commands and keep its
+  orientation constrained along a Cartesian motion;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
   of poses and gripper commands;
 - how to request rendered pixels from the environment and record them with
@@ -77,9 +79,21 @@ if MENAGERIE_PATH is None:
         "before running this tutorial."
     )
 
+# %%
+# CI fast path
+# ------------
+#
+# Rendering dominates the runtime of this tutorial, and the doc build does not
+# need four randomized rollouts to illustrate the API. When
+# ``TORCHRL_TUTORIALS_FAST=1`` (set in the docs CI workflow), we render at a
+# smaller resolution and run a single randomized rollout. Local builds keep
+# the full-quality settings.
+
+TUTORIAL_FAST = os.environ.get("TORCHRL_TUTORIALS_FAST", "0") == "1"
+
 MAX_EPISODE_STEPS = 12000
-RENDER_WIDTH = 480
-RENDER_HEIGHT = 360
+RENDER_WIDTH = 320 if TUTORIAL_FAST else 480
+RENDER_HEIGHT = 240 if TUTORIAL_FAST else 360
 VIDEO_FRAME_SKIP = 16
 VIDEO_INTERVAL_MS = 55
 IK_KWARGS = {
@@ -103,6 +117,8 @@ IK_KWARGS = {
 #   where it is;
 # - ``RobotMacroAction.reach_pose(..., gripper="closed")`` moves the arm and closes
 #   the gripper in one macro action;
+# - ``RobotMacroAction.wait()`` holds the complete low-level target, while
+#   ``open_gripper`` and ``close_gripper`` preserve the six arm-joint targets;
 # - ``RobotMacroAction.RESET`` asks the environment to return to its configured home
 #   joint posture.
 #
@@ -125,6 +141,9 @@ IK_KWARGS = {
 # ``env.step`` accepts a ``RobotMacroAction`` directly under ``td["action"]`` and
 # executes the expanded low-level sequence internally.
 
+# ``render_every`` matches the recorder's ``skip``: the recorder keeps one
+# frame in ``VIDEO_FRAME_SKIP``, so rendering the frames it drops would only
+# burn time (rendering dominates the cost of a step in this scene).
 env = CubeBowlEnv(
     seed=0,
     max_episode_steps=MAX_EPISODE_STEPS,
@@ -133,6 +152,7 @@ env = CubeBowlEnv(
     pixels_only=False,
     render_width=RENDER_WIDTH,
     render_height=RENDER_HEIGHT,
+    render_every=VIDEO_FRAME_SKIP,
 )
 assert env.action_spec.shape[-1] == 7
 assert env.robot_home_qpos is not None
@@ -153,6 +173,27 @@ recorder = VideoRecorder(
 )
 env = env.append_transform(recorder)
 env = env.append_transform(primitive_control)
+
+###############################################################################
+# Indexing MuJoCo batches
+# -----------------------
+# Native MuJoCo environment batches use snapshot indexing rather than the live
+# worker views used by :class:`~torchrl.envs.ParallelEnv`. If a custom MuJoCo
+# environment is created with multiple physics states, ``env[0]`` returns a
+# detached one-element snapshot: stepping or resetting the snapshot does not
+# mutate the parent batch until the snapshot is assigned back explicitly.
+# Slices, integer NumPy arrays and integer torch tensors select larger
+# snapshots, while boolean masks are intentionally not supported.
+#
+# .. code-block:: python
+#
+#    batched_env = CubeBowlEnv(..., num_envs=4)
+#    env0 = batched_env[0]
+#    env0.rand_step()
+#    batched_env[0] = env0
+#
+# Preserving a singleton batch for integer indexing keeps downstream code that
+# expects batched specs and TensorDicts working unchanged.
 
 cube_width = 2 * env.OBJECT_HALF_SIZE
 grasp_width = cube_width - 0.001
@@ -224,6 +265,46 @@ assert td["action"].mode.shape == torch.Size([1, 1])
 
 
 # %%
+# Keeping the end effector constrained
+# -------------------------------------
+#
+# There are two different ways to keep the end effector in place. When only the
+# gripper should move, :meth:`~torchrl.envs.RobotMacroAction.open_gripper` and
+# :meth:`~torchrl.envs.RobotMacroAction.close_gripper` copy the current arm
+# target and modify only the gripper command. A
+# :meth:`~torchrl.envs.RobotMacroAction.wait` action holds both the arm and the
+# gripper target.
+#
+# During a Cartesian move, keeping the tool *orientation* fixed requires an
+# orientation constraint. A full target quaternion locks all three rotational
+# degrees of freedom. Often two are enough: for a level gripper, rotations about
+# the world x and y axes must remain constrained, while spin about world z can
+# stay free. ``orientation_mask=(1.0, 1.0, 0.0)`` expresses exactly that
+# constraint and avoids over-constraining the inverse-kinematics solve.
+#
+# By default, ``reach_pose`` solves inverse kinematics at the endpoint and then
+# interpolates the arm joints. Both endpoint poses can be valid even though the
+# tool tilts or leaves the straight Cartesian line between them. Setting
+# ``path="cartesian"`` asks the solver to warm-start a new IK solve at every
+# waypoint, so the position and orientation constraints hold throughout the
+# motion. The carry actions below use both options:
+#
+# .. code-block:: python
+#
+#    RobotMacroAction.reach_pose(
+#        position=target_position,
+#        quaternion=level_quaternion,
+#        orientation_mask=(1.0, 1.0, 0.0),
+#        path="cartesian",
+#        gripper="closed",
+#    )
+#
+# Cartesian waypoint solving is more expensive than joint interpolation. It is
+# most useful when intermediate geometry matters, such as transporting a held
+# object without tilting it or drifting sideways.
+
+
+# %%
 # A scripted cube-to-bowl macro
 # -----------------------------
 #
@@ -274,6 +355,8 @@ def carry_action(alpha: float, bowl: torch.Tensor) -> RobotMacroAction:
     return RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
+        orientation_mask=(1.0, 1.0, 0.0),
+        path="cartesian",
         gripper="closed",
         gripper_command=gripper_close_command,
         steps=80,
@@ -345,8 +428,10 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     # bowl, the fingers can drag faster than the cube can safely follow: the
     # cube may slide inside the grasp, get pushed out, or arrive shifted enough
     # that the final drop misses the bowl. We therefore carry it through a few
-    # intermediate waypoints in the table plane. After each waypoint, the next
-    # command uses the latest observed cube and finger positions.
+    # intermediate macro targets in the table plane. Within each macro,
+    # ``path="cartesian"`` keeps the pinch site on the straight Cartesian line
+    # and ``orientation_mask`` keeps the gripper level. After each target, the
+    # next command uses the latest observed cube and finger positions.
     policy_state["carry_start_cube"] = policy_state["td"]["cube_pos"].clone()
 
     # Action 6: Carry the cube one quarter of the way toward the bowl.
@@ -515,7 +600,9 @@ scripted_macro_animation = recorder.to_animation(
 # appending frames until we ask it to render, so the final video is one long
 # clip containing all four randomized rollouts.
 
-rollout_count = len(workspace_layouts)
+# In the CI fast path a single randomized rollout is enough to demonstrate
+# the reset-onto-new-layout mechanics.
+rollout_count = 1 if TUTORIAL_FAST else len(workspace_layouts)
 for rollout_index in range(rollout_count):
     td = env.reset(random_scene_reset(rollout_index))
     td = run_scripted_rollout(td)
@@ -556,7 +643,9 @@ assert reset_td["robot_qpos"].shape == td["robot_qpos"].shape
 # still depend on calibration, solver quality and reachable waypoints. Their
 # practical value is that they provide a strong baseline, a source of
 # demonstrations, and a structured action space for residual policies or RL fine
-# tuning.
+# tuning. Use gripper-only actions or ``wait`` when the arm must remain still;
+# use an orientation mask and a Cartesian path when pose constraints must hold
+# while the arm is moving.
 #
 # .. seealso::
 #

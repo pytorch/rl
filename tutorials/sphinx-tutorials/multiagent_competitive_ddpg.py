@@ -623,14 +623,16 @@ for group, _agents in env.group_map.items():
 # Data collector
 # --------------
 #
-# TorchRL provides a set of data collector classes. Briefly, these
-# classes execute three operations: reset an environment, compute an action
+# TorchRL provides :class:`~torchrl.collectors.Collector` as the main data
+# collector construction API. It executes three operations: reset an
+# environment, compute an action
 # using the policy and the latest observation, execute a step in the environment, and repeat
 # the last two steps until the environment signals a stop (or reaches a done
 # state).
 #
-# We will use the simplest possible data collector, which has the same output as an environment rollout,
-# with the only difference that it will auto reset done states until the desired frames are collected.
+# We use its direct default, which has the same output as an environment
+# rollout except that it auto-resets done states until the desired frames are
+# collected. The same constructor can select process or distributed execution.
 #
 # We need to feed it our exploration policies. Furthermore, to run the policies from all groups as if they were one,
 # we put them in a sequence. They will not interfere with each other as each group writes and reads keys in different places.

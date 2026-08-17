@@ -105,6 +105,9 @@ def _main_async_collector(
         # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
         # it detects the RB. When trajs_per_batch is None, keep existing behavior.
         collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
+        runner_handles_replay_buffer = replay_buffer is not None and bool(
+            collector_class._ignore_rb
+        )
         inner_collector = collector_class(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
@@ -121,7 +124,10 @@ def _main_async_collector(
             env_device=env_device,
             exploration_type=exploration_type,
             reset_when_done=reset_when_done,
-            return_same_td=replay_buffer is None,
+            # The runner consumes this rollout immediately and writes it to the
+            # replay buffer before asking the collector for another one. There
+            # is no need to clone a rollout solely to protect it from reuse.
+            return_same_td=replay_buffer is None or runner_handles_replay_buffer,
             interruptor=interruptor,
             set_truncated=set_truncated,
             use_buffers=use_buffers,
@@ -247,11 +253,33 @@ def _main_async_collector(
                     run_free = False
                 if msg == "pause":
                     queue_out.put((idx, "paused"), timeout=_TIMEOUT)
-                    while not pipe_child.poll(1e-2):
-                        continue
-                    data_in, msg = pipe_child.recv()
-                    if msg != "restart":
-                        raise RuntimeError(f"Expected msg='restart', got {msg=}")
+                    while True:
+                        while not pipe_child.poll(1e-2):
+                            continue
+                        data_in, msg = pipe_child.recv()
+                        if msg == "restart":
+                            break
+                        if msg == "cascade_execute":
+                            attr_path, args, kwargs = data_in
+                            try:
+                                result = inner_collector.cascade_execute(
+                                    attr_path, *args, **kwargs
+                                )
+                                pipe_child.send((result, "cascade_execute"))
+                            except Exception as err:
+                                pipe_child.send((err, "cascade_execute"))
+                            continue
+                        if msg == "get_distant_attr":
+                            try:
+                                result = inner_collector.get_distant_attr(data_in)
+                                pipe_child.send((result, "get_distant_attr"))
+                            except Exception as err:
+                                pipe_child.send((err, "get_distant_attr"))
+                            continue
+                        raise RuntimeError(
+                            "Expected a paused-worker control message or "
+                            f"msg='restart', got {msg=}."
+                        )
                     msg = "continue"
             else:
                 data_in = None

@@ -25,7 +25,7 @@ from _transforms_common import (
 )
 from packaging import version
 from tensordict import NonTensorData, TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModuleBase, WrapModule
+from tensordict.nn import TensorDictModuleBase, TensorDictSequential, WrapModule
 from torch import nn
 
 from torchrl.data import (
@@ -49,6 +49,7 @@ from torchrl.data.vla import (
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
+    CartesianSolver,
     Compose,
     ConditionalPolicySwitch,
     ConditionalSkip,
@@ -1275,6 +1276,221 @@ class TestMacroPrimitiveTransform:
         )
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[..., -1], torch.full((1, 4), 154.0))
+
+    @staticmethod
+    def _recording_ik_solver(calls):
+        def solver(
+            target_pose,
+            start_action,
+            *,
+            orientation_mask=None,
+            waypoints=None,
+        ):
+            calls.append(
+                {
+                    "target_pose": target_pose,
+                    "orientation_mask": orientation_mask,
+                    "waypoints": waypoints,
+                }
+            )
+            if waypoints is not None:
+                out = (
+                    start_action.unsqueeze(-2)
+                    .expand(
+                        start_action.shape[:-1] + (waypoints, start_action.shape[-1])
+                    )
+                    .clone()
+                )
+                out[..., :6] = torch.arange(1, waypoints + 1, dtype=out.dtype).reshape(
+                    (1,) * (start_action.ndim - 1) + (waypoints, 1)
+                )
+                return out
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        return solver
+
+    def test_cartesian_solver_protocol(self):
+        calls = []
+        assert isinstance(self._ik_solver(), CartesianSolver)
+        assert isinstance(self._recording_ik_solver(calls), CartesianSolver)
+
+    def test_reach_pose_orientation_mask_passed_to_solver(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    orientation_mask=(1.0, 1.0, 0.0),
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        transform.inv(td)
+        assert len(calls) == 1
+        torch.testing.assert_close(
+            calls[0]["orientation_mask"], torch.tensor([[1.0, 1.0, 0.0]])
+        )
+        torch.testing.assert_close(
+            calls[0]["target_pose"][..., 3:],
+            torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+        )
+        assert calls[0]["waypoints"] is None
+
+    def test_reach_pose_without_mask_passes_none(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]), steps=2
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        transform.inv(td)
+        assert calls[0]["orientation_mask"] is None
+        torch.testing.assert_close(calls[0]["target_pose"][..., 3:], torch.zeros(1, 4))
+
+    @pytest.mark.parametrize(
+        ("reach_pose_kwargs", "match"),
+        [
+            ({"orientation_mask": (1.0, 1.0, 0.0)}, "orientation_mask"),
+            ({"path": "cartesian"}, "path='cartesian'"),
+        ],
+    )
+    def test_reach_pose_constraint_without_solver_raises(
+        self, reach_pose_kwargs, match
+    ):
+        transform = URScriptPrimitiveTransform(macro_steps=2)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    steps=2,
+                    **reach_pose_kwargs,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match=match):
+            transform.inv(td)
+
+    def test_reach_pose_orientation_mask_legacy_solver_raises(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    orientation_mask=(1.0, 1.0, 0.0),
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match="orientation_mask"):
+            transform.inv(td)
+
+    def test_reach_pose_cartesian_path_uses_waypoints(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=3, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    path="cartesian",
+                    gripper="closed",
+                    steps=3,
+                    settle_steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 5, 7])
+        # the endpoint solve plus the per-waypoint solve
+        assert [call["waypoints"] for call in calls] == [None, 3]
+        # arm columns follow the solver-provided waypoints, and the settle
+        # segment holds the final waypoint
+        torch.testing.assert_close(
+            action[0, :, 0], torch.tensor([1.0, 2.0, 3.0, 3.0, 3.0])
+        )
+        # the gripper column still follows the interpolated gripper command
+        torch.testing.assert_close(action[0, -1, -1], torch.tensor(255.0))
+
+    def test_reach_pose_cartesian_path_legacy_solver_raises(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    path="cartesian",
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match="waypoints"):
+            transform.inv(td)
+
+    def test_reach_pose_invalid_path_raises(self):
+        with pytest.raises(ValueError, match="path must be"):
+            RobotMacroAction.reach_pose(position=torch.zeros(1, 3), path="linear")
+
+    def test_reach_pose_cartesian_path_nested_action_key(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"),
+            macro_steps=2,
+            cartesian_solver=self._recording_ik_solver(calls),
+        )
+        td = TensorDict(
+            {
+                ("agent", "action"): RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    orientation_mask=(0.0, 1.0, 1.0),
+                    path="cartesian",
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)[("agent", "action")]
+        assert action.shape == torch.Size([1, 2, 7])
+        assert calls[-1]["waypoints"] == 2
+        torch.testing.assert_close(
+            calls[-1]["orientation_mask"], torch.tensor([[0.0, 1.0, 1.0]])
+        )
+        torch.testing.assert_close(action[0, :, 0], torch.tensor([1.0, 2.0]))
 
     def test_close_gripper_keeps_arm(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)
@@ -2713,15 +2929,93 @@ class TestActionChunkTransform(TransformBase):
         with pytest.raises(ValueError, match="immediately follow"):
             t(TensorDict({"action": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
 
+    @staticmethod
+    def _reference_gather(action, H):
+        # the pre-0.14 dedicated gather (arange + clamp + index_select), kept
+        # as the ground truth the CatFrames recipe must reproduce exactly
+        T = action.shape[-2]
+        idx = torch.arange(T).unsqueeze(-1) + torch.arange(H).unsqueeze(0)
+        is_pad = idx >= T
+        idx = idx.clamp_max(T - 1).reshape(-1)
+        chunk = action.index_select(-2, idx).unflatten(-2, (T, H))
+        is_pad = is_pad.expand(chunk.shape[:-1]).contiguous()
+        return chunk, is_pad
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (3, 2)])
+    @pytest.mark.parametrize("chunk_size", [1, 3, 7])
+    def test_equivalence_with_reference_gather(self, batch_size, chunk_size):
+        torch.manual_seed(0)
+        action = torch.randn(*batch_size, 5, 4)
+        t = ActionChunkTransform(chunk_size=chunk_size)
+        out = t(TensorDict({"action": action}, batch_size=batch_size))
+        ref_chunk, ref_pad = self._reference_gather(action, chunk_size)
+        # byte-identical: the recipe copies the same source elements
+        assert torch.equal(out[ACTION_CHUNK_KEY], ref_chunk)
+        assert torch.equal(out["action_is_pad"], ref_pad)
+
+    def test_done_aware_chunking(self):
+        # a done inside the window: chunks must not cross the trajectory
+        # boundary (steps past it are padded with the last valid action)
+        action = torch.arange(4.0).view(1, 4, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True  # boundary between steps 1 and 2
+        td = TensorDict({"action": action, ("next", "done"): done}, batch_size=[1, 4])
+        out = ActionChunkTransform(3)(td)
+        expected_chunk = torch.tensor(
+            [[0, 1, 1], [1, 1, 1], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
+        expected_pad = torch.tensor([[0, 0, 1], [0, 1, 1], [0, 0, 1], [0, 1, 1]]).bool()
+        assert torch.equal(out["action_is_pad"][0], expected_pad)
+
+    def test_done_key_none_ignores_dones(self):
+        action = torch.arange(4.0).view(1, 4, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True
+        td = TensorDict({"action": action, ("next", "done"): done}, batch_size=[1, 4])
+        out = ActionChunkTransform(3, done_key=None)(td)
+        # the boundary is ignored: the chunk at t=0 reads across the done
+        expected_chunk = torch.tensor(
+            [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
+
+    def test_done_shape_mismatch_raises(self):
+        td = TensorDict(
+            {
+                "action": torch.randn(2, 4, 3),
+                ("next", "done"): torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        with pytest.raises(ValueError, match="does not line up"):
+            ActionChunkTransform(2)(td)
+
+    def test_clone_keeps_recipe(self):
+        t = ActionChunkTransform(
+            chunk_size=3, action_key=("data", "action"), done_key=None
+        ).clone()
+        assert isinstance(t, ActionChunkTransform)
+        assert t.chunk_size == 3
+        assert t.action_key == ("data", "action")
+        assert t.done_key is None
+        td = TensorDict({"data": {"action": torch.randn(2, 4, 3)}}, batch_size=[2, 4])
+        assert t(td)[ACTION_CHUNK_KEY].shape == torch.Size([2, 4, 3, 3])
+
     @pytest.mark.skipif(IS_WIN, reason="torch.compile requires a C++ compiler")
-    def test_compile_build_chunk(self):
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"),
+        reason="requires torch>=2.5 (old dynamo cannot trace the tensordict-based "
+        "transform stack, e.g. InternalTorchDynamoError: next on torch 2.1)",
+    )
+    def test_compile(self):
         t = ActionChunkTransform(chunk_size=3)
-        action = torch.randn(2, 5, 2)
-        eager_chunk, eager_pad = t._build_chunk(action)
-        compiled = torch.compile(t._build_chunk, fullgraph=True)
-        c_chunk, c_pad = compiled(action)
-        torch.testing.assert_close(c_chunk, eager_chunk)
-        assert torch.equal(c_pad, eager_pad)
+        td = TensorDict({"action": torch.randn(2, 5, 2)}, batch_size=[2, 5])
+        eager = t(td.clone())
+        compiled = torch.compile(t)
+        out = compiled(td.clone())
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY], eager[ACTION_CHUNK_KEY])
+        assert torch.equal(out["action_is_pad"], eager["action_is_pad"])
 
 
 class TestActionTokenizerTransform(TransformBase):
@@ -2820,6 +3114,34 @@ class TestActionTokenizerTransform(TransformBase):
         )
         assert td[ACTION_TOKENS_KEY].tolist() == [[0, 128, 255]]
 
+    def test_transform_decode_model(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok, mode="decode")
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        tokens = tok.encode(action)
+        td = t(TensorDict({ACTION_TOKENS_KEY: tokens.clone()}, batch_size=[1]))
+        torch.testing.assert_close(td["action"], tok.decode(tokens))
+        assert t.in_keys == [ACTION_TOKENS_KEY]
+        assert t.out_keys == ["action"]
+        inv = t.inv(TensorDict({"action": action.clone()}, batch_size=[1]))
+        torch.testing.assert_close(inv[ACTION_TOKENS_KEY], tok.encode(action))
+
+    def test_transform_decode_tensordict_sequential(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        tokens = tok.encode(action)
+        policy = TensorDictSequential(ActionTokenizerTransform(tok, mode="decode"))
+        td = policy(TensorDict({ACTION_TOKENS_KEY: tokens.clone()}, batch_size=[1]))
+        torch.testing.assert_close(td["action"], tok.decode(tokens))
+
+    def test_decode_mode_does_not_rewrite_env_action_spec(self):
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), ActionTokenizerTransform(tok, mode="decode")
+        )
+        assert "action" in env.full_action_spec.keys(True, True)
+        assert ACTION_TOKENS_KEY not in env.full_action_spec.keys(True, True)
+
     def test_transform_rb(self):
         tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
         rb = TensorDictReplayBuffer(
@@ -2911,6 +3233,11 @@ class TestActionTokenizerTransform(TransformBase):
     def test_requires_tokenizer(self):
         with pytest.raises(TypeError, match="ActionTokenizerBase"):
             ActionTokenizerTransform(object())
+
+    def test_invalid_mode(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        with pytest.raises(ValueError, match="mode"):
+            ActionTokenizerTransform(tok, mode="invalid")
 
 
 if __name__ == "__main__":

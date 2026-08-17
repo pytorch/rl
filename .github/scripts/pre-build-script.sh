@@ -6,7 +6,7 @@
 ${CONDA_RUN} pip install --upgrade setuptools packaging
 
 ${CONDA_RUN} pip install "pybind11[global]"
-${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 ${CONDA_RUN} conda install anaconda::cmake -y
 
 # Determine tensordict installation source based on branch/tag

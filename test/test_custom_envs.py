@@ -397,6 +397,7 @@ class TestToyVLAEnv:
             state_dim=4,
             success_steps=2,
             group_repeats=3,
+            group_id_offset=10,
             batch_size=batch_size,
             seed=0,
         )
@@ -405,7 +406,7 @@ class TestToyVLAEnv:
             td = env.reset()
             group_ids.append(td["group_id"].reshape(()).item())
             targets.append(td["observation", "state"][..., 2:4].clone())
-        assert group_ids == [0, 0, 0, 1, 1, 1]
+        assert group_ids == [10, 10, 10, 11, 11, 11]
         torch.testing.assert_close(targets[1], targets[0])
         torch.testing.assert_close(targets[2], targets[0])
         torch.testing.assert_close(targets[4], targets[3])
@@ -413,7 +414,7 @@ class TestToyVLAEnv:
         assert not torch.allclose(targets[3], targets[0])
         # the group id rides every step of the episode
         td["action"] = td["observation", "state"][..., 2:4]
-        assert env.step(td)["next", "group_id"].reshape(()).item() == 1
+        assert env.step(td)["next", "group_id"].reshape(()).item() == 11
 
     def test_tracking_group_repeats_validation(self):
         with pytest.raises(ValueError, match="success_steps"):

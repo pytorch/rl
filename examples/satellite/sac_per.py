@@ -15,7 +15,7 @@ from pathlib import Path
 import torch
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import Collector, Evaluator, MultiCollector
+from torchrl.collectors import Collector, Evaluator
 from torchrl.data import (
     LazyTensorStorage,
     TensorDictPrioritizedReplayBuffer,
@@ -747,20 +747,21 @@ def main(argv: list[str] | None = None) -> int:
         # Free the in-process train env: the worker will build its own.
         train_env.close()
         torchrl_logger.info(
-            "Async collector enabled (MultiCollector sync=False, 1 worker). "
+            "Async process collector enabled (sync=False, 1 worker). "
             "Collection runs in a separate process and overlaps with grad updates."
         )
-        collector = MultiCollector(
-            create_env_fn=[train_env_factory],
+        collector = Collector(
+            create_env_fn=train_env_factory,
+            num_collectors=1,
             policy=actor,
             frames_per_batch=frames_per_batch,
             total_frames=total_frames,
+            sync=False,
             device=device,
             init_random_frames=init_random_frames,
             exploration_type=ExplorationType.RANDOM,
             postproc=postproc,
             update_at_each_batch=True,
-            sync=False,
         )
     else:
         collector = Collector(

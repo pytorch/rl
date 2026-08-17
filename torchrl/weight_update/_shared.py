@@ -10,6 +10,7 @@ from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger, WEIGHT_SYNC_TIMEOUT
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
     TransportBackend,
     WeightStrategy,
     WeightSyncScheme,
@@ -322,6 +323,7 @@ class SharedMemTransport:
         """No-op for shared memory - no acknowledgment needed."""
 
 
+@register_weight_sync_backend("shared")
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 

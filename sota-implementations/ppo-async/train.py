@@ -19,7 +19,7 @@ from functools import partial
 import torch
 import tqdm
 
-from torchrl.collectors import Evaluator, MultiAsyncCollector
+from torchrl.collectors import Collector, Evaluator
 from torchrl.weight_update import SharedMemWeightSyncScheme
 from utils_mujoco import (
     ActorWithCritic,
@@ -110,19 +110,19 @@ def train_start(
         collector_policy = actor
         postproc = LearnerPostproc(version_counter)
 
-    create_env_fn = [
-        partial(
-            make_env,
-            cfg.env.env_name,
-            collect_device,
-            cfg.env.num_envs,
-            cfg.env.compile,
-        )
-    ]
+    create_env_fn = partial(
+        make_env,
+        cfg.env.env_name,
+        collect_device,
+        cfg.env.num_envs,
+        cfg.env.compile,
+    )
 
     # Collector init compiles the collector env in a subprocess
-    collector = MultiAsyncCollector(
+    collector = Collector(
         create_env_fn=create_env_fn,
+        num_collectors=1,
+        sync=False,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,
@@ -362,19 +362,19 @@ def train_iterate(
     """Semi-async training: for data in collector, gated on collector output."""
     collector_policy = ActorWithCritic(actor, critic)
 
-    create_env_fn = [
-        partial(
-            make_env,
-            cfg.env.env_name,
-            collect_device,
-            cfg.env.num_envs,
-            cfg.env.compile,
-        )
-    ]
+    create_env_fn = partial(
+        make_env,
+        cfg.env.env_name,
+        collect_device,
+        cfg.env.num_envs,
+        cfg.env.compile,
+    )
 
     # Collector init compiles the collector env in a subprocess
-    collector = MultiAsyncCollector(
+    collector = Collector(
         create_env_fn=create_env_fn,
+        num_collectors=1,
+        sync=False,
         policy=collector_policy,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=total_frames,

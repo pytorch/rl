@@ -5,7 +5,48 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+
+from typing import Any, Generic, Protocol, runtime_checkable, TYPE_CHECKING, TypeVar
+
+if TYPE_CHECKING:
+    from typing import Self
+
+ClientT = TypeVar("ClientT", covariant=True)
+
+
+@runtime_checkable
+class Service(Protocol, Generic[ClientT]):
+    """Owner-side contract for a long-lived TorchRL service.
+
+    A service owns lifecycle and heavy resources. :meth:`client` returns the
+    lightweight capability that may be passed to worker processes or actors;
+    that client intentionally has no ``start`` or ``shutdown`` methods.
+
+    Examples:
+        >>> from torchrl.record.loggers import CSVLogger
+        >>> logger = CSVLogger(exp_name="example", log_dir="/tmp")
+        >>> _ = logger.start()
+        >>> logger.client() is logger
+        True
+        >>> logger.shutdown()
+    """
+
+    def start(self) -> Self:
+        """Start the owned service and return ``self``."""
+        ...
+
+    def shutdown(self, timeout: float | None = None) -> None:
+        """Stop the owned service and release its resources."""
+        ...
+
+    def client(self) -> ClientT:
+        """Return a cheap, picklable, capability-restricted client."""
+        ...
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether the owned service is running."""
+        ...
 
 
 class ServiceBase(ABC):
@@ -64,6 +105,23 @@ class ServiceBase(ABC):
             KeyError: If the service is not found.
         """
 
+    def get_client(self, name: str) -> Any:
+        """Get the restricted client for a registered :class:`Service`.
+
+        This method is additive so existing custom registry backends remain
+        instantiable. Backends that support owner/client discovery override it.
+
+        Args:
+            name: Service identifier.
+
+        Raises:
+            NotImplementedError: If this registry backend does not support
+                service-client discovery.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support service-client discovery."
+        )
+
     @abstractmethod
     def __contains__(self, name: str) -> bool:
         """Check if a service is registered.
@@ -87,9 +145,9 @@ class ServiceBase(ABC):
     def reset(self) -> None:
         """Reset the service registry.
 
-        This removes all registered services and cleans up associated resources.
-        After calling reset(), the registry will be empty and all service actors
-        will be terminated.
+        This removes all registered services and cleans up registry-owned
+        resources. Externally-owned :class:`Service` instances are removed from
+        discovery but are never shut down by the registry.
 
         Warning:
             This is a destructive operation. All services will be terminated and

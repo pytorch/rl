@@ -667,6 +667,153 @@ class TestCatFrames(TransformBase):
         cat_td = cat_frames._call(cat_td)
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 4
 
+    def test_unfolding_n_larger_than_t(self):
+        # history windows longer than the sampled trajectory: the leading
+        # no-reset block used to be built by slicing the done entry (capped
+        # at the time length) and crashed for N > T
+        t = CatFrames(N=6, dim=-2, in_keys=["obs"], out_keys=["obs_cat"])
+        obs = torch.arange(3.0).view(1, 3, 1, 1)
+        done = torch.zeros(1, 3, 1, dtype=torch.bool)
+        td = TensorDict(
+            {"obs": obs, ("next", "done"): done}, batch_size=[1, 3]
+        ).refine_names(None, "time")
+        out = t(td)
+        assert out["obs_cat"].shape == torch.Size([1, 3, 6, 1])
+        # padding="same": the first frame fills the missing history
+        torch.testing.assert_close(out["obs_cat"][0, 0, :, 0], torch.zeros(6))
+        torch.testing.assert_close(
+            out["obs_cat"][0, 2, :, 0],
+            torch.tensor([0.0, 0.0, 0.0, 0.0, 1.0, 2.0]),
+        )
+
+    def test_unfolding_missing_done_raises(self):
+        t = CatFrames(N=3, dim=-2, in_keys=["obs"], out_keys=["obs_cat"])
+        td = TensorDict(
+            {"obs": torch.randn(1, 4, 1, 1)}, batch_size=[1, 4]
+        ).refine_names(None, "time")
+        with pytest.raises(KeyError, match="delimit"):
+            t(td)
+
+    def test_future_windows(self):
+        t = CatFrames(
+            N=3,
+            dim=-2,
+            in_keys=["obs"],
+            out_keys=["obs_cat"],
+            future=True,
+            mask_key="mask",
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        # the done entry is optional with forward windows: each row is one
+        # contiguous trajectory
+        td = TensorDict({"obs": obs}, batch_size=[1, 4]).refine_names(None, "time")
+        out = t(td.clone())
+        expected = torch.tensor(
+            [[0.0, 1.0, 2.0], [1.0, 2.0, 3.0], [2.0, 3.0, 3.0], [3.0, 3.0, 3.0]]
+        )
+        torch.testing.assert_close(out["obs_cat"][0, :, :, 0], expected)
+        expected_mask = torch.tensor(
+            [[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]
+        ).bool()
+        assert torch.equal(out["mask"][0], expected_mask)
+
+    def test_future_windows_with_done(self):
+        t = CatFrames(
+            N=3,
+            dim=-2,
+            in_keys=["obs"],
+            out_keys=["obs_cat"],
+            future=True,
+            mask_key="mask",
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True  # boundary between steps 1 and 2
+        td = TensorDict(
+            {"obs": obs, ("next", "done"): done}, batch_size=[1, 4]
+        ).refine_names(None, "time")
+        out = t(td.clone())
+        expected = torch.tensor(
+            [[0.0, 1.0, 1.0], [1.0, 1.0, 1.0], [2.0, 3.0, 3.0], [3.0, 3.0, 3.0]]
+        )
+        torch.testing.assert_close(out["obs_cat"][0, :, :, 0], expected)
+        expected_mask = torch.tensor(
+            [[0, 0, 1], [0, 1, 1], [0, 0, 1], [0, 1, 1]]
+        ).bool()
+        assert torch.equal(out["mask"][0], expected_mask)
+
+    def test_future_windows_constant_padding(self):
+        t = CatFrames(
+            N=3,
+            dim=-2,
+            in_keys=["obs"],
+            out_keys=["obs_cat"],
+            future=True,
+            padding="constant",
+            padding_value=-1.0,
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        td = TensorDict({"obs": obs}, batch_size=[1, 4]).refine_names(None, "time")
+        out = t(td.clone())
+        expected = torch.tensor(
+            [[0.0, 1.0, 2.0], [1.0, 2.0, 3.0], [2.0, 3.0, -1.0], [3.0, -1.0, -1.0]]
+        )
+        torch.testing.assert_close(out["obs_cat"][0, :, :, 0], expected)
+
+    def test_mask_key_history_windows(self):
+        # the mask is also available for plain (backward) history windows
+        t = CatFrames(
+            N=3, dim=-2, in_keys=["obs"], out_keys=["obs_cat"], mask_key="mask"
+        )
+        obs = torch.arange(4.0).view(1, 4, 1, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True
+        td = TensorDict(
+            {"obs": obs, ("next", "done"): done}, batch_size=[1, 4]
+        ).refine_names(None, "time")
+        out = t(td.clone())
+        # window slots read oldest-to-newest; True = fabricated by padding
+        expected_mask = torch.tensor(
+            [[1, 1, 0], [1, 0, 0], [1, 1, 0], [1, 0, 0]]
+        ).bool()
+        assert torch.equal(out["mask"][0], expected_mask)
+
+    def test_future_env_raises(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            CatFrames(N=2, dim=-1, in_keys=["observation"], future=True),
+        )
+        with pytest.raises(RuntimeError, match="offline"):
+            env.reset()
+
+    def test_mask_key_env_raises(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            CatFrames(N=2, dim=-1, in_keys=["observation"], mask_key="mask"),
+        )
+        with pytest.raises(RuntimeError, match="offline"):
+            env.reset()
+
+    def test_future_next_key_overlap_raises(self):
+        t = CatFrames(
+            N=2,
+            dim=-1,
+            in_keys=["obs", ("next", "obs")],
+            out_keys=["obs_cat", ("next", "obs_cat")],
+            future=True,
+        )
+        obs = torch.randn(1, 4, 2)
+        td = TensorDict(
+            {
+                "obs": obs,
+                ("next", "obs"): obs,
+                ("next", "done"): torch.zeros(1, 4, 1, dtype=torch.bool),
+            },
+            batch_size=[1, 4],
+        ).refine_names(None, "time")
+        with pytest.raises(NotImplementedError, match="history"):
+            t(td)
+
     @staticmethod
     def _unfold_done(done, N, ndim):
         # Mirror of ``CatFrames.unfolding.unfold_done`` (window-padding mask)

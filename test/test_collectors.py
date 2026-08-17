@@ -8,6 +8,8 @@ import argparse
 import contextlib
 import functools
 import gc
+import inspect
+import json
 import os
 import subprocess
 import sys
@@ -40,6 +42,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from torch import nn
+from torchrl import service_backend
 from torchrl._utils import (
     _make_ordinal_device,
     _replace_last,
@@ -49,6 +52,7 @@ from torchrl._utils import (
 )
 from torchrl.collectors import (
     AsyncCollector,
+    BaseCollector,
     Collector,
     MultiAsyncCollector,
     MultiSyncCollector,
@@ -58,7 +62,9 @@ from torchrl.collectors import (
 from torchrl.collectors._base import _ProfilerHook
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors.distributed.generic import DistributedCollector
 from torchrl.collectors.distributed.ray import _has_ray, RayCollector
+from torchrl.collectors.distributed.rpc import RPCCollector
 
 from torchrl.collectors.utils import (
     _make_policy_factory,
@@ -136,10 +142,17 @@ from torchrl.testing.mocking_classes import (
 from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
+    DistributedWeightSyncScheme,
     MultiProcessWeightSyncScheme,
+    NoWeightSyncScheme,
+    RayWeightSyncScheme,
+    RPCWeightSyncScheme,
     SharedMemTransport,
     SharedMemWeightSyncScheme,
+    WeightSyncScheme,
 )
+from torchrl.weight_update._ray import _weight_tensors
+from torchrl.weight_update.utils import _weight_tensor_signature
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -148,6 +161,73 @@ PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
 PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
+
+
+@pytest.mark.parametrize(
+    ("backend", "scheme_cls"),
+    [
+        ("none", NoWeightSyncScheme),
+        ("direct", NoWeightSyncScheme),
+        ("shared", SharedMemWeightSyncScheme),
+        ("thread", SharedMemWeightSyncScheme),
+        ("process", MultiProcessWeightSyncScheme),
+        ("multiprocessing", MultiProcessWeightSyncScheme),
+        ("distributed", DistributedWeightSyncScheme),
+        ("rpc", RPCWeightSyncScheme),
+        ("ray", RayWeightSyncScheme),
+    ],
+)
+def test_weight_sync_scheme_from_backend(backend, scheme_cls):
+    scheme = WeightSyncScheme.from_backend(backend)
+    assert isinstance(scheme, scheme_cls)
+
+
+def test_weight_sync_scheme_from_backend_forwards_kwargs():
+    scheme = WeightSyncScheme.from_backend("shared", sync=False)
+    assert isinstance(scheme, SharedMemWeightSyncScheme)
+    assert not scheme.sync
+
+
+def test_weight_sync_scheme_from_backend_rejects_unknown():
+    with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
+        WeightSyncScheme.from_backend("unknown")
+
+
+def test_ray_weight_sync_copy_preserves_config_and_resets_runtime():
+    with pytest.warns(UserWarning, match="state_dict strategy is experimental"):
+        scheme = RayWeightSyncScheme(strategy="state_dict", backend="nccl")
+    scheme._future_option = "preserved"
+    scheme._model_id = "policy"
+    scheme._initialized_on_sender = True
+    scheme.synchronized_on_sender = True
+    rendezvous_id = scheme._rendezvous_id
+
+    copied = scheme._copy_uninitialized()
+
+    assert type(copied) is type(scheme)
+    assert copied is not scheme
+    assert copied.strategy_str == "state_dict"
+    assert copied._backend == "nccl"
+    assert copied._future_option == "preserved"
+    assert not copied.initialized_on_sender
+    assert not copied.synchronized_on_sender
+    assert copied._model_id is None
+    assert copied._rendezvous_id != rendezvous_id
+
+
+def test_ray_weight_transport_uses_canonical_tensor_order():
+    first = TensorDict({"second": torch.ones(2), "first": torch.zeros(1)})
+    second = TensorDict({"first": torch.zeros(1), "second": torch.ones(2)})
+
+    assert _weight_tensor_signature(first) == _weight_tensor_signature(second)
+    tensors = _weight_tensors(first)
+    torch.testing.assert_close(tensors[0], first["first"])
+    torch.testing.assert_close(tensors[1], first["second"])
+
+
+def test_missing_weight_update_path_raises():
+    with pytest.raises(RuntimeError, match="No weight updater"):
+        BaseCollector._maybe_fallback_update(object(), TensorDict())
 
 
 def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
@@ -601,6 +681,274 @@ class TestRandomPolicyLazyInit:
 
 
 class TestCollectorGeneric:
+    def test_public_signature(self):
+        signature = inspect.signature(Collector)
+        assert "self" not in signature.parameters
+        assert signature.parameters["backend"].default is None
+        assert signature.parameters["backend_options"].default is None
+        assert signature.parameters["num_collectors"].default is None
+        assert signature.parameters["sync"].default is None
+
+    @pytest.mark.parametrize(
+        ("backend", "target_path"),
+        [
+            ("process", "torchrl.collectors._multi_base.MultiCollector"),
+            ("multiprocessing", "torchrl.collectors._multi_base.MultiCollector"),
+            ("ray", "torchrl.collectors.distributed.ray.RayCollector"),
+            ("rpc", "torchrl.collectors.distributed.rpc.RPCCollector"),
+            (
+                "distributed",
+                "torchrl.collectors.distributed.generic.DistributedCollector",
+            ),
+            (
+                "submitit",
+                "torchrl.collectors.distributed.generic.DistributedCollector",
+            ),
+        ],
+    )
+    def test_backend_dispatch(self, backend, target_path):
+        sentinel = object()
+        with patch(target_path) as target:
+            target.return_value = sentinel
+            result = Collector(
+                ContinuousActionVecMockEnv,
+                backend=backend,
+                backend_options={"test_backend_option": 1},
+                num_collectors=2,
+                frames_per_batch=20,
+                total_frames=20,
+            )
+
+        assert result is sentinel
+        call_args, call_kwargs = target.call_args
+        assert call_args[0] == [
+            ContinuousActionVecMockEnv,
+            ContinuousActionVecMockEnv,
+        ]
+        assert call_kwargs["sync"] is False
+        assert call_kwargs["test_backend_option"] == 1
+        if backend == "ray":
+            assert call_kwargs["num_collectors"] == 2
+        if backend == "submitit":
+            assert call_kwargs["launcher"] == "submitit"
+
+    def test_context_backend_dispatch(self):
+        sentinel = object()
+        with patch("torchrl.collectors.distributed.rpc.RPCCollector") as target:
+            target.return_value = sentinel
+            with service_backend("rpc"):
+                result = Collector(
+                    ContinuousActionVecMockEnv,
+                    num_collectors=2,
+                    frames_per_batch=20,
+                    total_frames=20,
+                )
+        assert result is sentinel
+        assert target.call_args.kwargs["sync"] is False
+
+    def test_explicit_direct_backend_overrides_context(self):
+        with service_backend("ray"):
+            collector = Collector(
+                ContinuousActionVecMockEnv,
+                backend="direct",
+                frames_per_batch=20,
+                total_frames=20,
+            )
+        try:
+            assert type(collector) is Collector
+        finally:
+            collector.shutdown()
+
+    def test_ray_backend_rejects_direct_replay_buffer(self):
+        replay = ReplayBuffer()
+        try:
+            with pytest.raises(
+                TypeError, match="cannot be shared with distant Ray actors"
+            ):
+                Collector(
+                    ContinuousActionVecMockEnv,
+                    backend="ray",
+                    replay_buffer=replay,
+                    frames_per_batch=20,
+                )
+        finally:
+            replay.shutdown()
+
+    def test_concrete_default_divergences_are_pinned(self):
+        collector_parameters = inspect.signature(Collector.__init__).parameters
+        expected = {
+            MultiCollector: set(),
+            RayCollector: {
+                "init_random_frames",
+                "max_frames_per_traj",
+                "no_cuda_sync",
+                "split_trajs",
+            },
+            RPCCollector: {
+                "init_random_frames",
+                "max_frames_per_traj",
+                "split_trajs",
+            },
+            DistributedCollector: {
+                "init_random_frames",
+                "max_frames_per_traj",
+                "split_trajs",
+            },
+        }
+        ignored = {
+            "self",
+            "backend",
+            "backend_options",
+            "num_collectors",
+            "sync",
+            "kwargs",
+        }
+        for target, expected_divergences in expected.items():
+            target_parameters = inspect.signature(target.__init__).parameters
+            divergences = {
+                name
+                for name, parameter in collector_parameters.items()
+                if name not in ignored
+                and parameter.default is not inspect.Parameter.empty
+                and name in target_parameters
+                and target_parameters[name].default != parameter.default
+            }
+            assert divergences == expected_divergences
+
+    def test_sequence_inference_and_options_are_not_mutated(self):
+        options = {"remote_configs": {"num_cpus": 1}}
+        with patch("torchrl.collectors.distributed.ray.RayCollector") as target:
+            Collector(
+                [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+                backend="ray",
+                backend_options=options,
+                frames_per_batch=20,
+            )
+        assert target.call_args.kwargs["num_collectors"] == 2
+        assert options == {"remote_configs": {"num_cpus": 1}}
+
+        with patch(
+            "torchrl.collectors.distributed.generic.DistributedCollector"
+        ) as target:
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="distributed",
+                backend_options={"backend": "gloo", "launcher": "mp"},
+                frames_per_batch=20,
+            )
+        assert target.call_args.kwargs["backend"] == "gloo"
+        assert target.call_args.kwargs["launcher"] == "mp"
+
+        direct = Collector(
+            [ContinuousActionVecMockEnv],
+            backend="direct",
+            num_collectors=1,
+            frames_per_batch=20,
+        )
+        try:
+            assert type(direct) is Collector
+        finally:
+            direct.shutdown()
+
+    def test_backend_dispatch_validation(self):
+        with pytest.raises(ValueError, match="does not match"):
+            Collector(
+                [ContinuousActionVecMockEnv],
+                backend="process",
+                num_collectors=2,
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="duplicate"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="ray",
+                backend_options={"remote_configs": {}},
+                remote_configs={},
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="reserved"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="process",
+                backend_options={"sync": True},
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="at most one"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="direct",
+                num_collectors=2,
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="exactly one"):
+            Collector(
+                [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+                backend="direct",
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="positive integer"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="process",
+                num_collectors=0,
+                frames_per_batch=20,
+            )
+        with pytest.raises(TypeError, match="positive integer"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="process",
+                num_collectors=True,
+                frames_per_batch=20,
+            )
+        with pytest.raises(ValueError, match="duplicate"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                None,
+                backend="process",
+                backend_options={"policy": None},
+                frames_per_batch=20,
+            )
+        with service_backend("thread"):
+            with pytest.raises(
+                ValueError, match="enclosing torchrl.service_backend context"
+            ):
+                Collector(
+                    ContinuousActionVecMockEnv,
+                    frames_per_batch=20,
+                )
+        with pytest.raises(ValueError, match="requires launcher='submitit'"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                backend="submitit",
+                backend_options={"launcher": "mp"},
+                frames_per_batch=20,
+            )
+        with pytest.raises(TypeError, match="at most"):
+            Collector(
+                ContinuousActionVecMockEnv,
+                None,
+                3,
+                backend="process",
+                frames_per_batch=20,
+            )
+
+    def test_process_backend_smoke_and_context_isolation(self):
+        with service_backend("process"):
+            collector = Collector(
+                ContinuousActionVecMockEnv,
+                num_collectors=2,
+                sync=True,
+                frames_per_batch=20,
+                total_frames=20,
+            )
+            try:
+                assert isinstance(collector, MultiSyncCollector)
+                assert not isinstance(collector, Collector)
+                batch = next(iter(collector))
+                assert batch.numel() == 20
+            finally:
+                collector.shutdown()
+
     def test_collector_without_traj_ids(self):
         env = CountingEnv(max_steps=3)
         collector = Collector(
@@ -984,12 +1332,14 @@ class TestCollectorGeneric:
         collector_frames = collector._frames
         collector_iter = collector._iter
         collector_state_dict = collector.state_dict()
+        saved_traj_id = collector_state_dict["traj_pool"]["traj_id"].item()
         collector.shutdown()
 
         collector = collector_class(**collector_kwargs)
         collector.load_state_dict(collector_state_dict)
         assert collector._frames == collector_frames
         assert collector._iter == collector_iter
+        assert collector.state_dict()["traj_pool"]["traj_id"].item() > saved_traj_id
         for _ in enumerate(collector):
             raise AssertionError
         collector.shutdown()
@@ -4355,6 +4705,77 @@ class TestPolicyVersion:
         finally:
             collector.shutdown()
 
+    def test_single_collector_restores_policy_version(self):
+        """Collector state preserves its policy revision across reconstruction."""
+        collector = Collector(
+            self._Env,
+            policy=self._make_policy(),
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            collector.update_policy_weights_()
+            collector.update_policy_weights_()
+            state_dict = collector.state_dict()
+            saved_version = collector.policy_version
+        finally:
+            collector.shutdown()
+
+        restored = Collector(
+            self._Env,
+            policy=self._make_policy(),
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            restored.load_state_dict(state_dict)
+            assert restored.policy_version == saved_version
+            restored.update_policy_weights_()
+            assert restored.policy_version == saved_version + 1
+        finally:
+            restored.shutdown()
+
+    def test_multi_collector_restores_worker_policy_versions(self):
+        """Multiprocess restore preserves each worker's policy revision."""
+        collector = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            collector.update_policy_weights_()
+            collector.update_policy_weights_()
+            state_dict = collector.state_dict()
+            saved_versions = [
+                state_dict[f"worker{idx}"]["policy_version"] for idx in range(2)
+            ]
+        finally:
+            collector.shutdown()
+
+        restored = MultiSyncCollector(
+            [self._Env, self._Env],
+            policy=self._make_policy(),
+            frames_per_batch=20,
+            total_frames=200,
+            cat_results="stack",
+            track_policy_version=True,
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
+        )
+        try:
+            restored.load_state_dict(state_dict)
+            restored_state = restored.state_dict()
+            assert [
+                restored_state[f"worker{idx}"]["policy_version"] for idx in range(2)
+            ] == saved_versions
+        finally:
+            restored.shutdown()
+
     @pytest.mark.parametrize(
         "collector_cls",
         [
@@ -5262,6 +5683,113 @@ class TestCollectorRemoteHelpers:
             collector.shutdown()
 
 
+class TestCollectorStats:
+    def test_single_collector_stats(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            stats = collector.stats()
+            assert stats["frames"] == 0
+            assert stats["batches"] == 0
+            assert stats["total_frames"] == 32
+            assert stats["requested_frames_per_batch"] == 16
+            assert not stats["completed"]
+            frames_seen = []
+            for _ in collector:
+                frames_seen.append(collector.stats()["frames"])
+            stats = collector.stats()
+            assert frames_seen == [16, 32]
+            assert stats["batches"] == 2
+            assert stats["completed"]
+        finally:
+            collector.shutdown()
+
+    def test_single_collector_stats_policy_version(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            track_policy_version=True,
+        )
+        try:
+            assert isinstance(collector.stats().get("policy_version"), int)
+        finally:
+            collector.shutdown()
+
+    def test_stats_is_serializable(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            for _ in collector:
+                break
+            deserialized = json.loads(json.dumps(collector.stats()))
+            assert deserialized["frames"] == 16
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
+    def test_multiprocess_collector_stats(self, collector_cls):
+        collector = collector_cls(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            with pytest.raises(ValueError, match="workers must be one of"):
+                collector.stats(workers="bogus")
+            for _ in collector:
+                break
+            stats = collector.stats()
+            assert stats["workers"] == 2
+            assert stats["workers_alive"] == 2
+            assert stats["frames"] >= 16
+            both = collector.stats(workers="both")
+            assert "frames" in both
+            assert "worker_0/frames" in both
+            assert "worker_1/frames" in both
+            per_worker = collector.stats(workers="per_worker")
+            assert "frames" not in per_worker
+            assert "worker_0/frames" in per_worker
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="requires ray.")
+    def test_ray_collector_stats(self):
+        collector = RayCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            num_collectors=2,
+            ray_init_config={"num_cpus": 2, "include_dashboard": False},
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+        )
+        try:
+            for _ in collector:
+                break
+            stats = collector.stats()
+            assert stats["workers"] == 2
+            assert stats["workers_alive"] == 2
+            assert stats["frames"] >= 16
+            assert stats["worker_frames"] >= 16
+            assert stats["requested_frames_per_batch"] == 16
+            both = collector.stats(workers="both", timeout=30.0)
+            assert "worker_0/frames" in both
+            assert "worker_1/frames" in both
+        finally:
+            collector.shutdown()
+
+
 class TestCollectorRB:
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     def test_collector_rb_sync(self):
@@ -5557,6 +6085,36 @@ class TestCollectorRB:
         assert rb.write_count >= 32
         assert len(rb) > 0
         assert rb.storage[: len(rb)].device == torch.device("cpu")
+
+    def test_runner_managed_replay_buffer_returns_uncloned_rollout(self):
+        class RunnerManagedCollector(Collector):
+            _ignore_rb = True
+
+        env = CountingEnv()
+        rb = ReplayBuffer(storage=LazyTensorStorage(32), batch_size=4)
+        postproc_inputs = []
+
+        def postproc(data):
+            postproc_inputs.append(data)
+            return data
+
+        collector = RunnerManagedCollector(
+            env,
+            RandomPolicy(env.action_spec),
+            frames_per_batch=8,
+            total_frames=8,
+            replay_buffer=rb,
+            extend_buffer=True,
+            return_same_td=True,
+            postproc=postproc,
+        )
+        try:
+            data = next(iter(collector))
+            assert data is postproc_inputs[0]
+            rb.extend(data)
+            assert len(rb) == 8
+        finally:
+            collector.shutdown()
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize(
@@ -6113,6 +6671,13 @@ class TestAsyncCollection:
                     break
             else:
                 raise RuntimeError("RB is empty")
+            with collector.pause():
+                worker_lengths = collector.map_fn("replay_buffer.__len__")
+                worker_write_counts = collector.get_distant_attr(
+                    "replay_buffer.write_count"
+                )
+                assert worker_lengths == [len(rb)] * 2
+                assert worker_write_counts == [rb.write_count] * 2
         finally:
             collector.async_shutdown()
             del collector
@@ -7018,6 +7583,51 @@ class TestTrajsPerBatchReplayBuffer:
     * **SliceSampler integration**: sampled slices respect episode boundaries.
     """
 
+    def test_replay_buffer_tensordict_device_metadata_normalization(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        data0 = TensorDict({"obs": torch.zeros(4, 3)}, [4])
+        data1 = TensorDict({"obs": torch.ones(4, 3)}, [4])
+        assert data0.device is None
+        assert data1.device is None
+
+        rb.extend(_maybe_normalize_replay_buffer_tensordict_device(data0, rb))
+        rb.extend(_maybe_normalize_replay_buffer_tensordict_device(data1, rb))
+
+        stored = rb.storage.get(slice(0, len(rb)))
+        assert stored.device == torch.device("cpu")
+        assert len(rb) == 8
+
+    def test_replay_buffer_tensordict_device_metadata_uses_storage_payload(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        rb.extend(TensorDict({"obs": torch.zeros(4, 3)}, [4]))
+        rb.storage.device = None
+
+        data = TensorDict({"obs": torch.ones(4, 3)}, [4])
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 8
+
+    def test_replay_buffer_tensordict_device_metadata_normalizes_nested(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(16, device="cpu"))
+        data = TensorDict(
+            {
+                "obs": torch.zeros(4, 3),
+                "next": TensorDict({"obs": torch.ones(4, 3)}, [4]),
+            },
+            [4],
+            device="cpu",
+        )
+        data["next"].clear_device_()
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        assert data["next"].device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 4
+
     @staticmethod
     def _make_env_and_policy(max_steps=4):
         env_fn = lambda: TransformedEnv(  # noqa: E731
@@ -7706,6 +8316,29 @@ class TestTrajsPerBatchReplayBuffer:
         assert len(rb) > 0, "replay buffer must be non-empty"
         assert ("collector", "traj_ids") in rb.sample(2).keys(True)
         self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_multi_async_collector_empty_rb_ack(self):
+        """MultiAsyncCollector handles replay-buffer ACKs before any complete traj."""
+        max_steps = 10
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=1,
+            total_frames=1,
+            trajs_per_batch=1,
+            cat_results="stack",
+        )
+        try:
+            collector_iter = iter(collector)
+            out = next(collector_iter)
+        finally:
+            collector.shutdown()
+
+        assert out is None
+        assert len(rb) == 0
 
     def test_multi_async_probabilistic_actor_writes_log_prob_to_rb(self):
         max_steps = 4

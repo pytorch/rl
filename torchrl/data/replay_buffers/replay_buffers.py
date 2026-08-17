@@ -7,12 +7,15 @@ from __future__ import annotations
 import collections
 import contextlib
 import json
+import math
 import multiprocessing
+import pickle
 import textwrap
 import threading
 import warnings
-from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor, wait
+from copy import deepcopy
 from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any
@@ -26,13 +29,14 @@ except ImportError:
     from torch._dynamo import is_compiling
 
 from functools import partial, wraps
-from typing import TYPE_CHECKING, TypeVar
+from typing import Literal, TYPE_CHECKING, TypeVar
 
 from tensordict import (
     is_tensor_collection,
     is_tensorclass,
     LazyStackedTensorDict,
     NestedKey,
+    TensorClass,
     TensorDict,
     TensorDictBase,
     unravel_key,
@@ -51,7 +55,17 @@ except ImportError:
         return tree_flat
 
 
-from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
+from torchrl._comm.replay_service import _DistributedReplayService, _extend_reply
+from torchrl._utils import (
+    _RayServiceMetaClass,
+    accept_remote_rref_udf_invocation,
+    rl_warnings,
+)
+from torchrl.data.replay_buffers.query import _query_source, Trajectory
+from torchrl.data.replay_buffers.sample_units import (
+    SampleUnit,
+    Sequence as SequenceSampleUnit,
+)
 from torchrl.data.replay_buffers.samplers import (
     ConsumingSampler,
     PrioritizedSampler,
@@ -117,8 +131,57 @@ def _maybe_delay_init(func):
     return wrapper
 
 
-class ReplayBuffer:
+class ConditionalUpdateResult(TensorClass["nocast"]):
+    """Result of :meth:`ReplayBuffer.update_if_present`.
+
+    Attributes:
+        updated (torch.Tensor): boolean mask aligned with the order of the
+            indices passed to the update. ``True`` marks records that were
+            still live and received the patch; ``False`` marks records that
+            were not patched, either because their slot had been reused or
+            emptied (stale) or because they were rejected by the version
+            comparison. Non-patched records are left untouched.
+        version_rejected (torch.Tensor, optional): boolean mask aligned like
+            ``updated``. Only present (non-``None``) when the update was
+            called with ``version_key``; ``True`` marks records that were
+            generation-live but lost the version comparison (including
+            duplicate handles on the same slot that did not carry the highest
+            incoming version). Every input record lands in exactly one of
+            updated / version_rejected / stale.
+
+    Note that ``stale_count`` counts only generation-stale records: when a
+    version comparison is active, records rejected by it are counted by
+    ``version_rejected_count``, not by ``stale_count``.
+    """
+
+    updated: torch.Tensor
+    version_rejected: torch.Tensor | None = None
+
+    @property
+    def updated_count(self) -> int:
+        """Number of records that were live and patched."""
+        return int(self.updated.sum().item())
+
+    @property
+    def version_rejected_count(self) -> int:
+        """Number of records that were live but rejected by version comparison."""
+        if self.version_rejected is None:
+            return 0
+        return int(self.version_rejected.sum().item())
+
+    @property
+    def stale_count(self) -> int:
+        """Number of records that were stale and skipped."""
+        base = int(self.updated.numel()) - self.updated_count
+        if self.version_rejected is not None:
+            base -= self.version_rejected_count
+        return base
+
+
+class ReplayBuffer(metaclass=_RayServiceMetaClass):
     """A generic, composable replay buffer class.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.ReplayBufferConfig`.
 
     Keyword Args:
         storage (Storage, Callable[[], Storage], optional): the storage to be used.
@@ -129,6 +192,12 @@ class ReplayBuffer:
             If a callable is passed, it is used as constructor for the sampler.
             If none is provided, a default :class:`~torchrl.data.replay_buffers.RandomSampler`
             will be used.
+        sample_unit (SampleUnit, optional): expands the anchors selected by
+            the sampler into the records of the batch (see
+            :class:`~torchrl.data.replay_buffers.SampleUnit`). ``None``
+            (default) is equivalent to
+            :class:`~torchrl.data.replay_buffers.Transition`: every anchor is
+            one transition and classic behavior is preserved.
         writer (Writer, Callable[[], Writer], optional): the writer to be used.
             If a callable is passed, it is used as constructor for the writer.
             If none is provided a default :class:`~torchrl.data.replay_buffers.RoundRobinWriter`
@@ -214,6 +283,16 @@ class ReplayBuffer:
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        service_backend (str): deployment backend, either ``"direct"`` or
+            ``"ray"``. Defaults to ``"direct"``.
+        service_backend_options (dict, optional): Ray initialization options.
+            Accepted keys are ``ray_init_config`` and ``remote_config``.
+        transport (str, optional): physical transport used by a remote replay
+            owner. ``"auto"`` selects the backend default. Defaults to
+            ``"auto"``.
+        transport_options (dict, optional): options for the selected transport.
+            For ``transport="distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. TensorDict layouts are bound lazily on first use.
 
     Examples:
         >>> import torch
@@ -284,11 +363,44 @@ class ReplayBuffer:
 
     """
 
+    _accepts_transport_backend = True
+
+    @classmethod
+    def _ServiceClass(
+        cls,
+        service_backend,
+        *args,
+        service_backend_options=None,
+        **kwargs,
+    ):
+        if service_backend != "ray":
+            raise ValueError(
+                "ReplayBuffer supports service_backend='direct' or 'ray', "
+                f"not {service_backend!r}."
+            )
+        from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
+
+        options = dict(service_backend_options or {})
+        ray_init_config = options.pop("ray_init_config", None)
+        remote_config = options.pop("remote_config", None)
+        if options:
+            raise TypeError(
+                f"Unexpected Ray replay-buffer service options: {sorted(options)}"
+            )
+        return RayReplayBuffer(
+            *args,
+            replay_buffer_cls=cls,
+            ray_init_config=ray_init_config,
+            remote_config=remote_config,
+            **kwargs,
+        )
+
     def __init__(
         self,
         *,
         storage: Storage | Callable[[], Storage] | None = None,
         sampler: Sampler | Callable[[], Sampler] | None = None,
+        sample_unit: SampleUnit | None = None,
         writer: Writer | Callable[[], Writer] | None = None,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
@@ -306,7 +418,20 @@ class ReplayBuffer:
         shared: bool = False,
         compilable: bool | None = None,
         delayed_init: bool | None = None,
+        service_backend: Literal["direct", "ray"] = "direct",
+        service_backend_options: dict[str, Any] | None = None,
+        transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
+        transport_options: dict[str, Any] | None = None,
     ) -> None:
+        if service_backend == "direct" and transport not in ("auto", "direct"):
+            raise ValueError(
+                "A direct ReplayBuffer only supports transport='auto' or 'direct'."
+            )
+        if service_backend == "direct" and transport_options:
+            raise ValueError(
+                "transport_options are only valid for a remote ReplayBuffer."
+            )
+        del service_backend, service_backend_options, transport, transport_options
         if consume_after_n_samples is not None:
             if isinstance(consume_after_n_samples, bool) or not isinstance(
                 consume_after_n_samples, INT_CLASSES
@@ -318,6 +443,7 @@ class ReplayBuffer:
 
         self._delayed_init = delayed_init
         self._initialized = False
+        self._service_shutdown = False
 
         # Store init parameters for potential delayed initialization
         self._init_storage = storage
@@ -347,6 +473,11 @@ class ReplayBuffer:
         # Update _delayed_init after auto-detection
         self._delayed_init = delayed_init
 
+        if sample_unit is not None and not isinstance(sample_unit, SampleUnit):
+            raise TypeError(
+                f"sample_unit must be a SampleUnit instance, got {type(sample_unit).__name__}."
+            )
+        self._sample_unit = sample_unit
         self._pin_memory = pin_memory
         self._prefetch = bool(prefetch)
         self._prefetch_cap = prefetch or 0
@@ -469,6 +600,103 @@ class ReplayBuffer:
     def initialized(self) -> bool:
         """Whether the replay buffer has been initialized."""
         return self._initialized
+
+    def start(self) -> Self:
+        """Return this already-started direct replay buffer."""
+        if self._service_shutdown:
+            raise RuntimeError("A shut down replay buffer cannot be restarted.")
+        return self
+
+    @property
+    def is_alive(self) -> bool:
+        """Whether this direct replay buffer remains available."""
+        return not self._service_shutdown
+
+    @property
+    def service_backend(self) -> str:
+        """The canonical deployment backend for this replay buffer."""
+        return "direct"
+
+    def client(self) -> Self:
+        """Return ``self`` for the zero-overhead direct backend."""
+        return self
+
+    def _start_distributed_service(self, transport_options: dict[str, Any]) -> None:
+        """Start the private tensor transport inside a remote owner."""
+        if hasattr(self, "_distributed_service"):
+            raise RuntimeError("The distributed replay service is already running.")
+        options = dict(transport_options)
+        extend_spec = options.pop("extend_spec", None)
+        sample_spec = options.pop("sample_spec", None)
+        priority_spec = options.pop("priority_spec", None)
+        self._distributed_service = _DistributedReplayService(
+            self,
+            extend_spec=extend_spec,
+            sample_spec=sample_spec,
+            priority_spec=priority_spec,
+            **options,
+        ).start()
+
+    def _bootstrap_distributed_extend(self, data: TensorDictBase):
+        """Bind the extend schema and apply exactly one first operation."""
+        service = self._distributed_service
+        with service._lock:
+            if service.extend_transport is None:
+                result = self.extend(data)
+                reply = _extend_reply(result, service._wire_device)
+                service.bind_extend(data, reply)
+                return service.extend_client(), reply.get("result", None), True
+            return service.extend_client(), None, False
+
+    def _bootstrap_distributed_sample(self, batch_size: int):
+        """Bind the sample schema and return exactly one first sample."""
+        service = self._distributed_service
+        with service._lock:
+            if service.sample_transport is None:
+                result = self.sample(batch_size).to(service._wire_device)
+                service.bind_sample(result)
+                return service.sample_client(), result, True, batch_size
+            return (
+                service.sample_client(),
+                None,
+                False,
+                service._sample_batch_size,
+            )
+
+    def _bootstrap_distributed_priority(self, data: TensorDictBase):
+        """Bind the priority schema and apply exactly one first update."""
+        service = self._distributed_service
+        with service._lock:
+            if service.priority_transport is None:
+                update = getattr(self, "update_tensordict_priority", None)
+                if update is not None:
+                    update(data)
+                service.bind_priority(data)
+                return service.priority_client(), True
+            return service.priority_client(), False
+
+    def _distributed_control_client(self):
+        """Return a restricted control endpoint for length and write count."""
+        return self._distributed_service.control_client()
+
+    def _distributed_service_client(self):
+        """Create an independently routed client for the private service."""
+        service = getattr(self, "_distributed_service", None)
+        if service is None:
+            raise RuntimeError("The distributed replay service is not running.")
+        return service.client()
+
+    def _shutdown_distributed_service(self) -> None:
+        """Stop the private tensor transport when the remote owner closes."""
+        service = getattr(self, "_distributed_service", None)
+        if service is not None:
+            service.shutdown()
+            del self._distributed_service
+
+    def shutdown(self, timeout: float | None = None) -> None:
+        """Mark this direct replay-buffer owner as shut down."""
+        del timeout
+        self._service_shutdown = True
 
     def _initialize_prioritized_sampler(self) -> None:
         """Initialize priority trees for existing data when using PrioritizedSampler.
@@ -766,6 +994,370 @@ class ReplayBuffer:
         """The total number of items written so far in the buffer through add and extend."""
         return self._writer._write_count
 
+    def stats(self) -> dict[str, int | float | bool]:
+        """Returns a cheap, serializable snapshot of the buffer's operational state.
+
+        The snapshot only contains scalar counters and gauges. It never
+        includes the storage content, does not modify the buffer state and is
+        safe to call concurrently with writes and samples. Cumulative
+        counters such as ``write_count`` are meant to be converted into rates
+        by an external monitor such as
+        :class:`~torchrl.record.loggers.monitoring.LoggerMonitor`.
+
+        Calling this method on an uninitialized buffer does not trigger its
+        initialization; an empty snapshot with ``initialized=False`` is
+        returned instead (``capacity`` is still reported when the storage
+        already advertises it).
+
+        Returns:
+            A dictionary with the following entries:
+
+            - ``"size"``: current number of elements in the buffer (mirrors ``len(buffer)``);
+            - ``"write_count"``: total number of items written through ``add`` and
+              ``extend`` (``0`` for writers that do not track writes, such as
+              :class:`~torchrl.data.replay_buffers.writers.ImmutableDatasetWriter`);
+            - ``"prefetch_queue_size"``: number of pending prefetched batches;
+            - ``"initialized"``: whether the buffer components are initialized;
+            - ``"capacity"``: maximum number of elements the storage can hold
+              (only present when the storage advertises a ``max_size``);
+            - ``"utilization"``: ``size / capacity`` (only present alongside ``capacity``).
+
+            Remote clients backed by the distributed transport report a subset
+            of these entries (``size`` and ``write_count``).
+
+        Examples:
+            >>> import torch
+            >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+            >>> rb = ReplayBuffer(storage=LazyTensorStorage(10))
+            >>> rb.extend(torch.arange(5))
+            >>> snapshot = rb.stats()
+            >>> print(snapshot["size"], snapshot["write_count"], snapshot["capacity"])
+            5 5 10
+        """
+        if not self.initialized:
+            stats = {
+                "size": 0,
+                "write_count": 0,
+                "prefetch_queue_size": 0,
+                "initialized": False,
+            }
+            storage = getattr(self, "_storage", None) or getattr(
+                self, "_init_storage", None
+            )
+            capacity = getattr(storage, "max_size", None)
+            if isinstance(capacity, int):
+                stats["capacity"] = capacity
+                stats["utilization"] = 0.0
+            return stats
+        with self._replay_lock:
+            size = len(self)
+            capacity = getattr(self._storage, "max_size", None)
+            write_count = getattr(self._writer, "_write_count", 0)
+            prefetch_queue_size = len(self._prefetch_queue)
+        stats = {
+            "size": int(size),
+            "write_count": int(write_count),
+            "prefetch_queue_size": int(prefetch_queue_size),
+            "initialized": True,
+        }
+        if capacity is not None:
+            stats["capacity"] = int(capacity)
+            stats["utilization"] = float(size) / capacity if capacity else 0.0
+        return stats
+
+    def update_if_present(
+        self,
+        *,
+        index: torch.Tensor,
+        generation: torch.Tensor,
+        patch: Mapping[NestedKey, torch.Tensor] | TensorDictBase,
+        version_key: NestedKey | None = None,
+        version: int | torch.Tensor | None = None,
+        require_newer: bool = False,
+    ) -> ConditionalUpdateResult:
+        """Conditionally updates stored records that are still live.
+
+        Replay slots are recycled by round-robin writers, so a physical index
+        captured at sampling time can point to a different record by the time
+        an asynchronous computation writes back. This method applies ``patch``
+        only to records whose ``(index, generation)`` pair still matches the
+        writer's current slot generation, skipping records whose slot was
+        reused or emptied since the handle was captured. Skipped records are
+        never modified.
+
+        The whole patch is validated (key existence, shape and dtype) before
+        any write happens; a validation failure leaves the storage untouched.
+        Updating a record refreshes its content, not its identity: the same
+        handle keeps working until the slot is rewritten by ``add``,
+        ``extend`` or ``empty``.
+
+        Generation tracking is opt-in: the buffer must be constructed with a
+        writer that tracks slot generations, e.g.
+        ``RoundRobinWriter(track_generations=True)`` (see
+        :ref:`ref_buffers_generations`). Calling this method on a buffer whose
+        writer does not track generations raises a ``RuntimeError``.
+
+        Keyword Args:
+            index (torch.Tensor): storage indices, as returned by
+                :meth:`extend` or found in the sample under ``"index"``.
+            generation (torch.Tensor): slot generations captured with the
+                indices, as found in the sample under ``"index_generation"``.
+            patch (mapping of NestedKey to torch.Tensor, or TensorDictBase):
+                the fields to overwrite for live records. Leading dimension
+                must match the number of records addressed by ``index``.
+            version_key (NestedKey, optional): a stored per-record scalar
+                field holding each record's current version. When passed
+                (together with ``version``), a generation-live record is only
+                patched if the incoming version compares favorably against
+                the stored one, and the accepted version is written into
+                ``version_key`` atomically with the patch. ``version_key``
+                may not appear in ``patch``. Nested keys must be passed in
+                tuple form (``("nested", "version")``); dotted strings are
+                rejected. Defaults to ``None`` (no version comparison).
+            version (int or torch.Tensor, optional): the incoming version,
+                either a scalar (broadcast to every record) or a tensor with
+                one entry per record. Must be passed together with
+                ``version_key``.
+            require_newer (bool, optional): if ``True``, a record is only
+                patched when ``version > stored``; if ``False``, ties are
+                accepted (``version >= stored``). When the same slot is
+                addressed several times in one call, only the row carrying
+                the highest incoming version is applied (the last such row
+                on ties); the losing rows are reported in
+                ``version_rejected``. Defaults to ``False``.
+
+        Returns:
+            A :class:`ConditionalUpdateResult` whose ``updated`` mask is
+            aligned with the input index order, with ``updated_count`` and
+            ``stale_count`` conveniences. When ``version_key`` is passed, its
+            ``version_rejected`` mask marks generation-live records that were
+            rejected by the version comparison (``None`` otherwise).
+
+        Raises:
+            RuntimeError: if the storage does not support conditional updates
+                (for example :class:`ListStorage`) or the writer does not
+                track slot generations.
+            KeyError: if a patch key (or ``version_key``) does not exist in
+                the storage.
+            ValueError: if a patch entry has an incompatible shape or dtype,
+                if only one of ``version_key`` / ``version`` is passed, if
+                ``version_key`` appears in ``patch`` or names a non-scalar
+                field, or if it is a dotted string.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.data import (
+            ...     LazyTensorStorage,
+            ...     TensorDictReplayBuffer,
+            ...     TensorDictRoundRobinWriter,
+            ... )
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(10),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ...     batch_size=4,
+            ... )
+            >>> rb.extend(TensorDict({"obs": torch.zeros(10, 3)}, batch_size=[10]))
+            >>> sample = rb.sample()
+            >>> result = rb.update_if_present(
+            ...     index=sample["index"],
+            ...     generation=sample["index_generation"],
+            ...     patch={"obs": torch.ones(4, 3)},
+            ... )
+            >>> print(result.updated_count, result.stale_count)
+            4 0
+
+            With a version comparison, outdated asynchronous writers lose
+            deterministically:
+
+            >>> rb = TensorDictReplayBuffer(
+            ...     storage=LazyTensorStorage(10),
+            ...     writer=TensorDictRoundRobinWriter(track_generations=True),
+            ...     batch_size=4,
+            ... )
+            >>> rb.extend(
+            ...     TensorDict(
+            ...         {
+            ...             "obs": torch.zeros(10, 3),
+            ...             "v": torch.full((10,), 5, dtype=torch.int64),
+            ...         },
+            ...         batch_size=[10],
+            ...     )
+            ... )
+            >>> sample = rb.sample()
+            >>> result = rb.update_if_present(
+            ...     index=sample["index"],
+            ...     generation=sample["index_generation"],
+            ...     patch={"obs": torch.ones(4, 3)},
+            ...     version_key="v",
+            ...     version=4,
+            ...     require_newer=True,
+            ... )
+            >>> print(result.updated_count, result.version_rejected_count)
+            0 4
+        """
+        storage = self._storage
+        if not getattr(storage, "supports_conditional_update", False) or not getattr(
+            self._writer, "tracks_generations", False
+        ):
+            raise RuntimeError(
+                f"Conditional updates are not supported by {type(storage).__name__} "
+                f"with {type(self._writer).__name__}: the storage must support "
+                "conditional updates and the writer must track slot generations."
+            )
+        index = torch.as_tensor(index, dtype=torch.long)
+        dim0 = index[..., 0] if index.ndim > 1 else index.reshape(-1)
+        generation = torch.as_tensor(generation, dtype=torch.long).reshape(-1)
+        if generation.numel() != dim0.numel():
+            raise ValueError(
+                f"index and generation must address the same number of records, "
+                f"got {dim0.numel()} indices and {generation.numel()} generations."
+            )
+        if (version_key is None) != (version is None):
+            raise ValueError("version_key and version must be provided together.")
+
+        if isinstance(patch, TensorDictBase):
+            patch = dict(patch.items(include_nested=True, leaves_only=True))
+        else:
+            patch = dict(patch)
+        # Normalize key spellings so ("v",) and "v" (and the patch's own keys)
+        # cannot silently name the same field under different forms.
+        patch = {unravel_key(key): value for key, value in patch.items()}
+
+        version_leaf = None
+        if version_key is not None:
+            if isinstance(version_key, str) and "." in version_key:
+                raise ValueError(
+                    f"Dotted-string version keys are not supported: got "
+                    f"{version_key!r}. Pass the nested key in tuple form, e.g. "
+                    f"{tuple(version_key.split('.'))!r}."
+                )
+            version_key = unravel_key(version_key)
+            if version_key in patch:
+                raise ValueError(
+                    f"version_key {version_key!r} may not appear in patch."
+                )
+            # Raises KeyError if the field does not exist; the version field
+            # must hold one scalar per record (trailing singleton dims are
+            # accepted and squeezed).
+            version_leaf = storage._conditional_patch_leaf(version_key)
+            n_coords = index.shape[-1] if index.ndim > 1 else 1
+            feature_shape = version_leaf.shape[n_coords:]
+            if any(dim != 1 for dim in feature_shape):
+                raise ValueError(
+                    f"version_key {version_key!r} must reference a per-record "
+                    f"scalar field; the storage holds feature shape "
+                    f"{tuple(feature_shape)}."
+                )
+            version_tensor = torch.as_tensor(version)
+            while version_tensor.ndim > 1 and version_tensor.shape[-1] == 1:
+                version_tensor = version_tensor.squeeze(-1)
+            if version_tensor.ndim == 0:
+                version_tensor = version_tensor.expand(dim0.shape)
+            elif version_tensor.ndim != 1 or version_tensor.numel() != dim0.numel():
+                raise ValueError(
+                    f"version must be a scalar or hold one entry per record, "
+                    f"got shape {tuple(torch.as_tensor(version).shape)} for "
+                    f"{dim0.numel()} records."
+                )
+            patch[version_key] = version_tensor.reshape((dim0.numel(), *feature_shape))
+
+        normalized = storage._validate_conditional_patch(index, patch)
+        version_rejected = None
+
+        with self._replay_lock, self._write_lock:
+            # ``generations_of`` returns on the index device; align the captured
+            # generations with it so the comparison never crosses devices
+            # (index/generation/storage may live on CPU, CUDA or MPS).
+            current = self._writer.generations_of(dim0)
+            live = current == generation.to(current.device)
+            if version_key is not None:
+                version_rejected = torch.zeros_like(live)
+            if live.any():
+                if version_key is not None:
+                    live_mask = live.to(version_leaf.device)
+                    live_index = index.to(version_leaf.device)[live_mask]
+                    # Read the stored versions the same way the write path
+                    # addresses the storage, so ndim > 1 storages resolve
+                    # coordinates instead of fancy-indexing dim 0.
+                    if live_index.ndim > 1:
+                        coords = tuple(live_index.unbind(-1))
+                    else:
+                        coords = (live_index,)
+                    stored_version = version_leaf[coords].reshape(-1)
+                    incoming_version = normalized[version_key][live_mask].reshape(-1)
+                    if require_newer:
+                        version_accepted = incoming_version > stored_version
+                    else:
+                        version_accepted = incoming_version >= stored_version
+
+                    # A record addressed several times in one call would make
+                    # the scatter write order-dependent (every row compares
+                    # against the pre-call version, and the last write wins).
+                    # Keep, per record, only the row carrying the highest
+                    # incoming version -- the last such row on ties -- and
+                    # reject the rest, so the result stays truthful. Records
+                    # are identified by their full coordinates: for ndim > 1
+                    # storages, cells sharing a dim-0 slot are distinct.
+                    if live_index.ndim > 1:
+                        slots, slot_ids = torch.unique(
+                            live_index, dim=0, return_inverse=True
+                        )
+                        n_slots = slots.shape[0]
+                    else:
+                        slots, slot_ids = torch.unique(live_index, return_inverse=True)
+                        n_slots = slots.numel()
+                    if n_slots != slot_ids.numel():
+                        if incoming_version.is_floating_point():
+                            lowest = torch.finfo(incoming_version.dtype).min
+                        else:
+                            lowest = torch.iinfo(incoming_version.dtype).min
+                        slot_max = torch.full(
+                            (n_slots,),
+                            lowest,
+                            dtype=incoming_version.dtype,
+                            device=version_leaf.device,
+                        ).scatter_reduce(0, slot_ids, incoming_version, "amax")
+                        is_max = incoming_version == slot_max[slot_ids]
+                        row = torch.arange(slot_ids.numel(), device=version_leaf.device)
+                        best_row = torch.full(
+                            (n_slots,),
+                            -1,
+                            dtype=torch.int64,
+                            device=version_leaf.device,
+                        ).scatter_reduce(
+                            0,
+                            slot_ids,
+                            torch.where(
+                                is_max, row, row.new_full((), -1).expand_as(row)
+                            ),
+                            "amax",
+                        )
+                        version_accepted = version_accepted & (
+                            row == best_row[slot_ids]
+                        )
+
+                    accepted = version_accepted.to(live.device)
+                    version_rejected[live] = ~accepted
+                    new_live = torch.zeros_like(live)
+                    new_live[live] = accepted
+                    live = new_live
+
+                if live.any():
+                    live_index = index[live.to(index.device)]
+                    storage._apply_conditional_patch(
+                        live_index,
+                        {
+                            key: value[live.to(value.device)]
+                            for key, value in normalized.items()
+                        },
+                    )
+        return ConditionalUpdateResult(
+            updated=live,
+            version_rejected=version_rejected,
+            batch_size=live.shape,
+        )
+
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
 
@@ -903,6 +1495,7 @@ class ReplayBuffer:
         index = _to_numpy(index)
         with self._replay_lock:
             self._storage[:].set_at_(key, value, index)
+            self._storage._bump_mutation_revision()
         return self
 
     @_maybe_delay_init
@@ -919,6 +1512,7 @@ class ReplayBuffer:
         """
         with self._replay_lock:
             self._storage[:].set_(key, value)
+            self._storage._bump_mutation_revision()
         return self
 
     @_maybe_delay_init
@@ -942,36 +1536,169 @@ class ReplayBuffer:
                 clone=clone,
                 keys_to_update=keys_to_update,
             )
+            self._storage._bump_mutation_revision()
         return self
+
+    def _clone_prefetch_result(
+        self, result: tuple[Any, dict[str, Any]]
+    ) -> tuple[Any, dict[str, Any]]:
+        memo = {}
+
+        def _clone_leaf(value: Any) -> Any:
+            value_id = id(value)
+            if value_id in memo:
+                return memo[value_id]
+            if isinstance(value, Tensor):
+                # PyTorch deliberately rejects deepcopy for non-leaf tensors. A
+                # checkpoint only needs their value and requires-grad property,
+                # not the live autograd graph that produced the sample.
+                cloned = value.detach().clone()
+                if value.requires_grad:
+                    cloned.requires_grad_()
+            else:
+                cloned = deepcopy(value, memo)
+            memo[value_id] = cloned
+            return cloned
+
+        return tree_map(_clone_leaf, result)
+
+    @contextlib.contextmanager
+    def _capture_prefetch_state(
+        self, *, clone_queue: bool = True
+    ) -> Iterator[dict[str, Any]]:
+        with self._futures_lock:
+            results = (
+                tuple(future.result() for future in self._prefetch_queue)
+                if self._prefetch
+                else ()
+            )
+            # Futures acquire the replay lock while sampling, so only take it
+            # after every queued future has settled. Holding both locks while
+            # the caller captures the remaining components keeps the queue,
+            # storage, sampler, writer and RNG at one logical point in time.
+            with self._replay_lock:
+                queue = (
+                    tuple(self._clone_prefetch_result(result) for result in results)
+                    if clone_queue
+                    else results
+                )
+                yield {
+                    "version": 1,
+                    "capacity": int(self._prefetch_cap),
+                    "queue": queue,
+                }
+
+    def _clear_prefetch_queue_locked(self) -> None:
+        futures = tuple(self._prefetch_queue)
+        for future in futures:
+            future.cancel()
+        if futures:
+            wait(futures)
+        self._prefetch_queue.clear()
+
+    def _validate_prefetch_state(self, prefetch_state: dict[str, Any] | None) -> None:
+        if prefetch_state is None:
+            return
+        if not isinstance(prefetch_state, dict):
+            raise TypeError("The prefetch state must be a dictionary.")
+        if prefetch_state.get("version") != 1:
+            raise RuntimeError(
+                f"Unsupported prefetch state version: {prefetch_state.get('version')}."
+            )
+        capacity = prefetch_state.get("capacity")
+        if (
+            isinstance(capacity, bool)
+            or not isinstance(capacity, INT_CLASSES)
+            or capacity < 0
+        ):
+            raise ValueError(
+                "The saved prefetch capacity must be a non-negative integer."
+            )
+        capacity = int(capacity)
+        if capacity != int(self._prefetch_cap):
+            raise RuntimeError(
+                f"Cannot restore a prefetch queue with capacity {capacity} into a "
+                f"replay buffer with capacity {self._prefetch_cap}."
+            )
+        queue = prefetch_state.get("queue")
+        if not isinstance(queue, (list, tuple)):
+            raise TypeError("The saved prefetch queue must be a list or tuple.")
+        if len(queue) > capacity:
+            raise ValueError(
+                f"The saved prefetch queue contains {len(queue)} entries but its "
+                f"capacity is {capacity}."
+            )
+        if queue and not self._prefetch:
+            raise RuntimeError(
+                "Cannot restore a non-empty prefetch queue when prefetching is disabled."
+            )
+
+    def _restore_prefetch_queue_locked(
+        self,
+        prefetch_state: dict[str, Any] | None,
+        *,
+        clone_queue: bool = True,
+    ) -> None:
+        self._validate_prefetch_state(prefetch_state)
+        if prefetch_state is None:
+            return
+        queue = prefetch_state["queue"]
+        for result in queue:
+            future = Future()
+            if clone_queue:
+                result = self._clone_prefetch_result(result)
+            future.set_result(result)
+            self._prefetch_queue.append(future)
+
+    def _dump_prefetch_state(self, path: Path, prefetch_state: dict[str, Any]) -> None:
+        with open(path / "prefetch.pkl", "wb") as file:
+            pickle.dump(prefetch_state, file)
+
+    def _load_prefetch_state(self, path: Path) -> dict[str, Any] | None:
+        prefetch_path = path / "prefetch.pkl"
+        if not prefetch_path.exists():
+            return None
+        with open(prefetch_path, "rb") as file:
+            return pickle.load(file)
 
     @_maybe_delay_init
     def state_dict(self) -> dict[str, Any]:
-        return {
-            "_storage": self._storage.state_dict(),
-            "_sampler": self._sampler.state_dict(),
-            "_writer": self._writer.state_dict(),
-            "_transforms": self._transform.state_dict(),
-            "_batch_size": self._batch_size,
-            "_consume_after_n_samples": self._consume_after_n_samples,
-            "_rng": (self._rng.get_state().clone(), str(self._rng.device))
-            if self._rng is not None
-            else None,
-        }
+        with self._capture_prefetch_state() as prefetch_state:
+            return {
+                "_storage": self._storage.state_dict(),
+                "_sampler": self._sampler.state_dict(),
+                "_writer": self._writer.state_dict(),
+                "_transforms": self._transform.state_dict(),
+                "_batch_size": self._batch_size,
+                "_consume_after_n_samples": self._consume_after_n_samples,
+                "_rng": (self._rng.get_state().clone(), str(self._rng.device))
+                if self._rng is not None
+                else None,
+                "_prefetch_state": prefetch_state,
+            }
 
     @_maybe_delay_init
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self._storage.load_state_dict(state_dict["_storage"])
-        self._sampler.load_state_dict(state_dict["_sampler"])
-        self._writer.load_state_dict(state_dict["_writer"])
-        self._transform.load_state_dict(state_dict["_transforms"])
-        self._batch_size = state_dict["_batch_size"]
-        self._consume_after_n_samples = state_dict.get("_consume_after_n_samples")
-        rng = state_dict.get("_rng")
-        if rng is not None:
-            state, device = rng
-            rng = torch.Generator(device=device)
-            rng.set_state(state)
-            self.set_rng(generator=rng)
+        prefetch_state = state_dict.get("_prefetch_state")
+        self._validate_prefetch_state(prefetch_state)
+        with self._futures_lock:
+            self._clear_prefetch_queue_locked()
+            with self._replay_lock:
+                self._storage.load_state_dict(state_dict["_storage"])
+                self._sampler.load_state_dict(state_dict["_sampler"])
+                self._writer.load_state_dict(state_dict["_writer"])
+                self._transform.load_state_dict(state_dict["_transforms"])
+                self._batch_size = state_dict["_batch_size"]
+                self._consume_after_n_samples = state_dict.get(
+                    "_consume_after_n_samples"
+                )
+                rng = state_dict.get("_rng")
+                if rng is not None:
+                    state, device = rng
+                    rng = torch.Generator(device=device)
+                    rng.set_state(state)
+                    self.set_rng(generator=rng)
+                self._restore_prefetch_queue_locked(prefetch_state)
 
     @_maybe_delay_init
     def dumps(self, path):
@@ -1013,28 +1740,33 @@ class ReplayBuffer:
         """
         path = Path(path).absolute()
         path.mkdir(exist_ok=True)
-        self._storage.dumps(path / "storage")
-        self._sampler.dumps(path / "sampler")
-        self._writer.dumps(path / "writer")
-        if self._rng is not None:
-            rng_state = TensorDict(
-                rng_state=self._rng.get_state().clone(),
-                device=self._rng.device,
-            )
-            rng_state.memmap(path / "rng_state")
+        # The queue cannot be consumed while this context is active, so the
+        # pickle stream can read it directly without allocating another full
+        # queue-sized copy first.
+        with self._capture_prefetch_state(clone_queue=False) as prefetch_state:
+            self._storage.dumps(path / "storage")
+            self._sampler.dumps(path / "sampler")
+            self._writer.dumps(path / "writer")
+            if self._rng is not None:
+                rng_state = TensorDict(
+                    rng_state=self._rng.get_state().clone(),
+                    device=self._rng.device,
+                )
+                rng_state.memmap(path / "rng_state")
 
-        # fall back on state_dict for transforms
-        transform_sd = self._transform.state_dict()
-        if transform_sd:
-            torch.save(transform_sd, path / "transform.t")
-        with open(path / "buffer_metadata.json", "w") as file:
-            json.dump(
-                {
-                    "batch_size": self._batch_size,
-                    "consume_after_n_samples": self._consume_after_n_samples,
-                },
-                file,
-            )
+            # fall back on state_dict for transforms
+            transform_sd = self._transform.state_dict()
+            if transform_sd:
+                torch.save(transform_sd, path / "transform.t")
+            with open(path / "buffer_metadata.json", "w") as file:
+                json.dump(
+                    {
+                        "batch_size": self._batch_size,
+                        "consume_after_n_samples": self._consume_after_n_samples,
+                    },
+                    file,
+                )
+            self._dump_prefetch_state(path, prefetch_state)
 
     @_maybe_delay_init
     def loads(self, path):
@@ -1049,21 +1781,29 @@ class ReplayBuffer:
 
         """
         path = Path(path).absolute()
-        self._storage.loads(path / "storage")
-        self._sampler.loads(path / "sampler")
-        self._writer.loads(path / "writer")
-        if (path / "rng_state").exists():
-            rng_state = TensorDict.load_memmap(path / "rng_state")
-            rng = torch.Generator(device=rng_state.device)
-            rng.set_state(rng_state["rng_state"])
-            self.set_rng(rng)
-        # fall back on state_dict for transforms
-        if (path / "transform.t").exists():
-            self._transform.load_state_dict(torch.load(path / "transform.t"))
-        with open(path / "buffer_metadata.json") as file:
-            metadata = json.load(file)
-        self._batch_size = metadata["batch_size"]
-        self._consume_after_n_samples = metadata.get("consume_after_n_samples")
+        prefetch_state = self._load_prefetch_state(path)
+        self._validate_prefetch_state(prefetch_state)
+        with self._futures_lock:
+            self._clear_prefetch_queue_locked()
+            with self._replay_lock:
+                self._storage.loads(path / "storage")
+                self._sampler.loads(path / "sampler")
+                self._writer.loads(path / "writer")
+                if (path / "rng_state").exists():
+                    rng_state = TensorDict.load_memmap(path / "rng_state")
+                    rng = torch.Generator(device=rng_state.device)
+                    rng.set_state(rng_state["rng_state"])
+                    self.set_rng(rng)
+                # fall back on state_dict for transforms
+                if (path / "transform.t").exists():
+                    self._transform.load_state_dict(torch.load(path / "transform.t"))
+                with open(path / "buffer_metadata.json") as file:
+                    metadata = json.load(file)
+                self._batch_size = metadata["batch_size"]
+                self._consume_after_n_samples = metadata.get("consume_after_n_samples")
+                # This method owns the freshly unpickled queue, so moving its
+                # results into completed futures avoids a redundant deep copy.
+                self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
 
     @_maybe_delay_init
     def save(self, *args, **kwargs):
@@ -1079,6 +1819,11 @@ class ReplayBuffer:
     def load(self, *args, **kwargs):
         """Alias for :meth:`loads`."""
         return self.loads(*args, **kwargs)
+
+    def _torchrl_checkpoint_detach_from_load_path(self):
+        detach = getattr(self._storage.checkpointer, "_detach_from_load_path", None)
+        if detach is not None:
+            detach(self._storage)
 
     @_maybe_delay_init
     def register_save_hook(self, hook: Callable[[Any], Any]):
@@ -1278,7 +2023,11 @@ class ReplayBuffer:
         nc = contextlib.nullcontext()
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -1363,6 +2112,105 @@ class ReplayBuffer:
                 info = tree_map(lambda x: x.to(device) if hasattr(x, "to") else x, info)
             return out, info
         return result[0]
+
+    @_maybe_delay_init
+    def query(
+        self,
+        predicate: Callable[[Trajectory], bool] | None = None,
+        *,
+        trajectory_key: NestedKey | None = None,
+    ) -> list[Trajectory]:
+        """Filters the stored trajectories with a query predicate.
+
+        Splits the buffer content into trajectories (see
+        :func:`~torchrl.data.replay_buffers.query.iter_trajectories`) and
+        returns those matching the predicate as
+        :class:`~torchrl.data.replay_buffers.query.Trajectory` views.
+
+        Args:
+            predicate (Callable[[Trajectory], bool], optional): a
+                :class:`~torchrl.data.replay_buffers.query.TrajectoryPredicate`
+                built from :data:`~torchrl.data.replay_buffers.query.traj`, or
+                any callable mapping a trajectory to a boolean. Defaults to
+                None (return all trajectories).
+
+        Keyword Args:
+            trajectory_key (NestedKey, optional): entry holding
+                per-transition trajectory ids. Defaults to None
+                (auto-detection from ``("collector", "traj_ids")``,
+                ``"traj_ids"``, ``"episode"`` or the done/terminated/truncated
+                flags).
+
+        Returns:
+            A list of matching trajectory views, ordered chronologically
+            (oldest trajectory first; for multi-dimensional storages, grouped
+            by batch coordinate).
+
+        The trajectory boundaries are computed from the stored (untransformed)
+        data with the same machinery
+        :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` uses, so
+        samplers and queries always agree on where trajectories start and
+        stop. This includes storages with ``ndim > 1`` (e.g.
+        ``LazyTensorStorage(..., ndim=2)`` holding ``[B, T]`` batches), whose
+        trajectories are recovered per batch coordinate.
+
+        Predicates built from :data:`~torchrl.data.replay_buffers.query.traj`
+        report the keys they read via
+        :meth:`~torchrl.data.replay_buffers.query.TrajectoryPredicate.required_keys`;
+        evaluation then only fetches those entries from the storage and only
+        runs the transforms that can affect them. Matching trajectories are
+        extracted in full with the complete transform chain applied, so
+        predicates and results see the same values a sampler would produce.
+        Opaque callables are evaluated against the fully transformed content.
+
+        .. note::
+            Once the buffer has wrapped around (it is at capacity and older
+            entries have been overwritten), the oldest trajectory may have
+            lost its first transitions to overwriting and will appear
+            truncated at the front. A trajectory written across the wrap
+            point is followed through it and returned whole, in time order.
+
+        Examples:
+            >>> from torchrl.data import traj
+            >>> good_trajs = rb.query((traj.reward.sum() > 100) & (traj.length >= 50))
+            >>> observations = good_trajs[0].observation
+        """
+        storage = self._storage
+        if not len(storage):
+            return []
+        with self._replay_lock:
+            source = storage[:]
+        if isinstance(source, (list, tuple)):
+            if not source:
+                return []
+            if not all(is_tensor_collection(item) for item in source):
+                raise TypeError(
+                    "ReplayBuffer.query requires a tensordict-backed storage, "
+                    f"got items of type {type(source[0])}."
+                )
+            if any(item.batch_dims for item in source):
+                raise TypeError(
+                    "ReplayBuffer.query on a list-based storage expects "
+                    "single-transition (scalar) items."
+                )
+            source = LazyStackedTensorDict.lazy_stack(list(source))
+        elif not is_tensor_collection(source):
+            raise TypeError(
+                "ReplayBuffer.query requires a tensordict-backed storage, "
+                f"got content of type {type(source)}."
+            )
+        if self._transform is not None and len(self._transform):
+            transforms = list(self._transform.transforms)
+        else:
+            transforms = []
+        return _query_source(
+            source,
+            transforms=transforms,
+            predicate=predicate,
+            trajectory_key=trajectory_key,
+            at_capacity=bool(storage._is_full),
+            cursor=getattr(storage, "_last_cursor_index", None),
+        )
 
     @_maybe_delay_init
     def mark_update(self, index: int | torch.Tensor) -> None:
@@ -1472,29 +2320,31 @@ class ReplayBuffer:
 
     @_maybe_delay_init
     def __getstate__(self) -> dict[str, Any]:
-        state = self.__dict__.copy()
-        if getattr(self, "_rng", None) is not None:
-            rng_state = TensorDict(
-                rng_state=self._rng.get_state().clone(),
-                device=self._rng.device,
-            )
-            state["_rng"] = rng_state
-        _replay_lock = state.pop("_replay_lock", None)
-        _futures_lock = state.pop("_futures_lock", None)
-        if _replay_lock is not None:
-            state["_replay_lock_placeholder"] = None
-        if _futures_lock is not None:
-            state["_futures_lock_placeholder"] = None
-        # Remove non-picklable prefetch objects - they will be recreated on unpickle
-        _prefetch_queue = state.pop("_prefetch_queue", None)
-        _prefetch_executor = state.pop("_prefetch_executor", None)
-        if _prefetch_queue is not None:
-            state["_prefetch_queue_placeholder"] = None
-        if _prefetch_executor is not None:
-            state["_prefetch_executor_placeholder"] = None
-        return state
+        with self._capture_prefetch_state() as prefetch_state:
+            state = self.__dict__.copy()
+            if getattr(self, "_rng", None) is not None:
+                rng_state = TensorDict(
+                    rng_state=self._rng.get_state().clone(),
+                    device=self._rng.device,
+                )
+                state["_rng"] = rng_state
+            _replay_lock = state.pop("_replay_lock", None)
+            _futures_lock = state.pop("_futures_lock", None)
+            if _replay_lock is not None:
+                state["_replay_lock_placeholder"] = None
+            if _futures_lock is not None:
+                state["_futures_lock_placeholder"] = None
+            _prefetch_queue = state.pop("_prefetch_queue", None)
+            _prefetch_executor = state.pop("_prefetch_executor", None)
+            if _prefetch_queue is not None:
+                state["_prefetch_queue_placeholder"] = None
+            if _prefetch_executor is not None:
+                state["_prefetch_executor_placeholder"] = None
+            state["_prefetch_state"] = prefetch_state
+            return state
 
     def __setstate__(self, state: dict[str, Any]):
+        prefetch_state = state.pop("_prefetch_state", None)
         rngstate = None
         if "_rng" in state:
             rngstate = state["_rng"]
@@ -1522,6 +2372,10 @@ class ReplayBuffer:
         self.__dict__.update(state)
         if rngstate is not None:
             self.set_rng(rng)
+        with self._futures_lock:
+            # __setstate__ owns prefetch_state after popping it from the pickle
+            # payload, so queue entries can be transferred without cloning.
+            self._restore_prefetch_queue_locked(prefetch_state, clone_queue=False)
 
     @property
     @_maybe_delay_init
@@ -1652,6 +2506,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        transport (str, optional): physical transport used by a remote replay
+            owner. ``"auto"`` selects the backend default. Defaults to
+            ``"auto"``.
+        transport_options (dict, optional): options for the selected transport.
+            For ``transport="distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. TensorDict layouts are bound lazily on first use.
 
     .. note::
         Generic prioritized replay buffers (ie. non-tensordict backed) require
@@ -1698,6 +2558,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         dtype: torch.dtype = torch.float,
         storage: Storage | None = None,
         sampler: Sampler | None = None,
+        sample_unit: SampleUnit | None = None,
         sampler_device: DEVICE_TYPING | None = None,
         sync: bool = True,
         collate_fn: Callable | None = None,
@@ -1707,6 +2568,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         batch_size: int | None = None,
         dim_extend: int | None = None,
         delayed_init: bool = False,
+        transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
+        transport_options: dict[str, Any] | None = None,
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
@@ -1734,6 +2597,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         super().__init__(
             storage=storage,
             sampler=sampler,
+            sample_unit=sample_unit,
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
@@ -1741,6 +2605,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             batch_size=batch_size,
             dim_extend=dim_extend,
             delayed_init=delayed_init,
+            transport=transport,
+            transport_options=transport_options,
         )
 
     @property
@@ -1788,7 +2654,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._write_lock if not is_comp else nc,
         ):
             index, info = self.prioritized_sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -1840,6 +2710,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 class TensorDictReplayBuffer(ReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.TensorDictReplayBufferConfig`.
 
     Keyword Args:
         storage (Storage, Callable[[], Storage], optional): the storage to be used.
@@ -2132,12 +3004,78 @@ class TensorDictReplayBuffer(ReplayBuffer):
             return
         tensordict.set("index", expand_as_right(index, tensordict))
 
+    def _anchor_reduced_priority(
+        self, data: TensorDictBase, priority: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Reduces per-record priorities of a sample-unit expansion to anchors.
+
+        When a sample unit expanded the sampled anchors into windows of
+        records (e.g. :class:`~torchrl.data.replay_buffers.Sequence`), the
+        sample carries a per-record ``"anchor_index"`` entry while
+        ``"index"`` holds the expanded per-record storage indices. Priorities
+        are per-anchor quantities: this reduces the per-record priorities
+        with a max over each anchor's valid records (``"validity_mask"``)
+        and returns the unique anchors with their reduced priorities, making
+        the update well-defined when the same anchor appears in several
+        windows. Returns ``None`` when no expansion metadata is present.
+        """
+        if not isinstance(self._sample_unit, SequenceSampleUnit):
+            return None
+        anchor = data.get("anchor_index", None)
+        if anchor is None:
+            return None
+        validity = data.get("validity_mask", None)
+        if self._storage.ndim > 1:
+            if anchor.ndim < 2 or anchor.shape[-1] != self._storage.ndim:
+                return None
+            anchor = anchor.reshape(-1, self._storage.ndim)
+            priority = priority.reshape(-1)
+            if anchor.shape[0] != priority.shape[0]:
+                return None
+            if validity is not None:
+                validity = validity.reshape(-1)
+                anchor = anchor[validity]
+                priority = priority[validity]
+            shape = tuple(self._storage.shape)
+            stride = anchor.new_tensor(
+                [math.prod(shape[dim + 1 :]) for dim in range(len(shape))]
+            )
+            flat_anchor = (anchor * stride).sum(-1)
+            unique, inverse = torch.unique(flat_anchor, return_inverse=True)
+            reduced = torch.zeros_like(unique, dtype=priority.dtype)
+            reduced.scatter_reduce_(
+                0, inverse, priority, reduce="amax", include_self=False
+            )
+            coordinate = (unique.unsqueeze(-1) // stride) % anchor.new_tensor(shape)
+            return coordinate, reduced
+        while anchor.shape != priority.shape and anchor.ndim > priority.ndim:
+            anchor = anchor[..., 0]
+            if validity is not None:
+                validity = validity[..., 0]
+        if anchor.shape != priority.shape:
+            return None
+        anchor = anchor.reshape(-1)
+        priority = priority.reshape(-1)
+        if validity is not None:
+            validity = validity.reshape(-1)
+            # every anchor's own record is always valid, so masking cannot
+            # drop an anchor from the update
+            anchor = anchor[validity]
+            priority = priority[validity]
+        unique, inverse = torch.unique(anchor, return_inverse=True)
+        reduced = torch.zeros_like(unique, dtype=priority.dtype)
+        reduced.scatter_reduce_(0, inverse, priority, reduce="amax", include_self=False)
+        return unique, reduced
+
     @_maybe_delay_init
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
             return
         if data.ndim:
             priority = self._get_priority_vector(data)
+            anchored = self._anchor_reduced_priority(data, priority)
+            if anchored is not None:
+                return self.update_priority(*anchored)
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")
@@ -2215,7 +3153,11 @@ class TensorDictReplayBuffer(ReplayBuffer):
         nc = contextlib.nullcontext()
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             index, info = self._sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -2332,6 +3274,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             particularly when using transforms with modules that require gradients.
             If not specified, defaults to ``True`` when ``transform_factory`` is provided,
             and ``False`` otherwise.
+        transport (str, optional): physical transport used by a remote replay
+            owner. ``"auto"`` selects the backend default. Defaults to
+            ``"auto"``.
+        transport_options (dict, optional): options for the selected transport.
+            For ``transport="distributed"``, ``backend`` selects ``"gloo"``
+            or ``"nccl"``. TensorDict layouts are bound lazily on first use.
 
     Examples:
         >>> import torch
@@ -2398,6 +3346,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         priority_key: NestedKey = "td_error",
         eps: float = 1e-8,
         storage: Storage | None = None,
+        sample_unit: SampleUnit | None = None,
         sampler_device: DEVICE_TYPING | None = None,
         sync: bool = True,
         collate_fn: Callable | None = None,
@@ -2410,6 +3359,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         generator: torch.Generator | None = None,
         shared: bool = False,
         compilable: bool = False,
+        transport: Literal["auto", "direct", "ray", "distributed"] = "auto",
+        transport_options: dict[str, Any] | None = None,
     ) -> None:
         storage = self._maybe_make_storage(storage, compilable=compilable)
         self._sync = sync
@@ -2437,6 +3388,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             priority_key=priority_key,
             storage=storage,
             sampler=sampler,
+            sample_unit=sample_unit,
             collate_fn=collate_fn,
             pin_memory=pin_memory,
             prefetch=prefetch,
@@ -2446,6 +3398,8 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             generator=generator,
             shared=shared,
             compilable=compilable,
+            transport=transport,
+            transport_options=transport_options,
         )
 
     @property
@@ -2570,7 +3524,11 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             self._write_lock if not is_comp else nc,
         ):
             index, info = self.prioritized_sampler.sample(self._storage, batch_size)
+            if self._sample_unit is not None:
+                index, info = self._sample_unit.expand(index, info, self._storage)
             info["index"] = index
+            if self._writer.tracks_generations:
+                info["index_generation"] = self._writer.generations_of(index)
             data = self._storage.get(_storage_index(index, self._storage))
         if not isinstance(index, INT_CLASSES):
             data = self._collate_fn(data)
@@ -2603,6 +3561,9 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             return super().update_tensordict_priority(data)
         if data.ndim:
             priority = self._get_priority_vector(data)
+            anchored = self._anchor_reduced_priority(data, priority)
+            if anchored is not None:
+                return self.update_priority(*anchored)
         else:
             priority = torch.as_tensor(self._get_priority_item(data))
         index = data.get("index")

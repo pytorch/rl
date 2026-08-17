@@ -373,6 +373,15 @@ class TestSAC(LossModuleTestBase):
             loss = loss_fn(td)
         assert "loss_qvalue" in loss.keys()
 
+        updater = SoftUpdate(loss_fn, eps=0.5)
+        targets_before = updater._targets.clone()
+        with torch.no_grad():
+            for source in updater._sources.values(True, True):
+                source.add_(1)
+        updater.step()
+        for key, target in updater._targets.items(True, True):
+            torch.testing.assert_close(target, targets_before.get(key) + 0.5)
+
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -1280,6 +1289,28 @@ class TestSAC(LossModuleTestBase):
             action_spec=Unbounded(shape=(2,)),
         )
         loss.load_state_dict(state)
+
+    def test_sac_uses_joint_sample_log_prob(self, version, monkeypatch):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value() if version == 1 else None
+        loss = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("SAC inverse-scored a freshly sampled TanhNormal")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        with pytest.warns(
+            UserWarning, match="No target network updater"
+        ) if rl_warnings() else contextlib.nullcontext():
+            result = loss(td)
+        assert result.isfinite().all()
 
     @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
     def test_sac_target_entropy_auto(self, version, action_dim):

@@ -11,7 +11,7 @@ import warnings
 import weakref
 from collections import defaultdict
 from collections.abc import Callable, Iterator
-from typing import Any, Literal, overload, Protocol
+from typing import Any, Literal, overload, Protocol, TypeAlias
 
 import torch
 
@@ -22,6 +22,8 @@ from torchrl._utils import logger as torchrl_logger
 
 __all__ = [
     "TransportBackend",
+    "InitialSyncTransport",
+    "WeightSyncBackend",
     "WeightStrategy",
     "WeightSyncScheme",
 ]
@@ -35,7 +37,7 @@ from torchrl.weight_update.utils import _resolve_model
 
 
 class TransportBackend(Protocol):
-    """Abstract interface for different communication mechanisms."""
+    """Core data-plane interface for weight communication mechanisms."""
 
     def send_weights(self, weights: Any) -> None:
         """Send weights to the receiver."""
@@ -64,6 +66,10 @@ class TransportBackend(Protocol):
         """
         ...
 
+
+class InitialSyncTransport(Protocol):
+    """Optional initial-connection capability for weight transports."""
+
     def setup_connection_and_weights_on_sender(self) -> None:
         """Synchronize weights on sender side before collection starts.
 
@@ -81,22 +87,40 @@ class TransportBackend(Protocol):
         model: Any = None,
         strategy: WeightStrategy | None = None,
     ) -> Any:
-        """Synchronize weights on worker side before collection starts.
-
-        This is called once in each worker after initialization to receive
-        the initial weights. This is a no-op (weights are received via
-        receive_weights).
-
-        Args:
-            worker_idx: The worker index.
-            weights: Pre-allocated weight buffer to receive into.
-            model: The model to apply weights to.
-            strategy: Strategy for applying weights to the model.
-
-        Returns:
-            The received weights (for SharedMemTransport) or None.
-        """
+        """Synchronize weights on the receiver before collection starts."""
         ...
+
+
+WeightSyncBackend: TypeAlias = Literal[
+    "none",
+    "direct",
+    "shared",
+    "thread",
+    "process",
+    "multiprocessing",
+    "distributed",
+    "rpc",
+    "ray",
+]
+
+_WEIGHT_SYNC_BACKEND_ALIASES = {
+    "direct": "none",
+    "thread": "shared",
+    "multiprocessing": "process",
+}
+_WEIGHT_SYNC_SCHEMES: dict[str, type[WeightSyncScheme]] = {}
+
+
+def register_weight_sync_backend(
+    backend: str,
+) -> Callable[[type[WeightSyncScheme]], type[WeightSyncScheme]]:
+    """Register a concrete scheme without introducing import cycles."""
+
+    def register(cls: type[WeightSyncScheme]) -> type[WeightSyncScheme]:
+        _WEIGHT_SYNC_SCHEMES[backend] = cls
+        return cls
+
+    return register
 
 
 # ============================================================================
@@ -368,6 +392,32 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
 
         # Worker index
         self._worker_idx = None
+
+    @classmethod
+    def from_backend(cls, backend: WeightSyncBackend, **kwargs) -> WeightSyncScheme:
+        """Construct a weight-sync scheme from its deployment backend.
+
+        Args:
+            backend: One of ``none``, ``shared``, ``process``, ``distributed``,
+                ``rpc``, or ``ray``. ``direct``, ``thread``, and
+                ``multiprocessing`` are accepted aliases.
+            **kwargs: Arguments forwarded to the concrete scheme constructor.
+
+        Returns:
+            The selected concrete scheme.
+        """
+        canonical = _WEIGHT_SYNC_BACKEND_ALIASES.get(backend, backend)
+        try:
+            scheme_cls = _WEIGHT_SYNC_SCHEMES[canonical]
+        except KeyError:
+            choices = sorted(
+                set(_WEIGHT_SYNC_SCHEMES) | set(_WEIGHT_SYNC_BACKEND_ALIASES)
+            )
+            raise ValueError(
+                f"Unsupported weight-sync backend {backend!r}. "
+                f"Expected one of {choices}."
+            ) from None
+        return scheme_cls(**kwargs)
 
     # ========================================================================
     # Initialization

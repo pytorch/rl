@@ -333,8 +333,8 @@ for batch in collector:
 collector.shutdown()
 
 ###############################################################################
-# For async collection (useful when training takes longer than collecting),
-# see :class:`~torchrl.collectors.MultiAsyncCollector`.
+# For asynchronous collection (useful when training takes longer than
+# collecting), use ``Collector(num_collectors=N, sync=False)``.
 #
 # Replay Buffers
 # --------------

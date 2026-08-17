@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import contextvars
 import functools
 import inspect
 import logging
@@ -30,6 +31,13 @@ from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 from torch.autograd.profiler import record_function
+
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    _get_transport_backend,
+    _resolve_service_backend,
+)
 
 try:
     from torch.compiler import is_compiling
@@ -1002,6 +1010,18 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+# Canonical end-of-trajectory signal keys in TED (TorchRL Episode Data)
+# format. A step can be marked as the last of its trajectory by any of these
+# entries (typically read under the "next" sub-tensordict); "done" is the
+# union of the other two, but datasets sometimes carry only a subset of the
+# entries, so consumers detecting trajectory ends from flags should use the
+# union of all three. Defined here (rather than in the replay-buffer layer)
+# so that envs and collectors can share it without importing replay-buffer
+# utilities; re-exported as torchrl.data.DEFAULT_DONE_KEYS, which is the
+# public path. Documented in the "Trajectory boundaries" section of the docs.
+DEFAULT_DONE_KEYS: tuple[NestedKey, ...] = ("done", "truncated", "terminated")
+
+
 def _ends_with(key, match):
     if isinstance(key, str):
         return key == match
@@ -1308,7 +1328,13 @@ class set_auto_unwrap_transformed_env(_DecoratorContextManager):
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _AUTO_UNWRAP
         _AUTO_UNWRAP = self._old_mode
-        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+        if _AUTO_UNWRAP is None:
+            # Restoring the unset state must remove the variable: writing
+            # str(None) would poison subprocesses spawned later, which parse
+            # the inherited value with strtobool.
+            os.environ.pop("AUTO_UNWRAP_TRANSFORMED_ENV", None)
+        else:
+            os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
 
 
 def auto_unwrap_transformed_env(allow_none=False):
@@ -1512,11 +1538,16 @@ class cuda_memory_profile(_DecoratorContextManager):
             )
 
 
-class _RayServiceMetaClass(type):
-    """Metaclass that enables dynamic class selection based on use_ray_service parameter.
+_SERVICE_BACKEND_DISPATCHING = contextvars.ContextVar(
+    "torchrl_service_backend_dispatching", default=None
+)
 
-    This metaclass allows a class to dynamically return either itself or a Ray-based
-    alternative class when instantiated with use_ray_service=True.
+
+class _RayServiceMetaClass(type):
+    """Metaclass that selects direct or service-backed implementations.
+
+    ``use_ray_service`` remains supported as a compatibility spelling for
+    ``service_backend="ray"`` until v0.16.
 
     Usage:
         >>> class MyRayClass():
@@ -1543,20 +1574,115 @@ class _RayServiceMetaClass(type):
             return True
         # If the instance wraps a class (e.g. RayLogger), check if the
         # wrapped class is a subclass of cls.
-        wrapped_cls = getattr(instance, "_logger_cls", None)
+        wrapped_cls = getattr(instance, "_service_cls", None)
+        if wrapped_cls is None:
+            wrapped_cls = getattr(instance, "_logger_cls", None)
         if wrapped_cls is not None:
             return issubclass(wrapped_cls, cls)
         return False
 
-    def __call__(cls, *args, use_ray_service=False, **kwargs):
+    def __call__(
+        cls,
+        *args,
+        use_ray_service=False,
+        service_backend=None,
+        service_backend_options=None,
+        **kwargs,
+    ):
         if use_ray_service:
-            if not hasattr(cls, "_RayServiceClass"):
+            if service_backend not in (None, "ray"):
                 raise ValueError(
-                    f"Class {cls.__name__} does not have a _RayServiceClass attribute"
+                    "use_ray_service=True conflicts with "
+                    f"service_backend={service_backend!r}."
                 )
-            return cls._RayServiceClass(*args, **kwargs)
-        else:
-            return super().__call__(*args, **kwargs)
+            warnings.warn(
+                "use_ray_service is deprecated and will be removed in v0.16. "
+                "Use service_backend='ray' instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            service_backend = "ray"
+
+        if service_backend is None and (
+            _SERVICE_BACKEND_DISPATCHING.get() == os.getpid()
+            or getattr(cls, "_service_backend_resolved", False)
+        ):
+            # A service factory may construct a wrapper that uses this same
+            # metaclass (for example RayReplayBuffer). The backend has already
+            # been resolved by the outer construction and must not dispatch a
+            # second time from the still-active context.
+            service_backend = "direct"
+        service_backend_from_context = (
+            service_backend is None and _get_service_backend() is not None
+        )
+        service_backend = _resolve_service_backend(service_backend, default="direct")
+        options = dict(service_backend_options or {})
+
+        transport_backend_from_context = False
+        if (
+            getattr(cls, "_accepts_transport_backend", False)
+            and kwargs.get("transport") is None
+        ):
+            # Only inject the scoped default: not every subclass accepts a
+            # ``transport`` keyword, and absent any context the constructor
+            # default is equivalent.
+            contextual_transport = _get_transport_backend()
+            if contextual_transport is not None:
+                transport_backend_from_context = True
+                kwargs["transport"] = contextual_transport
+
+        def construct(factory):
+            try:
+                return factory()
+            except ValueError as err:
+                message = str(err)
+                service_error = (
+                    service_backend_from_context and "service_backend" in message
+                )
+                transport_error = (
+                    transport_backend_from_context and "transport" in message
+                )
+                if not service_error and not transport_error:
+                    raise
+                raise ValueError(
+                    _contextual_backend_error(
+                        message,
+                        service=service_error,
+                        transport=transport_error,
+                    )
+                ) from err
+
+        if service_backend == "direct":
+            if options:
+                raise ValueError(
+                    "service_backend_options are only valid for non-direct services."
+                )
+            direct_constructor = super().__call__
+            return construct(lambda: direct_constructor(*args, **kwargs))
+
+        if hasattr(cls, "_ServiceClass"):
+            token = _SERVICE_BACKEND_DISPATCHING.set(os.getpid())
+            try:
+                return construct(
+                    lambda: cls._ServiceClass(
+                        service_backend,
+                        *args,
+                        service_backend_options=options,
+                        **kwargs,
+                    )
+                )
+            finally:
+                _SERVICE_BACKEND_DISPATCHING.reset(token)
+        if service_backend == "ray" and hasattr(cls, "_RayServiceClass"):
+            if options and "ray_actor_options" not in kwargs:
+                kwargs["ray_actor_options"] = options.get("actor_options", options)
+            return construct(lambda: cls._RayServiceClass(*args, **kwargs))
+        raise ValueError(
+            _contextual_backend_error(
+                f"{cls.__name__} does not support service_backend={service_backend!r}.",
+                service=service_backend_from_context,
+            )
+        )
 
 
 @classmethod

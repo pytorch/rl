@@ -29,7 +29,7 @@ Supports three collection/advantage modes (configured via YAML):
     collector workers.
 
 Key components:
-  - MultiAsyncCollector for continuous background collection
+  - Collector with the async process backend for continuous collection
   - Replay buffer with StalenessAwareSampler for freshness-weighted sampling
   - Policy version tracking for staleness computation
   - IS diagnostics: ESS, max_ratio, mean_ratio, kl_approx
@@ -55,7 +55,7 @@ from train import train_iterate, train_start
 from utils_mujoco import make_ppo_models
 
 
-@hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
+@hydra.main(config_path="", config_name="config_mujoco", version_base="1.3")
 def main(cfg: DictConfig):
 
     torch.set_float32_matmul_precision("high")

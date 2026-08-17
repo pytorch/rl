@@ -22,7 +22,34 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 
 from test_services_fixtures import SimpleService, TokenizerService
-from torchrl.services import get_services, RayService
+from torchrl.services import get_services, RayService, Service
+
+
+class _ExternalClient:
+    def __init__(self, value):
+        self.value = value
+
+
+class _ExternalService:
+    def __init__(self, value):
+        self.value = value
+        self._alive = True
+
+    def start(self):
+        self._alive = True
+        return self
+
+    @property
+    def is_alive(self):
+        return self._alive
+
+    def client(self):
+        return _ExternalClient(self.value)
+
+    def shutdown(self, timeout=None):
+        del timeout
+        self._alive = False
+
 
 pytestmark = pytest.mark.skipif(
     not importlib.util.find_spec("ray"), reason="Ray not available"
@@ -120,6 +147,36 @@ class TestRayService:
             # Verify we can call methods on the actor
             result = ray.get(actor.get_value.remote(), timeout=10)
             assert result == 42
+        finally:
+            services.shutdown(raise_on_error=False)
+
+    def test_register_external_service_client_without_ownership(self):
+        services = RayService(namespace="test_external_owner")
+        owner = _ExternalService(value=42)
+        try:
+            assert isinstance(owner, Service)
+            registered = services.register("external", owner)
+            assert registered.value == 42
+            assert not hasattr(registered, "shutdown")
+
+            peer = RayService(namespace="test_external_owner")
+            discovered = peer.get_client("external")
+            assert discovered.value == 42
+            assert peer.get("external").value == 42
+
+            services.reset()
+            assert owner.is_alive
+            assert "external" not in services
+        finally:
+            owner.shutdown()
+            services.shutdown(raise_on_error=False)
+
+    def test_get_client_rejects_legacy_actor(self):
+        services = RayService(namespace="test_legacy_client")
+        try:
+            services.register("simple", SimpleService, value=42)
+            with pytest.raises(TypeError, match="legacy raw actor"):
+                services.get_client("simple")
         finally:
             services.shutdown(raise_on_error=False)
 

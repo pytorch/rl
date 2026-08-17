@@ -56,6 +56,10 @@ class VLAWrapperBase(TensorDictModuleBase):
         output_mode (str, optional): ``"chunk"``, ``"tokens"`` or ``"both"``.
             Defaults to ``"chunk"`` for continuous heads and ``"tokens"`` for
             token heads.
+        return_vla_action_container (bool): whether to write the structured
+            :class:`~torchrl.data.vla.VLAAction` object at the VLA action root
+            key. When ``False``, only its plain TensorDict fields are written.
+            Defaults to ``True``.
         vocab_size (int, optional): Number of action-token bins, required for
             token heads.
         action_tokenizer (ActionTokenizerBase, optional): Token/chunk codec used
@@ -124,6 +128,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         processor=None,
         input_mode: InputMode = "canonical",
         output_mode: OutputMode | None = None,
+        return_vla_action_container: bool = True,
         action_dim: int,
         chunk_size: int,
         action_head: ActionHead = "continuous",
@@ -199,6 +204,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         self.action_head = action_head
         self.input_mode = input_mode
         self.output_mode = output_mode
+        self.return_vla_action_container = bool(return_vla_action_container)
         self.vocab_size = None if vocab_size is None else int(vocab_size)
         self.action_tokenizer = action_tokenizer
         self.action_kwargs = {} if action_kwargs is None else dict(action_kwargs)
@@ -429,34 +435,40 @@ class VLAWrapperBase(TensorDictModuleBase):
         log_probs: torch.Tensor | None = None,
         mask: torch.Tensor | None = None,
     ) -> None:
-        action = VLAAction(
-            chunk=chunk,
-            tokens=tokens,
-            logits=logits,
-            log_probs=log_probs,
-            mask=mask,
-            batch_size=out.batch_size,
-            device=out.device,
-        )
-        out.set(self._tensor_keys.vla_action, action)
-        if chunk is not None and not self._is_vla_field_key(
-            self._tensor_keys.action_chunk, "chunk"
+        if self.return_vla_action_container:
+            action = VLAAction(
+                chunk=chunk,
+                tokens=tokens,
+                logits=logits,
+                log_probs=log_probs,
+                mask=mask,
+                batch_size=out.batch_size,
+                device=out.device,
+            )
+            out.set(self._tensor_keys.vla_action, action)
+        if chunk is not None and (
+            not self.return_vla_action_container
+            or not self._is_vla_field_key(self._tensor_keys.action_chunk, "chunk")
         ):
             out.set(self._tensor_keys.action_chunk, chunk)
-        if tokens is not None and not self._is_vla_field_key(
-            self._tensor_keys.action_tokens, "tokens"
+        if tokens is not None and (
+            not self.return_vla_action_container
+            or not self._is_vla_field_key(self._tensor_keys.action_tokens, "tokens")
         ):
             out.set(self._tensor_keys.action_tokens, tokens)
-        if logits is not None and not self._is_vla_field_key(
-            self._tensor_keys.action_logits, "logits"
+        if logits is not None and (
+            not self.return_vla_action_container
+            or not self._is_vla_field_key(self._tensor_keys.action_logits, "logits")
         ):
             out.set(self._tensor_keys.action_logits, logits)
-        if log_probs is not None and not self._is_vla_field_key(
-            self._tensor_keys.log_probs, "log_probs"
+        if log_probs is not None and (
+            not self.return_vla_action_container
+            or not self._is_vla_field_key(self._tensor_keys.log_probs, "log_probs")
         ):
             out.set(self._tensor_keys.log_probs, log_probs)
-        if mask is not None and not self._is_vla_field_key(
-            self._tensor_keys.action_mask, "mask"
+        if mask is not None and (
+            not self.return_vla_action_container
+            or not self._is_vla_field_key(self._tensor_keys.action_mask, "mask")
         ):
             out.set(self._tensor_keys.action_mask, mask)
 

@@ -79,6 +79,11 @@ class _MultiCollectorMeta(abc.ABCMeta):
 class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     """Runs a given number of DataCollectors on separate processes.
 
+    .. note::
+        Use :class:`~torchrl.collectors.Collector` with ``num_collectors`` and
+        ``sync`` to construct local process collectors in new code. This class
+        remains the concrete process-collector API.
+
     Args:
         create_env_fn (List[Callabled]): list of Callables, each returning an
             instance of :class:`~torchrl.envs.EnvBase`.
@@ -256,6 +261,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             a rollout is reached. If no ``"truncated"`` key is found, an exception is raised.
             Truncated keys can be set through ``env.add_truncated_keys``.
             Defaults to ``False``.
+            With a multi-process collector writing to a shared replay buffer,
+            this marks the worker-batch seams that would otherwise be
+            invisible to a :class:`~torchrl.data.replay_buffers.SliceSampler`;
+            see :ref:`the trajectory-boundary documentation <ref_traj_boundaries>`
+            and :ref:`collectors_replay_trajs` for the trade-offs.
         trajs_per_batch (int, optional): When set together with ``replay_buffer``,
             trajectory assembly is delegated to each worker's inner
             :class:`~torchrl.collectors.Collector`.  Each worker calls
@@ -612,27 +622,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Validate cat_results
         self._validate_cat_results(cat_results)
 
-    @property
-    def postprocs(self):
-        """Deprecated: use :attr:`postproc` instead. Will be removed in v0.14."""
-        warnings.warn(
-            "MultiCollector.postprocs is deprecated, use .postproc instead. "
-            "This will be removed in v0.14.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return self.postproc
-
-    @postprocs.setter
-    def postprocs(self, value):
-        warnings.warn(
-            "MultiCollector.postprocs is deprecated, use .postproc instead. "
-            "This will be removed in v0.14.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        self.postproc = value
-
     def _setup_workers_and_env_fns(
         self,
         create_env_fn: Sequence[Callable] | Callable,
@@ -982,6 +971,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Warn when a SliceSampler is used without trajs_per_batch: workers
         # write batches independently so adjacent frames in the buffer can
         # come from different episodes without an intervening done signal.
+        # This hazard is specific to multi-process collectors: a single
+        # Collector writes batches in temporal order, so consecutive batches
+        # are contiguous continuations of the same trajectories and the only
+        # mid-trajectory edge is the live write cursor, which SliceSampler
+        # already resolves at read time (see the trajectory-boundary section
+        # of the replay-buffer docs).
         from torchrl.data.replay_buffers.samplers import SliceSampler
 
         if (
@@ -1071,6 +1066,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             )
         if getattr(storage, "shared_init", False):
             return
+        storage_device = getattr(storage, "device", None)
+        if (
+            storage_device is not None
+            and storage_device != "auto"
+            and torch.device(storage_device).type != "cpu"
+        ):
+            warnings.warn(
+                f"Worker-initialized replay buffers store data in a CPU "
+                f"memory-mapped tensordict; the storage device "
+                f"({storage_device}) cannot be honored and will be reset to "
+                f"'cpu' at initialization time."
+            )
         storage.shared_init = True
         storage._init_lock = mp.Lock()
         storage._init_event = mp.Event()
@@ -1154,7 +1161,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             == self.num_workers
         ):
             raise RuntimeError(
-                f"THe length of the devices does not match the number of workers: {self.num_workers}."
+                f"The length of the devices does not match the number of workers: {self.num_workers}."
             )
         storing_device, policy_device, env_device = zip(
             *[
@@ -1337,7 +1344,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 else:
                     policy_to_send = policy
                     if policy is not None and policy_weights is not None:
-                        cm = policy_weights.to_module(policy)
+                        cm = policy_weights.to_module(
+                            policy, preserve_module_state=False
+                        )
                     else:
                         cm = contextlib.nullcontext()
             else:
@@ -1823,6 +1832,43 @@ also that the state dict is synchronised across processes if needed."""
             results.append(result)
         return results
 
+    def stats(
+        self, workers: Literal["aggregate", "per_worker", "both"] = "aggregate"
+    ) -> dict[str, int | float | bool]:
+        """Returns a cheap, serializable snapshot of the collector's progress.
+
+        See :meth:`~torchrl.collectors.BaseCollector.stats` for the base
+        entries. On top of those, multiprocessing collectors report
+        ``"workers"`` (number of worker processes) and ``"workers_alive"``.
+
+        Args:
+            workers (str, optional): controls the worker view. With
+                ``"aggregate"`` (default), only coordinator-side counters are
+                reported and no worker communication happens, so the call is
+                safe from any thread. With ``"per_worker"`` or ``"both"``,
+                each worker is queried through the control pipes and its
+                snapshot is namespaced as ``"worker_<idx>/<metric>"``; since
+                this shares the control channel with other coordinator
+                commands, it should not race with concurrent control calls
+                such as weight updates issued from other threads.
+        """
+        if workers not in ("aggregate", "per_worker", "both"):
+            raise ValueError(
+                f"workers must be one of 'aggregate', 'per_worker' or 'both', got {workers!r}."
+            )
+        stats: dict[str, int | float | bool] = {}
+        if workers in ("aggregate", "both"):
+            stats.update(super().stats())
+        procs = getattr(self, "procs", None)
+        stats["workers"] = int(self.num_workers)
+        if procs:
+            stats["workers_alive"] = sum(int(proc.is_alive()) for proc in procs)
+        if workers in ("per_worker", "both"):
+            for idx, worker_stats in enumerate(self.map_fn("stats")):
+                for key, value in worker_stats.items():
+                    stats[f"worker_{idx}/{key}"] = value
+        return stats
+
     def __del__(self):
         try:
             self.shutdown()
@@ -1986,12 +2032,20 @@ also that the state dict is synchronised across processes if needed."""
         for idx in range(self.num_workers):
             self.pipes[idx].send((None, "state_dict"))
         state_dict = OrderedDict()
+        traj_pool_state = None
         for idx in range(self.num_workers):
             _state_dict, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
             if msg != "state_dict":
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
+            worker_traj_pool_state = _state_dict.pop("traj_pool", None)
+            if traj_pool_state is None and worker_traj_pool_state is not None:
+                traj_pool_state = worker_traj_pool_state
             state_dict[f"worker{idx}"] = _state_dict
         state_dict.update({"frames": self._frames, "iter": self._iter})
+        if traj_pool_state is not None:
+            state_dict["traj_pool"] = traj_pool_state
+        if self.policy_version_tracker is not None:
+            state_dict["policy_version"] = self.policy_version
 
         return state_dict
 
@@ -2003,6 +2057,9 @@ also that the state dict is synchronised across processes if needed."""
                 ``{"worker0": state_dict0, "worker1": state_dict1}``.
 
         """
+        traj_pool_state = state_dict.get("traj_pool")
+        if traj_pool_state is not None:
+            self._traj_pool.load_state_dict(traj_pool_state)
         for idx in range(self.num_workers):
             self.pipes[idx].send((state_dict[f"worker{idx}"], "load_state_dict"))
         for idx in range(self.num_workers):
@@ -2011,6 +2068,9 @@ also that the state dict is synchronised across processes if needed."""
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
         self._frames = state_dict["frames"]
         self._iter = state_dict["iter"]
+        policy_version = state_dict.get("policy_version")
+        if policy_version is not None and self.policy_version_tracker is not None:
+            self.policy_version_tracker.version = policy_version
 
     def increment_version(self):
         """Increment the policy version."""
@@ -2181,8 +2241,8 @@ also that the state dict is synchronised across processes if needed."""
         return super().receive_weights(policy_or_weights)
 
     # for RPC
-    def _receive_weights_scheme(self):
-        return super()._receive_weights_scheme()
+    def _receive_weights_scheme(self, model_version: int | None = None):
+        return super()._receive_weights_scheme(model_version=model_version)
 
 
 # Backward-compatible alias (deprecated, use MultiCollector instead)

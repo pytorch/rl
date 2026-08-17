@@ -20,6 +20,11 @@ from torchrl.modules.models.model_based import (
     RSSMPrior,
     RSSMRollout,
 )
+from torchrl.modules.models.model_based_v3 import (
+    DreamerV3MLP,
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+)
 
 from torchrl.testing import get_default_devices
 
@@ -257,6 +262,138 @@ class TestDreamerComponents:
         assert torch.allclose(
             rollout["next", "posterior_std"], rollout_bis["next", "posterior_std"]
         )
+
+
+class TestDreamerV3Components:
+    def test_mlp_output_scale_and_multiple_inputs(self):
+        module = DreamerV3MLP(
+            6,
+            4,
+            depth=2,
+            num_cells=8,
+            outscale=0.0,
+        )
+        output = module(torch.randn(3, 2), torch.randn(3, 4))
+        torch.testing.assert_close(output, torch.zeros_like(output))
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_block_gru_reference_fixture(self, device):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            hidden_dim=4,
+            rnn_hidden_dim=4,
+            num_categoricals=2,
+            num_classes=2,
+            action_dim=2,
+            recurrent_model="block_gru",
+            num_blocks=2,
+            num_layers=1,
+            prior_num_layers=1,
+            device=device,
+        )
+        with torch.no_grad():
+            for parameter in prior.parameters():
+                parameter.copy_(
+                    torch.linspace(
+                        -0.2,
+                        0.2,
+                        parameter.numel(),
+                        device=device,
+                    ).reshape_as(parameter)
+                )
+        state = torch.tensor([[1.0, 0.0, 0.0, 1.0]], device=device)
+        belief = torch.tensor([[0.1, -0.2, 0.3, -0.4]], device=device)
+        action = torch.tensor([[2.0, -4.0]], device=device)
+
+        torch.manual_seed(0)
+        logits, sampled_state, next_belief = prior(state, belief, action)
+
+        torch.testing.assert_close(
+            logits,
+            torch.tensor([[[-0.2459, -0.0750], [0.0959, 0.2668]]], device=device),
+            atol=5e-5,
+            rtol=5e-5,
+        )
+        torch.testing.assert_close(
+            next_belief,
+            torch.tensor([[0.0593, -0.1581, 0.2277, -0.2400]], device=device),
+            atol=5e-5,
+            rtol=5e-5,
+        )
+        assert sampled_state.shape == (1, 4)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_block_gru_action_normalization_and_gradients(self, device):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            action_dim=2,
+            recurrent_model="block_gru",
+            num_blocks=2,
+            device=device,
+        )
+        state = torch.randn(3, 8, device=device, requires_grad=True)
+        belief = torch.randn(3, 8, device=device, requires_grad=True)
+        action = torch.tensor([[2.0, -4.0], [0.5, -0.25], [-3.0, 2.0]], device=device)
+        normalized_action = action / action.abs().clamp_min(1)
+
+        torch.manual_seed(0)
+        logits, _, next_belief = prior(state, belief, action)
+        torch.manual_seed(0)
+        normalized_logits, _, normalized_belief = prior(
+            state, belief, normalized_action
+        )
+
+        torch.testing.assert_close(logits, normalized_logits)
+        torch.testing.assert_close(next_belief, normalized_belief)
+        (logits.square().mean() + next_belief.square().mean()).backward()
+        assert state.grad is not None
+        assert belief.grad is not None
+        assert all(parameter.grad is not None for parameter in prior.parameters())
+
+    def test_block_gru_torch_compile(self):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            action_dim=2,
+            recurrent_model="block_gru",
+            num_blocks=2,
+        )
+        state = torch.randn(3, 8)
+        belief = torch.randn(3, 8)
+        action = torch.randn(3, 2)
+        compiled = torch.compile(prior, fullgraph=True)
+
+        torch.manual_seed(0)
+        expected = prior(state, belief, action)
+        torch.manual_seed(0)
+        actual = compiled(state, belief, action)
+        for expected_item, actual_item in zip(expected, actual):
+            torch.testing.assert_close(expected_item, actual_item)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_posterior_rms_norm(self, device):
+        posterior = RSSMPosteriorV3(
+            hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            rnn_hidden_dim=8,
+            obs_embed_dim=6,
+            use_rms_norm=True,
+            num_layers=1,
+            device=device,
+        )
+        belief = torch.randn(3, 8, device=device)
+        embedding = torch.randn(3, 6, device=device)
+        logits, state = posterior(belief, embedding)
+        assert logits.shape == (3, 2, 4)
+        assert state.shape == (3, 8)
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl._utils import _standardize, logger as torchrl_logger, VERBOSE
+from torchrl.modules.distributions.utils import composite_entropy, sample_and_log_prob
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -662,7 +663,11 @@ class PPOLoss(LossModule):
         self, dist: d.Distribution, adv_shape: torch.Size
     ) -> torch.Tensor | TensorDict:
         try:
-            entropy = dist.entropy()
+            entropy = (
+                composite_entropy(dist, self.samples_mc_entropy)
+                if isinstance(dist, CompositeDistribution)
+                else dist.entropy()
+            )
             if not entropy.isfinite().all():
                 del entropy
                 if VERBOSE:
@@ -675,16 +680,16 @@ class PPOLoss(LossModule):
                 torchrl_logger.warning(
                     f"Entropy not implemented for {type(dist)} or is not finite. Using Monte Carlo sampling."
                 )
-            if getattr(dist, "has_rsample", False):
-                x = dist.rsample((self.samples_mc_entropy,))
-            else:
-                x = dist.sample((self.samples_mc_entropy,))
             with (
                 set_composite_lp_aggregate(False)
                 if isinstance(dist, CompositeDistribution)
                 else contextlib.nullcontext()
             ):
-                log_prob = dist.log_prob(x)
+                _, log_prob = sample_and_log_prob(
+                    dist,
+                    (self.samples_mc_entropy,),
+                    reparameterize=getattr(dist, "has_rsample", False),
+                )
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
                         log_prob = log_prob.get(self.tensor_keys.sample_log_prob)
@@ -985,9 +990,8 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
-        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1393,7 +1397,7 @@ class ClipPPOLoss(PPOLoss):
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
             # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
             # dispersion.
-            lw = log_weight.squeeze()
+            lw = log_weight.squeeze(-1)
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
@@ -1435,9 +1439,8 @@ class ClipPPOLoss(PPOLoss):
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())
             td_out.set("mean_ratio", ratio.mean())
-        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1742,13 +1745,14 @@ class KLPENPPOLoss(PPOLoss):
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
-            x = previous_dist.sample((self.samples_mc_kl,))
             with (
                 set_composite_lp_aggregate(False)
                 if is_composite
                 else contextlib.nullcontext()
             ):
-                previous_log_prob = previous_dist.log_prob(x)
+                x, previous_log_prob = sample_and_log_prob(
+                    previous_dist, (self.samples_mc_kl,)
+                )
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
                 if previous_log_prob.batch_size != advantage.shape[:-1]:
@@ -1796,9 +1800,8 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
-        loss_mask = tensordict_copy.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict_copy).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

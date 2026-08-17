@@ -14,15 +14,30 @@ import numpy as np
 import torch
 from tensordict import NonTensorData, TensorDictBase
 from tensordict.utils import NestedKey
-from torchrl._utils import _can_be_pickled
+from torchrl._utils import _can_be_pickled, _ends_with, logger as torchrl_logger
 from torchrl.data.tensor_specs import NonTensor, TensorSpec, Unbounded
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase
 from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
+from torchrl.services.base import Service
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
 _has_matplotlib = importlib.util.find_spec("matplotlib", None) is not None
+
+
+def _make_video_grid(frames: torch.Tensor) -> torch.Tensor:
+    """Tile ``[N, C, H, W]`` frames without requiring torchvision."""
+    nframes, channels, height, width = frames.shape
+    ncols = int(math.ceil(math.sqrt(nframes)))
+    nrows = int(math.ceil(nframes / ncols))
+    grid = frames.new_zeros(channels, nrows * height, ncols * width)
+    for index, frame in enumerate(frames):
+        row, col = divmod(index, ncols)
+        grid[
+            :, row * height : (row + 1) * height, col * width : (col + 1) * width
+        ] = frame
+    return grid
 
 
 class VideoRecorder(ObservationTransform):
@@ -32,14 +47,15 @@ class VideoRecorder(ObservationTransform):
     to a Logger object when needed.
 
     Args:
-        logger (Logger): a Logger instance where the video
+        logger (Logger or Service): a logger or logger-service owner where the video
             should be written. To save the video under a memmap tensor or an mp4 file, use
             the :class:`~torchrl.record.loggers.CSVLogger` class.
         tag (str): the video tag in the logger.
         in_keys (Sequence of NestedKey, optional): keys to be read to produce the video.
             Default is :obj:`"pixels"`.
         skip (int): frame interval in the output video.
-            Default is ``2`` if the transform has a parent environment, and ``1`` if not.
+            Defaults to ``1`` for vector environments and standalone use, and
+            ``2`` for a single parent environment.
         center_crop (int, optional): value of square center crop.
         make_grid (bool, optional): if ``True``, a grid is created assuming that a
             tensor of shape [B x W x H x 3] is provided, with B being the batch
@@ -49,6 +65,16 @@ class VideoRecorder(ObservationTransform):
             to ``in_keys`` if not provided.
         fps (int, optional): Frames per second of the output video. Defaults to the logger predefined ``fps``,
             and overrides it if provided.
+        max_frames (int, optional): maximum number of frames held in the
+            recorder buffer. Once the buffer is full, new frames are
+            discarded until :meth:`dump` empties it. Use this to bound
+            memory when dumps are infrequent (or could be missed
+            altogether). Unbounded by default.
+        dump_on_done (bool, optional): if ``True``, the recorder calls
+            :meth:`dump` on its own whenever a step ends the episode, i.e.
+            whenever all the ``"done"`` entries of the root tensordict are
+            ``True`` (for a batched env, this means every sub-env is done
+            at the same step). Defaults to ``False``.
         **kwargs (Dict[str, Any], optional): additional keyword arguments for
             :meth:`~torchrl.record.loggers.Logger.log_video`.
 
@@ -77,6 +103,17 @@ class VideoRecorder(ObservationTransform):
 
         >>> env.transform.dump()
 
+    .. note::
+        When recording a batched env (:class:`~torchrl.envs.SerialEnv` or
+        :class:`~torchrl.envs.ParallelEnv`), attach the recorder to the
+        *outer* env, e.g.
+        ``TransformedEnv(ParallelEnv(N, make_env), VideoRecorder(...))``,
+        so that the batch is tiled into a single grid video
+        (``make_grid=True``). Recorders living inside the worker envs of a
+        batched env are not reached by ``dump`` calls issued on the outer
+        env or by collectors and evaluators, and would accumulate frames
+        indefinitely.
+
         The transform can also be used within a dataset to save the video collected. Unlike in the environment case,
         images will come in a batch. The ``skip`` argument will enable to save the images only at specific intervals.
 
@@ -104,16 +141,25 @@ class VideoRecorder(ObservationTransform):
 
     def __init__(
         self,
-        logger: Logger,
-        tag: str,
+        logger: Logger | Service | None,
+        tag: str | None,
         in_keys: Sequence[NestedKey] | None = None,
         skip: int | None = None,
         center_crop: int | None = None,
         make_grid: bool | None = None,
         out_keys: Sequence[NestedKey] | None = None,
         fps: int | None = None,
+        max_frames: int | None = None,
+        dump_on_done: bool = False,
         **kwargs,
     ) -> None:
+        client = getattr(logger, "client", None)
+        if callable(client):
+            logger = client()
+        if max_frames is not None and max_frames <= 0:
+            raise ValueError(
+                f"max_frames must be a positive integer, got {max_frames}."
+            )
         if in_keys is None:
             in_keys = ["pixels"]
         if out_keys is None:
@@ -131,6 +177,8 @@ class VideoRecorder(ObservationTransform):
         self.count = 0
         self.center_crop = center_crop
         self.make_grid = make_grid
+        self.max_frames = max_frames
+        self.dump_on_done = dump_on_done
         if center_crop and not _has_tv:
             raise ImportError(
                 "Could not load center_crop from torchvision. Make sure torchvision is installed."
@@ -156,11 +204,14 @@ class VideoRecorder(ObservationTransform):
     def skip(self):
         skip = self._skip
         if skip is None:
-            if self.parent is not None:
-                self._skip = 2
-                return 2
-            self._skip = 1
-            return 1
+            parent = self.parent
+            if parent is None:
+                skip = 1
+            else:
+                batch_size = getattr(parent, "batch_size", ())
+                skip = 1 if len(batch_size) else 2
+            self._skip = skip
+            return skip
         return skip
 
     @skip.setter
@@ -174,6 +225,8 @@ class VideoRecorder(ObservationTransform):
             observation_trsf = observation
         self.count += 1
         if self.count % self.skip == 0:
+            if self.max_frames is not None and len(self.obs) >= self.max_frames:
+                return observation
             if (
                 observation_trsf.ndim >= 3
                 and observation_trsf.shape[-3] in (1, 3)
@@ -221,26 +274,53 @@ class VideoRecorder(ObservationTransform):
                     observation_trsf, [self.center_crop, self.center_crop]
                 )
             if self.make_grid and observation_trsf.ndimension() >= 4:
-                if not _has_tv:
-                    raise ImportError(
-                        "Could not import torchvision, `make_grid` not available. "
-                        "Make sure torchvision is installed in your environment."
-                    )
-                from torchvision.utils import make_grid
-
                 obs_flat = observation_trsf.flatten(0, -4)
-                observation_trsf = make_grid(
-                    obs_flat, nrow=int(math.ceil(math.sqrt(obs_flat.shape[0])))
-                )
+                observation_trsf = _make_video_grid(obs_flat)
                 self.obs.append(observation_trsf.to("cpu", torch.uint8))
             elif observation_trsf.ndimension() >= 4:
-                self.obs.extend(observation_trsf.to("cpu", torch.uint8).flatten(0, -4))
+                frames = observation_trsf.to("cpu", torch.uint8).flatten(0, -4)
+                if self.max_frames is not None:
+                    frames = frames[: self.max_frames - len(self.obs)]
+                self.obs.extend(frames)
             else:
                 self.obs.append(observation_trsf.to("cpu", torch.uint8))
         return observation
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        next_tensordict = super()._step(tensordict, next_tensordict)
+        if self.dump_on_done and self._all_done(next_tensordict):
+            self.dump()
+        return next_tensordict
+
+    def _all_done(self, next_tensordict: TensorDictBase) -> bool:
+        """Whether every ``"done"`` entry of the post-step data is ``True``."""
+        parent = self.parent
+        if parent is not None:
+            done_keys = [key for key in parent.done_keys if _ends_with(key, "done")]
+        else:
+            done_keys = ["done"]
+        dones = [next_tensordict.get(key, None) for key in done_keys]
+        dones = [done for done in dones if done is not None]
+        if not dones:
+            return False
+        return all(bool(done.all()) for done in dones)
+
+    def _check_batched_worker_compat(self) -> None:
+        torchrl_logger.warning(
+            "A VideoRecorder was found among the transforms of a "
+            "SerialEnv/ParallelEnv worker env. Worker-side transforms are not "
+            "reached by `dump` calls issued on the outer env or by collectors "
+            "and evaluators, so recorded frames accumulate until dumped "
+            "manually (consider `max_frames` or `dump_on_done` to bound "
+            "memory). Prefer attaching the recorder to the outer env, e.g. "
+            "TransformedEnv(ParallelEnv(N, make_env), VideoRecorder(...)), "
+            "which records all worker envs into a single grid video."
+        )
 
     def to_animation(
         self,

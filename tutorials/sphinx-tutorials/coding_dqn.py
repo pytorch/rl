@@ -86,6 +86,7 @@ TorchRL trainer: A DQN example
 # sphinx_gallery_start_ignore
 import tempfile
 import warnings
+from functools import partial
 
 from tensordict.nn import TensorDictSequential
 
@@ -105,7 +106,7 @@ import uuid
 
 import torch
 from torch import nn
-from torchrl.collectors import Collector, MultiAsyncCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.envs import (
     EnvCreator,
@@ -397,8 +398,8 @@ def get_replay_buffer(buffer_size, n_optim, batch_size, device):
 # .. note::
 #   This feature is only available when running the code within the "spawn"
 #   start method of python multiprocessing library. If this tutorial is run
-#   directly as a script (thereby using the "fork" method) we will be using
-#   a regular :class:`~torchrl.collectors.Collector`.
+#   directly as a script (thereby using the "fork" method) we select the
+#   direct backend of :class:`~torchrl.collectors.Collector`.
 #
 # The advantage of this configuration is that we can balance the amount of
 # compute that is executed in batch with what we want to be executed
@@ -430,14 +431,17 @@ def get_collector(
 ):
     # We can't use nested child processes with mp_start_method="fork"
     if is_fork:
-        cls = Collector
         env_arg = make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
+        backend_kwargs = {"backend": "direct"}
     else:
-        cls = MultiAsyncCollector
-        env_arg = [
-            make_env(parallel=True, obs_norm_sd=stats, num_workers=num_workers)
-        ] * num_collectors
-    data_collector = cls(
+        env_arg = partial(
+            make_env,
+            parallel=True,
+            obs_norm_sd=stats,
+            num_workers=num_workers,
+        )
+        backend_kwargs = {"num_collectors": num_collectors, "sync": False}
+    data_collector = Collector(
         env_arg,
         policy=actor_explore,
         frames_per_batch=frames_per_batch,
@@ -450,6 +454,7 @@ def get_collector(
         storing_device=device,
         split_trajs=False,
         postproc=MultiStep(gamma=gamma, n_steps=5),
+        **backend_kwargs,
     )
     return data_collector
 

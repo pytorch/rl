@@ -1,0 +1,113 @@
+name: CI Timing Tracker
+
+on:
+  schedule:
+    # Run daily at 6:45 UTC, after the nightly test workflows. Concurrent
+    # pushes to gh-pages (benchmarks, flaky tracker) are handled by
+    # rebase-and-retry in the deploy step.
+    - cron: '45 6 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Lookback window in days (use ~190 to backfill history)'
+        required: false
+        default: '4'
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ci-timing-tracker
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  LOOKBACK_DAYS: ${{ inputs.days || '4' }}
+
+jobs:
+  track-ci-timing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+          # Depth 2 so the tip's parent is present: the deploy step amends the
+          # previous dashboard commit, and amending at the shallow boundary
+          # (depth 1) would create a parentless commit and rewrite the whole
+          # branch history on force-push.
+          fetch-depth: 2
+
+      - name: Update CI timing history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/track_ci_timing.py \
+            --days "$LOOKBACK_DAYS" \
+            --history gh-pages/ci-timing/data.json \
+            --output-dir ci-timing-out
+
+      - name: Deploy to GitHub Pages
+        run: |
+          cd gh-pages
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+          # Each run overwrites the previous dashboard commit (amend +
+          # force-with-lease) instead of stacking a daily commit, to keep
+          # gh-pages history shallow. When another workflow's commit sits at
+          # the tip, fall back to a regular commit; the scheduled gh-pages
+          # squash reclaims those eventually.
+          deploy() {
+            mkdir -p ci-timing
+            cp ../ci-timing-out/data.json ci-timing/
+            cp ../.github/scripts/ci_timing_dashboard.html ci-timing/index.html
+            git add ci-timing/
+            if git diff --staged --quiet; then
+              echo "No changes to deploy"
+              return 0
+            fi
+            local msg="Update CI timing dashboard - $(date -u +%Y-%m-%d)"
+            local tip_msg
+            tip_msg="$(git log -1 --format=%s)"
+            if [[ "$tip_msg" == "Update CI timing dashboard"* ]] \
+                && git rev-parse -q --verify HEAD^ >/dev/null; then
+              git commit --amend -m "$msg"
+              git push --force-with-lease=refs/heads/gh-pages
+            else
+              git commit -m "$msg"
+              git push
+            fi
+          }
+
+          # Other workflows (benchmarks, flaky tracker) also push to gh-pages;
+          # on a lost race, re-sync to the remote tip and retry.
+          for i in 1 2 3; do
+            if deploy; then
+              exit 0
+            fi
+            git fetch --depth 2 origin gh-pages
+            git reset --hard origin/gh-pages
+          done
+          deploy

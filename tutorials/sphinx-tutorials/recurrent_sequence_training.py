@@ -219,6 +219,12 @@ print(
 # batch (``("next", "done")`` and the collector-written ``("collector",
 # "traj_ids")``) to draw whole sub-trajectories.
 #
+# .. seealso::
+#   :ref:`Trajectory boundaries <ref_traj_boundaries>` documents how the
+#   sampler recovers episode boundaries from these markers, including the
+#   circular-storage subtleties (wraparound, write cursor) that appear once
+#   the buffer is full.
+#
 # Two design choices in this section:
 #
 # 1. **Slices remain *ragged* by default**. ``SliceSampler`` returns a flat

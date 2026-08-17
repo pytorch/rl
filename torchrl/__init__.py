@@ -58,6 +58,7 @@ except ImportError:
 
 _init_extension()
 
+from torchrl._comm.backends import service_backend, transport_backend  # noqa: E402
 from torchrl._utils import (  # noqa: E402
     _get_default_mp_start_method,
     auto_unwrap_transformed_env,
@@ -150,6 +151,8 @@ __all__ = [
     "merge_ray_runtime_env",
     "reset_cuda_peak_stats",
     "set_auto_unwrap_transformed_env",
+    "service_backend",
     "timeit",
     "torchrl_logger",
+    "transport_backend",
 ]

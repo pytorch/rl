@@ -7,12 +7,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.configs.envs import EnvConfig
+
+if TYPE_CHECKING:
+    _CollectorBackend = Literal[
+        "direct", "process", "ray", "rpc", "distributed", "submitit"
+    ]
+else:
+    # OmegaConf structured configs do not support Literal on all supported
+    # versions.
+    _CollectorBackend = str
 
 
 @dataclass
@@ -30,9 +39,13 @@ class CollectorConfig(BaseCollectorConfig):
     create_env_fn: ConfigBase = MISSING
     policy: Any = None
     policy_factory: Any = None
+    backend: _CollectorBackend | None = None
+    backend_options: dict[str, Any] | None = None
+    num_collectors: int | None = None
+    sync: bool | None = None
     frames_per_batch: int | None = None
     total_frames: int = -1
-    init_random_frames: int | None = 0
+    init_random_frames: int | None = None
     device: str | None = None
     storing_device: str | None = None
     policy_device: str | None = None
@@ -41,16 +54,17 @@ class CollectorConfig(BaseCollectorConfig):
     max_frames_per_traj: int | None = None
     reset_at_each_iter: bool = False
     postproc: Any = None
-    split_trajs: bool = False
+    split_trajs: bool | None = None
+    track_traj_ids: bool = True
     exploration_type: str = "RANDOM"
     return_same_td: bool = False
     reset_when_done: bool = True
     interruptor: Any = None
     set_truncated: bool = False
-    use_buffers: bool = False
+    use_buffers: bool | None = None
     replay_buffer: Any = None
-    extend_buffer: bool = False
-    trust_policy: bool = True
+    extend_buffer: bool = True
+    trust_policy: bool | None = None
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
@@ -62,6 +76,10 @@ class CollectorConfig(BaseCollectorConfig):
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
     traj_format: str | None = None
+    auto_register_policy_transforms: bool | None = None
+    pre_collect_hook: Any = None
+    post_collect_hook: Any = None
+    compact_obs: bool = False
 
     _target_: str = "torchrl.collectors.Collector"
     _partial_: bool = False

@@ -115,16 +115,18 @@ bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERS
 # ============================================================================================ #
 # ================================ TorchCodec ================================================ #
 
+# The editable torchrl install below runs with --no-build-isolation, which
+# requires the build backend to be present in the environment.
+uv pip install --no-progress setuptools ninja packaging "pybind11[global]"
+
 printf "* Installing torchcodec\n"
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-progress setuptools ninja packaging "pybind11[global]"
-  torchcodec_dir="$(mktemp -d)"
-  git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
-  python_base="$(python -c 'import sys; print(sys.base_prefix)')"
-  CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
-    I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
-    uv pip install --no-progress --no-build-isolation "$torchcodec_dir"
-  rm -rf "$torchcodec_dir"
+  # Nightly wheels from the PyTorch index, matching the torch nightly above.
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+    uv pip install --no-progress --pre torchcodec --index-url https://download.pytorch.org/whl/nightly/cpu
+  else
+    uv pip install --no-progress --pre torchcodec --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+  fi
 else
   uv pip install --no-progress "torchcodec>=0.10.0"
 fi
@@ -140,7 +142,7 @@ uv pip install --no-progress \
   hypothesis \
   future \
   cloudpickle \
-  pyvers \
+  "pyvers>=0.2.3" \
   packaging \
   pygame \
   "moviepy<2.0.0" \
@@ -156,7 +158,7 @@ uv pip install --no-progress \
   pyyaml \
   scipy \
   psutil \
-  hydra-core \
+  "hydra-core<1.4" \
   "imageio==2.26.0" \
   "dm_control>=1.0.41" \
   "mujoco>=3.8.1,<3.9.0" \

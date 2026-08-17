@@ -896,6 +896,27 @@ class CatFrames(ObservationTransform):
             and raises an exception otherwise.
         done_key (NestedKey, optional): the done key to be used as partial
             done indicator. Must be unique. If not provided, defaults to ``"done"``.
+        future (bool, optional): if ``True``, each step's window gathers the
+            ``N`` *upcoming* frames ``[t, t + 1, ..., t + N - 1]`` instead of
+            the ``N`` most recent ones ``[t - N + 1, ..., t]``. With
+            ``padding="same"`` the slots that run past the end of the
+            trajectory repeat the last in-trajectory frame. Forward-looking
+            windows require the full trajectory, so this mode is only
+            available offline (replay buffer / data pipelines): attaching the
+            transform to an environment raises a ``RuntimeError`` on the step
+            path. Defaults to ``False``.
+
+            .. versionadded:: 0.14
+        mask_key (NestedKey, optional): if provided, the offline (forward /
+            unfolding) path also writes a boolean mask of shape
+            ``[*batch, time, N]`` flagging, for each window, the slots that
+            were fabricated by padding (``True`` = padded slot, either out of
+            the trajectory or out of the sampled window). This is the
+            convention of the ``action_is_pad`` entry of chunked-action
+            datasets. The mask is not available on the online (env step)
+            path. Defaults to ``None`` (no mask is written).
+
+            .. versionadded:: 0.14
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -978,6 +999,10 @@ class CatFrames(ObservationTransform):
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "constant", "zeros"}
+    # class-level defaults double as fallbacks for instances pickled before
+    # these options existed
+    future = False
+    mask_key = None
 
     def __init__(
         self,
@@ -990,6 +1015,8 @@ class CatFrames(ObservationTransform):
         as_inverse=False,
         reset_key: NestedKey | None = None,
         done_key: NestedKey | None = None,
+        future: bool = False,
+        mask_key: NestedKey | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -997,6 +1024,8 @@ class CatFrames(ObservationTransform):
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
+        self.future = bool(future)
+        self.mask_key = mask_key
         if dim >= 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.dim = dim
@@ -1077,6 +1106,8 @@ class CatFrames(ObservationTransform):
             as_inverse=False,
             reset_key=self.reset_key,
             done_key=self.done_key,
+            future=self.future,
+            mask_key=self.mask_key,
         )
         sampler = SliceSampler(slice_len=self.N, **sampler_kwargs)
         sampler._batch_size_multiplier = self.N
@@ -1175,6 +1206,19 @@ class CatFrames(ObservationTransform):
 
     def _call(self, next_tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
+        if self.future:
+            raise RuntimeError(
+                "CatFrames(future=True) cannot run on the environment step "
+                "path: forward-looking windows require the full trajectory "
+                "and are only available offline (replay buffer / data "
+                "pipelines)."
+            )
+        if self.mask_key is not None:
+            raise RuntimeError(
+                "CatFrames(mask_key=...) is only available offline (forward "
+                "/ unfolding): the online step path does not build "
+                "per-window validity masks."
+            )
         _just_reset = _reset is not None
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             # Lazy init of buffers
@@ -1241,6 +1285,13 @@ class CatFrames(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if self.future:
+            raise RuntimeError(
+                "CatFrames(future=True) cannot be attached to an "
+                "environment: forward-looking windows require the full "
+                "trajectory and are only available offline (replay buffer / "
+                "data pipelines)."
+            )
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.low = torch.cat([space.low] * self.N, self.dim)
@@ -1301,9 +1352,14 @@ class CatFrames(ObservationTransform):
 
         def unfold_done(done, N):
             prefix = (slice(None),) * (tensordict.ndim - 1)
+            # the leading no-reset block is built explicitly rather than by
+            # slicing ``done`` (which would cap it at the time length and
+            # break windows longer than the trajectory, N > T)
+            zeros_shape = list(done.shape)
+            zeros_shape[tensordict.ndim - 1] = self.N - 1
             reset = torch.cat(
                 [
-                    torch.zeros_like(done[prefix + (slice(self.N - 1),)]),
+                    torch.zeros(zeros_shape, dtype=done.dtype, device=done.device),
                     torch.ones_like(done[prefix + (slice(1),)]),
                     done[prefix + (slice(None, -1),)],
                 ],
@@ -1320,8 +1376,42 @@ class CatFrames(ObservationTransform):
             reset[prefix + (0,)] = 1
             return reset_unfold, reset
 
-        done = tensordict.get(("next", self.done_key))
+        # The time axis is the last batch dim of (the possibly transposed)
+        # ``tensordict``; the same index addresses it in every entry since the
+        # batch dims lead the tensors.
+        tdim = tensordict.ndim - 1
+        done = tensordict.get(("next", self.done_key), default=None)
+        if done is None:
+            if not self.future:
+                raise KeyError(
+                    f"CatFrames.unfolding requires the {('next', self.done_key)} "
+                    "entry to delimit trajectories. Make sure the sampled data "
+                    "carries its done state, or use forward-looking windows "
+                    "(future=True) to treat each batch row as a single "
+                    "contiguous trajectory."
+                )
+            # Absent done in future mode: each batch row is one contiguous
+            # trajectory and only the windows that run past its end are padded.
+            done = torch.zeros(
+                (*tensordict.shape, 1),
+                dtype=torch.bool,
+                device=tensordict.get(keys[0][0]).device,
+            )
+        if self.future:
+            # Forward windows are backward windows of the time-reversed data:
+            # the chunk ``[t, ..., t + N - 1]`` is the reversed window at
+            # ``T - 1 - t`` read backwards. A boundary between steps ``t`` and
+            # ``t + 1`` (``done[t]``) sits between reversed steps ``T - 2 - t``
+            # and ``T - 1 - t``, hence the flip + shift; the rolled-in last
+            # entry is never read (``unfold_done`` drops the final done).
+            done = done.flip(tdim).roll(-1, dims=tdim)
         done_mask, reset = unfold_done(done, self.N)
+
+        if self.mask_key is not None:
+            mask = done_mask
+            if self.future:
+                mask = mask.flip(tdim).flip(-1)
+            tensordict.set(self.mask_key, mask.reshape(*tensordict.shape, self.N))
 
         for in_key, out_key in keys:
             # check if we have an obs in "next" that has already been processed.
@@ -1340,6 +1430,13 @@ class CatFrames(ObservationTransform):
                     first_val = prev_val.unflatten(
                         data.ndim + self.dim, (self.N, n_feat)
                     )
+            if first_val is not None and self.future:
+                raise NotImplementedError(
+                    "CatFrames(future=True) does not support processing a "
+                    "('next', key) entry alongside its root counterpart: the "
+                    "one-step-offset fixup is only implemented for "
+                    "history (backward) windows."
+                )
 
             # The time axis sits at ``tensordict.ndim - 1`` within ``data`` (the
             # tensordict batch dims lead the tensor). Expressed relative to
@@ -1348,6 +1445,8 @@ class CatFrames(ObservationTransform):
             # ``cat_frames`` functional so that the offline transform stays
             # byte-for-byte identical to its stateless core.
             time_dim = (tensordict.ndim - 1) - data.ndim
+            if self.future:
+                data = data.flip(tdim)
             data = F._cat_frames_windows(
                 data,
                 self.N,
@@ -1357,6 +1456,11 @@ class CatFrames(ObservationTransform):
                 time_dim=time_dim,
                 done_mask=done_mask,
             )
+            if self.future:
+                # Back to forward time, windows read oldest-to-newest: undo
+                # the time reversal and flip the window axis (which
+                # ``_cat_frames_windows`` placed just before the cat axis).
+                data = data.flip(tdim).flip(data.ndim + self.dim - 1)
 
             if first_val is not None:
                 data0_pad = torch.full_like(

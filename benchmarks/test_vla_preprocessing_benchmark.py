@@ -11,7 +11,9 @@ Run with:
 """
 from __future__ import annotations
 
+import argparse
 import importlib.util
+from typing import Literal
 
 import pytest
 import torch
@@ -28,14 +30,23 @@ def _make_images(batch_size: int, height: int, width: int) -> torch.Tensor:
 
 @pytest.mark.parametrize("batch_size", [1, 4, 16, 64])
 @pytest.mark.parametrize("height,width", [(224, 224), (256, 256), (480, 640)])
-@pytest.mark.parametrize("backend", ["pil", "torchvision"])
+@pytest.mark.parametrize("backend", ["pil", "torchvision", "torch_reference"])
 def test_openvla_preprocessing_throughput(
-    benchmark, batch_size: int, height: int, width: int, backend: str
+    benchmark,
+    batch_size: int,
+    height: int,
+    width: int,
+    backend: Literal["pil", "torchvision", "torch_reference"],
 ):
     if backend == "pil" and not _has_pil:
         pytest.skip("Pillow not found")
-    if backend == "torchvision" and not _has_torchvision:
+    if backend in ("torchvision", "torch_reference") and not _has_torchvision:
         pytest.skip("torchvision not found")
     images = _make_images(batch_size, height, width)
     preprocessor = OpenVLAImagePreprocessor(backend=backend, center_crop=True)
     benchmark(preprocessor, images)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

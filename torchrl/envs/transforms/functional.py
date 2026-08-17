@@ -65,31 +65,21 @@ def _apply_same_padding(dim: int, data: Tensor, done_mask: Tensor) -> Tensor:
     (marked by ``done_mask``) are overwritten with the earliest in-trajectory
     frame of that window. ``data`` is the permuted, windowed tensor (the window
     axis already moved to ``data.ndim + dim - 1``); ``done_mask`` is the
-    un-permuted boolean mask of shape ``(*batch, time, N)``.
+    un-permuted boolean mask of shape ``(*batch, time, 1, N)`` (the singleton is
+    the done "feature" dim).
     """
     d = data.ndim + dim - 1
-    res = data.clone()
-    num_repeats_per_sample = done_mask.sum(dim=-1)
-
-    if num_repeats_per_sample.dim() > 2:
-        extra_dims = num_repeats_per_sample.dim() - 2
-        num_repeats_per_sample = num_repeats_per_sample.flatten(0, extra_dims)
-        res_flat_series = res.flatten(0, extra_dims)
-    else:
-        extra_dims = 0
-        res_flat_series = res
-
-    if d - 1 > extra_dims:
-        res_flat_series_flat_batch = res_flat_series.flatten(1, d - 1)
-    else:
-        res_flat_series_flat_batch = res_flat_series[:, None]
-
-    for sample_idx, num_repeats in enumerate(num_repeats_per_sample):
-        if num_repeats > 0:
-            res_slice = res_flat_series_flat_batch[sample_idx]
-            res_slice[:, :num_repeats] = res_slice[:, num_repeats : num_repeats + 1]
-
-    return res
+    N = done_mask.shape[-1]
+    # The out-of-trajectory slots always form a prefix of the window (the
+    # oldest frames), so slot ``j`` reads slot ``max(j, num_padded)``: its own
+    # value once past the prefix, the first in-trajectory frame otherwise.
+    num_padded = done_mask.sum(dim=-1)
+    index = torch.maximum(torch.arange(N, device=data.device), num_padded).clamp_max_(
+        N - 1
+    )
+    data = data.movedim(d, -1)
+    index = index.reshape(*index.shape[:-1], *(1,) * (data.ndim - index.ndim), N)
+    return data.gather(-1, index.expand(data.shape)).movedim(-1, d)
 
 
 def _cat_frames_windows(

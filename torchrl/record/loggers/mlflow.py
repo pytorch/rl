@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib.util
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from tempfile import TemporaryDirectory
 from typing import Any
 
@@ -69,6 +69,15 @@ class MLFlowLogger(Logger):
         super().__init__(exp_name=exp_name, log_dir=tracking_uri)
         self.video_log_counter = 0
         self.video_fps = video_fps
+
+    def _checkpoint_state(self) -> dict[str, Any]:
+        return {"id": self.id, "video_log_counter": self.video_log_counter}
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, Any]) -> None:
+        if "id" in state_dict:
+            self.id = state_dict["id"]
+        if "video_log_counter" in state_dict:
+            self.video_log_counter = state_dict["video_log_counter"]
 
     def _create_experiment(self) -> mlflow.ActiveRun:  # noqa
         import mlflow

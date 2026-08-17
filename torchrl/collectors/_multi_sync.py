@@ -27,6 +27,10 @@ from torchrl.collectors.utils import split_trajectories
 class MultiSyncCollector(MultiCollector):
     """Runs a given number of DataCollectors on separate processes synchronously.
 
+    .. note::
+        Prefer ``Collector(num_collectors=N, sync=True)`` for construction in
+        new code. This class is the concrete synchronous result.
+
     .. aafig::
 
             +----------------------------------------------------------------------+
@@ -470,5 +474,5 @@ class MultiSyncCollector(MultiCollector):
         return super().receive_weights(policy_or_weights)
 
     # for RPC
-    def _receive_weights_scheme(self):
-        return super()._receive_weights_scheme()
+    def _receive_weights_scheme(self, model_version: int | None = None):
+        return super()._receive_weights_scheme(model_version=model_version)

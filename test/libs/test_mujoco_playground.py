@@ -186,18 +186,18 @@ class TestMujocoPlayground:
         tensordict = env.rollout(3)
         assert tensordict.shape == torch.Size([n, *batch_size, 3])
 
-    def test_num_workers_returns_lazy_parallel_env(self, envname, device):
-        """num_workers > 1 returns a lazy ParallelEnv."""
+    def test_num_workers_returns_parallel_env(self, envname, device):
+        """num_workers > 1 uses worker-originated metadata."""
         env = MujocoPlaygroundEnv(
             envname, num_workers=3, device=device, config_overrides=_JAX_CONFIG
         )
         try:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
-            assert env.is_closed
-            env.configure_parallel(use_buffers=False)
-            env.reset()
+            assert env._metadata_from_workers
+            assert env._use_buffers is False
             assert not env.is_closed
+            env.reset()
         finally:
             env.close()
 

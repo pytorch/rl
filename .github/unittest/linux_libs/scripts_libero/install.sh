@@ -28,13 +28,13 @@ uv_pip_install \
   coverage \
   expecttest \
   future \
-  hydra-core \
+  "hydra-core<1.4" \
   hypothesis \
   importlib_metadata \
   orjson \
   packaging \
   psutil \
-  "pyvers>=0.2.0,<0.3.0" \
+  "pyvers>=0.2.3,<0.3.0" \
   pybind11[global] \
   pytest \
   pytest-asyncio \

@@ -42,7 +42,7 @@ from torchrl.objectives.dreamer import (
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config")
+@hydra.main(version_base="1.3", config_path="", config_name="config")
 def main(cfg: DictConfig):  # noqa: F821
     # cfg = correct_for_frame_skip(cfg)
 
@@ -268,7 +268,7 @@ def main(cfg: DictConfig):  # noqa: F821
 
         # Note: We do NOT compile rssm_prior/rssm_posterior here because they are
         # shared with the policy used in the collector. Compiling them would cause
-        # issues with the MultiCollector workers.
+        # issues with the process collector workers.
         #
         # Instead, we compile the loss modules themselves which wraps the forward pass.
         # fullgraph=False allows graph breaks which can help with inductor issues.

@@ -112,8 +112,37 @@ def _normalize_libero_num_workers(
     return num_workers
 
 
+def _libero_worker_metadata_compatible(worker_kwargs: list[dict[str, Any]]) -> bool:
+    non_schema_keys = {
+        "group_id_mode",
+        "group_id_offset",
+        "group_repeats",
+        "init_state_id",
+        "init_state_mode",
+        "init_states",
+        "instruction",
+        "max_episode_steps",
+        "render_gpu_device_id",
+        "seed",
+        "settle_steps",
+    }
+
+    def schema_kwargs(kwargs):
+        return tuple(
+            (key, repr(value))
+            for key, value in sorted(kwargs.items())
+            if key not in non_schema_keys
+        )
+
+    reference = schema_kwargs(worker_kwargs[0])
+    return all(
+        schema_kwargs(worker_kwargs_i) == reference
+        for worker_kwargs_i in worker_kwargs[1:]
+    )
+
+
 class _LiberoEnvMeta(_EnvPostInit):
-    """Metaclass that returns a lazy ``ParallelEnv`` for ``LiberoEnv`` workers."""
+    """Metaclass that returns a ``ParallelEnv`` for ``LiberoEnv`` workers."""
 
     def __call__(
         cls,
@@ -165,7 +194,11 @@ class _LiberoEnvMeta(_EnvPostInit):
             partial(cls, num_workers=1, **worker_kwarg)
             for worker_kwarg in worker_kwargs
         ]
-        return ParallelEnv(num_workers, make_envs)
+        return ParallelEnv(
+            num_workers,
+            make_envs,
+            metadata_from_workers=_libero_worker_metadata_compatible(worker_kwargs),
+        )
 
 
 class LiberoWrapper(_EnvWrapper):
@@ -598,7 +631,10 @@ class LiberoEnv(LiberoWrapper, metaclass=_LiberoEnvMeta):
     Keyword Args:
         num_workers (int, optional): if greater than ``1``, return a
             :class:`~torchrl.envs.ParallelEnv` with ``num_workers`` LIBERO
-            workers. Defaults to ``1``.
+            workers. Each worker provides its metadata directly, so no temporary
+            LIBERO environment is constructed in the parent process, unless
+            worker-specific arguments produce different observation schemas.
+            Defaults to ``1``.
         num_envs (int, optional): alias for ``num_workers``.
         camera_height (int or list of int, optional): rendered image height.
             When ``num_workers > 1``, a list dispatches one value per worker

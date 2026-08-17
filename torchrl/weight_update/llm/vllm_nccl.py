@@ -360,6 +360,10 @@ class VLLMCollectiveTransport:
         ray.get(refs)
         torch.cuda.synchronize()
 
+        # Invalidate prefix caches before resuming scheduling: cached prefixes
+        # are keyed by prompt content and are stale now that weights changed.
+        self.vllm_engine.reset_prefix_cache()
+
         # Wake up vLLM engine after weight transfer
         wake_refs = []
         for actor in self.vllm_engine.actors:

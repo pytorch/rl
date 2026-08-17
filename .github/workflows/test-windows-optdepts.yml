@@ -1,11 +1,12 @@
 name: Unit-tests on Windows
 
+# The full-suite Windows run takes ~70 minutes. It no longer runs on pull
+# requests or pushes to main: the nightly orchestrator drives it daily via
+# workflow_call (and feeds the nightly dashboard). For an on-demand run on a
+# PR branch, use workflow_dispatch on that branch.
 on:
-  pull_request:
   push:
     branches:
-      - nightly
-      - main
       - release/*
   workflow_dispatch:
   workflow_call:

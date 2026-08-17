@@ -6,18 +6,21 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.util
+import inspect
 import os
+import pkgutil
 import subprocess
 import sys
+import typing
+import warnings
 
 import pytest
 import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
-
 from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
-
 from torchrl.data.replay_buffers.replay_buffers import (
     ReplayBuffer,
     TensorDictReplayBuffer,
@@ -62,6 +65,7 @@ from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
+    from torchrl.trainers.algorithms import configs as algorithm_configs
     from torchrl.trainers.algorithms.configs.modules import (
         ActivationConfig,
         LayerConfig,
@@ -82,6 +86,268 @@ _python_version_compatible = sys.version_info >= (3, 10)
 _has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
 pytestmark = pytest.mark.filterwarnings("error")
+
+
+def _discover_leaf_configs() -> dict[str, type]:
+    """Collects every concrete ``*Config`` dataclass defined under the configs package.
+
+    A class is "concrete" here if it declares its own ``_target_`` field (as
+    opposed to an abstract base like ``TransformConfig`` that subclasses share).
+    """
+    from torchrl.trainers.algorithms.configs.common import ConfigBase
+
+    configs = {}
+    for modinfo in pkgutil.iter_modules(
+        algorithm_configs.__path__, algorithm_configs.__name__ + "."
+    ):
+        module = importlib.import_module(modinfo.name)
+        for name, obj in vars(module).items():
+            if (
+                isinstance(obj, type)
+                and dataclasses.is_dataclass(obj)
+                and issubclass(obj, ConfigBase)
+                and obj.__module__ == module.__name__
+            ):
+                configs[name] = obj
+    return configs
+
+
+def _resolve_wrapped_class(target_path: str) -> type | None:
+    """Resolves a ``_target_`` dotted path to the class it ultimately constructs.
+
+    ``_target_`` either names a class directly (most transforms, storages,
+    samplers, ...) or a ``_make_*``/``make_*`` factory function (trainers and a
+    few composite modules). For the factory case, the wrapped class is read off
+    the factory's return-type annotation rather than parsed out of its body.
+    Returns ``None`` if neither resolution path yields a class.
+    """
+    module_path, _, attr = target_path.rpartition(".")
+    target = getattr(importlib.import_module(module_path), attr)
+    if inspect.isclass(target):
+        return target
+    if inspect.isfunction(target):
+        return_type = typing.get_type_hints(target).get("return")
+        if inspect.isclass(return_type):
+            return return_type
+    return None
+
+
+_CONFIG_PARITY_UNRESOLVED = {
+    "BatchedEnvConfig": "make_batched_env dispatches to ParallelEnv, SerialEnv or "
+    "AsyncEnvPool based on batched_env_type, and per-backend kwargs pass through "
+    "the create_env_kwargs dict rather than individual fields; there is no single "
+    "wrapped class to diff kwargs against.",
+    "TanhNormalModelConfig": "_make_tanh_normal_model composes a TensorDictModule "
+    "and a ProbabilisticTensorDictModule into a ProbabilisticTensorDictSequential; "
+    "there is no single wrapped class whose __init__ the Config fields mirror.",
+    "StorageEnsembleWriterConfig": "_target_ references torchrl.data.replay_buffers."
+    "StorageEnsembleWriter, which does not exist in the current codebase.",
+    "KLRewardTransformConfig": "_target_ references torchrl.envs.transforms.llm, "
+    "which does not exist; KLRewardTransform now lives in "
+    "torchrl.envs.llm.transforms.kl.",
+    "LionConfig": "_target_ references torch.optim.Lion, which is not available in "
+    "the torch versions TorchRL currently supports.",
+}
+
+_CONFIG_PARITY_KNOWN_GAPS = frozenset(
+    {
+        "ActionMaskConfig",
+        "AggregatorConfig",
+        "BurnInTransformConfig",
+        "CatTensorsConfig",
+        "CenterCropConfig",
+        "CropConfig",
+        "DTypeCastTransformConfig",
+        "DeviceCastTransformConfig",
+        "DiscreteActionProjectionConfig",
+        "ExcludeTransformConfig",
+        "FlattenObservationConfig",
+        "FlattenTensorDictConfig",
+        "HashConfig",
+        "ImmutableDatasetWriterConfig",
+        "IsaacGymEnvConfig",
+        "LayerConfig",
+        "LazyStackStorageConfig",
+        "MeltingpotEnvConfig",
+        "ModuleTransformConfig",
+        "MultiStepTransformConfig",
+        "MultiSyncCollectorConfig",
+        "MultiThreadedEnvConfig",
+        "NormConfig",
+        "ObservationNormConfig",
+        "OpenMLEnvConfig",
+        "OpenSpielEnvConfig",
+        "PermuteTransformConfig",
+        "PettingZooEnvConfig",
+        "PrioritizedSamplerConfig",
+        "PrioritizedSliceSamplerConfig",
+        "QValueModelConfig",
+        "R3MTransformConfig",
+        "RandomCropTensorDictConfig",
+        "RemoveEmptySpecsConfig",
+        "RenameTransformConfig",
+        "ReplayBufferConfig",
+        "Reward2GoTransformConfig",
+        "RewardSumConfig",
+        "SMACv2EnvConfig",
+        "SamplerEnsembleConfig",
+        "SelectTransformConfig",
+        "SignTransformConfig",
+        "SliceSamplerConfig",
+        "SliceSamplerWithoutReplacementConfig",
+        "SqueezeTransformConfig",
+        "StackConfig",
+        "StorageConfig",
+        "TensorDictModuleConfig",
+        "TensorDictPrimerConfig",
+        "TimeMaxPoolConfig",
+        "TokenizerConfig",
+        "UnaryTransformConfig",
+        "UnityMLAgentsEnvConfig",
+        "UnsqueezeTransformConfig",
+        "VC1TransformConfig",
+        "VIPRewardTransformConfig",
+        "VIPTransformConfig",
+        "ValueModelConfig",
+        "VecGymEnvTransformConfig",
+        "VecNormConfig",
+        "VecNormV2Config",
+        "WriterConfig",
+    }
+)
+
+
+def _has_concrete_target(cfg_cls: type) -> bool:
+    target_field = next(
+        (f for f in dataclasses.fields(cfg_cls) if f.name == "_target_"), None
+    )
+    return target_field is not None and target_field.default not in (
+        dataclasses.MISSING,
+        None,
+    )
+
+
+def _config_parity_cases() -> list:
+    if not _configs_available:
+        return []
+    cases = []
+    for name, cfg_cls in sorted(_discover_leaf_configs().items()):
+        if not _has_concrete_target(cfg_cls):
+            continue
+        if name in _CONFIG_PARITY_UNRESOLVED:
+            cases.append(
+                pytest.param(
+                    name,
+                    marks=pytest.mark.skip(reason=_CONFIG_PARITY_UNRESOLVED[name]),
+                )
+            )
+        elif name in _CONFIG_PARITY_KNOWN_GAPS:
+            cases.append(
+                pytest.param(
+                    name,
+                    marks=pytest.mark.xfail(
+                        reason="pre-existing config/class kwarg-parity gap; see "
+                        "CLAUDE.md section 14 (run with -rx for the missing kwargs)",
+                        strict=True,
+                    ),
+                )
+            )
+        else:
+            cases.append(name)
+    return cases
+
+
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
+class TestConfigClassParity:
+    """Checks that every leaf ``*Config`` dataclass stays in sync with the class it wraps.
+
+    CLAUDE.md section 14 requires every kwarg accepted by a wrapped class's
+    ``__init__`` to appear as a Config field with the same default; otherwise a
+    user setting that kwarg through Hydra has no effect and the failure is
+    silent. This walks every concrete Config dataclass reachable from
+    ``torchrl.trainers.algorithms.configs``, resolves the class or factory named
+    by its ``_target_``, and asserts every named constructor parameter --
+    required or optional -- has a same-named Config field.
+
+    Two deliberate limitations, left as follow-ups:
+
+    - Only field-name presence is checked; default-value *equality* between a
+      Config field and the corresponding ``__init__`` kwarg is NOT enforced, so
+      a Config default that drifts from the constructor's default still passes.
+    - Wrapped ``__init__`` signatures made up purely of ``*args``/``**kwargs``
+      expose no named parameters to diff, so their configs pass vacuously, and
+      a ``**kwargs`` catch-all next to named parameters hides any kwarg that is
+      only reachable through it.
+
+    Resolving a ``_target_`` can import optional-dependency modules; when such
+    an import fails the case is skipped rather than failed, so the test stays
+    green on minimal installs.
+
+    A handful of configs cannot be checked this way (composite or polymorphic
+    factories with no single wrapped class, or a ``_target_`` that references a
+    class which no longer exists) and are skipped with an explicit reason
+    instead of silently passing. A further set of configs have a known,
+    pre-existing gap and are marked ``xfail(strict=True)``: fixing one of them
+    without removing it from ``_CONFIG_PARITY_KNOWN_GAPS`` turns CI red, which
+    is the point -- the allowlist should only shrink.
+    """
+
+    @pytest.mark.parametrize("config_name", _config_parity_cases())
+    def test_wrapped_class_kwargs_have_config_fields(self, config_name):
+        cfg_cls = _discover_leaf_configs()[config_name]
+        fields = {f.name: f for f in dataclasses.fields(cfg_cls)}
+        target_path = fields["_target_"].default
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                wrapped_cls = _resolve_wrapped_class(target_path)
+        except ImportError as err:
+            # Resolving a _target_ may import modules that require optional
+            # dependencies (e.g. the vLLM weight-sync schemes pull in modules
+            # that need `requests`); on a minimal install that is a skip, not
+            # a parity failure.
+            pytest.skip(
+                f"optional dependency missing while resolving "
+                f"{config_name}._target_ = {target_path!r}: {err}"
+            )
+        assert wrapped_cls is not None, (
+            f"{config_name}._target_ = {target_path!r} could not be resolved to "
+            "a class (not a class itself, and not a function with a class "
+            "return annotation)."
+        )
+
+        params = [
+            (pname, param)
+            for pname, param in inspect.signature(
+                wrapped_cls.__init__
+            ).parameters.items()
+            if pname != "self"
+        ]
+        if (
+            fields.get("_partial_") is not None
+            and fields["_partial_"].default is True
+            and params
+        ):
+            params = params[1:]
+
+        missing = [
+            pname
+            for pname, param in params
+            if param.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            and pname not in fields
+        ]
+        assert not missing, (
+            f"{config_name} is missing Config field(s) for "
+            f"{wrapped_cls.__name__}.__init__ kwarg(s) {missing}: these can be "
+            f"set on {wrapped_cls.__name__} directly but are silently "
+            f"unreachable through Hydra. See CLAUDE.md section 14."
+        )
 
 
 @pytest.mark.skipif(
@@ -175,14 +441,16 @@ class TestDataConfigs:
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.data import RoundRobinWriterConfig
 
-        cfg = RoundRobinWriterConfig(compilable=True)
+        cfg = RoundRobinWriterConfig(compilable=True, track_generations=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.RoundRobinWriter"
         assert cfg.compilable is True
+        assert cfg.track_generations is True
 
         # Test instantiation
         writer = instantiate(cfg)
         assert isinstance(writer, RoundRobinWriter)
         assert writer._compilable is True
+        assert writer.tracks_generations is True
 
     def test_sampler_config(self):
         """Test basic SamplerConfig."""
@@ -203,6 +471,28 @@ class TestDataConfigs:
         # Test instantiation
         sampler = instantiate(cfg)
         assert isinstance(sampler, RandomSampler)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_sample_unit_configs(self):
+        """Test TransitionConfig and SequenceConfig."""
+        from hydra.utils import instantiate
+        from torchrl.data.replay_buffers import Sequence, Transition
+        from torchrl.trainers.algorithms.configs.data import (
+            SequenceConfig,
+            TransitionConfig,
+        )
+
+        cfg = TransitionConfig()
+        assert cfg._target_ == "torchrl.data.replay_buffers.Transition"
+        assert isinstance(instantiate(cfg), Transition)
+
+        cfg = SequenceConfig(length=8, episode_boundary="stop")
+        assert cfg._target_ == "torchrl.data.replay_buffers.Sequence"
+        unit = instantiate(cfg)
+        assert isinstance(unit, Sequence)
+        assert unit.length == 8
+        assert unit.episode_boundary == "stop"
+        assert unit.done_key == ("next", "done")
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_tensor_storage_config(self):
@@ -364,14 +654,16 @@ class TestDataConfigs:
             TensorDictRoundRobinWriterConfig,
         )
 
-        cfg = TensorDictRoundRobinWriterConfig(compilable=True)
+        cfg = TensorDictRoundRobinWriterConfig(compilable=True, track_generations=True)
         assert cfg._target_ == "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
         assert cfg.compilable is True
+        assert cfg.track_generations is True
 
         # Test instantiation
         writer = instantiate(cfg)
         assert isinstance(writer, TensorDictRoundRobinWriter)
         assert writer._compilable is True
+        assert writer.tracks_generations is True
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_immutable_dataset_writer_config(self):
@@ -1100,6 +1392,28 @@ class TestModuleConfigs:
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestCollectorsConfig:
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_generic_collector_backend_fields(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import CollectorConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg = CollectorConfig(
+            create_env_fn=GymEnvConfig(env_name="Pendulum-v1"),
+            backend="process",
+            num_collectors=1,
+            sync=True,
+            frames_per_batch=10,
+            total_frames=10,
+        )
+        collector = instantiate(cfg)
+        try:
+            assert isinstance(collector, MultiSyncCollector)
+            assert next(iter(collector)).numel() == 10
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
@@ -1271,6 +1585,13 @@ class TestCollectorsConfig:
 )
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestLossConfigs:
+    def test_gae_config_value_chunk_dim(self):
+        from torchrl.trainers.algorithms.configs.objectives import GAEConfig
+
+        cfg = GAEConfig(value_chunk_dim=1)
+        assert cfg._target_ == "torchrl.objectives.value.GAE"
+        assert cfg.value_chunk_dim == 1
+
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
@@ -1389,6 +1710,82 @@ class TestLossConfigs:
         assert cfg.noise_clip == 0.5
         assert cfg.delay_actor is True
         assert cfg.delay_qvalue is True
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_a2c_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.objectives.a2c import A2CLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import A2CLossConfig
+
+        actor_network = TanhNormalModelConfig(
+            network=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        critic_network = TensorDictModuleConfig(
+            module=MLPConfig(in_features=10, out_features=1, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        cfg = A2CLossConfig(
+            actor_network=actor_network,
+            critic_network=critic_network,
+            gamma=0.98,
+            advantage_key=["custom", "advantage"],
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_a2c_loss"
+        )
+
+        # gamma and advantage_key must be routed through make_value_estimator /
+        # set_keys, not the constructor (which rejects them)
+        loss = instantiate(cfg)
+        assert isinstance(loss, A2CLoss)
+        assert loss.tensor_keys.advantage == ("custom", "advantage")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_reinforce_loss_config(self):
+        from hydra.utils import instantiate
+        from torchrl.objectives.reinforce import ReinforceLoss
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictModuleConfig,
+        )
+        from torchrl.trainers.algorithms.configs.objectives import ReinforceLossConfig
+
+        actor_network = TanhNormalModelConfig(
+            network=MLPConfig(in_features=10, out_features=10, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+        critic_network = TensorDictModuleConfig(
+            module=MLPConfig(in_features=10, out_features=1, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        cfg = ReinforceLossConfig(
+            actor_network=actor_network,
+            critic_network=critic_network,
+            gamma=0.98,
+            advantage_key=["custom", "advantage"],
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_reinforce_loss"
+        )
+
+        # gamma and advantage_key must be routed through make_value_estimator /
+        # set_keys, not the constructor (which rejects them)
+        loss = instantiate(cfg)
+        assert isinstance(loss, ReinforceLoss)
+        assert loss.tensor_keys.advantage == ("custom", "advantage")
 
 
 @pytest.mark.skipif(
@@ -1516,6 +1913,29 @@ class TestLoggerConfigs:
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestTrainerConfigs:
+    @pytest.mark.parametrize(
+        "config_name",
+        [
+            "A2CTrainerConfig",
+            "CQLTrainerConfig",
+            "DDPGTrainerConfig",
+            "DQNTrainerConfig",
+            "IQLTrainerConfig",
+            "OfflineToOnlineTrainerConfig",
+            "PPOTrainerConfig",
+            "ReinforceTrainerConfig",
+            "SACTrainerConfig",
+            "TD3TrainerConfig",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "field_name",
+        ["checkpoint", "checkpoint_rotation", "checkpoint_metadata"],
+    )
+    def test_checkpoint_config_parity(self, config_name, field_name):
+        field = getattr(algorithm_configs, config_name).__dataclass_fields__[field_name]
+        assert field.default is None
+
     def test_nested_key_normalization_for_hydra_lists(self):
         from omegaconf import ListConfig
         from torchrl.trainers.algorithms.configs.common import (
@@ -1570,6 +1990,66 @@ class TestTrainerConfigs:
         )
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_a2c_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import A2CTrainerConfig
+
+        cfg = A2CTrainerConfig(
+            collector=None,
+            total_frames=100,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            clip_grad_norm=True,
+            clip_norm=1.0,
+            progress_bar=True,
+            seed=1,
+            save_trainer_interval=10000,
+            log_interval=10000,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_a2c_trainer"
+        )
+        assert cfg.total_frames == 100
+        assert cfg.frame_skip == 1
+        assert cfg.num_epochs == 1
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_reinforce_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import ReinforceTrainerConfig
+
+        cfg = ReinforceTrainerConfig(
+            collector=None,
+            total_frames=100,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            clip_grad_norm=True,
+            clip_norm=1.0,
+            progress_bar=True,
+            seed=1,
+            save_trainer_interval=10000,
+            log_interval=10000,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_reinforce_trainer"
+        )
+        assert cfg.total_frames == 100
+        assert cfg.frame_skip == 1
+        assert cfg.num_epochs == 1
 
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config_optional_fields(self):
@@ -1894,7 +2374,7 @@ class TestHydraParsing:
         # Register the configs manually for testing
         _register_configs()
         initialize_config_module(
-            "torchrl.trainers.algorithms.configs", version_base="1.1"
+            "torchrl.trainers.algorithms.configs", version_base="1.3"
         )
 
     def _run_hydra_test(
@@ -1909,7 +2389,7 @@ import hydra
 import torchrl
 from torchrl.trainers.algorithms.configs.common import Config
 
-@hydra.main(config_path="config", config_name="config", version_base="1.1")
+@hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg):
 {test_script_content}
     print("{success_message}")
@@ -2307,6 +2787,218 @@ trainer:
 
     trainer = hydra.utils.instantiate(cfg.trainer)
     assert isinstance(trainer, torchrl.trainers.algorithms.ppo.PPOTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_a2c_trainer_parsing_with_file(self, tmpdir):
+        """Test A2C trainer parsing with file config."""
+        os.makedirs(tmpdir / "save", exist_ok=True)
+
+        yaml_config = f"""
+defaults:
+  - env@training_env: gym
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - collector@data_collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@storage: tensor
+  - sampler@sampler: without_replacement
+  - writer@writer: round_robin
+  - trainer@trainer: a2c
+  - optimizer@optimizer: adam
+  - loss@loss: a2c
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 4
+
+  value_network:
+    out_features: 1
+    in_features: 4
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${{networks.policy_network}}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${{networks.value_network}}
+
+training_env:
+  env_name: CartPole-v1
+
+storage:
+  max_size: 1000
+  device: cpu
+  ndim: 1
+
+replay_buffer:
+  storage: ${{storage}}
+  sampler: ${{sampler}}
+  writer: ${{writer}}
+
+loss:
+  actor_network: ${{models.policy_model}}
+  critic_network: ${{models.value_model}}
+
+data_collector:
+  create_env_fn: ${{training_env}}
+  policy: ${{models.policy_model}}
+  total_frames: 1000
+  frames_per_batch: 100
+
+optimizer:
+  lr: 0.001
+
+logger:
+  exp_name: test_exp
+
+trainer:
+  collector: ${{data_collector}}
+  optimizer: ${{optimizer}}
+  replay_buffer: ${{replay_buffer}}
+  loss_module: ${{loss}}
+  logger: ${{logger}}
+  total_frames: 1000
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
+  save_trainer_file: {tmpdir}/save/ckpt.pt
+  optim_steps_per_batch: 1
+"""
+
+        test_code = """
+    # Just verify we can instantiate the main components without running
+    loss = hydra.utils.instantiate(cfg.loss)
+    assert isinstance(loss, torchrl.objectives.A2CLoss)
+
+    collector = hydra.utils.instantiate(cfg.data_collector)
+    assert isinstance(collector, torchrl.collectors.Collector)
+
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.a2c.A2CTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_reinforce_trainer_parsing_with_file(self, tmpdir):
+        """Test REINFORCE trainer parsing with file config."""
+        os.makedirs(tmpdir / "save", exist_ok=True)
+
+        yaml_config = f"""
+defaults:
+  - env@training_env: gym
+  - model@models.policy_model: tanh_normal
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.value_network: mlp
+  - collector@data_collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@storage: tensor
+  - sampler@sampler: without_replacement
+  - writer@writer: round_robin
+  - trainer@trainer: reinforce
+  - optimizer@optimizer: adam
+  - loss@loss: reinforce
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 4
+
+  value_network:
+    out_features: 1
+    in_features: 4
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${{networks.policy_network}}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${{networks.value_network}}
+
+training_env:
+  env_name: CartPole-v1
+
+storage:
+  max_size: 1000
+  device: cpu
+  ndim: 1
+
+replay_buffer:
+  storage: ${{storage}}
+  sampler: ${{sampler}}
+  writer: ${{writer}}
+
+loss:
+  actor_network: ${{models.policy_model}}
+  critic_network: ${{models.value_model}}
+
+data_collector:
+  create_env_fn: ${{training_env}}
+  policy: ${{models.policy_model}}
+  total_frames: 1000
+  frames_per_batch: 100
+
+optimizer:
+  lr: 0.001
+
+logger:
+  exp_name: test_exp
+
+trainer:
+  collector: ${{data_collector}}
+  optimizer: ${{optimizer}}
+  replay_buffer: ${{replay_buffer}}
+  loss_module: ${{loss}}
+  logger: ${{logger}}
+  total_frames: 1000
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 100.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 100
+  log_interval: 100
+  save_trainer_file: {tmpdir}/save/ckpt.pt
+  optim_steps_per_batch: 1
+"""
+
+        test_code = """
+    # Just verify we can instantiate the main components without running
+    loss = hydra.utils.instantiate(cfg.loss)
+    assert isinstance(loss, torchrl.objectives.ReinforceLoss)
+
+    collector = hydra.utils.instantiate(cfg.data_collector)
+    assert isinstance(collector, torchrl.collectors.Collector)
+
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.reinforce.ReinforceTrainer)
 """
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")

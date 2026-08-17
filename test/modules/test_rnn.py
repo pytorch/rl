@@ -54,7 +54,11 @@ from torchrl.modules import (
     set_recurrent_mode,
     ValueOperator,
 )
-from torchrl.modules.tensordict_module._rnn_triton import _resolve_save_gates
+from torchrl.modules.tensordict_module._rnn_triton import (
+    _resolve_save_gates,
+    gru_triton,
+    lstm_triton,
+)
 from torchrl.modules.tensordict_module.rnn import (
     _canonical_contiguous,
     _canonical_stride,
@@ -3293,6 +3297,87 @@ class TestGRUModule:
         torch.testing.assert_close(
             pad_out["next", "hidden"], scan_out["next", "hidden"]
         )
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+@pytest.mark.parametrize("rnn_type", ["gru", "lstm"])
+def test_triton_compile_forward_backward(rnn_type):
+    """The Triton kernels and their custom backward compile as one full graph."""
+    torch.manual_seed(0)
+    device = torch.device("cuda")
+    B, T, F, H = 2, 4, 3, 16
+    n_gates = 3 if rnn_type == "gru" else 4
+    x = torch.randn(B, T, F, device=device)
+    hidden = torch.randn(B, T, H, device=device)
+    w_ih = torch.randn(n_gates * H, F, device=device)
+    w_hh = torch.randn(n_gates * H, H, device=device)
+    b_ih = torch.randn(n_gates * H, device=device)
+    b_hh = torch.randn(n_gates * H, device=device)
+    is_init = torch.zeros(B, T, dtype=torch.bool, device=device)
+    is_init[0, 2] = True
+
+    if rnn_type == "gru":
+
+        def loss_fn(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init):
+            steps, final = gru_triton(
+                x,
+                hidden,
+                w_ih,
+                w_hh,
+                b_ih,
+                b_hh,
+                is_init,
+                input_precision="ieee",
+            )
+            return steps.square().mean() + final.square().mean()
+
+        base_inputs = (x, hidden, w_ih, w_hh, b_ih, b_hh, is_init)
+    else:
+        cell = torch.randn(B, T, H, device=device)
+
+        def loss_fn(x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, c_steps, h_final, c_final = lstm_triton(
+                x,
+                hidden,
+                cell,
+                w_ih,
+                w_hh,
+                b_ih,
+                b_hh,
+                is_init,
+                input_precision="ieee",
+            )
+            return (
+                h_steps.square().mean()
+                + c_steps.square().mean()
+                + h_final.square().mean()
+                + c_final.square().mean()
+            )
+
+        base_inputs = (x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init)
+
+    def make_inputs():
+        return tuple(
+            tensor.detach().clone().requires_grad_(tensor.is_floating_point())
+            for tensor in base_inputs
+        )
+
+    eager_inputs = make_inputs()
+    compiled_inputs = make_inputs()
+    eager_loss = loss_fn(*eager_inputs)
+    eager_loss.backward()
+    compiled_loss = torch.compile(loss_fn, fullgraph=True)(*compiled_inputs)
+    compiled_loss.backward()
+
+    torch.testing.assert_close(eager_loss, compiled_loss, atol=5e-3, rtol=5e-3)
+    for eager_input, compiled_input in zip(eager_inputs, compiled_inputs):
+        if eager_input.grad is None:
+            assert compiled_input.grad is None
+        else:
+            torch.testing.assert_close(
+                eager_input.grad, compiled_input.grad, atol=5e-3, rtol=5e-3
+            )
 
 
 def test_get_primers_from_module():

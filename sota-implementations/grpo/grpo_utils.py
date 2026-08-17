@@ -404,6 +404,18 @@ def _get_sglang_inference_model(
         inference_params[
             "disable_radix_cache"
         ] = not cfg.inference_model.enable_prefix_caching
+    if not inference_params.get("disable_radix_cache", False):
+        # SGLang can only flush the radix cache on weight sync when generation
+        # is paused with the 'abort' mode (the scheduler must be idle); under
+        # the default 'retract' mode stale prefixes survive weight updates.
+        warnings.warn(
+            "The SGLang radix cache is enabled. To keep cached prefixes "
+            "consistent with online weight updates, set "
+            "TORCHRL_SGLANG_PAUSE_GENERATION_MODE=abort (in-flight requests "
+            "are cancelled at each sync) or disable the radix cache with "
+            "inference_model.enable_prefix_caching=false.",
+            stacklevel=2,
+        )
 
     # Pin SGLang server to allocated GPUs via CUDA_VISIBLE_DEVICES
     if sglang_devices is not None:

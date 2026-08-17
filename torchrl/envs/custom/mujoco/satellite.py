@@ -371,6 +371,33 @@ class SatelliteEnv(MujocoEnv):
         )
         return out
 
+    def _index_extra_state(
+        self, index: slice | torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        return {
+            "target_quat": self._target_quat[index].clone(),
+            "last_manip": self._last_manip[index].clone(),
+        }
+
+    def _load_indexed_extra_state(self, state: dict[str, torch.Tensor]) -> None:
+        self._target_quat = state["target_quat"]
+        self._last_manip = state["last_manip"]
+
+    def _set_indexed_extra_state(
+        self,
+        index: slice | torch.Tensor,
+        source: SatelliteEnv,
+    ) -> None:
+        self._target_quat[index] = source._target_quat.to(
+            device=self._target_quat.device,
+            dtype=self._target_quat.dtype,
+        )
+        self._last_manip[index] = source._last_manip.to(
+            device=self._last_manip.device,
+            dtype=self._last_manip.dtype,
+        )
+        self._sync_target_frame()
+
     def _prepare_ctrl(self, action: torch.Tensor) -> torch.Tensor:
         # Scale the agent's [-1, 1] command up to ``[-action_scale,
         # action_scale]`` rad/s of gimbal rate. With the velocity
@@ -526,12 +553,7 @@ class SatelliteEnv(MujocoEnv):
         if not self.pixels_only:
             out.update(self._make_obs_split(state))
         if self.from_pixels:
-            out["pixels"] = self._backend.render(
-                camera_id=self.camera_id,
-                width=self.render_width,
-                height=self.render_height,
-                background=self.RENDER_BACKGROUND,
-            )
+            out["pixels"] = self._render_pixels()
         return out
 
     def _compute_reward(

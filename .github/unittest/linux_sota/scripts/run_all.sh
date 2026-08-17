@@ -70,7 +70,7 @@ uv pip install \
   hypothesis \
   future \
   cloudpickle \
-  pyvers \
+  "pyvers>=0.2.3" \
   packaging \
   pygame \
   "moviepy<2.0.0" \
@@ -86,7 +86,7 @@ uv pip install \
   pyyaml \
   scipy \
   psutil \
-  hydra-core \
+  "hydra-core>=1.3,<1.4" \
   "imageio==2.26.0" \
   dm_control \
   "mujoco<3.3.6" \

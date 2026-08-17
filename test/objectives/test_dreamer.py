@@ -38,6 +38,7 @@ from torchrl.objectives.world_model_loss import WorldModelLoss
 
 from torchrl.testing import (  # noqa
     call_value_nets as _call_value_nets,
+    CatLinear,
     dtype_fixture,
     get_available_devices,
     get_default_devices,
@@ -538,15 +539,6 @@ _WML_ACTION_DIM = 2
 _WML_BATCH = 3
 
 
-class _WMLCatLinear(torch.nn.Module):
-    def __init__(self, in_features: int, out_features: int) -> None:
-        super().__init__()
-        self.linear = torch.nn.Linear(in_features, out_features)
-
-    def forward(self, *tensors: torch.Tensor) -> torch.Tensor:
-        return self.linear(torch.cat(tensors, dim=-1))
-
-
 def _wml_make_world_model(
     with_done_head: bool = False, with_decoder: bool = False
 ) -> WorldModel:
@@ -558,7 +550,7 @@ def _wml_make_world_model(
         out_keys=["latent"],
     )
     dynamics = TensorDictModule(
-        _WMLCatLinear(_WML_LATENT_DIM + _WML_ACTION_DIM, _WML_LATENT_DIM),
+        CatLinear(_WML_LATENT_DIM + _WML_ACTION_DIM, _WML_LATENT_DIM),
         in_keys=["latent", "action"],
         out_keys=[("next", "latent")],
     )
@@ -627,7 +619,7 @@ class TestWorldModelLoss:
             out_keys=["latent"],
         )
         dynamics = TensorDictModule(
-            _WMLCatLinear(_WML_LATENT_DIM + _WML_ACTION_DIM, _WML_LATENT_DIM),
+            CatLinear(_WML_LATENT_DIM + _WML_ACTION_DIM, _WML_LATENT_DIM),
             in_keys=["latent", "action"],
             out_keys=["predicted_latent"],
         )

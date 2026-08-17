@@ -40,3 +40,6 @@ Reward Model Training
     RewardModelLoss
     RewardModelLossOutput
     reward_model_loss
+    DistillationLoss
+    DistillationLossOutput
+    k3_kl_token_estimate

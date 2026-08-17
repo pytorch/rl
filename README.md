@@ -2,6 +2,7 @@
 [![Nightly](https://github.com/pytorch/rl/actions/workflows/nightly_orchestrator.yml/badge.svg)](https://pytorch.github.io/rl/nightly-status/)
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://pytorch.org/rl/)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch.github.io/rl/dev/bench/)
+[![CI Timing](https://img.shields.io/badge/CI%20Timing-blue.svg)](https://pytorch.github.io/rl/ci-timing/)
 [![codecov](https://codecov.io/gh/pytorch/rl/branch/main/graph/badge.svg?token=HcpK1ILV6r)](https://codecov.io/gh/pytorch/rl)
 [![Flaky Tests](https://img.shields.io/endpoint?url=https://pytorch.github.io/rl/flaky/badge.json)](https://pytorch.github.io/rl/flaky/)
 [![X / Twitter Follow](https://img.shields.io/twitter/follow/torchrl1?style=social)](https://twitter.com/torchrl1)
@@ -429,7 +430,7 @@ CUDA wheel from the PyTorch wheel index that matches your PyTorch CUDA runtime
 (replace `cu128` with the CUDA build you use):
 
 ```bash
-pip install "torchrl==0.13.0+cu128" --extra-index-url https://download.pytorch.org/whl/cu128
+pip install "torchrl==0.14.0+cu128" --extra-index-url https://download.pytorch.org/whl/cu128
 ```
 
 The CUDA wheel is optional: if you do not need CUDA prioritized replay buffers,
@@ -550,6 +551,21 @@ PyTorch questions, use the [PyTorch reinforcement learning forum](https://discus
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 contribution guide and the [call for contributions](https://github.com/pytorch/rl/issues/509)
 for open areas where help is especially useful.
+
+To work on an open issue, comment `/assign` on the issue. This will assign the
+issue to you.
+
+### Trusted collaborators
+
+TorchRL is maintained by [Vincent Moens (`vmoens`)](https://github.com/vmoens).
+The following trusted collaborators are also available for review guidance and
+contributor advice:
+
+- [`theap06`](https://github.com/theap06)
+- [`coder-jayp`](https://github.com/coder-jayp)
+
+If you would like to be added to this list, reach out to
+[Vincent Moens (`vmoens`)](https://github.com/vmoens).
 
 For local development, install pre-commit hooks with:
 

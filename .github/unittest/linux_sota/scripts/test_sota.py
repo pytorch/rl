@@ -153,6 +153,19 @@ commands = {
   env.name=Pendulum-v1 \
   logger.backend=
 """,
+    "tqc": """python sota-implementations/tqc/tqc.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device= \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  network.device= \
+  logger.backend=
+""",
     "discrete_sac": """python sota-implementations/discrete_sac/discrete_sac.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -338,14 +351,39 @@ commands = {
   logger.eval_episodes=1 \
   logger.output_plot= \
   networks.hidden_dim=8 \
-  networks.depth=1 \
+  networks.encoder_layers=1 \
+  networks.decoder_layers=1 \
+  networks.reward_layers=1 \
+  networks.actor_layers=1 \
+  networks.value_layers=1 \
   networks.num_categoricals=2 \
   networks.num_classes=2 \
   networks.num_reward_bins=11 \
+  networks.num_value_bins=11 \
   networks.rnn_hidden_dim=8 \
   networks.obs_embed_dim=8
 """,
 }
+
+# CI sharding: the smoke list runs as SOTA_NUM_SHARDS parallel jobs, each
+# selecting an interleaved slice of the sorted command list via SOTA_SHARD
+# (1-based). Interleaving keeps the heavy neighbors (dreamer/dreamer_v3) on
+# different shards. Both variables unset (the local default) runs everything.
+_num_shards = int(os.environ.get("SOTA_NUM_SHARDS", "1"))
+_shard = os.environ.get("SOTA_SHARD")
+if _num_shards > 1:
+    if _shard is None:
+        raise RuntimeError("SOTA_NUM_SHARDS is set but SOTA_SHARD is not.")
+    _shard_index = int(_shard) - 1
+    if not 0 <= _shard_index < _num_shards:
+        raise RuntimeError(
+            f"SOTA_SHARD={_shard} is out of range for SOTA_NUM_SHARDS={_num_shards}."
+        )
+    commands = {
+        algo: command
+        for index, (algo, command) in enumerate(sorted(commands.items()))
+        if index % _num_shards == _shard_index
+    }
 
 
 def run_command(command):

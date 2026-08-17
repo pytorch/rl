@@ -44,6 +44,17 @@ one can simply call:
         >>> print(a)
         9.81
 
+Batched environments can be indexed with integers, slices, integer numpy arrays
+or integer torch tensors. Indexing returns a live batched-env view over the
+selected workers. For example, ``env23 = env[2:]`` keeps talking to the same
+workers as ``env``; stepping or resetting ``env23`` updates those workers rather
+than a detached copy. Integer indexing preserves a singleton batch. The parent
+batched environment owns the workers: closing an indexed view only closes that
+view object, while closing the parent shuts down the shared workers and makes
+existing indexed views unusable. The view keeps its parent alive, so rebinding
+``env = env[:1]`` remains usable; close the final view when it is no longer
+needed.
+
 .. note::
 
   *A note on performance*: launching a :class:`~.ParallelEnv` can take quite some time
@@ -51,6 +62,39 @@ one can simply call:
   the time that it takes to run ``import torch`` (and other imports), starting the
   parallel env can be a bottleneck. This is why, for instance, TorchRL tests are so slow.
   Once the environment is launched, a great speedup should be observed.
+
+  Environments with especially expensive constructors can avoid a second,
+  parent-side construction pass by setting ``metadata_from_workers=True``.
+  In this opt-in mode, the real worker environments report their metadata before
+  normal initialization. The workers start eagerly, their tensor schemas are
+  validated for compatibility, and no temporary environment is created in the
+  parent. This mode currently requires pipe-based communication with
+  ``use_buffers=False``. All workers must expose the same tensor schema: specs
+  and example tensors may only differ in non-tensor payload values (such as
+  language instructions). Environments with genuinely heterogeneous specs
+  should keep the default metadata path. At shutdown, workers started in this
+  mode are closed one at a time to bound teardown resource spikes; the
+  per-worker grace period is controlled by the ``shutdown_timeout`` argument.
+  Convenience constructors that create a :class:`ParallelEnv` from
+  ``num_workers`` (for example ``GymEnv("Pendulum-v1", num_workers=4)``)
+  enable worker-originated metadata automatically when the worker schemas are
+  compatible. Native vectorization arguments such as ``GymEnv(...,
+  num_envs=4)`` do not create a :class:`ParallelEnv` and are unaffected.
+  Use one common factory with ``create_env_kwargs`` for
+  worker-specific arguments:
+
+  .. code-block:: python
+
+      from functools import partial
+
+      make_env = partial(GymEnv, "Pendulum-v1")
+      env = ParallelEnv(
+          4,
+          make_env,
+          create_env_kwargs=[{"g": 9.0 + worker_idx} for worker_idx in range(4)],
+          metadata_from_workers=True,
+          use_buffers=False,
+      )
 
 .. note::
 

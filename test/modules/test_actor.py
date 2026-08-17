@@ -30,6 +30,7 @@ from torchrl.modules import (
     MultiStepActorWrapper,
     ProbabilisticActor,
     SafeModule,
+    SafeProbabilisticModule,
     TanhDelta,
     TanhModule,
     TanhNormal,
@@ -45,6 +46,40 @@ from torchrl.modules.vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, NestedCountingEnv
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("num_samples", [None, 3])
+def test_probabilistic_module_tanhnormal_joint_log_prob(
+    device, num_samples, monkeypatch
+):
+    loc = torch.tensor([[20.0, -20.0]], device=device)
+    scale = torch.full_like(loc, 0.1)
+    module = SafeProbabilisticModule(
+        in_keys=["loc", "scale"],
+        out_keys=["action"],
+        distribution_class=TanhNormal,
+        default_interaction_type=InteractionType.RANDOM,
+        return_log_prob=True,
+        log_prob_key="sample_log_prob",
+        num_samples=num_samples,
+        generator=torch.Generator(device=device).manual_seed(0),
+    )
+
+    sample_shape = torch.Size() if num_samples is None else (num_samples,)
+    torch.manual_seed(0)
+    expected_action, expected_log_prob = TanhNormal(loc, scale).rsample_and_log_prob(
+        sample_shape
+    )
+
+    def fail_log_prob(*args, **kwargs):
+        raise AssertionError("a freshly sampled TanhNormal was inverse-scored")
+
+    monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+    result = module(TensorDict({"loc": loc, "scale": scale}, batch_size=[1]))
+
+    torch.testing.assert_close(result["action"], expected_action)
+    torch.testing.assert_close(result["sample_log_prob"], expected_log_prob)
 
 
 @pytest.mark.parametrize(
@@ -980,6 +1015,17 @@ class TestTinyVLA:
         assert "action_chunk" not in out.keys(True, True)
         assert policy.out_keys == [("vla_action", "chunk")]
         assert ("observation", "image") in policy.in_keys
+
+    def test_plain_vla_action_fields(self):
+        policy = TinyVLA(
+            action_dim=7,
+            chunk_size=4,
+            return_vla_action_container=False,
+        )
+        out = policy(_make_obs_td())
+        assert not isinstance(out["vla_action"], VLAAction)
+        assert out["vla_action", "chunk"].shape == torch.Size([2, 4, 7])
+        assert policy.out_keys == [("vla_action", "chunk")]
 
     def test_multistep_actor_uses_vla_chunk_as_cache(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)

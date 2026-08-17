@@ -61,7 +61,7 @@ inference_model:
   max_tokens: 512
   include_stop_str_in_output: true
   enforce_eager: false
-  enable_prefix_caching: false
+  enable_prefix_caching: true  # safe with online updates: caches are reset on weight sync
 
 ref_model:
   gradient_checkpointing: false

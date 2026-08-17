@@ -20,7 +20,7 @@ from torchrl.envs.model_based import WorldModelEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import SafeModule, WorldModel
 from torchrl.modules.tensordict_module import WorldModelWrapper
-from torchrl.testing import get_default_devices
+from torchrl.testing import CatLinear, get_default_devices
 from torchrl.testing.mocking_classes import ActionObsMergeLinear, DummyModelBasedEnvBase
 
 
@@ -124,17 +124,6 @@ _WM_ACTION_DIM = 2
 _WM_BATCH = 3
 
 
-class _CatLinear(torch.nn.Module):
-    """Concatenates all positional inputs along the last dim, then applies Linear."""
-
-    def __init__(self, in_features: int, out_features: int) -> None:
-        super().__init__()
-        self.linear = torch.nn.Linear(in_features, out_features)
-
-    def forward(self, *tensors: torch.Tensor) -> torch.Tensor:
-        return self.linear(torch.cat(tensors, dim=-1))
-
-
 def _make_linear_world_model(
     with_done_head: bool = False, with_decoder: bool = False
 ) -> WorldModel:
@@ -144,7 +133,7 @@ def _make_linear_world_model(
         out_keys=["latent"],
     )
     dynamics = TensorDictModule(
-        _CatLinear(_WM_LATENT_DIM + _WM_ACTION_DIM, _WM_LATENT_DIM),
+        CatLinear(_WM_LATENT_DIM + _WM_ACTION_DIM, _WM_LATENT_DIM),
         in_keys=["latent", "action"],
         out_keys=[("next", "latent")],
     )
@@ -269,7 +258,7 @@ class TestWorldModelForward:
             out_keys=[("encoded", "latent")],
         )
         dynamics = TensorDictModule(
-            _CatLinear(_WM_LATENT_DIM + _WM_ACTION_DIM, _WM_LATENT_DIM),
+            CatLinear(_WM_LATENT_DIM + _WM_ACTION_DIM, _WM_LATENT_DIM),
             in_keys=[("encoded", "latent"), "action"],
             out_keys=[("next", "encoded", "latent")],
         )

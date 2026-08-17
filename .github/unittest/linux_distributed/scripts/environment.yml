@@ -22,7 +22,7 @@ dependencies:
     - pyyaml
     - scipy
     - psutil
-    - hydra-core
+    - hydra-core<1.4
     - tensorboard
     - imageio==2.26.0
     - wandb

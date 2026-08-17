@@ -160,7 +160,7 @@ Collector
 Because IsaacLab environments are **pre-vectorized** (a single ``gym.make``
 creates ~4096 parallel environments on the GPU), use a single
 :class:`~torchrl.collectors.Collector` — there is no need for
-``ParallelEnv`` or ``MultiCollector``:
+``ParallelEnv`` or a process-backed ``Collector``:
 
 .. code-block:: python
 
@@ -221,23 +221,28 @@ Key points:
   only GPU 0).
 - Falls back gracefully to single-GPU if only 1 GPU is available.
 
-RayCollector (alternative)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Ray backend (alternative)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you need distributed collection across multiple GPUs/nodes, use
-:class:`~torchrl.collectors.distributed.RayCollector`:
+the main :class:`~torchrl.collectors.Collector` entry point with
+``backend="ray"``:
 
 .. code-block:: python
 
-    from torchrl.collectors.distributed import RayCollector
+    from torchrl.collectors import Collector
 
-    collector = RayCollector(
-        [make_env] * num_collectors,
+    collector = Collector(
+        make_env,
         policy,
+        backend="ray",
+        num_collectors=num_collectors,
         frames_per_batch=8192,
-        collector_kwargs={
-            "trust_policy": True,
-            "no_cuda_sync": True,
+        backend_options={
+            "collector_kwargs": {
+                "trust_policy": True,
+                "no_cuda_sync": True,
+            },
         },
     )
 

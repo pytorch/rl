@@ -38,7 +38,7 @@ uv pip install \
     expecttest \
     pyyaml \
     scipy \
-    hydra-core
+    "hydra-core<1.4"
 
 # ============================================================================================ #
 # ================================ PyTorch Installation ====================================== #
@@ -68,7 +68,7 @@ fi
 
 printf "* Installing tensordict\n"
 # Install tensordict dependencies first (pyvers is required but --no-deps skips it)
-uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 uv pip install "pybind11[global]" ninja
 if [[ "$RELEASE" == 0 ]]; then
     uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
@@ -115,7 +115,7 @@ uv pip install --reinstall --index-url https://pypi.org/simple "torchvision===0.
 # Keep secondary dependencies inside the ranges required by the latest SGLang
 # dependency set so uv pip check catches real breakage instead of resolver drift.
 printf "* Constraining secondary dependencies for SGLang\n"
-uv pip install "pillow>=9.2,<12" "numpy>=1.25,<2.4" "fsspec[http]<=2026.2.0"
+uv pip install "cuda-bindings~=13.3.1" "pillow>=9.2,<12" "numpy>=1.25,<2.4" "fsspec[http]<=2026.2.0"
 
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
