@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextlib
+import threading
 from functools import partial
 
 import numpy as np
@@ -59,6 +60,20 @@ from torchrl.testing.mocking_classes import (
     NestedCountingEnv,
     Str2StrEnv,
 )
+
+
+class _DelayedCountingEnv(CountingEnv):
+    def __init__(self, *args, delay: float, **kwargs):
+        self.delay = delay
+        super().__init__(*args, **kwargs)
+
+    def _reset(self, tensordict, **kwargs):
+        threading.Event().wait(self.delay)
+        return super()._reset(tensordict, **kwargs)
+
+    def _step(self, tensordict):
+        threading.Event().wait(self.delay)
+        return super()._step(tensordict)
 
 
 def test_callable_metadata_env_closes_when_extraction_fails(monkeypatch):
@@ -834,6 +849,140 @@ class TestAsyncEnvPool:
             env.check_env_specs(break_when_any_done="both")
         finally:
             base_env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_exchange(self, make_envs):
+        env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
+        try:
+            reset = env.reset()
+            assert env._slot_exchange.input_buffer.is_shared()
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            step, next_step = env.step_and_maybe_reset(reset)
+            assert step.shape == env.shape
+            assert next_step.shape == env.shape
+            assert env._env_idx_key in step
+            assert env._env_idx_key in next_step
+            next_step.set("action", torch.ones(next_step.shape + (1,)))
+            env.async_step_send(next_step)
+            env.async_step_recv(min_get=env.num_envs)
+            stats = env.stats()
+            assert stats["avg_batch_to_action_ms"] > 0
+            assert stats["consumer_busy_fraction"] > 0
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_full_batch_preserves_env_order(self):
+        makers = [
+            partial(
+                _DelayedCountingEnv,
+                delay=(3 - index) * 0.05,
+                max_steps=100,
+                start_val=index,
+            )
+            for index in range(4)
+        ]
+        env = AsyncEnvPool(makers, backend="multiprocessing", exchange="shm")
+        try:
+            reset = env.reset()
+            expected = torch.arange(4, dtype=torch.int32)
+            torch.testing.assert_close(reset["observation"].squeeze(-1), expected)
+
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            step = env.step(reset)
+            torch.testing.assert_close(
+                step["next", "observation"].squeeze(-1), expected + 1
+            )
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_per_env_result_owns_storage(self, make_envs):
+        env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
+        try:
+            env.async_reset_send(env_index=0)
+            reset = env.async_reset_recv(env_index=0)
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            env.async_step_and_maybe_reset_send(reset, env_index=0)
+            result, next_result = env.async_step_and_maybe_reset_recv(env_index=0)
+            result_snapshot = result.clone()
+
+            next_result.set("action", torch.ones(next_result.shape + (1,)))
+            next_snapshot = next_result.clone()
+            env.async_step_and_maybe_reset_send(next_result, env_index=0)
+            env.async_step_and_maybe_reset_recv(env_index=0)
+
+            assert_allclose_td(result, result_snapshot)
+            assert_allclose_td(next_result, next_snapshot)
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_lazy_result_lifetime(self, make_envs):
+        env = AsyncEnvPool(
+            make_envs, backend="multiprocessing", exchange="shm", stack="lazy"
+        )
+        try:
+            reset = env.reset()
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            env.async_step_and_maybe_reset_send(reset)
+            result, next_result = env.async_step_and_maybe_reset_recv(
+                min_get=env.num_envs
+            )
+            result_snapshot = result.clone()
+
+            next_result.set("action", torch.ones(next_result.shape + (1,)))
+            env.async_step_and_maybe_reset_send(next_result)
+            env.async_step_and_maybe_reset_recv(min_get=env.num_envs)
+
+            assert not torch.equal(
+                result["observation"], result_snapshot["observation"]
+            )
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_deadline_batching(self, make_envs):
+        env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
+        try:
+            env.async_reset_send(env_index=list(range(env.num_envs)))
+            first = env.async_reset_recv(min_get=1, max_get=4, timeout=0.0)
+            remaining = env.async_reset_recv(min_get=3, max_get=3, timeout=0.1)
+            assert first.shape[0] == 1
+            assert remaining.shape[0] == 3
+            stats = env.stats(reset=True)
+            assert stats["batches"] == 2
+            assert stats["items"] == 4
+            assert stats["avg_batch_size"] == 2
+            assert stats["batch_fill_ratio"] == pytest.approx(4 / 7)
+            assert stats["partial_batch_fraction"] == 0.5
+            assert stats["avg_observation_to_batch_ms"] >= 0
+            assert stats["consumer_busy_fraction"] == 0
+            assert env.stats()["batches"] == 0
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    def test_deadline_batching(self, make_envs, backend):
+        env = AsyncEnvPool(make_envs, backend=backend)
+        try:
+            env.async_reset_send(env_index=list(range(env.num_envs)))
+            first = env.async_reset_recv(min_get=1, max_get=1, timeout=0.0)
+            remaining = env.async_reset_recv(min_get=3, max_get=3, timeout=0.1)
+            assert first.shape[0] == 1
+            assert remaining.shape[0] == 3
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.parametrize("backend", ["multiprocessing", "threading"])
+    def test_deadline_batch_validation(self, make_envs, backend):
+        env = AsyncEnvPool(make_envs, backend=backend)
+        try:
+            env.async_reset_send(env_index=list(range(env.num_envs)))
+            with pytest.raises(ValueError, match="max_get"):
+                env.async_reset_recv(min_get=2, max_get=1)
+        finally:
+            env._maybe_shutdown()
 
 
 def _has_mps():

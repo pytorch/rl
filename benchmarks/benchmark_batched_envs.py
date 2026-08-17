@@ -16,13 +16,15 @@ Requires pandas ("pip install pandas").
 """
 
 import pandas as pd
+
 from torchrl._utils import logger as torchrl_logger
 
 pd.set_option("display.max_columns", 100)
 pd.set_option("display.width", 1000)
 import torch
 from torch.utils.benchmark import Timer
-from torchrl.envs import MultiThreadedEnv, ParallelEnv, SerialEnv
+
+from torchrl.envs import AsyncEnvPool, MultiThreadedEnv, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import GymEnv
 
 N_STEPS = 1000
@@ -51,6 +53,16 @@ def create_parallel(num_workers, device):
     env = ParallelEnv(num_workers=num_workers, create_env_fn=factory)
     env = env.to(device=torch.device(device))
     env.rollout(policy=None, max_steps=5)  # Warm-up
+    return env
+
+
+def create_async(num_workers, exchange):
+    env = AsyncEnvPool(
+        [factory] * num_workers,
+        backend="multiprocessing",
+        exchange=exchange,
+    )
+    env.rollout(policy=None, max_steps=5)
     return env
 
 
@@ -93,10 +105,29 @@ if __name__ == "__main__":
             )
             time_parallel = res_parallel.blocked_autorange().mean
 
+            if device == "cpu":
+                async_times = {}
+                for exchange in ("queue", "shm"):
+                    torchrl_logger.info(f"AsyncEnvPool ({exchange})...")
+                    env_async = create_async(num_workers, exchange)
+                    res_async = Timer(
+                        stmt="run_env(env)",
+                        setup="from __main__ import run_env",
+                        globals={"env": env_async},
+                    )
+                    async_times[exchange] = res_async.blocked_autorange().mean
+                    env_async.close()
+            else:
+                async_times = {}
+
             res[f"num_workers_{num_workers}_{device}"] = {
                 "Serial, s": time_serial,
                 "Parallel, s": time_parallel,
                 "Multithreaded, s": time_multithreaded,
+                **{
+                    f"Async ({exchange}), s": elapsed
+                    for exchange, elapsed in async_times.items()
+                },
             }
     df = pd.DataFrame(res).round(3)
     gain = 1 - df.loc["Multithreaded, s"] / df.loc["Parallel, s"]
