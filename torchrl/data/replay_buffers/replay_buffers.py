@@ -1358,6 +1358,7 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             version_rejected=version_rejected,
             batch_size=live.shape,
         )
+
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
 
