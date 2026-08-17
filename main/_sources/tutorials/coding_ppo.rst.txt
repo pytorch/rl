@@ -756,20 +756,31 @@ parameters.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 458-463
+.. GENERATED FROM PYTHON SOURCE LINES 458-469
 
-let's try our policy and value modules. As we said earlier, the usage of
+Let's try our policy and value modules. As we said earlier, the usage of
 :class:`~tensordict.nn.TensorDictModule` makes it possible to directly read the output
 of the environment to run these modules, as they know what information to read
-and where to write it:
+and where to write it.
+
+.. note::
+    Running these modules with a dummy batch of data is not just for testing!
+    Since we used ``nn.LazyLinear``, this step is required to initialize the
+    network parameters. Without it, you will get an ``UninitializedParameter``
+    error when the algorithm attempts to disable gradients or update the weights.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 463-466
+.. GENERATED FROM PYTHON SOURCE LINES 469-477
 
 .. code-block:: Python
 
-    print("Running policy:", policy_module(env.reset()))
-    print("Running value:", value_module(env.reset()))
+
+    # Run a dummy forward pass to initialize the Lazy modules (strictly required!)
+    out_policy = policy_module(env.reset())
+    out_value = value_module(env.reset())
+
+    print("Running policy:", out_policy)
+    print("Running value:", out_value)
 
 
 
@@ -808,7 +819,7 @@ and where to write it:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 467-479
+.. GENERATED FROM PYTHON SOURCE LINES 478-490
 
 Model mode
 ----------
@@ -823,7 +834,7 @@ Set the mode before constructing the collector: some collectors may wrap,
 move, or copy the policy during initialization.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 479-482
+.. GENERATED FROM PYTHON SOURCE LINES 490-493
 
 .. code-block:: Python
 
@@ -855,7 +866,7 @@ move, or copy the policy during initialization.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 483-512
+.. GENERATED FROM PYTHON SOURCE LINES 494-523
 
 Data collector
 --------------
@@ -887,7 +898,7 @@ training loop allows you to write data loading pipelines
 that are 100% oblivious to the actual specificities of the rollout content.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 512-521
+.. GENERATED FROM PYTHON SOURCE LINES 523-532
 
 .. code-block:: Python
 
@@ -907,7 +918,7 @@ that are 100% oblivious to the actual specificities of the rollout content.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 522-540
+.. GENERATED FROM PYTHON SOURCE LINES 533-551
 
 Replay buffer
 -------------
@@ -928,7 +939,7 @@ sample the sub-batches from the collected batch, but using these classes
 make it easy for us to build the inner training loop in a reproducible way.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 540-546
+.. GENERATED FROM PYTHON SOURCE LINES 551-557
 
 .. code-block:: Python
 
@@ -945,7 +956,7 @@ make it easy for us to build the inner training loop in a reproducible way.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 547-568
+.. GENERATED FROM PYTHON SOURCE LINES 558-579
 
 Loss function
 -------------
@@ -969,7 +980,7 @@ Both of these will be used by :class:`~torchrl.objectives.ClipPPOLoss` to
 return the policy and value losses.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 568-589
+.. GENERATED FROM PYTHON SOURCE LINES 579-600
 
 .. code-block:: Python
 
@@ -1001,7 +1012,7 @@ return the policy and value losses.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 590-613
+.. GENERATED FROM PYTHON SOURCE LINES 601-624
 
 Training loop
 -------------
@@ -1027,7 +1038,7 @@ The steps include:
     still controls whether actions are sampled randomly during collection.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 613-682
+.. GENERATED FROM PYTHON SOURCE LINES 624-693
 
 .. code-block:: Python
 
@@ -1108,11 +1119,11 @@ The steps include:
 
  .. code-block:: none
 
-      0%|          | 0/10000 [00:00<?, ?it/s]     10%|█         | 1000/10000 [00:02<00:24, 366.27it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.0846 (init= 9.0846), step count (max): 13, lr policy:  0.0003:  10%|█         | 1000/10000 [00:02<00:24, 366.27it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.0846 (init= 9.0846), step count (max): 13, lr policy:  0.0003:  20%|██        | 2000/10000 [00:05<00:21, 367.66it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.1427 (init= 9.0846), step count (max): 19, lr policy:  0.0003:  20%|██        | 2000/10000 [00:05<00:21, 367.66it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.1427 (init= 9.0846), step count (max): 19, lr policy:  0.0003:  30%|███       | 3000/10000 [00:08<00:18, 370.55it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.1602 (init= 9.0846), step count (max): 19, lr policy:  0.0003:  30%|███       | 3000/10000 [00:08<00:18, 370.55it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.1602 (init= 9.0846), step count (max): 19, lr policy:  0.0003:  40%|████      | 4000/10000 [00:10<00:16, 374.78it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2032 (init= 9.0846), step count (max): 24, lr policy:  0.0002:  40%|████      | 4000/10000 [00:10<00:16, 374.78it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2032 (init= 9.0846), step count (max): 24, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:13<00:13, 377.14it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2157 (init= 9.0846), step count (max): 23, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:13<00:13, 377.14it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2157 (init= 9.0846), step count (max): 23, lr policy:  0.0002:  60%|██████    | 6000/10000 [00:15<00:10, 379.12it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2282 (init= 9.0846), step count (max): 48, lr policy:  0.0001:  60%|██████    | 6000/10000 [00:15<00:10, 379.12it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2282 (init= 9.0846), step count (max): 48, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:18<00:07, 380.34it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2339 (init= 9.0846), step count (max): 32, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:18<00:07, 380.34it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2339 (init= 9.0846), step count (max): 32, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:21<00:05, 382.00it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2478 (init= 9.0846), step count (max): 38, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:21<00:05, 382.00it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2478 (init= 9.0846), step count (max): 38, lr policy:  0.0001:  90%|█████████ | 9000/10000 [00:23<00:02, 382.26it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2523 (init= 9.0846), step count (max): 59, lr policy:  0.0000:  90%|█████████ | 9000/10000 [00:23<00:02, 382.26it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2523 (init= 9.0846), step count (max): 59, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:26<00:00, 381.74it/s]    eval cumulative reward:  241.8240 (init:  241.8240), eval step-count: 25, average reward= 9.2452 (init= 9.0846), step count (max): 42, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:26<00:00, 381.74it/s]
+      0%|          | 0/10000 [00:00<?, ?it/s]     10%|█         | 1000/10000 [00:02<00:24, 372.06it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.0938 (init= 9.0938), step count (max): 12, lr policy:  0.0003:  10%|█         | 1000/10000 [00:02<00:24, 372.06it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.0938 (init= 9.0938), step count (max): 12, lr policy:  0.0003:  20%|██        | 2000/10000 [00:05<00:21, 373.63it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.1215 (init= 9.0938), step count (max): 14, lr policy:  0.0003:  20%|██        | 2000/10000 [00:05<00:21, 373.63it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.1215 (init= 9.0938), step count (max): 14, lr policy:  0.0003:  30%|███       | 3000/10000 [00:07<00:18, 376.83it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.1478 (init= 9.0938), step count (max): 22, lr policy:  0.0003:  30%|███       | 3000/10000 [00:07<00:18, 376.83it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.1478 (init= 9.0938), step count (max): 22, lr policy:  0.0003:  40%|████      | 4000/10000 [00:10<00:15, 378.59it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.1942 (init= 9.0938), step count (max): 22, lr policy:  0.0002:  40%|████      | 4000/10000 [00:10<00:15, 378.59it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.1942 (init= 9.0938), step count (max): 22, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:13<00:13, 379.27it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2029 (init= 9.0938), step count (max): 22, lr policy:  0.0002:  50%|█████     | 5000/10000 [00:13<00:13, 379.27it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2029 (init= 9.0938), step count (max): 22, lr policy:  0.0002:  60%|██████    | 6000/10000 [00:15<00:10, 380.16it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2103 (init= 9.0938), step count (max): 33, lr policy:  0.0001:  60%|██████    | 6000/10000 [00:15<00:10, 380.16it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2103 (init= 9.0938), step count (max): 33, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:18<00:07, 382.15it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2335 (init= 9.0938), step count (max): 35, lr policy:  0.0001:  70%|███████   | 7000/10000 [00:18<00:07, 382.15it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2335 (init= 9.0938), step count (max): 35, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:21<00:05, 371.34it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2352 (init= 9.0938), step count (max): 38, lr policy:  0.0001:  80%|████████  | 8000/10000 [00:21<00:05, 371.34it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2352 (init= 9.0938), step count (max): 38, lr policy:  0.0001:  90%|█████████ | 9000/10000 [00:23<00:02, 376.04it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2398 (init= 9.0938), step count (max): 42, lr policy:  0.0000:  90%|█████████ | 9000/10000 [00:23<00:02, 376.04it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2398 (init= 9.0938), step count (max): 42, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:26<00:00, 379.71it/s]    eval cumulative reward:  119.6629 (init:  119.6629), eval step-count: 12, average reward= 9.2437 (init= 9.0938), step count (max): 57, lr policy:  0.0000: 100%|██████████| 10000/10000 [00:26<00:00, 379.71it/s]
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 683-690
+.. GENERATED FROM PYTHON SOURCE LINES 694-701
 
 Results
 -------
@@ -1122,7 +1133,7 @@ step count of 1000 steps, which is the maximum number of steps before the
 trajectory is truncated.
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 690-705
+.. GENERATED FROM PYTHON SOURCE LINES 701-716
 
 .. code-block:: Python
 
@@ -1153,7 +1164,7 @@ trajectory is truncated.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 706-726
+.. GENERATED FROM PYTHON SOURCE LINES 717-737
 
 Conclusion and next steps
 -------------------------
@@ -1179,7 +1190,7 @@ If you want to experiment with this tutorial a bit more, you can apply the follo
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 27.566 seconds)
+   **Total running time of the script:** (0 minutes 27.695 seconds)
 
 
 .. _sphx_glr_download_tutorials_coding_ppo.py:

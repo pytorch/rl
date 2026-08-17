@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 29 files **from all galleries**:
+**00:27.695** total execution time for 29 files **from all galleries**:
 
 .. container::
 
@@ -32,6 +32,9 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``reference/generated/tutorials/coding_ppo.py``)
+     - 00:27.695
+     - 0.0
    * - :ref:`sphx_glr_tutorials_checkpointing.py` (``reference/generated/tutorials/checkpointing.py``)
      - 00:00.000
      - 0.0
@@ -39,9 +42,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_dqn.py` (``reference/generated/tutorials/coding_dqn.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``reference/generated/tutorials/coding_ppo.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_tutorials_collector_trajectory_assembly.py` (``reference/generated/tutorials/collector_trajectory_assembly.py``)

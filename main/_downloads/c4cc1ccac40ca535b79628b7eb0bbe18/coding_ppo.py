@@ -455,13 +455,24 @@ value_module = ValueOperator(
 )
 
 ######################################################################
-# let's try our policy and value modules. As we said earlier, the usage of
+# Let's try our policy and value modules. As we said earlier, the usage of
 # :class:`~tensordict.nn.TensorDictModule` makes it possible to directly read the output
 # of the environment to run these modules, as they know what information to read
-# and where to write it:
+# and where to write it.
 #
-print("Running policy:", policy_module(env.reset()))
-print("Running value:", value_module(env.reset()))
+# .. note::
+#     Running these modules with a dummy batch of data is not just for testing!
+#     Since we used ``nn.LazyLinear``, this step is required to initialize the
+#     network parameters. Without it, you will get an ``UninitializedParameter``
+#     error when the algorithm attempts to disable gradients or update the weights.
+#
+
+# Run a dummy forward pass to initialize the Lazy modules (strictly required!)
+out_policy = policy_module(env.reset())
+out_value = value_module(env.reset())
+
+print("Running policy:", out_policy)
+print("Running value:", out_value)
 
 ######################################################################
 # Model mode
