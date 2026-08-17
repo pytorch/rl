@@ -857,6 +857,51 @@ class TestAsyncEnvPool:
             env._maybe_shutdown()
 
     @set_capture_non_tensor_stack(False)
+    def test_shared_memory_per_env_result_owns_storage(self, make_envs):
+        env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
+        try:
+            env.async_reset_send(env_index=0)
+            reset = env.async_reset_recv(env_index=0)
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            env.async_step_and_maybe_reset_send(reset, env_index=0)
+            result, next_result = env.async_step_and_maybe_reset_recv(env_index=0)
+            result_snapshot = result.clone()
+
+            next_result.set("action", torch.ones(next_result.shape + (1,)))
+            next_snapshot = next_result.clone()
+            env.async_step_and_maybe_reset_send(next_result, env_index=0)
+            env.async_step_and_maybe_reset_recv(env_index=0)
+
+            assert_allclose_td(result, result_snapshot)
+            assert_allclose_td(next_result, next_snapshot)
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
+    def test_shared_memory_lazy_result_lifetime(self, make_envs):
+        env = AsyncEnvPool(
+            make_envs, backend="multiprocessing", exchange="shm", stack="lazy"
+        )
+        try:
+            reset = env.reset()
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            env.async_step_and_maybe_reset_send(reset)
+            result, next_result = env.async_step_and_maybe_reset_recv(
+                min_get=env.num_envs
+            )
+            result_snapshot = result.clone()
+
+            next_result.set("action", torch.ones(next_result.shape + (1,)))
+            env.async_step_and_maybe_reset_send(next_result)
+            env.async_step_and_maybe_reset_recv(min_get=env.num_envs)
+
+            assert not torch.equal(
+                result["observation"], result_snapshot["observation"]
+            )
+        finally:
+            env._maybe_shutdown()
+
+    @set_capture_non_tensor_stack(False)
     def test_shared_memory_deadline_batching(self, make_envs):
         env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
         try:

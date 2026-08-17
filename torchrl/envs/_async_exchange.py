@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import queue
 import threading
-import time
 from typing import Any
 
 import torch
 from tensordict import TensorDictBase
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import expand_as_right
+
+from torchrl._utils import timeit
 
 
 def _receive_batch(
@@ -32,7 +33,9 @@ def _receive_batch(
         raise ValueError(f"timeout must be non-negative, got {timeout}.")
 
     items = [result_queue.get()]
-    deadline = None if timeout is None else time.monotonic() + timeout
+    deadline_timer = (
+        None if timeout is None else timeit("async_env_batch_deadline").start()
+    )
 
     while len(items) < min_get:
         items.append(result_queue.get())
@@ -40,10 +43,10 @@ def _receive_batch(
     limit = max_get if max_get is not None else float("inf")
     while len(items) < limit:
         try:
-            if deadline is None:
+            if deadline_timer is None:
                 items.append(result_queue.get_nowait())
             else:
-                remaining = deadline - time.monotonic()
+                remaining = timeout - deadline_timer.elapsed()
                 if remaining <= 0:
                     break
                 items.append(result_queue.get(timeout=remaining))
@@ -64,18 +67,19 @@ class _SharedSlotExchange:
         self.next_slots = self.next_buffer.unbind(0)
         self._input_keys = set(self.input_buffer.keys(True, True))
         self._lock = threading.Lock()
-        self._leased_at: dict[int, int] = {}
+        self._clock = timeit("async_env_shared_exchange").start()
+        self._leased_at: dict[int, float] = {}
         self._batch_count = 0
         self._batch_items = 0
         self._batch_capacity = 0
         self._partial_batch_count = 0
-        self._ready_dwell_ns = 0
+        self._ready_dwell_s = 0.0
         self._ready_dwell_count = 0
-        self._action_dwell_ns = 0
+        self._action_dwell_s = 0.0
         self._action_dwell_count = 0
-        self._consumer_busy_ns = 0
-        self._consumer_busy_started_ns: int | None = None
-        self._metric_started_ns: int | None = None
+        self._consumer_busy_s = 0.0
+        self._consumer_busy_started_s: float | None = None
+        self._metric_started_s: float | None = None
 
     @staticmethod
     def _validate(fake_tensordicts: list[TensorDictBase]) -> None:
@@ -116,11 +120,12 @@ class _SharedSlotExchange:
 
     def worker_slots(
         self, env_index: int
-    ) -> tuple[TensorDictBase, TensorDictBase, TensorDictBase]:
+    ) -> tuple[TensorDictBase, TensorDictBase, TensorDictBase, timeit]:
         return (
             self.input_slots[env_index],
             self.result_slots[env_index],
             self.next_slots[env_index],
+            self._clock,
         )
 
     def write_input(
@@ -152,10 +157,12 @@ class _SharedSlotExchange:
         return tuple(tensor_keys)
 
     @staticmethod
-    def publish(slot: TensorDictBase, tensordict: TensorDictBase) -> tuple[tuple, int]:
+    def publish(
+        slot: TensorDictBase, tensordict: TensorDictBase, clock: timeit
+    ) -> tuple[tuple, float]:
         keys = tuple(tensordict.keys(True, True))
         slot.update_(tensordict)
-        return keys, time.monotonic_ns()
+        return keys, clock.elapsed()
 
     @staticmethod
     def publish_pair(
@@ -163,12 +170,13 @@ class _SharedSlotExchange:
         next_slot: TensorDictBase,
         result: TensorDictBase,
         next_result: TensorDictBase,
-    ) -> tuple[tuple, tuple, int]:
+        clock: timeit,
+    ) -> tuple[tuple, tuple, float]:
         result_keys = tuple(result.keys(True, True))
         next_keys = tuple(next_result.keys(True, True))
         result_slot.update_(result)
         next_slot.update_(next_result)
-        return result_keys, next_keys, time.monotonic_ns()
+        return result_keys, next_keys, clock.elapsed()
 
     def receive(
         self,
@@ -195,23 +203,23 @@ class _SharedSlotExchange:
         max_get: int | None,
         track_action: bool,
     ) -> None:
-        now = time.monotonic_ns()
+        now = self._clock.elapsed()
         with self._lock:
-            if self._metric_started_ns is None:
-                self._metric_started_ns = now
+            if self._metric_started_s is None:
+                self._metric_started_s = now
             self._batch_count += 1
             self._batch_items += len(descriptors)
             self._batch_capacity += len(descriptors) if max_get is None else max_get
             if max_get is not None and len(descriptors) < max_get:
                 self._partial_batch_count += 1
             if track_action and not self._leased_at:
-                self._consumer_busy_started_ns = now
+                self._consumer_busy_started_s = now
             for descriptor in descriptors:
                 env_index = descriptor[0]
-                ready_ns = descriptor[-1]
+                ready_s = descriptor[-1]
                 if track_action:
                     self._leased_at[env_index] = now
-                self._ready_dwell_ns += now - ready_ns
+                self._ready_dwell_s += now - ready_s
                 self._ready_dwell_count += 1
 
     def read(self, descriptors: list[tuple], stack_func) -> TensorDictBase:
@@ -232,6 +240,7 @@ class _SharedSlotExchange:
         return (
             self.result_slots[env_index]
             .select(*keys, strict=True)
+            .clone()
             .set("env_index", NonTensorData(env_index))
         )
 
@@ -264,36 +273,38 @@ class _SharedSlotExchange:
         result = (
             self.result_slots[env_index]
             .select(*result_keys, strict=True)
+            .clone()
             .set("env_index", index_data)
         )
         next_result = (
             self.next_slots[env_index]
             .select(*next_keys, strict=True)
+            .clone()
             .set("env_index", index_data.clone())
         )
         return result, next_result
 
     def record_action(self, env_index: int) -> None:
-        now = time.monotonic_ns()
+        now = self._clock.elapsed()
         with self._lock:
             leased_at = self._leased_at.pop(env_index, None)
             if leased_at is not None:
-                self._action_dwell_ns += now - leased_at
+                self._action_dwell_s += now - leased_at
                 self._action_dwell_count += 1
                 if not self._leased_at:
-                    self._consumer_busy_ns += now - self._consumer_busy_started_ns
-                    self._consumer_busy_started_ns = None
+                    self._consumer_busy_s += now - self._consumer_busy_started_s
+                    self._consumer_busy_started_s = None
 
     def stats(self, reset: bool = False) -> dict[str, float | int]:
         with self._lock:
-            now = time.monotonic_ns()
+            now = self._clock.elapsed()
             batch_count = self._batch_count
-            busy_ns = self._consumer_busy_ns
-            if self._consumer_busy_started_ns is not None:
-                busy_ns += now - self._consumer_busy_started_ns
-            elapsed_ns = (
-                now - self._metric_started_ns
-                if self._metric_started_ns is not None
+            busy_s = self._consumer_busy_s
+            if self._consumer_busy_started_s is not None:
+                busy_s += now - self._consumer_busy_started_s
+            elapsed_s = (
+                now - self._metric_started_s
+                if self._metric_started_s is not None
                 else 0
             )
             metrics = {
@@ -308,29 +319,29 @@ class _SharedSlotExchange:
                 "partial_batch_fraction": self._partial_batch_count / batch_count
                 if batch_count
                 else 0.0,
-                "avg_observation_to_batch_ms": self._ready_dwell_ns
+                "avg_observation_to_batch_ms": self._ready_dwell_s
                 / self._ready_dwell_count
-                / 1e6
+                * 1e3
                 if self._ready_dwell_count
                 else 0.0,
-                "avg_batch_to_action_ms": self._action_dwell_ns
+                "avg_batch_to_action_ms": self._action_dwell_s
                 / self._action_dwell_count
-                / 1e6
+                * 1e3
                 if self._action_dwell_count
                 else 0.0,
-                "consumer_busy_fraction": busy_ns / elapsed_ns if elapsed_ns else 0.0,
+                "consumer_busy_fraction": busy_s / elapsed_s if elapsed_s else 0.0,
             }
             if reset:
                 self._batch_count = 0
                 self._batch_items = 0
                 self._batch_capacity = 0
                 self._partial_batch_count = 0
-                self._ready_dwell_ns = 0
+                self._ready_dwell_s = 0.0
                 self._ready_dwell_count = 0
-                self._action_dwell_ns = 0
+                self._action_dwell_s = 0.0
                 self._action_dwell_count = 0
-                self._consumer_busy_ns = 0
-                self._metric_started_ns = now if self._leased_at else None
-                self._consumer_busy_started_ns = now if self._leased_at else None
+                self._consumer_busy_s = 0.0
+                self._metric_started_s = now if self._leased_at else None
+                self._consumer_busy_started_s = now if self._leased_at else None
                 self._leased_at = {env_index: now for env_index in self._leased_at}
         return metrics

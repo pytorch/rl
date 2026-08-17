@@ -951,8 +951,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data.set(cls._env_idx_key, NonTensorData(i))
                     target.put(data)
                 else:
-                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
-                    target.put((i, keys, ready_ns))
+                    keys, ready_s = _SharedSlotExchange.publish(
+                        shared_slots[1], data, shared_slots[3]
+                    )
+                    target.put((i, keys, ready_s))
             elif msg == "_reset":
                 if shared_slots is not None:
                     data = shared_slots[0].select(*data, strict=True)
@@ -961,8 +963,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data.set(cls._env_idx_key, NonTensorData(i))
                     reset_queue.put(data)
                 else:
-                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
-                    reset_queue.put((i, keys, ready_ns))
+                    keys, ready_s = _SharedSlotExchange.publish(
+                        shared_slots[1], data, shared_slots[3]
+                    )
+                    reset_queue.put((i, keys, ready_s))
             elif msg == "step_and_maybe_reset":
                 if shared_slots is not None:
                     data = shared_slots[0].select(*data, strict=True)
@@ -973,10 +977,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data_.set(cls._env_idx_key, NonTensorData(i))
                     target.put((data, data_))
                 else:
-                    result_keys, next_keys, ready_ns = _SharedSlotExchange.publish_pair(
-                        shared_slots[1], shared_slots[2], data, data_
+                    result_keys, next_keys, ready_s = _SharedSlotExchange.publish_pair(
+                        shared_slots[1], shared_slots[2], data, data_, shared_slots[3]
                     )
-                    target.put((i, result_keys, next_keys, ready_ns))
+                    target.put((i, result_keys, next_keys, ready_s))
             elif msg == "step":
                 if shared_slots is not None:
                     data = shared_slots[0].select(*data, strict=True)
@@ -986,8 +990,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data.set(cls._env_idx_key, NonTensorData(i))
                     target.put(data)
                 else:
-                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
-                    target.put((i, keys, ready_ns))
+                    keys, ready_s = _SharedSlotExchange.publish(
+                        shared_slots[1], data, shared_slots[3]
+                    )
+                    target.put((i, keys, ready_s))
             elif msg == "_step":
                 if shared_slots is not None:
                     data = shared_slots[0].select(*data, strict=True)
@@ -996,8 +1002,10 @@ class ProcessorAsyncEnvPool(AsyncEnvPool):
                     data.set(cls._env_idx_key, NonTensorData(i))
                     step_queue.put(data)
                 else:
-                    keys, ready_ns = _SharedSlotExchange.publish(shared_slots[1], data)
-                    step_queue.put((i, keys, ready_ns))
+                    keys, ready_s = _SharedSlotExchange.publish(
+                        shared_slots[1], data, shared_slots[3]
+                    )
+                    step_queue.put((i, keys, ready_s))
             elif msg == "shutdown":
                 env.close()
                 break
