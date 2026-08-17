@@ -115,7 +115,10 @@ warnings.filterwarnings("ignore")
 # This allows the tutorial to run as a script without if __name__ == "__main__"
 
 if _multiprocessing.get_start_method(allow_none=True) is None:
-    _multiprocessing.set_start_method("fork")
+    try:
+        _multiprocessing.set_start_method("fork")
+    except ValueError:
+        pass
 
 # sphinx_gallery_end_ignore
 

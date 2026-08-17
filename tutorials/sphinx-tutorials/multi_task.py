@@ -18,7 +18,10 @@ warnings.filterwarnings("ignore")
 from torch import multiprocessing
 
 if multiprocessing.get_start_method(allow_none=True) is None:
-    multiprocessing.set_start_method("fork")
+    try:
+        multiprocessing.set_start_method("fork")
+    except ValueError:
+        pass
 mp_context = multiprocessing.get_start_method()
 
 # sphinx_gallery_end_ignore
