@@ -1270,7 +1270,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             # generations with it so the comparison never crosses devices
             # (index/generation/storage may live on CPU, CUDA or MPS).
             current = self._writer.generations_of(dim0)
-            live = current == generation.to(current.device)
+            captured = generation.to(current.device)
+            live = (current >= 0) & (captured >= 0) & (current == captured)
             if version_key is not None:
                 version_rejected = torch.zeros_like(live)
             if live.any():
@@ -1357,7 +1358,6 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
             version_rejected=version_rejected,
             batch_size=live.shape,
         )
-
     def __repr__(self) -> str:
         from torchrl.envs.transforms import Compose
 

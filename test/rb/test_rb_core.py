@@ -2730,6 +2730,29 @@ class TestUpdateIfPresent:
         assert result.stale_count == 10
         assert (rb[:]["obs"] == 0).all()
 
+    def test_never_written_slot_is_stale(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            writer=TensorDictRoundRobinWriter(track_generations=True),
+            batch_size=4,
+        )
+        rb.extend(TensorDict({"obs": torch.zeros(5, 3)}, batch_size=[5]))
+        index = torch.tensor([7])
+        generation = rb._writer.generations_of(index)
+        before = rb._storage._storage["obs"][index].clone()
+
+        result = rb.update_if_present(
+            index=index,
+            generation=generation,
+            patch={"obs": torch.full((1, 3), 42.0)},
+        )
+
+        assert generation.item() == -1
+        assert not result.updated.item()
+        assert result.stale_count == 1
+        assert len(rb) == 5
+        torch.testing.assert_close(rb._storage._storage["obs"][index], before)
+
     def test_sampled_handles_roundtrip(self):
         rb, _, _, _ = self._make_rb()
         sample = rb.sample()
