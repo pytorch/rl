@@ -22,6 +22,7 @@ from torchrl.modules.models.utils import _reset_parameters_recursive
 
 @implement_for("torch", None, "2.12", compilable=True)
 def _is_exporting() -> bool:
+    # Older exporters cannot trace the slot lookup and mutation used below.
     return False
 
 
@@ -36,6 +37,9 @@ class MultiAgentNetBase(nn.Module):
     .. note:: to initialize the MARL module parameters with the `torch.nn.init`
         module, please refer to :meth:`get_stateful_net` and :meth:`from_stateful_net`
         methods.
+
+    .. note:: Exporting a network with unshared parameters requires PyTorch 2.12
+        or newer.
 
     """
 
@@ -131,7 +135,14 @@ class MultiAgentNetBase(nn.Module):
         ...
 
     @staticmethod
-    def vmap_func_module(module, *args, **kwargs):
+    def vmap_func_module(
+        module,
+        in_dims=0,
+        out_dims=0,
+        randomness="error",
+        *,
+        chunk_size=None,
+    ):
         if _is_exporting():
 
             def exec_module_export(params, *inputs):
@@ -139,6 +150,7 @@ class MultiAgentNetBase(nn.Module):
 
             def exec_vmap(params, *inputs):
                 flat_params = params.flatten_keys(".").to_dict()
+                # Each invocation restores its own slots, including nested calls.
                 slots = []
                 try:
                     for key in flat_params:
@@ -150,26 +162,32 @@ class MultiAgentNetBase(nn.Module):
                         ):
                             slots.append((submodule, name, getattr(submodule, name)))
                             setattr(submodule, name, None)
-                    in_dims, out_dims = args
                     out_dim = out_dims[0] if isinstance(out_dims, tuple) else out_dims
                     # Nonzero vmap out_dims are lifted as constants by export.
-                    return torch.vmap(exec_module_export, in_dims, 0, **kwargs)(
-                        flat_params, *inputs
-                    ).movedim(0, out_dim)
+                    return torch.vmap(
+                        exec_module_export,
+                        in_dims=in_dims,
+                        out_dims=0,
+                        randomness=randomness,
+                        chunk_size=chunk_size,
+                    )(flat_params, *inputs).movedim(0, out_dim)
                 finally:
                     for submodule, name, value in reversed(slots):
                         setattr(submodule, name, value)
 
             return exec_vmap
 
-        def exec_module(params, *inputs):
-            with params.to_module(module):
-                return module(*inputs)
         def exec_module(params, *input):
             with params.to_module(module, preserve_module_state=False):
                 return module(*input)
 
-        return torch.vmap(exec_module, *args, **kwargs)
+        return torch.vmap(
+            exec_module,
+            in_dims=in_dims,
+            out_dims=out_dims,
+            randomness=randomness,
+            chunk_size=chunk_size,
+        )
 
     def forward(self, *inputs: tuple[torch.Tensor]) -> torch.Tensor:
         if len(inputs) > 1:
@@ -194,8 +212,8 @@ class MultiAgentNetBase(nn.Module):
             input_dim = None if self.centralized else agent_dim_positive
             output = self.vmap_func_module(
                 self._empty_net,
-                (0, input_dim),
-                (agent_dim_positive,),
+                in_dims=(0, input_dim),
+                out_dims=(agent_dim_positive,),
                 randomness=self.vmap_randomness,
             )(self.params, inputs)
 

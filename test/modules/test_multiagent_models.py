@@ -230,25 +230,40 @@ class TestMultiAgent:
     )
     @pytest.mark.parametrize("centralized", [True, False])
     @pytest.mark.parametrize("use_td_params", [True, False])
-    def test_multiagent_mlp_export(self, centralized, use_td_params):
+    @pytest.mark.parametrize(
+        ("model_type", "model_kwargs", "input_shape"),
+        [
+            (
+                MultiAgentMLP,
+                {"n_agent_inputs": 6, "n_agent_outputs": 2, "depth": 2},
+                (4, 3, 6),
+            ),
+            (
+                MultiAgentConvNet,
+                {"in_features": 3, "kernel_sizes": 3},
+                (4, 3, 3, 15, 15),
+            ),
+        ],
+    )
+    def test_multiagent_export(
+        self, centralized, use_td_params, model_type, model_kwargs, input_shape
+    ):
         """Regression test for https://github.com/pytorch/rl/issues/2902."""
         torch.manual_seed(0)
-        mlp = MultiAgentMLP(
-            n_agent_inputs=6,
-            n_agent_outputs=2,
+        model = model_type(
             n_agents=3,
             centralized=centralized,
             share_params=False,
-            depth=2,
             use_td_params=use_td_params,
+            **model_kwargs,
         )
-        module = TensorDictModule(mlp, in_keys=["input"], out_keys=["output"])
+        module = TensorDictModule(model, in_keys=["input"], out_keys=["output"])
         module.select_out_keys("output")
-        inputs = torch.randn(4, 3, 6)
-        state = {key: value.clone() for key, value in mlp.state_dict().items()}
+        inputs = torch.randn(input_shape)
+        state = {key: value.clone() for key, value in model.state_dict().items()}
         template_state = {}
-        for key in mlp.params.keys(True, True):
-            submodule = mlp._empty_net.get_submodule(".".join(key[:-1]))
+        for key in model.params.keys(True, True):
+            submodule = model._empty_net.get_submodule(".".join(key[:-1]))
             template_state[key] = getattr(submodule, key[-1])
 
         exported = torch.export.export(
@@ -258,9 +273,52 @@ class TestMultiAgent:
         assert not exported.constants
         torch.testing.assert_close(exported.module()(input=inputs), expected)
 
-        torch.testing.assert_close(mlp.state_dict(), state)
+        torch.testing.assert_close(model.state_dict(), state)
         for key, value in template_state.items():
-            submodule = mlp._empty_net.get_submodule(".".join(key[:-1]))
+            submodule = model._empty_net.get_submodule(".".join(key[:-1]))
+            assert getattr(submodule, key[-1]) is value
+
+    def test_multiagent_export_reentrant(self, monkeypatch):
+        torch.manual_seed(0)
+        model = MultiAgentMLP(
+            n_agent_inputs=6,
+            n_agent_outputs=2,
+            n_agents=3,
+            centralized=False,
+            share_params=False,
+            depth=2,
+        )
+        inputs = torch.randn(4, 3, 6)
+        expected = model(inputs)
+        template_state = {}
+        for key in model.params.keys(True, True):
+            submodule = model._empty_net.get_submodule(".".join(key[:-1]))
+            template_state[key] = getattr(submodule, key[-1])
+
+        monkeypatch.setattr(
+            "torchrl.modules.models.multiagent._is_exporting", lambda: True
+        )
+        mapped = model.vmap_func_module(
+            model._empty_net,
+            in_dims=(0, 1),
+            out_dims=(1,),
+            randomness=model.vmap_randomness,
+        )
+        functional_call = torch.func.functional_call
+        reentered = False
+
+        def reentrant_call(module, params, args):
+            nonlocal reentered
+            if not reentered:
+                reentered = True
+                mapped(model.params, inputs)
+            return functional_call(module, params, args)
+
+        monkeypatch.setattr(torch.func, "functional_call", reentrant_call)
+        torch.testing.assert_close(mapped(model.params, inputs), expected)
+        assert reentered
+        for key, value in template_state.items():
+            submodule = model._empty_net.get_submodule(".".join(key[:-1]))
             assert getattr(submodule, key[-1]) is value
 
     def test_multiagent_mlp_lazy(self):
