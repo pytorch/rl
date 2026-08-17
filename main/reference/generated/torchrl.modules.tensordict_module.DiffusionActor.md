@@ -12,8 +12,9 @@ The strict TensorDict contract is `in_keys=["observation"]` →
 `out_keys=["action"]`.
 
 Respects `interaction_type()`: setting
-the interaction type to `DETERMINISTIC` disables stochastic noise
-injection during the reverse chain, yielding a deterministic output.
+the interaction type to `DETERMINISTIC` starts from an all-zero latent
+and disables stochastic noise injection during the reverse chain. The
+result is repeatable but is not a sample from the Gaussian DDPM prior.
 
 Parameters:
 
@@ -27,7 +28,10 @@ provided this argument is ignored. Defaults to `None`.
 last dimension. If `None`, a two-hidden-layer MLP of width 256
 with a [`LazyLinear`](https://docs.pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html#torch.nn.LazyLinear) first layer is constructed
 automatically (`obs_dim` need not be specified in this case).
-- **num_steps** (*int*) - Number of DDPM denoising steps. Defaults to 100.
+- **num_steps** (*int*) - Number of DDPM denoising steps. Reduced-precision
+models require at most 257 steps for bfloat16 and 2049 steps for
+float16 so every raw integer timestep remains distinct. Defaults
+to 100.
 - **beta_start** (*float*) - Starting beta for the linear schedule.
 Defaults to 1e-4.
 - **beta_end** (*float*) - Ending beta for the linear schedule.
