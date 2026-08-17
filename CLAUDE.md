@@ -49,6 +49,25 @@ Strongly encouraged (not mandatory):
 - Hot-path components (collectors, RB, losses, key transforms): verify under
   `torch.compile` and, where reasonable, cudagraphs.
 
+### 6a. Module device state
+
+- **Do not define or assign `self.device` on an `nn.Module`**, or cache an
+  equivalent single-device attribute. `module.to(...)`, `.cuda()`, and
+  `_apply(...)` move parameters and buffers, not arbitrary Python state, so a
+  cached device becomes stale. A module may also legitimately span several
+  devices under pipeline parallelism, tensor parallelism, FSDP, or manual
+  placement, in which case no single module device exists.
+- Derive placement from the specific input, parameter, or buffer involved in
+  an operation. Prefer device-preserving constructors such as `tensor.new_*`
+  or pass `device=tensor.device` explicitly. Do not infer a device for the
+  whole module from its first parameter.
+- Register persistent tensor state as a parameter or buffer so normal module
+  transforms move it. A constructor may accept `device` to place initial
+  state, but must not retain that argument as module state.
+- Do not work around this rule by overriding `to()` or `_apply()` merely to
+  synchronize a device cache; that still encodes an invalid single-device
+  assumption and is brittle under sharding and composition.
+
 ## 7. Tests
 
 - Every new public class / function needs tests.
