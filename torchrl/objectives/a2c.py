@@ -27,6 +27,7 @@ from torch import distributions as d
 
 from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.modules.distributions.utils import rsample_and_log_prob
+from torchrl.modules.value_norm import ValueNorm
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -65,6 +66,16 @@ class A2CLoss(LossModule):
             loss won't be included and the in-keys will miss the critic inputs.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        advantage_norm (ValueNorm, optional): a stateful
+            :class:`~torchrl.modules.ValueNorm` used to rescale the advantage,
+            e.g. :class:`~torchrl.modules.PercentileValueNorm` for
+            DreamerV3-style return normalization. In training mode, its
+            statistics are updated with the batch value targets once per
+            forward call; the advantage is then divided by
+            ``advantage_norm.scale()`` without re-centering (the advantage is
+            already centred by the value baseline). Requires the value target
+            to be available in the input tensordict (it is when the loss
+            computes the advantage itself). Defaults to ``None``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -272,6 +283,7 @@ class A2CLoss(LossModule):
         entropy_coeff: float | None = None,
         critic_coeff: float = 1.0,
         loss_critic_type: str = "smooth_l1",
+        advantage_norm: ValueNorm | None = None,
         gamma: float | None = None,
         separate_losses: bool = False,
         advantage_key: str | None = None,
@@ -353,6 +365,7 @@ class A2CLoss(LossModule):
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
+        self.advantage_norm = advantage_norm
 
         self.register_coeff_buffer("clip_value", clip_value, device=device)
 
@@ -535,6 +548,22 @@ class A2CLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
+    def _scale_advantage(
+        self, advantage: torch.Tensor, tensordict: TensorDictBase
+    ) -> torch.Tensor:
+        value_target = tensordict.get(self.tensor_keys.value_target, None)
+        if value_target is None:
+            raise KeyError(
+                f"advantage_norm requires the value target "
+                f"({self.tensor_keys.value_target!r}) in the input tensordict "
+                "to update the return statistics. Let the loss compute the "
+                "advantage with its value estimator, or write the value "
+                "target under that key."
+            )
+        if self.training:
+            self.advantage_norm.update(value_target)
+        return advantage / self.advantage_norm.scale()
+
     @dispatch()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -546,6 +575,8 @@ class A2CLoss(LossModule):
                 target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
+        if self.advantage_norm is not None:
+            advantage = self._scale_advantage(advantage, tensordict)
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss}, batch_size=[])
