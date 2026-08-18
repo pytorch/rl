@@ -31,6 +31,7 @@ optim:
 
 # loss
 loss:
+  # The reference training loop requires a scalar loss.
   reduction: mean
   center_coeff: null  # set a float to add the score-centering regularizer
 
@@ -47,5 +48,7 @@ logger:
 
 # checkpointing
 checkpoint:
+  # Checkpoints are written beneath this directory as checkpoint-<step> and
+  # checkpoint-final, including tokenizer files when a tokenizer is used.
   save_dir: ./reward_model_ckpt
   save_iter: 1000

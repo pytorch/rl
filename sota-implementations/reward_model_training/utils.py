@@ -12,16 +12,20 @@ download, no ``datasets`` dependency).
 """
 from __future__ import annotations
 
+import importlib.util
+
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.data import (
-    LazyTensorStorage,
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
+    TensorStorage,
 )
 from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
+
+_has_datasets = importlib.util.find_spec("datasets") is not None
 
 
 class _RewardModel(nn.Module):
@@ -144,6 +148,12 @@ def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
 
     # Real preference data. ``datasets`` is imported lazily so the synthetic/CI path
     # never requires it.
+    if not _has_datasets:
+        raise ImportError(
+            "Loading a Hugging Face preference dataset requires the optional "
+            "`datasets` dependency. Install the recipe requirements with "
+            "`pip install -r requirements.txt`."
+        )
     from datasets import load_dataset
 
     ds = load_dataset(dataset_name, split=split)
@@ -174,16 +184,12 @@ def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
     )
 
 
-def make_replay_buffer(
-    data: TensorDict, batch_size: int, device: torch.device
-) -> TensorDictReplayBuffer:
-    rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(data.shape[0], device=device),
+def make_replay_buffer(data: TensorDict, batch_size: int) -> TensorDictReplayBuffer:
+    return TensorDictReplayBuffer(
+        storage=TensorStorage(data.cpu(), device="cpu"),
         sampler=SamplerWithoutReplacement(drop_last=True),
         batch_size=batch_size,
     )
-    rb.extend(data)
-    return rb
 
 
 def make_optimizer(cfg, score_network: TensorDictModule) -> torch.optim.Optimizer:

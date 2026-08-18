@@ -60,8 +60,13 @@ Key fields in [`config.yaml`](config.yaml):
 | `data` | `dataset_name` | HF preference dataset; empty -> synthetic data (CI). |
 | `data` | `max_length`, `batch_size`, `max_samples` | Tokenization / sampling. |
 | `optim` | `max_iters`, `lr`, `freeze_frac`, `clip_grad` | Optimization. |
-| `loss` | `reduction`, `center_coeff` | Bradley-Terry loss options. |
+| `loss` | `reduction`, `center_coeff` | Bradley-Terry loss options (`reduction` must be `mean` or `sum`). |
 | `logger` | `backend`, `eval_iter`, `eval_iters` | Logging / evaluation. |
+
+Periodic checkpoints are stored under `checkpoint.save_dir/checkpoint-<step>` and the
+last model under `checkpoint.save_dir/checkpoint-final`. Each checkpoint includes the
+matching tokenizer when a Hugging Face tokenizer is used, so checkpoints are directly
+loadable with `from_pretrained`.
 
 ## Hermetic smoke run
 

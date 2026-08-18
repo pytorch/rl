@@ -24,12 +24,18 @@ Examples:
 """
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Literal
+
 import hydra
 import torch
 import tqdm
+from omegaconf import DictConfig
+from tensordict.nn import TensorDictModule
 from torchrl._utils import get_available_device, logger as torchrl_logger, timeit
 from torchrl.objectives.llm import RewardModelLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
+from transformers import PreTrainedTokenizerBase
 from utils import (
     get_vocab_size,
     log_metrics,
@@ -41,8 +47,34 @@ from utils import (
 )
 
 
+def _validate_config(cfg: DictConfig) -> None:
+    if cfg.loss.reduction not in ("mean", "sum"):
+        raise ValueError(
+            "The reward-model training recipe requires loss.reduction to be "
+            f"'mean' or 'sum', got {cfg.loss.reduction!r}."
+        )
+
+
+def _save_checkpoint(
+    score_network: TensorDictModule,
+    tokenizer: PreTrainedTokenizerBase | None,
+    save_dir: str | Path,
+    step: int | Literal["final"],
+) -> Path:
+    checkpoint_name = (
+        f"checkpoint-{step:08d}" if isinstance(step, int) else "checkpoint-final"
+    )
+    checkpoint_dir = Path(save_dir) / checkpoint_name
+    score_network.module.model.save_pretrained(checkpoint_dir)
+    if tokenizer is not None:
+        tokenizer.save_pretrained(checkpoint_dir)
+    return checkpoint_dir
+
+
 @hydra.main(config_path="", config_name="config", version_base="1.1")
-def main(cfg):  # noqa: F821
+def main(cfg: DictConfig) -> None:
+    _validate_config(cfg)
+
     # Logger
     exp_name = generate_exp_name("RewardModel", cfg.logger.exp_name)
     logger = None
@@ -73,15 +105,14 @@ def main(cfg):  # noqa: F821
     with timeit("setup/data"):
         train_data = make_dataset(cfg, tokenizer, cfg.data.split_train, vocab_size)
         val_data = make_dataset(cfg, tokenizer, cfg.data.split_val, vocab_size)
-        train_rb = make_replay_buffer(train_data, cfg.data.batch_size, device)
-        val_rb = make_replay_buffer(val_data, cfg.data.batch_size, device)
+        train_rb = make_replay_buffer(train_data, cfg.data.batch_size)
+        val_rb = make_replay_buffer(val_data, cfg.data.batch_size)
 
     # Loss + optimizer
     loss_module = RewardModelLoss(
         score_network,
         reduction=cfg.loss.reduction,
         center_coeff=cfg.loss.center_coeff,
-        device=device,
     )
     optimizer = make_optimizer(cfg, score_network)
 
@@ -93,7 +124,7 @@ def main(cfg):  # noqa: F821
         score_network.eval()
         losses, accuracies = [], []
         for _ in range(int(cfg.logger.eval_iters)):
-            batch = val_rb.sample()
+            batch = val_rb.sample().to(device)
             out = loss_module(batch)
             losses.append(out.loss_reward_model)
             accuracies.append(out.accuracy)
@@ -110,7 +141,7 @@ def main(cfg):  # noqa: F821
         timeit.printevery(num_prints=1000, total_count=max_iters, erase=True)
 
         with timeit("train/sample"):
-            batch = train_rb.sample()
+            batch = train_rb.sample().to(device)
 
         with timeit("train/forward"):
             loss_out = loss_module(batch)
@@ -145,13 +176,13 @@ def main(cfg):  # noqa: F821
             )
 
         if it % int(cfg.checkpoint.save_iter) == 0:
-            score_network.module.model.save_pretrained(cfg.checkpoint.save_dir)
+            _save_checkpoint(score_network, tokenizer, cfg.checkpoint.save_dir, step=it)
 
         if logger is not None and it % int(cfg.logger.log_interval) == 0:
             metrics_to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, metrics_to_log, it)
 
-    score_network.module.model.save_pretrained(cfg.checkpoint.save_dir)
+    _save_checkpoint(score_network, tokenizer, cfg.checkpoint.save_dir, step="final")
     pbar.close()
 
 
