@@ -29,6 +29,7 @@ __all__ = [
     "td_lambda_advantage_estimate",
     "vec_td_lambda_advantage_estimate",
     "vtrace_advantage_estimate",
+    "retrace_lambda_return_estimate",
 ]
 
 from torchrl.objectives.value.utils import (
@@ -1375,6 +1376,187 @@ def vtrace_advantage_estimate(
     )
 
     return advantages, vs
+
+
+########################################################################
+# Retrace(lambda)
+# ---------------
+
+
+def _generalized_trace_correction(
+    gamma: float | torch.Tensor,
+    c: torch.Tensor,
+    delta: torch.Tensor,
+    done: torch.Tensor,
+    time_dim: int = -2,
+) -> torch.Tensor:
+    r"""Backward recursion shared by the off-policy trace-return estimators.
+
+    Computes, for every :math:`t`,
+
+    .. math::
+
+        \Delta_t = \delta_t + \gamma (1 - d_t) c_t \Delta_{t+1}
+
+    which expands into the trace series
+
+    .. math::
+
+        \Delta_t = \sum_{k \geq t} \gamma^{k-t}
+            \left( \prod_{s=t}^{k-1} c_s \right) \delta_k
+
+    This is the general off-policy return operator of Munos et al. 2016
+    (Table 1): Retrace(:math:`\lambda`), Tree-Backup(:math:`\lambda`),
+    Q(:math:`\lambda`) and plain importance sampling differ only in how ``c``
+    and ``delta`` are built, not in this recursion.
+
+    ``c`` follows the *aligned* convention: ``c[..., t, :]`` is the coefficient
+    multiplying :math:`\Delta_{t+1}`. Estimators whose definition indexes the
+    trace product from :math:`s = t+1` -- Retrace among them -- must shift
+    their coefficients before calling this helper.
+
+    ``done`` cuts the trace at episode boundaries, so a trajectory never
+    borrows credit from the one that follows it in the same batch.
+
+    Args:
+        gamma (scalar or Tensor): exponential mean discount.
+        c (Tensor): trace coefficients, aligned as described above.
+        delta (Tensor): per-step temporal-difference errors.
+        done (Tensor): boolean end-of-episode flag.
+        time_dim (int): dimension where time is unrolled. Defaults to ``-2``.
+
+    Returns:
+        The trace correction, with the same shape as ``delta``.
+    """
+    # Cast to the value dtype rather than to int: an int mask scaled by a
+    # Python float would silently produce float32 discounts and degrade a
+    # float64 computation.
+    not_done = (~done).to(delta.dtype)
+    done_discounts = gamma * not_done
+    time_steps = delta.shape[time_dim]
+
+    trace = [torch.zeros_like(delta[..., -1, :])]
+    for i in reversed(range(time_steps)):
+        trace.append(
+            delta[..., i, :] + done_discounts[..., i, :] * c[..., i, :] * trace[-1]
+        )
+    out = torch.stack(trace[1:], dim=time_dim)
+    return torch.flip(out, dims=[time_dim])
+
+
+@_transpose_time
+def retrace_lambda_return_estimate(
+    gamma: float,
+    lmbda: float | torch.Tensor,
+    log_pi: torch.Tensor,
+    log_mu: torch.Tensor,
+    action_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
+    time_dim: int = -2,
+) -> torch.Tensor:
+    r"""Computes the Retrace(:math:`\lambda`) off-policy action-value target.
+
+    Retrace(:math:`\lambda`) is the safe and efficient off-policy return
+    operator of "Safe and Efficient Off-Policy Reinforcement Learning",
+    Munos et al. 2016, https://arxiv.org/abs/1606.02647. It uses the trace
+    coefficient
+
+    .. math::
+
+        c_s = \lambda \min\left(1, \frac{\pi(a_s|x_s)}{\mu(a_s|x_s)}\right)
+
+    whose truncation at 1 keeps the variance of the correction bounded no
+    matter how far the behaviour policy :math:`\mu` is from the target policy
+    :math:`\pi`, while remaining a contraction around :math:`Q^\pi`.
+
+    The target is :math:`Q(x_t, a_t) + \Delta_t` with
+
+    .. math::
+
+        \delta_t = r_t + \gamma \mathbb{E}_\pi Q(x_{t+1}, \cdot) - Q(x_t, a_t)
+
+    Note that, unlike V-Trace, the temporal-difference error carries *no*
+    importance-sampling factor of its own: only the trace product is
+    corrected.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        lmbda (scalar or Tensor): trace decay parameter. ``1.0`` recovers the
+            untruncated correction, ``0.0`` reduces the target to a one-step
+            expected-SARSA backup.
+        log_pi (Tensor): target-policy log-probability of the actions taken.
+        log_mu (Tensor): behaviour-policy log-probability of the actions taken,
+            as recorded at collection time.
+        action_value (Tensor): :math:`Q(x_t, a_t)` for the actions taken.
+        next_state_value (Tensor): :math:`\mathbb{E}_\pi Q(x_{t+1}, \cdot)`,
+            the target-policy expectation of the action-value at the next
+            state.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode. Cuts the trace.
+        terminated (Tensor, optional): boolean flag for terminated episodes.
+            Controls bootstrapping. If ``None``, defaults to ``done``.
+        time_dim (int): dimension where the time is unrolled. Defaults to
+            ``-2``.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
+
+    Returns:
+        The Retrace(:math:`\lambda`) action-value target, shaped like
+        ``action_value``.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.objectives.value.functional import (
+        ...     retrace_lambda_return_estimate,
+        ... )
+        >>> T = 5
+        >>> reward = torch.randn(1, T, 1)
+        >>> action_value = torch.randn(1, T, 1)
+        >>> next_state_value = torch.randn(1, T, 1)
+        >>> log_pi = torch.log(torch.rand(1, T, 1))
+        >>> log_mu = torch.log(torch.rand(1, T, 1))
+        >>> done = torch.zeros(1, T, 1, dtype=torch.bool)
+        >>> target = retrace_lambda_return_estimate(
+        ...     0.99, 0.95, log_pi, log_mu, action_value,
+        ...     next_state_value, reward, done, done,
+        ... )
+        >>> target.shape
+        torch.Size([1, 5, 1])
+    """
+    if not (next_state_value.shape == action_value.shape == reward.shape == done.shape):
+        raise RuntimeError(SHAPE_ERR)
+
+    if terminated is None:
+        terminated = done.clone()
+
+    not_terminated = (~terminated).to(action_value.dtype)
+    terminated_discounts = gamma * not_terminated
+
+    # Retrace corrects only the trace, never the TD error itself.
+    delta = reward + terminated_discounts * next_state_value - action_value
+
+    if not isinstance(lmbda, torch.Tensor):
+        # Build at the value dtype: the default float32 would round a
+        # non-dyadic lambda (0.95 and friends) before it ever reaches the
+        # recursion.
+        lmbda = torch.tensor(
+            lmbda, device=action_value.device, dtype=action_value.dtype
+        )
+    ratio = (log_pi - log_mu).exp()
+    c = lmbda.to(action_value.device) * ratio.clamp_max(1.0)
+
+    # The trace product runs over s = t+1 .. k, not s = t .. k-1: the action at
+    # t is the one Q is conditioned on, so it needs no correction. Shift left so
+    # that c[..., t, :] multiplies Delta_{t+1}. The final slot multiplies
+    # Delta_T = 0 and is therefore arbitrary.
+    c = torch.cat([c[..., 1:, :], torch.zeros_like(c[..., -1:, :])], dim=-2)
+
+    correction = _generalized_trace_correction(gamma, c, delta, done, time_dim=-2)
+    return action_value + correction
 
 
 ########################################################################
