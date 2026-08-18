@@ -21,6 +21,10 @@ Parameters:
 environment instances themselves.
 - **backend** (*Literal**[**"threading"**,**"multiprocessing"**,**"asyncio"**]**,**optional*) - The backend to use for parallel execution. Defaults to "threading".
 - **stack** (*Literal**[**"dense"**,**"maybe_dense"**,**"lazy"**]**,**optional*) - The method to use for stacking environment outputs. Defaults to "dense".
+- **exchange** (*Literal**[**"queue"**,**"shm"**]**,**optional*) - Data exchange used by the
+multiprocessing backend. `"shm"` stores fixed-shape tensor data in
+shared slots and sends only readiness descriptors through queues.
+Defaults to `"queue"`.
 - **create_env_kwargs** (*dict**,**optional*) - Keyword arguments to pass to the environment maker. Defaults to {}.
 
 Variables:
@@ -2805,6 +2809,19 @@ Composite(
 *property*state_spec_unbatched*: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*
 
 Returns the state spec of the env as if it had no batch dimensions.
+
+stats(***, *reset: bool = False*) → dict[str, float | int][[source]](../../_modules/torchrl/envs/async_envs.html#AsyncEnvPool.stats)
+
+Return shared-memory exchange statistics.
+
+Parameters:
+
+**reset** - Whether to clear the counters after taking the snapshot.
+
+Returns:
+
+Batch counts, fill rates, and exchange latency statistics. Queue
+and threading exchanges return an empty dictionary.
 
 step(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/async_envs.html#AsyncEnvPool.step)
 

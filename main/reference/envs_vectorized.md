@@ -322,6 +322,28 @@ the output of others.
 This family of classes is particularly interesting when dealing with environments that have a high (and/or variable)
 latency.
 
+The multiprocessing backend can use fixed shared-memory slots instead of sending
+TensorDict payloads through queues:
+
+```
+env = AsyncEnvPool(
+ [make_env] * 32,
+ backend="multiprocessing",
+ exchange="shm",
+)
+```
+
+This mode requires identical child batch sizes, TensorDict keys, tensor shapes,
+and CPU devices. Queue exchange remains the default for dynamic or non-tensor
+data. Receive methods also accept `max_get` and `timeout`. `min_get` is a
+hard lower bound. The timeout starts when the first result arrives and does not
+limit the wait for `min_get` results. After `min_get` is reached, the call
+returns when that deadline expires or `max_get` results have arrived. Exchange
+statistics are available through `env.stats()`. Dense batches and
+per-environment receives own their tensor storage. Aggregate batches returned
+with `stack="lazy"` are views over the shared slots and remain valid only until
+actions are sent back to the corresponding environments.
+
 Note
 
 This class and its subclasses should work when nested in with [`TransformedEnv`](generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv) and

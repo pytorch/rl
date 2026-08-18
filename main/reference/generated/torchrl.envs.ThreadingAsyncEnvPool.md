@@ -2711,6 +2711,19 @@ Composite(
 
 Returns the state spec of the env as if it had no batch dimensions.
 
+stats(***, *reset: bool = False*) → dict[str, float | int]
+
+Return shared-memory exchange statistics.
+
+Parameters:
+
+**reset** - Whether to clear the counters after taking the snapshot.
+
+Returns:
+
+Batch counts, fill rates, and exchange latency statistics. Queue
+and threading exchanges return an empty dictionary.
+
 step(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
 Makes a step in the environment.
