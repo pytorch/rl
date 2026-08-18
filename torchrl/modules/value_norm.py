@@ -14,6 +14,11 @@ implementations:
 - :class:`RunningValueNorm` — exact Welford running mean / variance with no
   decay. Cheaper and more stable when value targets are stationary; tends to
   be the better default for shorter / non-curriculum runs.
+- :class:`PercentileValueNorm` — exponential-moving-average of a low / high
+  quantile pair, rescaling by the clamped span between them (the DreamerV3
+  "return normalisation", Hafner et al. 2023,
+  https://arxiv.org/abs/2301.04104). Scale-only by default, which suits
+  advantage scaling.
 
 Plug any subclass into :class:`~torchrl.objectives.multiagent.MAPPOLoss` (or
 your own actor-critic loss) via ``value_norm=...``.
@@ -73,6 +78,15 @@ class ValueNorm(nn.Module, metaclass=ABCMeta):
     @abstractmethod
     def denormalize(self, normalised_value: torch.Tensor) -> torch.Tensor:
         """Inverse of :meth:`normalize` — recover real-scale values."""
+
+    @abstractmethod
+    def scale(self) -> torch.Tensor:
+        """Multiplicative scale currently applied by :meth:`normalize`.
+
+        Exposed separately so consumers can rescale quantities that must not
+        be re-centred, e.g. advantages (already centred by the value
+        baseline), for which only the division by the scale applies.
+        """
 
     # ------------------------------------------------------- shared helpers
 
@@ -161,6 +175,10 @@ class PopArtValueNorm(ValueNorm):
         mean, var = self._running_stats()
         return normalised_value * var.sqrt() + mean
 
+    def scale(self) -> torch.Tensor:
+        _, var = self._running_stats()
+        return var.sqrt()
+
 
 class RunningValueNorm(ValueNorm):
     """Exact running mean / variance (Welford's online algorithm).
@@ -238,3 +256,104 @@ class RunningValueNorm(ValueNorm):
 
     def denormalize(self, normalised_value: torch.Tensor) -> torch.Tensor:
         return normalised_value * self._var().sqrt() + self.mean
+
+    def scale(self) -> torch.Tensor:
+        return self._var().sqrt()
+
+
+class PercentileValueNorm(ValueNorm):
+    """DreamerV3-style EMA percentile-range value normaliser.
+
+    Tracks exponential moving averages of a low and a high quantile of the
+    value targets and rescales by the span between them, clamped from below:
+    ``scale = max(min_scale, high - low)``. Following DreamerV3 (Hafner et
+    al., *Mastering Diverse Domains through World Models*, 2023,
+    https://arxiv.org/abs/2301.04104), the clamp scales large values down
+    without amplifying small or noisy ones, which keeps fixed coefficients
+    such as an entropy bonus comparable across reward scales.
+
+    By default (``center=False``) :meth:`normalize` only divides by the
+    span — the DreamerV3 recipe for advantages, which are already centred by
+    the value baseline. With ``center=True`` the low-percentile EMA is also
+    subtracted, mapping the tracked percentile range onto ``[0, 1]``.
+
+    Keyword Args:
+        shape: per-element shape of the value tensor (everything except the
+            leading batch / time / agent dims that get reduced). Defaults to
+            ``1``.
+        quantiles: lower and upper quantiles tracked by the EMA. Defaults to
+            ``(0.05, 0.95)``.
+        rate: EMA update rate towards the batch quantiles; higher = faster
+            adaptation. Defaults to ``0.01``.
+        min_scale: lower bound of the normalisation scale. Defaults to
+            ``1.0``.
+        center: if ``True``, subtract the low-percentile EMA in
+            :meth:`normalize`. Defaults to ``False``.
+        epsilon: kept for interface parity with the other normalisers;
+            unused because ``min_scale`` already bounds the divisor.
+        device: device for the running-stats buffers.
+
+    Example:
+        >>> vn = PercentileValueNorm(shape=1, rate=1.0)
+        >>> returns = torch.linspace(0.0, 100.0, steps=101).unsqueeze(-1)
+        >>> vn.update(returns)
+        >>> vn.scale()
+        tensor([90.])
+        >>> vn.normalize(torch.tensor([45.0]))
+        tensor([0.5000])
+    """
+
+    def __init__(
+        self,
+        *,
+        shape: int | tuple[int, ...] = 1,
+        quantiles: tuple[float, float] = (0.05, 0.95),
+        rate: float = 0.01,
+        min_scale: float = 1.0,
+        center: bool = False,
+        epsilon: float = 1e-5,
+        device: torch.device | None = None,
+    ) -> None:
+        super().__init__(shape=shape, epsilon=epsilon, device=device)
+        low, high = quantiles
+        if not 0 <= low < high <= 1:
+            raise ValueError(
+                f"quantiles must satisfy 0 <= low < high <= 1, got {quantiles}."
+            )
+        if not 0 <= rate <= 1:
+            raise ValueError(f"rate must be in [0, 1], got {rate}.")
+        if min_scale <= 0:
+            raise ValueError(f"min_scale must be positive, got {min_scale}.")
+        self.quantiles = (float(low), float(high))
+        self.rate = rate
+        self.min_scale = min_scale
+        self.center = center
+        self.register_buffer("low", torch.zeros(self.shape, device=device))
+        self.register_buffer("high", torch.zeros(self.shape, device=device))
+        self.register_buffer(
+            "_q",
+            torch.tensor([float(low), float(high)], device=device),
+            persistent=False,
+        )
+
+    @torch.no_grad()
+    def update(self, value_target: torch.Tensor) -> None:
+        value_target = value_target.detach()
+        self._check_trailing_shape(value_target)
+        flat = value_target.reshape(-1, *self.shape).to(self.low.dtype)
+        batch_low, batch_high = torch.quantile(flat, self._q.to(flat.dtype), dim=0)
+        self.low.lerp_(batch_low, self.rate)
+        self.high.lerp_(batch_high, self.rate)
+
+    def normalize(self, value_target: torch.Tensor) -> torch.Tensor:
+        if self.center:
+            return (value_target - self.low) / self.scale()
+        return value_target / self.scale()
+
+    def denormalize(self, normalised_value: torch.Tensor) -> torch.Tensor:
+        if self.center:
+            return normalised_value * self.scale() + self.low
+        return normalised_value * self.scale()
+
+    def scale(self) -> torch.Tensor:
+        return (self.high - self.low).clamp_min(self.min_scale)
