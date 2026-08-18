@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 import tensordict
 import torch
-
 from tensordict import lazy_stack, MetaData, TensorDict
 from tensordict.nn import TensorDictModule
+
 from torchrl._utils import logger
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.data.llm.history import _CHAT_TEMPLATES
@@ -1504,15 +1504,18 @@ class TestGRPOLossIntegration:
 
 
 class _Scorer(torch.nn.Module):
-    """A tiny, dependency-free score network mapping input_ids -> scalar score."""
+    """A tiny, dependency-free score network mapping tokens to a scalar score."""
 
     def __init__(self, vocab_size: int = 128, embed_dim: int = 8):
         super().__init__()
         self.embed = torch.nn.Embedding(vocab_size, embed_dim)
         self.head = torch.nn.Linear(embed_dim, 1)
 
-    def forward(self, input_ids):
-        return self.head(self.embed(input_ids).float().mean(-2))
+    def forward(self, input_ids, attention_mask):
+        hidden = self.embed(input_ids).float()
+        mask = attention_mask.unsqueeze(-1)
+        pooled = (hidden * mask).sum(-2) / mask.sum(-2).clamp_min(1)
+        return self.head(pooled)
 
 
 class TestRewardModel:
@@ -1526,19 +1529,27 @@ class TestRewardModel:
         from tensordict.nn import TensorDictModule
 
         return TensorDictModule(
-            _Scorer(self.vocab_size), in_keys=["input_ids"], out_keys=["score"]
+            _Scorer(self.vocab_size),
+            in_keys=["input_ids", "attention_mask"],
+            out_keys=["score"],
         )
 
     def _make_data(self, chosen_key="chosen", rejected_key="rejected"):
-        def _ids():
-            return torch.randint(0, self.vocab_size, (self.batch_size, self.seq_len))
+        def _response():
+            attention_mask = torch.ones(self.batch_size, self.seq_len, dtype=torch.bool)
+            attention_mask[:, -4:] = False
+            return TensorDict(
+                input_ids=torch.randint(
+                    0, self.vocab_size, (self.batch_size, self.seq_len)
+                ),
+                attention_mask=attention_mask,
+                batch_size=[self.batch_size],
+            )
 
         return TensorDict(
             {
-                chosen_key: TensorDict(input_ids=_ids(), batch_size=[self.batch_size]),
-                rejected_key: TensorDict(
-                    input_ids=_ids(), batch_size=[self.batch_size]
-                ),
+                chosen_key: _response(),
+                rejected_key: _response(),
             },
             batch_size=[self.batch_size],
         )
@@ -1557,6 +1568,13 @@ class TestRewardModel:
         torch.testing.assert_close(
             reward_model_loss(chosen, rejected, "sum"), expected.sum()
         )
+
+    def test_invalid_reduction_raises_during_initialization(self):
+        with pytest.raises(ValueError, match="Invalid reduction"):
+            RewardModelLoss(
+                score_network=self._score_network(),
+                reduction="invalid",
+            )
 
     def test_forward_output_type_and_backward(self):
         loss_fn = RewardModelLoss(score_network=self._score_network())
@@ -1621,6 +1639,42 @@ class TestRewardModel:
         out = loss_fn(td)
         assert torch.isfinite(out.loss_reward_model)
         assert ("data", "chosen") in loss_fn.in_keys
+
+    def test_nested_score_key(self):
+        """A custom precomputed-score key does not alter a network's output key."""
+        score_network = self._score_network()
+        loss_fn = RewardModelLoss(score_network=score_network)
+        loss_fn.set_keys(score=("metrics", "score"))
+        assert score_network.out_keys == ["score"]
+        out = loss_fn(self._make_data())
+        assert torch.isfinite(out.loss_reward_model)
+
+    def test_nested_precomputed_score_key(self):
+        """Exercise NestedKey score lookup via set_keys for precomputed scores."""
+        loss_fn = RewardModelLoss(score_network=None)
+        loss_fn.set_keys(score=("metrics", "score"))
+        chosen = torch.randn(self.batch_size)
+        rejected = torch.randn(self.batch_size)
+        td = TensorDict(
+            {
+                "chosen": TensorDict(
+                    {"metrics": TensorDict(score=chosen, batch_size=[self.batch_size])},
+                    batch_size=[self.batch_size],
+                ),
+                "rejected": TensorDict(
+                    {
+                        "metrics": TensorDict(
+                            score=rejected, batch_size=[self.batch_size]
+                        )
+                    },
+                    batch_size=[self.batch_size],
+                ),
+            },
+            batch_size=[self.batch_size],
+        )
+        out = loss_fn(td)
+        expected = -torch.nn.functional.logsigmoid(chosen - rejected).mean()
+        torch.testing.assert_close(out.loss_reward_model, expected)
 
     def test_missing_key_raises(self):
         loss_fn = RewardModelLoss(score_network=self._score_network())
