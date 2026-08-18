@@ -18,7 +18,7 @@ from _objectives_common import (
     LossModuleTestBase,
 )
 
-from tensordict import assert_allclose_td, TensorDict
+from tensordict import assert_allclose_td, tensorclass, TensorDict
 from tensordict.nn import (
     NormalParamExtractor,
     ProbabilisticTensorDictModule as ProbMod,
@@ -281,6 +281,21 @@ class TestIQL(LossModuleTestBase):
         )
         self.reset_parameters_recursive_test(loss_fn)
 
+    @staticmethod
+    def _as_iql_tensorclass(td):
+        @tensorclass
+        class MyData:
+            observation: torch.Tensor
+            action: torch.Tensor
+            next: TensorDict  # noqa: A003
+            td_error: torch.Tensor | None = None
+            _log_prob: torch.Tensor | None = None
+            loc: torch.Tensor | None = None
+            scale: torch.Tensor | None = None
+
+        return MyData(**td, batch_size=td.batch_size)
+
+    @pytest.mark.parametrize("as_tensorclass", [False, True])
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
@@ -293,9 +308,12 @@ class TestIQL(LossModuleTestBase):
         temperature,
         expectile,
         td_est,
+        as_tensorclass,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(device=device)
+        if as_tensorclass:
+            td = self._as_iql_tensorclass(td)
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
@@ -919,6 +937,32 @@ class TestIQL(LossModuleTestBase):
                 return
             assert loss_actor == loss_val_td["loss_actor"]
             assert loss_value == loss_val_td["loss_value"]
+
+    def test_iql_tensorclass_parity(self):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_iql()
+
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+
+        loss_fn = IQLLoss(
+            actor_network=actor, qvalue_network=qvalue, value_network=value
+        )
+        data = self._as_iql_tensorclass(td)
+
+        with pytest.warns(
+            UserWarning, match="No target network updater"
+        ) if rl_warnings() else contextlib.nullcontext():
+            torch.manual_seed(self.seed)
+            loss_val_tc = loss_fn(data)
+            torch.manual_seed(self.seed)
+            loss_val_td = loss_fn(td)
+        assert_allclose_td(loss_val_td, loss_val_tc)
+        torch.testing.assert_close(
+            data.get(loss_fn.tensor_keys.priority),
+            td.get(loss_fn.tensor_keys.priority),
+        )
 
     @pytest.mark.parametrize("reduction", [None, "none", "mean", "sum"])
     def test_iql_reduction(self, reduction):
