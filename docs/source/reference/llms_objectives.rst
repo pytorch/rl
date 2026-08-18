@@ -37,6 +37,7 @@ Reward Model Training
     :toctree: generated/
     :template: rl_template.rst
 
+    reward_model_loss
     RewardModelLoss
     RewardModelLossOutput
 

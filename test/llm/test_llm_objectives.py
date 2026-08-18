@@ -14,13 +14,17 @@ import tensordict
 import torch
 from tensordict import lazy_stack, MetaData, TensorDict
 from tensordict.nn import TensorDictModule
-
 from torchrl._utils import logger
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
 from torchrl.data.llm.history import _CHAT_TEMPLATES
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
+from torchrl.objectives.llm import (
+    reward_model_loss,
+    RewardModelLoss,
+    RewardModelLossOutput,
+)
 from torchrl.objectives.llm.distillation import (
     _distillation_loss,
     DistillationLoss,
@@ -35,11 +39,6 @@ from torchrl.objectives.llm.grpo import (
     MCAdvantage,
     MCAdvantageSelector,
     RayMCAdvantage,
-)
-from torchrl.objectives.llm.reward import (
-    reward_model_loss,
-    RewardModelLoss,
-    RewardModelLossOutput,
 )
 from torchrl.objectives.llm.sft import SFTLoss
 
@@ -1526,8 +1525,6 @@ class TestRewardModel:
     batch_size = 4
 
     def _score_network(self):
-        from tensordict.nn import TensorDictModule
-
         return TensorDictModule(
             _Scorer(self.vocab_size),
             in_keys=["input_ids", "attention_mask"],

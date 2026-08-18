@@ -10,6 +10,7 @@ model and a synthetic preference dataset are used when ``model.name`` /
 ``data.dataset_name`` are left empty, which keeps the CI smoke test hermetic (no
 download, no ``datasets`` dependency).
 """
+
 from __future__ import annotations
 
 import importlib.util

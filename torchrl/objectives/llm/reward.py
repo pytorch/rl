@@ -10,7 +10,6 @@ from typing import Literal
 import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
 from tensordict.nn import TensorDictModule
-
 from torchrl.objectives.common import LossModule
 
 _REDUCTIONS = ("mean", "sum", "none")

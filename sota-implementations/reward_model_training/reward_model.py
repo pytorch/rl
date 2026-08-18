@@ -22,6 +22,7 @@ Examples:
         python reward_model.py model.name= data.dataset_name= \\
             optim.max_iters=3 logger.backend=
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,7 +72,7 @@ def _save_checkpoint(
     return checkpoint_dir
 
 
-@hydra.main(config_path="", config_name="config", version_base="1.1")
+@hydra.main(config_path="", config_name="config", version_base="1.3")
 def main(cfg: DictConfig) -> None:
     _validate_config(cfg)
 
