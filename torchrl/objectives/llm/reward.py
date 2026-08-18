@@ -4,15 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import contextlib
-
 from dataclasses import dataclass
 from typing import Literal
 
 import torch
 from tensordict import NestedKey, TensorClass, TensorDictBase
 from tensordict.nn import TensorDictModule
+
 from torchrl.objectives.common import LossModule
+
+_REDUCTIONS = ("mean", "sum", "none")
+
+
+def _validate_reduction(reduction: str) -> None:
+    if reduction not in _REDUCTIONS:
+        raise ValueError(f"Invalid reduction: {reduction}.")
 
 
 def reward_model_loss(
@@ -44,14 +50,13 @@ def reward_model_loss(
         - Ralph Allan Bradley, Milton E. Terry, 1952. "Rank Analysis of Incomplete Block
           Designs: I. The Method of Paired Comparisons".
     """
+    _validate_reduction(reduction)
     loss = -torch.nn.functional.logsigmoid(chosen_scores - rejected_scores)
     if reduction == "mean":
         return loss.mean()
     if reduction == "sum":
         return loss.sum()
-    if reduction == "none":
-        return loss
-    raise ValueError(f"Invalid reduction: {reduction}.")
+    return loss
 
 
 class RewardModelLossOutput(TensorClass["nocast"]):
@@ -111,10 +116,6 @@ class RewardModelLoss(LossModule):
             ``center_coeff * (chosen_score**2 + rejected_score**2)`` that discourages
             the reward model from drifting to large magnitudes. Defaults to ``None``
             (disabled).
-        device (torch.device or str, optional): if provided, chosen/rejected
-            sub-tensordicts are moved to this device before scoring and loss
-            computation. The ``score_network`` is expected to already be on this
-            device. Defaults to ``None``.
 
     .. note::
         The input tensordict is expected to contain the following keys by default:
@@ -124,8 +125,9 @@ class RewardModelLoss(LossModule):
             - ``"rejected"``: the corresponding sub-tensordict for the rejected
               response.
 
-        These keys (and the ``score`` output key) can be customized using the
-        :meth:`~torchrl.objectives.common.LossModule.set_keys` method.
+        The chosen/rejected keys and the precomputed ``score`` key can be customized
+        using :meth:`~torchrl.objectives.common.LossModule.set_keys`. When a score
+        network is provided, its declared output key is used instead.
 
     .. seealso:: :class:`~torchrl.modules.models.llm.GPT2RewardModel` for a ready-made
         GPT2-based reward-model backbone, and
@@ -152,19 +154,28 @@ class RewardModelLoss(LossModule):
         ...         self.embed = torch.nn.Embedding(vocab_size, embed_dim)
         ...         self.head = torch.nn.Linear(embed_dim, 1)
         ...
-        ...     def forward(self, input_ids):
-        ...         return self.head(self.embed(input_ids).mean(-2))
+        ...     def forward(self, input_ids, attention_mask):
+        ...         hidden = self.embed(input_ids)
+        ...         mask = attention_mask.unsqueeze(-1)
+        ...         pooled = (hidden * mask).sum(-2) / mask.sum(-2).clamp_min(1)
+        ...         return self.head(pooled)
         >>>
         >>> score_network = TensorDictModule(
-        ...     Scorer(), in_keys=["input_ids"], out_keys=["score"]
+        ...     Scorer(), in_keys=["input_ids", "attention_mask"], out_keys=["score"]
         ... )
         >>> loss_fn = RewardModelLoss(score_network=score_network)
+        >>> attention_mask = torch.ones(4, 16, dtype=torch.bool)
+        >>> attention_mask[:, -4:] = False
         >>> data = TensorDict(
         ...     chosen=TensorDict(
-        ...         input_ids=torch.randint(0, 128, (4, 16)), batch_size=[4]
+        ...         input_ids=torch.randint(0, 128, (4, 16)),
+        ...         attention_mask=attention_mask,
+        ...         batch_size=[4],
         ...     ),
         ...     rejected=TensorDict(
-        ...         input_ids=torch.randint(0, 128, (4, 16)), batch_size=[4]
+        ...         input_ids=torch.randint(0, 128, (4, 16)),
+        ...         attention_mask=attention_mask,
+        ...         batch_size=[4],
         ...     ),
         ...     batch_size=[4],
         ... )
@@ -187,8 +198,9 @@ class RewardModelLoss(LossModule):
             rejected (NestedKey): The input tensordict key where the rejected response
                 sub-tensordict is expected. Defaults to ``"rejected"``.
             score (NestedKey): The key (within each chosen/rejected sub-tensordict)
-                where the per-sequence scalar score is written by ``score_network`` or
-                read from when ``score_network`` is ``None``. Defaults to ``"score"``.
+                where a precomputed per-sequence scalar score is read when
+                ``score_network`` is ``None``. When a score network is provided, its
+                declared output key is used. Defaults to ``"score"``.
         """
 
         chosen: NestedKey = "chosen"
@@ -204,13 +216,12 @@ class RewardModelLoss(LossModule):
         *,
         reduction: Literal["mean", "sum", "none"] = "mean",
         center_coeff: float | None = None,
-        device: torch.device | str | None = None,
     ) -> None:
+        _validate_reduction(reduction)
         super().__init__()
         self.score_network = score_network
         self.reduction = reduction
         self.center_coeff = center_coeff
-        self.device = torch.device(device) if device is not None else None
         self._set_in_keys()
 
     def _set_in_keys(self) -> None:
@@ -226,19 +237,26 @@ class RewardModelLoss(LossModule):
                 f"Could not find the sub-tensordict at key {key!r} in the input "
                 f"tensordict with keys {set(tensordict.keys())}."
             )
-        if self.device is not None:
-            sub_td = sub_td.to(self.device)
         if self.score_network is not None:
-            with (
-                torch.device(self.device)
-                if self.device is not None
-                else contextlib.nullcontext()
-            ):
-                sub_td = self.score_network(sub_td)
-        score = sub_td.get(self.tensor_keys.score, default=None)
+            sub_td = self.score_network(sub_td)
+            score_keys = self.score_network.out_keys
+            if self.tensor_keys.score in score_keys:
+                score_key = self.tensor_keys.score
+            elif self.default_keys().score in score_keys:
+                score_key = self.default_keys().score
+            elif len(score_keys) == 1:
+                score_key = score_keys[0]
+            else:
+                raise KeyError(
+                    "Could not identify the score_network output key: expected "
+                    f"{self.tensor_keys.score!r} among {score_keys!r}."
+                )
+        else:
+            score_key = self.tensor_keys.score
+        score = sub_td.get(score_key, default=None)
         if score is None:
             raise KeyError(
-                f"Could not find the score at key {self.tensor_keys.score!r} under "
+                f"Could not find the score at key {score_key!r} under "
                 f"{key!r}. If score_network is None, the scores must be precomputed."
             )
         # reduce a trailing singleton dimension (e.g. [B, 1] -> [B])
