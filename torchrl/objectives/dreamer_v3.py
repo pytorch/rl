@@ -40,6 +40,7 @@ from torchrl.modules.models.model_based import (  # noqa: F401
     two_hot_decode as _two_hot_decode,
     two_hot_encode as _two_hot_encode,
 )
+from torchrl.modules.value_norm import PercentileValueNorm
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
@@ -529,7 +530,10 @@ class DreamerV3ActorLoss(LossModule):
     estimators divide the objective by an exponential moving average of the
     5th-95th return-percentile span, ``max(min_scale, high - low)``,
     following DreamerV3. This keeps the fixed entropy bonus ``eta``
-    comparable across reward scales.
+    comparable across reward scales. The statistics live in a
+    :class:`~torchrl.modules.PercentileValueNorm` submodule
+    (``self.retnorm``); ``return_low`` / ``return_high`` are exposed as
+    read-through views for logging.
 
     Reference: https://arxiv.org/abs/2301.04104
 
@@ -709,21 +713,11 @@ class DreamerV3ActorLoss(LossModule):
         self.entropy_bonus = entropy_bonus
         self.use_reinforce = use_reinforce
         self.return_normalization = return_normalization
-        if not 0 <= return_normalization_rate <= 1:
-            raise ValueError("return_normalization_rate must be in [0, 1].")
-        lower_quantile, upper_quantile = return_normalization_quantiles
-        if not 0 <= lower_quantile < upper_quantile <= 1:
-            raise ValueError(
-                "return_normalization_quantiles must satisfy "
-                "0 <= lower < upper <= 1."
-            )
-        if return_normalization_min_scale <= 0:
-            raise ValueError("return_normalization_min_scale must be positive.")
-        self.return_normalization_rate = return_normalization_rate
-        self.return_normalization_quantiles = return_normalization_quantiles
-        self.return_normalization_min_scale = return_normalization_min_scale
-        self.register_buffer("return_low", torch.tensor(0.0))
-        self.register_buffer("return_high", torch.tensor(0.0))
+        self.retnorm = PercentileValueNorm(
+            quantiles=return_normalization_quantiles,
+            rate=return_normalization_rate,
+            min_scale=return_normalization_min_scale,
+        )
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
@@ -856,20 +850,30 @@ class DreamerV3ActorLoss(LossModule):
         if not self.return_normalization:
             return torch.ones((), dtype=returns.dtype, device=returns.device)
         if self.training:
-            quantiles = torch.tensor(
-                self.return_normalization_quantiles,
-                dtype=self.return_low.dtype,
-                device=self.return_low.device,
-            )
-            current_low, current_high = torch.quantile(
-                returns.detach().to(self.return_low), quantiles
-            )
-            with torch.no_grad():
-                self.return_low.lerp_(current_low, self.return_normalization_rate)
-                self.return_high.lerp_(current_high, self.return_normalization_rate)
-        return (self.return_high - self.return_low).clamp_min(
-            self.return_normalization_min_scale
-        )
+            self.retnorm.update(returns)
+        return self.retnorm.scale().squeeze(-1)
+
+    @property
+    def return_normalization_rate(self) -> float:
+        return self.retnorm.rate
+
+    @property
+    def return_normalization_quantiles(self) -> tuple[float, float]:
+        return self.retnorm.quantiles
+
+    @property
+    def return_normalization_min_scale(self) -> float:
+        return self.retnorm.min_scale
+
+    @property
+    def return_low(self) -> torch.Tensor:
+        """EMA of the low return quantile (0-dim view of ``retnorm.low``)."""
+        return self.retnorm.low.squeeze(-1)
+
+    @property
+    def return_high(self) -> torch.Tensor:
+        """EMA of the high return quantile (0-dim view of ``retnorm.high``)."""
+        return self.retnorm.high.squeeze(-1)
 
     def lambda_target(
         self,
