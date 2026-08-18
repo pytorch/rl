@@ -37,9 +37,11 @@ from torchrl.objectives.value.advantages import (
 )
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
+    retrace_lambda_return_estimate,
     td0_advantage_estimate,
     td1_advantage_estimate,
     td_lambda_advantage_estimate,
+    td_lambda_return_estimate,
     vec_generalized_advantage_estimate,
     vec_td1_advantage_estimate,
     vec_td_lambda_advantage_estimate,
@@ -1817,6 +1819,322 @@ class TestValues:
         r2 = [torch.cat(list2[0], -1), torch.cat(list2[1], -1)]
         if len(D) == 2:
             r2 = [r2[0].unflatten(-1, D), r2[1].unflatten(-1, D)]
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.95])
+    @pytest.mark.parametrize("N", [(1,), (3,), (7, 3)])
+    @pytest.mark.parametrize("T", [200, 5, 3])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("has_done", [False, True])
+    def test_retrace_lambda(self, device, gamma, lmbda, N, T, dtype, has_done):
+        torch.manual_seed(0)
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        terminated = done.clone()
+        if has_done:
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        action_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        log_pi = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+        log_mu = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+
+        target = retrace_lambda_return_estimate(
+            gamma,
+            lmbda,
+            log_pi,
+            log_mu,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+
+        assert target.shape == action_value.shape
+        assert target.dtype == dtype
+        assert not torch.isnan(target).any()
+        assert not torch.isinf(target).any()
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5])
+    # 0.5 and 1.0 are exactly representable in float32 while 0.1 / 0.95 / 0.99
+    # are not: only the latter catch a discount or lambda that silently drops
+    # to the default dtype inside a float64 estimate.
+    @pytest.mark.parametrize("lmbda", [0.0, 0.1, 0.5, 0.95, 0.99, 1.0])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [50, 5])
+    @pytest.mark.parametrize("has_done", [False, True])
+    def test_retrace_on_policy_matches_td_lambda(
+        self, device, gamma, lmbda, N, T, has_done
+    ):
+        """On-policy, Retrace(lambda) must reduce to TD(lambda).
+
+        This is the defining guarantee of Munos et al. 2016: with pi == mu the
+        trace coefficients collapse to lambda and the correction telescopes
+        into the TD(lambda) return. It is the sharpest available check on the
+        trace alignment, since an off-by-one in the coefficient shift breaks
+        it while leaving shapes and finiteness intact.
+        """
+        torch.manual_seed(0)
+        dtype = torch.double
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        terminated = done.clone()
+        if has_done:
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        action_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        # The telescoping identity needs the next-state expectation to be the
+        # action-value actually taken at t+1; the final entry bootstraps.
+        next_state_value = torch.cat(
+            [
+                action_value[..., 1:, :],
+                torch.randn(*N, 1, 1, device=device, dtype=dtype),
+            ],
+            dim=-2,
+        )
+        log_pi = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+
+        retrace = retrace_lambda_return_estimate(
+            gamma,
+            lmbda,
+            log_pi,
+            log_pi,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+        td_lambda = td_lambda_return_estimate(
+            gamma,
+            lmbda,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+        torch.testing.assert_close(retrace, td_lambda, rtol=1e-12, atol=1e-12)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5])
+    @pytest.mark.parametrize("has_done", [False, True])
+    def test_retrace_lambda_zero_is_expected_sarsa(self, device, gamma, has_done):
+        """lambda=0 kills the trace, leaving a one-step expected-SARSA backup."""
+        torch.manual_seed(0)
+        N, T, dtype = (3,), 10, torch.double
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        terminated = done.clone()
+        if has_done:
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        action_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        log_pi = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+        log_mu = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+
+        target = retrace_lambda_return_estimate(
+            gamma,
+            0.0,
+            log_pi,
+            log_mu,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+        expected = reward + gamma * (~terminated).to(dtype) * next_state_value
+        torch.testing.assert_close(target, expected, rtol=1e-12, atol=1e-12)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5])
+    @pytest.mark.parametrize("lmbda", [0.3, 0.95])
+    @pytest.mark.parametrize("has_done", [False, True])
+    def test_retrace_matches_explicit_paper_reference(
+        self, device, gamma, lmbda, has_done
+    ):
+        """Check the trace against a literal transcription of the paper.
+
+        The reference below expands Munos et al. 2016 eq. (4) as an explicit
+        double loop, so it shares no structure with the backward recursion
+        under test. Crucially it indexes the trace product over
+        ``s = t+1 .. k``: an off-policy sequence with time-varying
+        coefficients is the only thing that pins that alignment down, since
+        on-policy every coefficient equals lambda and a misaligned shift is
+        invisible.
+        """
+        torch.manual_seed(0)
+        N, T, dtype = (2,), 6, torch.double
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        terminated = done.clone()
+        if has_done:
+            terminated = terminated.bernoulli_(0.2)
+            done = done.bernoulli_(0.2) | terminated
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        action_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        log_pi = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+        log_mu = torch.log(torch.rand(*N, T, 1, device=device, dtype=dtype))
+
+        c = lmbda * (log_pi - log_mu).exp().clamp_max(1.0)
+        delta = (
+            reward + gamma * (~terminated).to(dtype) * next_state_value - action_value
+        )
+
+        expected = torch.zeros_like(action_value)
+        for t in range(T):
+            acc = delta[..., t, :].clone()
+            coef = torch.ones_like(acc)
+            for k in range(t + 1, T):
+                # trace product over s = t+1 .. k, cut at episode boundaries
+                coef = coef * gamma * (~done[..., k - 1, :]).to(dtype) * c[..., k, :]
+                acc = acc + coef * delta[..., k, :]
+            expected[..., t, :] = action_value[..., t, :] + acc
+
+        target = retrace_lambda_return_estimate(
+            gamma,
+            lmbda,
+            log_pi,
+            log_mu,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
+        torch.testing.assert_close(target, expected, rtol=1e-12, atol=1e-12)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5])
+    @pytest.mark.parametrize("lmbda", [0.5, 0.95])
+    def test_retrace_clips_importance_ratio(self, device, gamma, lmbda):
+        """Ratios above 1 are truncated, so c saturates at lambda.
+
+        This is what bounds the variance of the correction however far mu is
+        from pi, and is the property that separates Retrace from plain
+        importance sampling.
+        """
+        torch.manual_seed(0)
+        N, T, dtype = (3,), 10, torch.double
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        action_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+
+        log_pi = torch.zeros(*N, T, 1, device=device, dtype=dtype)
+        # mu assigns the taken actions a tiny probability, so pi/mu >> 1
+        log_mu_small = torch.full_like(log_pi, -10.0)
+
+        clipped = retrace_lambda_return_estimate(
+            gamma,
+            lmbda,
+            log_pi,
+            log_mu_small,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=done,
+        )
+        on_policy = retrace_lambda_return_estimate(
+            gamma,
+            lmbda,
+            log_pi,
+            log_pi,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=done,
+        )
+        torch.testing.assert_close(clipped, on_policy, rtol=1e-12, atol=1e-12)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.95])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [100, 3])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("feature_dim", [[5], [2, 5]])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_retrace_multidim(
+        self, device, gamma, lmbda, N, T, dtype, has_done, feature_dim
+    ):
+        D = feature_dim
+        time_dim = -1 - len(D)
+
+        torch.manual_seed(0)
+
+        done = torch.zeros(*N, T, *D, device=device, dtype=torch.bool)
+        terminated = done.clone()
+        if has_done:
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
+        reward = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        action_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        log_pi = torch.log(torch.rand(*N, T, *D, device=device, dtype=dtype))
+        log_mu = torch.log(torch.rand(*N, T, *D, device=device, dtype=dtype))
+
+        r1 = retrace_lambda_return_estimate(
+            gamma,
+            lmbda,
+            log_pi,
+            log_mu,
+            action_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=time_dim,
+        )
+        if len(D) == 2:
+            r2 = [
+                retrace_lambda_return_estimate(
+                    gamma,
+                    lmbda,
+                    log_pi[..., i : i + 1, j],
+                    log_mu[..., i : i + 1, j],
+                    action_value[..., i : i + 1, j],
+                    next_state_value[..., i : i + 1, j],
+                    reward[..., i : i + 1, j],
+                    done=done[..., i : i + 1, j],
+                    terminated=terminated[..., i : i + 1, j],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+                for j in range(D[1])
+            ]
+        else:
+            r2 = [
+                retrace_lambda_return_estimate(
+                    gamma,
+                    lmbda,
+                    log_pi[..., i : i + 1],
+                    log_mu[..., i : i + 1],
+                    action_value[..., i : i + 1],
+                    next_state_value[..., i : i + 1],
+                    reward[..., i : i + 1],
+                    done=done[..., i : i + 1],
+                    terminated=terminated[..., i : i + 1],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+            ]
+
+        r2 = torch.cat(r2, -1)
+        if len(D) == 2:
+            r2 = r2.unflatten(-1, D)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_default_devices())
