@@ -204,12 +204,42 @@ class TestTransformedEnv:
         assert "other_count" in env.observation_spec.keys()
         assert env.is_spec_locked
 
-    def test_spec_lock_opt_out(self) -> None:
-        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
-        env.set_spec_lock_(False)
+    @pytest.mark.parametrize("set_after_init", [False, True])
+    def test_spec_lock_opt_out(self, set_after_init: bool) -> None:
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), StepCounter(), spec_locked=set_after_init
+        )
+        if set_after_init:
+            env.set_spec_lock_(False)
         assert not env.is_spec_locked
         assert not env.observation_spec.is_locked
         assert env._step_mdp is not env._step_mdp
+
+    def test_spec_lock_without_spec_cache(self) -> None:
+        class DynamicKeyTransform(Transform):
+            enabled = False
+
+            def transform_observation_spec(
+                self, observation_spec: TensorSpec
+            ) -> TensorSpec:
+                if self.enabled:
+                    observation_spec["dynamic"] = Unbounded(shape=(1,))
+                return observation_spec
+
+        transform = DynamicKeyTransform()
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), transform, cache_specs=False
+        )
+
+        assert env.is_spec_locked
+        assert env.observation_spec.is_locked
+        assert env.input_spec.is_locked
+        assert "dynamic" not in env.observation_keys
+
+        transform.enabled = True
+
+        assert "dynamic" in env.observation_keys
+        assert env.observation_spec.is_locked
 
     def test_spec_lock_with_lazy_transform(self) -> None:
         env = TransformedEnv(

@@ -93,7 +93,7 @@ def _cache_value(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        if not self.is_spec_locked:
+        if not self.is_spec_locked or not self.__dict__.get("cache_specs", True):
             return func(self, *args, **kwargs)
         result = self.__dict__.setdefault("_cache", {}).get(func_name, NO_DEFAULT)
         if result is NO_DEFAULT:
