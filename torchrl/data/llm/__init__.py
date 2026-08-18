@@ -4,11 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 from .contracts import (
-    GRPOLossOutputProtocol,
-    PostTrainingBufferProtocol,
-    PostTrainingCollectorProtocol,
-    SFTLossOutputProtocol,
-    assert_satisfies_protocol,
+    assert_buffer_contract,
+    assert_collector_contract,
+    assert_loss_contract,
 )
 from .dataset import (
     create_infinite_iterator,
@@ -24,20 +22,18 @@ from .utils import AdaptiveKLController, ConstantKLController, RolloutFromModel
 
 __all__ = [
     "AdaptiveKLController",
-    "assert_satisfies_protocol",
+    "assert_buffer_contract",
+    "assert_collector_contract",
+    "assert_loss_contract",
     "ConstantKLController",
     "ContentBase",
-    "GRPOLossOutputProtocol",
     "History",
     "PairwiseDataset",
-    "PostTrainingBufferProtocol",
-    "PostTrainingCollectorProtocol",
     "PromptData",
     "add_chat_template",
     "PromptTensorDictTokenizer",
     "RewardData",
     "RolloutFromModel",
-    "SFTLossOutputProtocol",
     "TensorDictTokenizer",
     "TokenizedDatasetLoader",
     "create_infinite_iterator",

@@ -4,30 +4,23 @@
 # LICENSE file in the root directory of this source tree.
 """Stable component boundaries for LLM post-training external-loop interop (RFC #3948, WS1).
 
-Defines ``typing.Protocol`` interfaces for replay buffers, collectors, and
+Defines validation helper functions for replay buffers, collectors, and
 loss outputs so external training loops (TRL, NeMo-RL, custom) can consume
-individual TorchRL components without depending on concrete classes.
+individual TorchRL components with confidence.
 """
 from __future__ import annotations
 
-from typing import Any, Iterator, runtime_checkable
-
-import torch
-from tensordict import TensorDictBase
-from typing_extensions import Protocol
+from typing import Any
 
 __all__ = [
-    "PostTrainingBufferProtocol",
-    "PostTrainingCollectorProtocol",
-    "GRPOLossOutputProtocol",
-    "SFTLossOutputProtocol",
-    "assert_satisfies_protocol",
+    "assert_buffer_contract",
+    "assert_collector_contract",
+    "assert_loss_contract",
 ]
 
 
-@runtime_checkable
-class PostTrainingBufferProtocol(Protocol):
-    """Minimal interface a replay buffer must expose for post-training loops.
+def assert_buffer_contract(buffer: Any) -> None:
+    """Assert that a replay buffer exposes the necessary methods for post-training.
 
     **TensorDict key contract** — samples must carry:
 
@@ -35,32 +28,26 @@ class PostTrainingBufferProtocol(Protocol):
     * ``("tokens", "full")`` — full token sequence, shape ``[B, T]``.
     * ``("tokens", "response")`` — response tokens, shape ``[B, R]`` or ragged.
 
-    Example::
+    Args:
+        buffer: The buffer object to validate.
 
-        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
-        >>> from torchrl.data.llm.contracts import PostTrainingBufferProtocol
-        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
-        >>> isinstance(rb, PostTrainingBufferProtocol)
-        True
+    Raises:
+        TypeError: If the buffer is missing ``extend``, ``sample``, or ``write_count``.
     """
-
-    def extend(self, data: TensorDictBase) -> None:
-        """Append a batch of trajectories to the buffer."""
-        ...
-
-    def sample(self, batch_size: int | None = None) -> TensorDictBase:
-        """Sample a batch from the buffer."""
-        ...
-
-    @property
-    def write_count(self) -> int:
-        """Total number of samples written since creation."""
-        ...
+    missing = [
+        attr
+        for attr in ("extend", "sample", "write_count")
+        if not hasattr(buffer, attr)
+    ]
+    if missing:
+        raise TypeError(
+            f"Object of type '{type(buffer).__name__}' does not satisfy the "
+            f"post-training buffer contract.\n  Missing: {', '.join(missing)}"
+        )
 
 
-@runtime_checkable
-class PostTrainingCollectorProtocol(Protocol):
-    """Minimal interface an LLM rollout collector must expose.
+def assert_collector_contract(collector: Any) -> None:
+    """Assert that a rollout collector exposes the necessary methods.
 
     **TensorDict key contract** — each yielded batch must carry:
 
@@ -70,150 +57,52 @@ class PostTrainingCollectorProtocol(Protocol):
     * ``("next", "reward")`` — reward signal, shape ``[B, ...]``.
     * ``("masks", "all_attention_mask")`` — boolean mask, shape ``[B, T]``.
 
-    Example::
-
-        >>> from torchrl.data.llm.contracts import PostTrainingCollectorProtocol
-        >>> class MyCollector:
-        ...     def update_policy_weights_(self, policy_weights=None, *, worker_ids=None): ...
-        ...     def __iter__(self): return iter([])
-        ...     def __next__(self): raise StopIteration
-        >>> isinstance(MyCollector(), PostTrainingCollectorProtocol)
-        True
-    """
-
-    def update_policy_weights_(
-        self,
-        policy_weights: Any | None = None,
-        *,
-        worker_ids: list[int] | None = None,
-    ) -> None:
-        """Push updated policy weights to inference workers."""
-        ...
-
-    def __iter__(self) -> Iterator[TensorDictBase]:
-        ...
-
-    def __next__(self) -> TensorDictBase:
-        ...
-
-
-class GRPOLossOutputProtocol(Protocol):
-    """Interface satisfied by :class:`~torchrl.objectives.llm.GRPOLossOutput`.
-
-    .. note::
-        ``GRPOLossOutput`` is a ``TensorClass`` subclass whose fields live in
-        TensorDict internals rather than Python ``__dict__``.  Use
-        :func:`assert_satisfies_protocol` instead of ``isinstance``.
-
-    **Field contract** — fields read by ``PostTrainingLogger`` via ``getattr``:
-    ``loss_objective``, ``clip_fraction``, ``kl_approx``, ``ESS``,
-    ``entropy``, ``loss_entropy``, ``loss_kl_to_ref``, ``kl_to_ref``,
-    ``loss_kl_to_inference``, ``kl_to_inference``.
-
-    Example::
-
-        >>> import torch
-        >>> from torchrl.objectives.llm.grpo import GRPOLossOutput
-        >>> from torchrl.data.llm.contracts import GRPOLossOutputProtocol, assert_satisfies_protocol
-        >>> out = GRPOLossOutput(
-        ...     loss_objective=torch.tensor(0.5),
-        ...     clip_fraction=torch.tensor(0.1),
-        ...     kl_approx=torch.tensor(0.01),
-        ...     ESS=torch.tensor(32.0),
-        ... )
-        >>> assert_satisfies_protocol(out, GRPOLossOutputProtocol)
-    """
-
-    @property
-    def loss_objective(self) -> torch.Tensor:
-        """Primary GRPO policy loss."""
-        ...
-
-
-class SFTLossOutputProtocol(Protocol):
-    """Interface satisfied by :class:`~torchrl.objectives.llm.SFTLossOutput`.
-
-    .. note::
-        ``SFTLossOutput`` is a ``TensorClass`` subclass whose fields live in
-        TensorDict internals rather than Python ``__dict__``.  Use
-        :func:`assert_satisfies_protocol` instead of ``isinstance``.
-
-    **Field contract** — fields read by ``PostTrainingLogger`` via ``getattr``:
-    ``loss_sft``, ``kl_to_ref``, ``loss_kl_to_ref``.
-
-    Example::
-
-        >>> import torch
-        >>> from torchrl.objectives.llm.sft import SFTLossOutput
-        >>> from torchrl.data.llm.contracts import SFTLossOutputProtocol, assert_satisfies_protocol
-        >>> out = SFTLossOutput(loss_sft=torch.tensor(0.3))
-        >>> assert_satisfies_protocol(out, SFTLossOutputProtocol)
-    """
-
-    @property
-    def loss_sft(self) -> torch.Tensor:
-        """Supervised fine-tuning loss."""
-        ...
-
-
-# Maps each loss-output protocol to the single field it requires.
-_LOSS_PROTOCOL_FIELDS: dict[type, str] = {
-    GRPOLossOutputProtocol: "loss_objective",
-    SFTLossOutputProtocol: "loss_sft",
-}
-
-
-def assert_satisfies_protocol(
-    obj: Any,
-    protocol: type,
-    *,
-    name: str = "",
-) -> None:
-    """Raise :class:`TypeError` if *obj* does not satisfy *protocol*.
-
-    Development utility — call once at the start of a training loop to
-    catch integration bugs early. Not intended for hot paths.
-
     Args:
-        obj: Object to validate.
-        protocol: A :class:`~typing.Protocol` to check against.
-        name: Optional label included in the error message.
+        collector: The collector object to validate.
 
     Raises:
-        TypeError: If *obj* does not satisfy *protocol*.
-
-    Example::
-
-        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
-        >>> from torchrl.data.llm.contracts import (
-        ...     PostTrainingBufferProtocol, assert_satisfies_protocol,
-        ... )
-        >>> rb = ReplayBuffer(storage=LazyTensorStorage(100))
-        >>> assert_satisfies_protocol(rb, PostTrainingBufferProtocol, name="rb")
+        TypeError: If the collector is missing ``update_policy_weights_``, ``__iter__``, or ``__next__``.
     """
-    label = f'"{name}" ' if name else ""
-
-    if protocol in _LOSS_PROTOCOL_FIELDS:
-        # GRPOLossOutput / SFTLossOutput are TensorClass subclasses: their fields
-        # live in TensorDict internals, not Python __dict__, so isinstance fails.
-        required_field = _LOSS_PROTOCOL_FIELDS[protocol]
-        if getattr(obj, required_field, None) is None:
-            raise TypeError(
-                f"Object {label}of type '{type(obj).__name__}' does not satisfy "
-                f"'{protocol.__name__}'.\n"
-                f"  Must expose a non-None '{required_field}' field."
-            )
-        return
-
-    if not isinstance(obj, protocol):
-        protocol_name = getattr(protocol, "__name__", str(protocol))
-        missing = [
-            attr
-            for attr in getattr(protocol, "__protocol_attrs__", [])
-            if not hasattr(obj, attr)
-        ]
-        missing_str = f"  Missing: {', '.join(missing)}" if missing else ""
+    missing = [
+        attr
+        for attr in ("update_policy_weights_", "__iter__", "__next__")
+        if not hasattr(collector, attr)
+    ]
+    if missing:
         raise TypeError(
-            f"Object {label}of type '{type(obj).__name__}' does not satisfy "
-            f"'{protocol_name}'.\n{missing_str}"
+            f"Object of type '{type(collector).__name__}' does not satisfy the "
+            f"post-training collector contract.\n  Missing: {', '.join(missing)}"
+        )
+
+
+def assert_loss_contract(loss_output: Any, *, loss_type: str = "grpo") -> None:
+    """Assert that a loss-output object exposes the necessary fields.
+
+    **Field contract** — fields read by ``PostTrainingLogger`` via ``getattr``:
+
+    * For GRPO: ``loss_objective``, ``clip_fraction``, ``kl_approx``, ``ESS``,
+      ``entropy``, ``loss_entropy``, ``loss_kl_to_ref``, ``kl_to_ref``,
+      ``loss_kl_to_inference``, ``kl_to_inference``.
+    * For SFT: ``loss_sft``, ``kl_to_ref``, ``loss_kl_to_ref``.
+
+    Args:
+        loss_output: The loss output object (usually a ``TensorClass``) to validate.
+        loss_type: The expected loss type, either ``"grpo"`` or ``"sft"``.
+
+    Raises:
+        TypeError: If the required field (``loss_objective`` or ``loss_sft``) is missing or None.
+        ValueError: If an unknown ``loss_type`` is requested.
+    """
+    if loss_type == "grpo":
+        required_field = "loss_objective"
+    elif loss_type == "sft":
+        required_field = "loss_sft"
+    else:
+        raise ValueError(f"Unknown loss_type '{loss_type}'. Expected 'grpo' or 'sft'.")
+
+    if getattr(loss_output, required_field, None) is None:
+        raise TypeError(
+            f"Object of type '{type(loss_output).__name__}' does not satisfy the "
+            f"'{loss_type}' loss contract.\n"
+            f"  Must expose a non-None '{required_field}' field."
         )

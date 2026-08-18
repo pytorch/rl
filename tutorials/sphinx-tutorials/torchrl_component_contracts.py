@@ -1,10 +1,6 @@
 """
-TorchRL Component Contracts for External Loops (WS1)
-=====================================================
-
-Documents the stable component boundaries from RFC #3948 WS1.
 Shows how to verify that custom buffers, collectors, and loss outputs
-satisfy TorchRL's interfaces using :func:`~torchrl.data.llm.contracts.assert_satisfies_protocol`.
+satisfy TorchRL's interfaces using the provided helper functions.
 """
 
 # %%
@@ -13,13 +9,11 @@ satisfy TorchRL's interfaces using :func:`~torchrl.data.llm.contracts.assert_sat
 
 import torch
 from tensordict import TensorDict
-from torchrl.data import ReplayBuffer, LazyTensorStorage
+from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.llm.contracts import (
-    GRPOLossOutputProtocol,
-    PostTrainingBufferProtocol,
-    PostTrainingCollectorProtocol,
-    SFTLossOutputProtocol,
-    assert_satisfies_protocol,
+    assert_buffer_contract,
+    assert_collector_contract,
+    assert_loss_contract,
 )
 from torchrl.objectives.llm.sft import SFTLossOutput
 
@@ -30,10 +24,10 @@ from torchrl.objectives.llm.sft import SFTLossOutput
 # TorchRL's built-in ``ReplayBuffer`` already satisfies this:
 
 rb = ReplayBuffer(storage=LazyTensorStorage(1_000), batch_size=8)
-assert isinstance(rb, PostTrainingBufferProtocol)
+assert_buffer_contract(rb)
 
 # %%
-# Custom buffers can be verified with ``assert_satisfies_protocol``:
+# Custom buffers can also be verified with the helper:
 
 
 class MyCustomBuffer:
@@ -52,7 +46,7 @@ class MyCustomBuffer:
 
 
 buf = MyCustomBuffer()
-assert_satisfies_protocol(buf, PostTrainingBufferProtocol, name="my_buffer")
+assert_buffer_contract(buf)
 
 # %%
 # Missing a required field raises ``TypeError`` with a helpful message:
@@ -67,8 +61,8 @@ class IncompleteBuffer:
 
 
 try:
-    assert_satisfies_protocol(IncompleteBuffer(), PostTrainingBufferProtocol)
-except TypeError as e:
+    assert_buffer_contract(IncompleteBuffer())
+except TypeError:
     pass  # expected — write_count is missing
 
 # %%
@@ -89,21 +83,21 @@ class MyCollector:
 
 
 col = MyCollector()
-assert_satisfies_protocol(col, PostTrainingCollectorProtocol, name="my_collector")
+assert_collector_contract(col)
 
 # %%
 # Loss output contracts
 # ---------------------
-# TorchRL provides two separate loss-output protocols, one per loss type:
+# TorchRL provides explicit field validation for two separate loss types:
 #
-# * :class:`~torchrl.data.llm.contracts.GRPOLossOutputProtocol` — requires ``loss_objective``.
-# * :class:`~torchrl.data.llm.contracts.SFTLossOutputProtocol` — requires ``loss_sft``.
+# * GRPO — requires ``loss_objective``.
+# * SFT — requires ``loss_sft``.
 #
 # Because ``GRPOLossOutput`` and ``SFTLossOutput`` are ``TensorClass`` subclasses,
-# use ``assert_satisfies_protocol`` (not ``isinstance``):
+# use ``assert_loss_contract`` (not ``isinstance``):
 
 sft_out = SFTLossOutput(loss_sft=torch.tensor(0.42))
-assert_satisfies_protocol(sft_out, SFTLossOutputProtocol, name="sft_out")
+assert_loss_contract(sft_out, loss_type="sft")
 
 # %%
 # Asserting all contracts at startup
@@ -112,9 +106,9 @@ assert_satisfies_protocol(sft_out, SFTLossOutputProtocol, name="sft_out")
 
 
 def my_training_loop(buffer, collector, loss_output):
-    assert_satisfies_protocol(buffer, PostTrainingBufferProtocol, name="buffer")
-    assert_satisfies_protocol(collector, PostTrainingCollectorProtocol, name="collector")
-    assert_satisfies_protocol(loss_output, SFTLossOutputProtocol, name="loss_output")
+    assert_buffer_contract(buffer)
+    assert_collector_contract(collector)
+    assert_loss_contract(loss_output, loss_type="sft")
 
 
 my_training_loop(rb, col, sft_out)
