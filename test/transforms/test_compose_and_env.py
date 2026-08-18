@@ -227,9 +227,7 @@ class TestTransformedEnv:
                 return observation_spec
 
         transform = DynamicKeyTransform()
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(), transform, cache_specs=False
-        )
+        env = TransformedEnv(ContinuousActionVecMockEnv(), transform, cache_specs=False)
 
         assert env.is_spec_locked
         assert env.observation_spec.is_locked
