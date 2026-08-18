@@ -2,8 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Stable component boundaries for LLM post-training external-loop interop (RFC #3948, WS1).
-
+"""
 Defines validation helper functions for replay buffers, collectors, and
 loss outputs so external training loops (TRL, NeMo-RL, custom) can consume
 individual TorchRL components with confidence.

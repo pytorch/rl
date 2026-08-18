@@ -1,4 +1,8 @@
 """
+TorchRL Component Contracts for External Loops
+==============================================
+
+Documents the stable component boundaries.
 Shows how to verify that custom buffers, collectors, and loss outputs
 satisfy TorchRL's interfaces using the provided helper functions.
 """

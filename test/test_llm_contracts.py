@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+"""Tests for stable component boundary helpers."""
 import pytest
 import torch
 from tensordict import TensorDict
