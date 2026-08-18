@@ -514,6 +514,12 @@ class DreamerV3ActorLoss(LossModule):
     When the actor is a reparameterizable (continuous) policy the
     reparameterization gradient is used directly instead of REINFORCE.
 
+    With ``return_normalization=True`` (the default), both gradient
+    estimators divide the objective by an exponential moving average of the
+    5th-95th return-percentile span, ``max(min_scale, high - low)``,
+    following DreamerV3. This keeps the fixed entropy bonus ``eta``
+    comparable across reward scales.
+
     Reference: https://arxiv.org/abs/2301.04104
 
     Args:
@@ -533,14 +539,16 @@ class DreamerV3ActorLoss(LossModule):
             * stop-gradient advantage). If ``False``, uses the straight
             reparameterization gradient (suitable for continuous Gaussian
             actors). Default: ``False``.
-        return_normalization (bool, optional): Normalize detached REINFORCE
-            advantages by an EMA return-percentile span. Default: ``True``.
+        return_normalization (bool, optional): Normalize the actor objective
+            by an EMA return-percentile span: REINFORCE advantages and the
+            reparameterization lambda-returns are divided by the clamped span
+            between the low and high return quantiles. Default: ``True``.
         return_normalization_rate (float, optional): EMA update rate for the
             return statistics. Default: ``0.01``.
         return_normalization_quantiles (tuple of float, optional): Lower and
             upper return quantiles. Default: ``(0.05, 0.95)``.
-        return_normalization_min_scale (float, optional): Minimum divisor for
-            REINFORCE advantages. Default: ``1.0``.
+        return_normalization_min_scale (float, optional): Minimum value of the
+            return-span divisor. Default: ``1.0``.
 
     Examples:
         >>> import torch
@@ -790,10 +798,8 @@ class DreamerV3ActorLoss(LossModule):
             actor_loss = -(discount * log_prob * advantage).mean()
         else:
             # Reparameterization gradient
-            return_scale = torch.ones(
-                (), dtype=lambda_target.dtype, device=lambda_target.device
-            )
-            actor_loss = -(discount * lambda_target).mean()
+            return_scale = self._return_scale(lambda_target)
+            actor_loss = -(discount * lambda_target / return_scale).mean()
 
         if self.entropy_bonus > 0:
             if HAS_ENTROPY.get(type(policy_distribution), False):
