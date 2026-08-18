@@ -1,34 +1,34 @@
 {
-  "last_updated": "2026-08-18T18:07:45.560892+00:00",
+  "last_updated": "2026-08-18T19:36:56.745534+00:00",
   "stats": {
     "last_7_days": {
       "days": 7,
       "runs_with_data": 7,
-      "total_workflow_runs": 90,
-      "total_success": 65,
-      "total_failure": 23,
-      "success_rate": 72.2
+      "total_workflow_runs": 92,
+      "total_success": 68,
+      "total_failure": 24,
+      "success_rate": 73.9
     },
     "last_30_days": {
       "days": 30,
       "runs_with_data": 30,
-      "total_workflow_runs": 389,
-      "total_success": 173,
-      "total_failure": 211,
-      "success_rate": 44.5
+      "total_workflow_runs": 391,
+      "total_success": 176,
+      "total_failure": 212,
+      "success_rate": 45.0
     }
   },
   "history": [
     {
       "date": "2026-08-18",
       "orchestrator_ran": true,
-      "orchestrator_status": "in_progress",
+      "orchestrator_status": "failure",
       "orchestrator_url": "https://github.com/pytorch/rl/actions/runs/32106036712",
       "orchestrator_run_id": 32106036712,
       "workflows": {
         "test-linux.yml": {
-          "status": "in_progress",
-          "conclusion": null,
+          "status": "failure",
+          "conclusion": "failure",
           "url": "https://github.com/pytorch/rl/actions/runs/32106036712/job/95615597519",
           "display_name": "Linux Tests"
         },
@@ -57,8 +57,8 @@
           "display_name": "SOTA Tests"
         },
         "test-linux-libs.yml": {
-          "status": "in_progress",
-          "conclusion": null,
+          "status": "skipped",
+          "conclusion": "skipped",
           "url": "https://github.com/pytorch/rl/actions/runs/32106036712/job/95615597095",
           "display_name": "Libs Tests"
         },
@@ -105,31 +105,31 @@
           "display_name": "Wheels (Linux)"
         },
         "build-wheels-m1.yml": {
-          "status": "skipped",
-          "conclusion": null,
-          "url": null,
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/rl/actions/runs/32106036712/job/95817523937",
           "display_name": "Wheels (M1)"
         },
         "build-wheels-windows.yml": {
-          "status": "skipped",
-          "conclusion": null,
-          "url": null,
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/rl/actions/runs/32106036712/job/95820020645",
           "display_name": "Wheels (Windows)"
         },
         "build-wheels-aarch64-linux.yml": {
-          "status": "skipped",
-          "conclusion": null,
-          "url": null,
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/rl/actions/runs/32106036712/job/95825685805",
           "display_name": "Wheels (Aarch64)"
         }
       },
       "summary": {
         "total": 16,
-        "success": 7,
-        "failure": 2,
-        "skipped": 5,
-        "other": 2,
-        "success_rate": 63.6
+        "success": 10,
+        "failure": 3,
+        "skipped": 3,
+        "other": 0,
+        "success_rate": 76.9
       }
     },
     {
