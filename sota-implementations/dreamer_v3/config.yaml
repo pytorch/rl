@@ -51,6 +51,9 @@ optimization:
   deferred_policy_sync: false
   separate_policy_rng: false
   mixed_precision: false
+  # Compile the RSSM recurrence: null, "step" or "scan". "scan" is faster but
+  # changes the random stream; see the README.
+  compile_rssm: null
   lr: 4.0e-5
   adam_eps: 1.0e-20
   adaptive_grad_clip: 0.3

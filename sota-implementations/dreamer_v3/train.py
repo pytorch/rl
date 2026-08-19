@@ -128,6 +128,8 @@ def _build_learner(
         prior_net=prior_net,
         reward_net=reward_net,
         reward_decoder=reward_decoder,
+        # Compiling changes the categorical draws; "step" must match eager.
+        compile_prior=cfg.optimization.compile_rssm == "scan",
     ).to(device)
     continuation_model = build_continuation_model(continuation_net=continuation_net).to(
         device

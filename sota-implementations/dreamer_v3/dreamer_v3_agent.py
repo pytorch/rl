@@ -510,6 +510,8 @@ def build_world_model(
     # Only the reset record of an episode has is_init set, thus a sampled
     # window can cross an episode boundary.
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior, reset_key="is_init")
+    if cfg.optimization.compile_rssm:
+        rollout.compile_rollout(cfg.optimization.compile_rssm)
 
     decoder_event_dims = tuple(cfg.networks.decoder_event_dims or (obs_dim,))
     if sum(decoder_event_dims) != obs_dim:
@@ -591,11 +593,15 @@ def build_imagination_model(
     prior_net: RSSMPriorV3,
     reward_net: DreamerV3MLP,
     reward_decoder: SymExpTwoHot,
+    compile_prior: bool = False,
 ) -> WorldModelWrapper:
-    """Build the imagination model from the trained world-model modules."""
+    """Build the imagination model from the trained world-model modules.
+
+    ``compile_prior`` compiles the prior here only, not in the shared rollout.
+    """
     transition_model = TensorDictSequential(
         TensorDictModule(
-            prior_net,
+            torch.compile(prior_net, dynamic=False) if compile_prior else prior_net,
             in_keys=["state", "belief", "action"],
             out_keys=["_", "state", "belief"],
         )
