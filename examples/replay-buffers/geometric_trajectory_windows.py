@@ -27,10 +27,12 @@ from torchrl.data import (
 )
 
 HISTORY = 3
+MAX_FUTURE = 8
 BATCH_SIZE = 4
 
 sampler = GeometricTrajectoryWindowSampler(
     history=HISTORY,
+    max_future=MAX_FUTURE,
     continuation_probability=0.7,
     trajectory_key="trajectory_id",
     step_key="step_id",
@@ -64,8 +66,9 @@ for trajectory_id, step_id in arrival_order:
         )
     )
 
-# The raw sample is the union [t-h, ..., t+k]. Padded positions repeat step
-# zero so the storage lookup remains valid; validity_mask identifies them.
+# The raw sample has the fixed extent [t-h, ..., t+MAX_FUTURE]. Positions before
+# step zero and after the sampled t+k repeat a valid storage index;
+# validity_mask identifies both kinds of padding.
 window = replay_buffer.sample()
 k = int(window["future_offset"][0, 0])
 validity = window["validity_mask"]
