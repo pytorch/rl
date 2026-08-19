@@ -27,6 +27,7 @@ from torchrl.data import (
 )
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
+    GeometricTrajectoryWindowSampler,
     PrioritizedSampler,
     PrioritizedSliceSampler,
     PromptGroupSampler,
@@ -2044,6 +2045,188 @@ class TestStalenessAwareSampler:
         # Should not raise
         batch = rb.sample()
         assert batch.shape[0] == 8
+
+
+class TestGeometricTrajectoryWindowSampler:
+    @staticmethod
+    def _make_interleaved_data(lengths, *, nested=False):
+        records = [
+            (trajectory, step)
+            for step in range(max(lengths))
+            for trajectory, length in enumerate(lengths)
+            if step < length
+        ]
+        trajectories = torch.tensor([trajectory for trajectory, _ in records])
+        steps = torch.tensor([step for _, step in records])
+        values = trajectories * 100 + steps
+        if nested:
+            data = {
+                "meta": TensorDict(
+                    {"trajectory": trajectories, "step": steps},
+                    batch_size=[len(records)],
+                ),
+                "observation": values,
+                "action": -values,
+            }
+        else:
+            data = {
+                "trajectory": trajectories,
+                "step": steps,
+                "observation": values,
+                "action": -values,
+            }
+        return TensorDict(data, batch_size=[len(records)])
+
+    def test_interleaved_windows_nested_keys_and_padding(self):
+        generator = torch.Generator().manual_seed(0)
+        sampler = GeometricTrajectoryWindowSampler(
+            history=2,
+            continuation_probability=0.8,
+            trajectory_key=("meta", "trajectory"),
+            step_key=("meta", "step"),
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(32),
+            sampler=sampler,
+            batch_size=64,
+            generator=generator,
+        )
+        rb.extend(self._make_interleaved_data([5, 8], nested=True))
+
+        sample = rb.sample()
+        future_offset = sample["future_offset"].unique()
+        assert future_offset.numel() == 1
+        future_offset = int(future_offset)
+        assert sample.shape == (64, 2 + future_offset + 1)
+
+        trajectories = sample["meta", "trajectory"]
+        steps = sample["meta", "step"]
+        anchor_steps = steps[:, sampler.history]
+        expected_steps = anchor_steps.unsqueeze(1) + torch.arange(
+            -sampler.history, future_offset + 1
+        )
+        expected_validity = expected_steps >= 0
+        assert (trajectories == trajectories[:, :1]).all()
+        assert torch.equal(sample["validity_mask"], expected_validity)
+        assert torch.equal(steps, expected_steps.clamp_min(0))
+        assert torch.equal(
+            sample["anchor_index"],
+            sample["index"][:, sampler.history : sampler.history + 1].expand_as(
+                sample["anchor_index"]
+            ),
+        )
+        trajectory_lengths = torch.tensor([5, 8])
+        assert (
+            anchor_steps + future_offset
+            < trajectory_lengths[trajectories[:, sampler.history]]
+        ).all()
+
+    def test_uniform_over_eligible_steps_not_trajectories(self):
+        generator = torch.Generator().manual_seed(0)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            sampler=GeometricTrajectoryWindowSampler(
+                history=0,
+                continuation_probability=0.0,
+                trajectory_key="trajectory",
+                step_key="step",
+            ),
+            batch_size=20_000,
+            generator=generator,
+        )
+        rb.extend(self._make_interleaved_data([1, 3]))
+
+        sample = rb.sample()
+        long_trajectory_fraction = (sample["trajectory"] == 1).float().mean()
+        assert torch.isclose(long_trajectory_fraction, torch.tensor(0.75), atol=0.02)
+
+    def test_wraparound_removes_windows_crossing_overwritten_steps(self):
+        sampler = GeometricTrajectoryWindowSampler(
+            history=2,
+            continuation_probability=0.0,
+            trajectory_key="trajectory",
+            step_key="step",
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(5), sampler=sampler, batch_size=64
+        )
+        rb.extend(self._make_interleaved_data([5]))
+        rb.sample()
+        for step in range(3):
+            value = 100 + step
+            rb.add(
+                TensorDict(
+                    {
+                        "trajectory": torch.tensor(1),
+                        "step": torch.tensor(step),
+                        "observation": torch.tensor(value),
+                        "action": torch.tensor(-value),
+                    },
+                    batch_size=[],
+                )
+            )
+
+        sample = rb.sample()
+        assert (sample["trajectory"] == 1).all()
+        expected_steps = sample["step"][:, 2:].add(torch.tensor([-2, -1, 0]))
+        assert torch.equal(sample["step"], expected_steps.clamp_min(0))
+        assert torch.equal(sample["validity_mask"], expected_steps >= 0)
+
+    def test_shared_storage_write_invalidates_reader_index(self):
+        storage = LazyTensorStorage(4)
+        reader = TensorDictReplayBuffer(
+            storage=storage,
+            sampler=GeometricTrajectoryWindowSampler(
+                history=1,
+                continuation_probability=0.0,
+                trajectory_key="trajectory",
+                step_key="step",
+            ),
+            batch_size=16,
+        )
+        writer = TensorDictReplayBuffer(storage=storage)
+        writer.extend(self._make_interleaved_data([4]))
+        assert (reader.sample()["trajectory"] == 0).all()
+
+        replacement = self._make_interleaved_data([0, 4])
+        writer.extend(replacement)
+        assert (reader.sample()["trajectory"] == 1).all()
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"history": -1, "continuation_probability": 0.5},
+            {"history": 1.5, "continuation_probability": 0.5},
+            {"history": 1, "continuation_probability": -0.1},
+            {"history": 1, "continuation_probability": 1.0},
+            {"history": 1, "continuation_probability": "high"},
+        ],
+    )
+    def test_construction_errors(self, kwargs):
+        with pytest.raises((TypeError, ValueError)):
+            GeometricTrajectoryWindowSampler(**kwargs)
+
+    def test_incomplete_stored_history_raises(self):
+        sampler = GeometricTrajectoryWindowSampler(
+            history=2,
+            continuation_probability=0.0,
+            trajectory_key="trajectory",
+            step_key="step",
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4), sampler=sampler, batch_size=1
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "trajectory": torch.zeros(2, dtype=torch.long),
+                    "step": torch.tensor([1, 2]),
+                },
+                batch_size=[2],
+            )
+        )
+        with pytest.raises(RuntimeError, match="complete stored history"):
+            rb.sample()
 
 
 class TestPromptGroupSampler:

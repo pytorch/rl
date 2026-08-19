@@ -20,6 +20,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import (
+    GeometricTrajectoryWindowSampler,
     PrioritizedSampler,
     PromptGroupSampler,
     RandomSampler,
@@ -430,6 +431,31 @@ def test_prompt_group_sampler_cached_sample(benchmark, size):
                 "prompt": torch.arange(size) % 64,
                 "value": torch.arange(size),
             },
+            batch_size=[size],
+        )
+    )
+    rb.sample()
+    benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("size", [1_000, 100_000])
+def test_geometric_trajectory_window_sampler_cached_sample(benchmark, size):
+    trajectory_length = 128
+    trajectory = torch.arange(size) // trajectory_length
+    step = torch.arange(size) % trajectory_length
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=GeometricTrajectoryWindowSampler(
+            history=8,
+            continuation_probability=0.9,
+            trajectory_key="trajectory",
+            step_key="step",
+        ),
+        batch_size=64,
+    )
+    rb.extend(
+        TensorDict(
+            {"trajectory": trajectory, "step": step, "value": torch.arange(size)},
             batch_size=[size],
         )
     )
