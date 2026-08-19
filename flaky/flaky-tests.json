@@ -1,55 +1,55 @@
 {
-  "generated_at": "2026-08-18T06:12:34.505039+00:00",
+  "generated_at": "2026-08-19T06:15:50.220035+00:00",
   "analysis_period": {
-    "start": "2026-08-14",
-    "end": "2026-08-17",
-    "runs_analyzed": 30
+    "start": "2026-08-15",
+    "end": "2026-08-18",
+    "runs_analyzed": 45
   },
   "summary": {
-    "total_tests": 31546,
-    "flaky_count": 8,
-    "new_flaky_count": 8,
+    "total_tests": 31554,
+    "flaky_count": 9,
+    "new_flaky_count": 9,
     "resolved_count": 0
   },
   "flaky_tests": [
     {
       "nodeid": "test/modules/test_actor.py::TestDiffusionActor::test_reduced_precision_schedule[dtype0]",
-      "executions": 62,
-      "failures": 6,
-      "failure_rate": 0.0968,
-      "flaky_score": 0.1935,
-      "passed": 56,
-      "failed": 6,
+      "executions": 73,
+      "failures": 7,
+      "failure_rate": 0.0959,
+      "flaky_score": 0.1918,
+      "passed": 66,
+      "failed": 7,
       "error": 0,
       "reruns": 0,
       "avg_duration": 0.002,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
       "first_seen_flaky": "2026-08-17T07:53:36Z",
       "is_new": true
     },
     {
       "nodeid": "test/objectives/test_tqc.py::TestTQC::test_tqc_numerical_contract[True]",
-      "executions": 84,
-      "failures": 8,
-      "failure_rate": 0.0952,
-      "flaky_score": 0.1905,
-      "passed": 76,
-      "failed": 8,
+      "executions": 95,
+      "failures": 9,
+      "failure_rate": 0.0947,
+      "flaky_score": 0.1895,
+      "passed": 86,
+      "failed": 9,
       "error": 0,
       "reruns": 0,
       "avg_duration": 0.009,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
       "first_seen_flaky": "2026-08-16T19:37:50Z",
       "is_new": true
@@ -64,15 +64,15 @@
       "failed": 12,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 7.842,
+      "avg_duration": 7.833,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
-      "first_seen_flaky": "2026-08-14T09:22:00Z",
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     },
     {
@@ -87,13 +87,13 @@
       "reruns": 0,
       "avg_duration": 0.001,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
-      "first_seen_flaky": "2026-08-14T09:22:00Z",
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     },
     {
@@ -106,15 +106,15 @@
       "failed": 12,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.879,
+      "avg_duration": 0.887,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
-      "first_seen_flaky": "2026-08-14T09:22:00Z",
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     },
     {
@@ -127,15 +127,15 @@
       "failed": 12,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.285,
+      "avg_duration": 0.284,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
-      "first_seen_flaky": "2026-08-14T09:22:00Z",
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     },
     {
@@ -150,13 +150,13 @@
       "reruns": 0,
       "avg_duration": 0.318,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
-      "first_seen_flaky": "2026-08-14T09:22:00Z",
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     },
     {
@@ -169,15 +169,36 @@
       "failed": 12,
       "error": 0,
       "reruns": 0,
-      "avg_duration": 0.302,
+      "avg_duration": 0.299,
       "recent_failures": [
-        "2026-08-17T07:58:50Z",
         "2026-08-17T07:59:15Z",
         "2026-08-17T07:59:38Z",
         "2026-08-17T14:29:35Z",
-        "2026-08-17T14:33:36Z"
+        "2026-08-17T14:33:36Z",
+        "2026-08-18T08:45:49Z"
       ],
-      "first_seen_flaky": "2026-08-14T09:22:00Z",
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/rb/test_rb_core.py::test_replay_buffer_prefetch_state_dict_roundtrip",
+      "executions": 138,
+      "failures": 8,
+      "failure_rate": 0.058,
+      "flaky_score": 0.1159,
+      "passed": 130,
+      "failed": 8,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.006,
+      "recent_failures": [
+        "2026-08-16T19:37:50Z",
+        "2026-08-17T14:29:35Z",
+        "2026-08-17T14:29:35Z",
+        "2026-08-18T08:45:49Z",
+        "2026-08-18T08:45:49Z"
+      ],
+      "first_seen_flaky": "2026-08-15T06:24:50Z",
       "is_new": true
     }
   ],
