@@ -1,4 +1,4 @@
-﻿# Copyright (c) Meta Platforms, Inc. and affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -7,27 +7,28 @@ from __future__ import annotations
 import pytest
 import torch
 from tensordict import TensorDict
-from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.nn import TensorDictModule
+from tensordict.tensorclass import NonTensorStack
 
 from torchrl.envs.batched_inference import FixedBatchedInference
 
 
-CUDA_AVAILABLE = torch.cuda.is_available()
-
-
-def _make_policy(in_features: int = 4, out_features: int = 2, device="cpu"):
+def _make_policy(in_features: int = 4, out_features: int = 2):
     return TensorDictModule(
-        torch.nn.Linear(in_features, out_features).to(device),
+        torch.nn.Linear(in_features, out_features),
         in_keys=["obs"],
         out_keys=["action"],
     )
 
 
-def _make_batch(B: int, obs_dim: int = 4, with_env_index: bool = False) -> TensorDict:
+def _make_batch(
+    B: int, obs_dim: int = 4, with_env_index: bool = False, nested: bool = False
+) -> TensorDict:
     td = TensorDict({"obs": torch.randn(B, obs_dim)}, batch_size=[B])
     if with_env_index:
         td.set("env_index", NonTensorStack(*list(range(B))))
+    if nested:
+        td.set("state", TensorDict({"hidden": torch.randn(B, 8)}, batch_size=[B]))
     return td
 
 
@@ -51,7 +52,6 @@ class TestConstruction:
     def test_nn_module_moved_to_device(self):
         policy = torch.nn.Linear(4, 2)
         helper = FixedBatchedInference(policy, "cpu")
-        # On CPU the policy should remain accessible and on cpu
         assert next(helper.policy.parameters()).device.type == "cpu"
 
 
@@ -150,6 +150,22 @@ class TestCPUHotPath:
         for buf in helper._staging[4]:
             assert "env_index" not in buf.keys()
 
+    def test_nested_tensordict_goes_into_staging(self):
+        """Nested TensorDicts must be classified as tensor data, not metadata."""
+        helper = self._make_helper()
+        batch = _make_batch(3, nested=True)
+        # _non_tensor_keys must not include "state" (a nested TensorDict)
+        assert "state" not in helper._non_tensor_keys(batch)
+        out = helper(batch)
+        assert out.batch_size == torch.Size([3])
+
+    def test_nested_tensordict_not_treated_as_non_tensor(self):
+        """Nested TD must not be reattached from the original batch (stale data path)."""
+        helper = self._make_helper()
+        batch = _make_batch(3, nested=True)
+        # "state" is a nested TensorDict — must NOT appear in non_tensor_keys.
+        assert "state" not in helper._non_tensor_keys(batch)
+
 
 class TestDoubleBuffer:
     def test_buf_idx_advances(self):
@@ -196,24 +212,21 @@ class TestMultipleBuckets:
         assert set(helper._staging.keys()) == {4, 8, 16}
 
 
-@pytest.mark.skipif(not CUDA_AVAILABLE, reason="CUDA not available")
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 class TestCUDA:
     def test_policy_moved_to_cuda(self):
-        policy = torch.nn.Linear(4, 2)  # starts on CPU
+        policy = torch.nn.Linear(4, 2)
         helper = FixedBatchedInference(policy, "cuda:0", bucket_sizes=[8])
         assert next(helper.policy.parameters()).device.type == "cuda"
 
     def test_output_on_device(self):
-        helper = FixedBatchedInference(
-            _make_policy(), "cuda:0", bucket_sizes=[8]
-        )
+        helper = FixedBatchedInference(_make_policy(), "cuda:0", bucket_sizes=[8])
         out = helper(_make_batch(3))
         assert out["action"].device.type == "cuda"
 
     def test_output_shape_on_cuda(self):
-        helper = FixedBatchedInference(
-            _make_policy(), "cuda:0", bucket_sizes=[8, 16]
-        )
+        helper = FixedBatchedInference(_make_policy(), "cuda:0", bucket_sizes=[8, 16])
         for B in (1, 5, 8, 16):
             out = helper(_make_batch(B))
             assert out.batch_size == torch.Size([B])
@@ -230,34 +243,33 @@ class TestCUDA:
 
     def test_output_readable_after_stream_handoff(self):
         """Calling stream must not race with compute stream on result tensors."""
-        helper = FixedBatchedInference(
-            _make_policy(), "cuda:0", bucket_sizes=[8]
-        )
-        batch = _make_batch(5)
-        out = helper(batch)
-        # If stream sync is broken this may return zeros or garbage.
-        # At minimum it must not hang or raise.
+        helper = FixedBatchedInference(_make_policy(), "cuda:0", bucket_sizes=[8])
+        out = helper(_make_batch(5))
         torch.cuda.synchronize()
         assert out["action"].shape == torch.Size([5, 2])
         assert not out["action"].isnan().any()
 
     def test_separate_copy_and_compute_streams(self):
-        helper = FixedBatchedInference(
-            _make_policy(), "cuda:0", bucket_sizes=[8]
-        )
+        helper = FixedBatchedInference(_make_policy(), "cuda:0", bucket_sizes=[8])
         assert helper._copy_stream is not None
         assert helper._compute_stream is not None
         assert helper._copy_stream != helper._compute_stream
 
     def test_env_index_preserved_on_cuda(self):
-        helper = FixedBatchedInference(
-            _make_policy(), "cuda:0", bucket_sizes=[8]
-        )
+        helper = FixedBatchedInference(_make_policy(), "cuda:0", bucket_sizes=[8])
         batch = _make_batch(3, with_env_index=True)
         out = helper(batch)
         assert "env_index" in out.keys()
         indices = [out.get("env_index")[i].data for i in range(3)]
         assert indices == [0, 1, 2]
+
+    def test_nested_tensordict_on_cuda(self):
+        """Nested TDs must be classified as tensor data and copied to device."""
+        helper = FixedBatchedInference(_make_policy(), "cuda:0", bucket_sizes=[8])
+        batch = _make_batch(3, nested=True)
+        assert "state" not in helper._non_tensor_keys(batch)
+        out = helper(batch)
+        assert out.batch_size == torch.Size([3])
 
 
 def test_importable_from_torchrl_envs():

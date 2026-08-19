@@ -1,14 +1,15 @@
-﻿# Copyright (c) Meta Platforms, Inc. and affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
 import bisect
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 import torch
 from tensordict import TensorDictBase
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 
 __all__ = ["FixedBatchedInference"]
@@ -60,7 +61,8 @@ class FixedBatchedInference:
     .. note::
         Non-tensor metadata keys (e.g. `"env_index"`) are automatically
         routed around the pinned staging buffer and reattached to the output,
-        so they are always preserved.
+        so they are always preserved.  Nested :class:~tensordict.TensorDictBase
+        values are correctly identified as tensor data and included in staging.
 
     .. note::
         Initialisation is *lazy*: pinned staging buffers and CUDA events are
@@ -132,13 +134,29 @@ class FixedBatchedInference:
 
         self._initialized = False
 
+    @staticmethod
+    def _non_tensor_keys(batch: TensorDictBase) -> list[str]:
+        """Return top-level keys whose values are not tensors or TensorDicts.
+
+        Non-tensor metadata (e.g. `NonTensorStack` env_index) cannot live in
+        pinned staging buffers and must be routed around them.
+
+        Note: we inspect the **top-level value** (not recursive leaves) so that
+        nested TensorDicts — which contain tensor leaves reachable via tuple
+        keys — are correctly classified as tensor data, not metadata.
+        """
+        return [
+            k
+            for k in batch.keys()
+            if isinstance(batch.get(k), (NonTensorStack, NonTensorData))
+        ]
+
     def _init_from_batch(self, batch: TensorDictBase) -> None:
         """Allocate pinned staging buffers per bucket from the first batch."""
-        # Only tensor leaves go into staging; non-tensor metadata (e.g. env_index)
-        # is routed separately in __call__.
-        tensor_keys = [
-            k for k, v in batch.items(True, True) if isinstance(v, torch.Tensor)
-        ]
+        # Only tensor leaves and nested TensorDicts go into staging.
+        # Non-tensor metadata (e.g. env_index) is routed separately in __call__.
+        meta_keys = self._non_tensor_keys(batch)
+        tensor_keys = [k for k in batch.keys() if k not in meta_keys]
         tensor_template = batch.select(*tensor_keys)[:1]
 
         for bucket in self.bucket_sizes:
@@ -200,12 +218,12 @@ class FixedBatchedInference:
         if not self._initialized:
             self._init_from_batch(batch)
 
-        # Separate tensor leaves from non-tensor metadata (e.g. env_index).
-        # Non-tensor keys cannot live in pinned staging buffers.
-        tensor_keys = [
-            k for k, v in batch.items(True, True) if isinstance(v, torch.Tensor)
-        ]
-        non_tensor_keys = [k for k in batch.keys() if k not in tensor_keys]
+        # Separate non-tensor metadata from tensor / nested-TensorDict keys.
+        # Nested TensorDicts are identified by checking the top-level value type
+        # directly; iterating recursive leaves would yield tuple keys that do not
+        # appear in batch.keys(), causing nested TDs to be misclassified.
+        non_tensor_keys = self._non_tensor_keys(batch)
+        tensor_keys = [k for k in batch.keys() if k not in non_tensor_keys]
 
         bucket = self._pick_bucket(B)
         buf_idx = self._buf_idx[bucket]
@@ -243,6 +261,13 @@ class FixedBatchedInference:
             # with compute for the current batch.
             self._compute_stream.wait_stream(self._copy_stream)
             with torch.cuda.stream(self._compute_stream):
+                # Tell the caching allocator that device_batch tensors are live
+                # on _compute_stream.  Without this, if device_batch goes out of
+                # scope before the stream reaches the forward pass, the allocator
+                # may reuse the backing memory while the GPU is still reading it.
+                device_batch.apply(
+                    lambda t: t.record_stream(torch.cuda.current_stream())
+                )
                 output = self.policy(device_batch)
 
             # Make the *calling* stream wait for compute before the caller reads
