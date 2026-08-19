@@ -64,3 +64,9 @@ records for the preset. A window narrower than that holds no completed episode
 over most of the run, so the script refuses one before launching anything. The
 command above keeps the 50,000-step window and still fills two of them with
 about 48 episodes each.
+
+`optimization.compile_rssm` compiles the RSSM recurrence and is off by default,
+since a short run never repays the build. `step` compiles the deterministic work
+and draws the same categories as an eager run; `scan` compiles the unrolled
+recurrence and the imagination prior, and is faster, but its draws fall inside
+the compiled region, so a seeded run diverges from an eager one.
