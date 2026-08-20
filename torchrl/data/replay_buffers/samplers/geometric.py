@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -12,11 +13,9 @@ import numpy as np
 import torch
 from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
-
 from torchrl.data.replay_buffers.storages import Storage
 
 from .base import Sampler
-
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -320,6 +319,24 @@ class GeometricTrajectoryWindowSampler(Sampler):
         self._cache_storage_id = id(storage)
         self._cache_revision = revision
 
+    def _sample_future_offset(self, max_future: torch.Tensor) -> torch.Tensor:
+        """Sample from the geometric distribution truncated at ``max_future``."""
+        if not self.continuation_probability:
+            return torch.zeros((1,), dtype=torch.long, device=max_future.device)
+
+        uniform = torch.rand(
+            (),
+            dtype=torch.float32,
+            device=max_future.device,
+            generator=self._rng,
+        )
+
+        log_y = math.log(self.continuation_probability)
+        truncation_mass = -torch.expm1((max_future.to(torch.float32) + 1) * log_y)
+        quantile = torch.log1p(-uniform * truncation_mass) / log_y
+        offset = torch.floor(quantile).clamp_min(0).to(torch.long)
+        return torch.minimum(offset, max_future).reshape(1)
+
     def _consume_pending(self) -> torch.Tensor:
         if len(self._pending_indices) == 1:
             index = self._pending_indices[0]
@@ -483,14 +500,10 @@ class GeometricTrajectoryWindowSampler(Sampler):
         following: torch.Tensor,
         batch_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        device = max_future_by_slot.device
-        offsets = torch.arange(self.max_future + 1, device=device)
         max_available = max_future_by_slot.max()
-        offset_weights = self.continuation_probability ** offsets.to(torch.float32)
-        offset_weights = offset_weights * (offsets <= max_available)
-        future_offset = torch.multinomial(
-            offset_weights, 1, replacement=True, generator=self._rng
-        )
+        future_offset = self._sample_future_offset(max_available)
+        zero = torch.zeros((), dtype=torch.long, device=max_future_by_slot.device)
+        one = torch.ones_like(future_offset)
         anchor_weights = (max_future_by_slot >= future_offset).to(torch.float32)
         anchors = torch.multinomial(
             anchor_weights, batch_size, replacement=True, generator=self._rng
@@ -501,7 +514,7 @@ class GeometricTrajectoryWindowSampler(Sampler):
         current = anchors
         for _ in range(self.history):
             candidate = previous[current]
-            is_valid = candidate >= 0
+            is_valid = candidate >= zero
             current = torch.where(is_valid, candidate, current)
             indices.append(current)
             validity.append(is_valid)
@@ -509,12 +522,14 @@ class GeometricTrajectoryWindowSampler(Sampler):
         validity.reverse()
 
         current = anchors
-        for offset in range(1, self.max_future + 1):
-            take_step = offsets[offset] <= future_offset
+        remaining_future = future_offset
+        for _ in range(self.max_future):
+            take_step = remaining_future > zero
             candidate = following[current]
             current = torch.where(take_step, candidate, current)
             indices.append(current)
             validity.append(take_step.expand_as(current))
+            remaining_future = remaining_future - one
 
         index = torch.stack(indices, dim=-1)
         validity_mask = torch.stack(validity, dim=-1)

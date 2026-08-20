@@ -10,7 +10,6 @@ import os
 import pytest
 import torch
 from tensordict import TensorDict
-
 from torchrl.data import (
     LazyMemmapStorage,
     LazyStackStorage,
@@ -486,6 +485,17 @@ def test_geometric_trajectory_window_sampler_sample(
         benchmark(write_and_sample)
     else:
         benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("max_future", [32, 4_096])
+def test_geometric_trajectory_window_sampler_future_offset(benchmark, max_future):
+    sampler = GeometricTrajectoryWindowSampler(
+        history=0,
+        max_future=max_future,
+        continuation_probability=0.9,
+    )
+    max_available = torch.tensor(max_future)
+    benchmark(sampler._sample_future_offset, max_available)
 
 
 class TestPrioritizedReplayBufferBenchmark:
