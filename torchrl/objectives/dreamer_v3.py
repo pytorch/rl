@@ -133,6 +133,7 @@ def categorical_kl_balanced(
         prior_logits: Shape ``[..., num_categoricals, num_classes]``.
         alpha (float): Balancing weight (0.8 in the paper). Default: 0.8.
         free_bits (float): Minimum per-categorical KL in nats. Default: 1.0.
+
     Returns:
         Scalar KL loss.
 
