@@ -2125,6 +2125,38 @@ class TestGeometricTrajectoryWindowSampler:
             < trajectory_lengths[trajectories[:, sampler.history]]
         ).all()
 
+    def test_truncated_geometric_distribution(self):
+        continuation_probability = 0.6
+        max_future = 4
+        num_samples = 20_000
+
+        sampler = GeometricTrajectoryWindowSampler(
+            history=0,
+            continuation_probability=continuation_probability,
+        )
+        sampler._rng = torch.Generator().manual_seed(0)
+
+        samples = torch.tensor(
+            [sampler._sample_future_offset(max_future) for _ in range(num_samples)]
+        )
+
+        observed = torch.bincount(
+            samples,
+            minlength=max_future + 1,
+        ).to(torch.float64)
+        observed /= num_samples
+
+        offsets = torch.arange(max_future + 1, dtype=torch.float64)
+        expected = continuation_probability**offsets
+        expected /= expected.sum()
+
+        torch.testing.assert_close(
+            observed,
+            expected,
+            atol=0.015,
+            rtol=0,
+        )
+
     def test_uniform_over_eligible_steps_not_trajectories(self):
         generator = torch.Generator().manual_seed(0)
         rb = TensorDictReplayBuffer(

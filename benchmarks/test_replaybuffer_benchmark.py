@@ -82,6 +82,25 @@ def sample(rb):
     rb.sample()
 
 
+def add_and_sample_geometric(rb, counter, trajectory_length):
+    value = counter[0]
+    trajectory = value // trajectory_length
+    step = value % trajectory_length
+
+    rb.add(
+        TensorDict(
+            {
+                "trajectory": torch.tensor(trajectory),
+                "step": torch.tensor(step),
+                "value": torch.tensor(value),
+            },
+            batch_size=[],
+        )
+    )
+    counter[0] += 1
+    rb.sample()
+
+
 def _replay_boundary_device():
     device = os.getenv("TORCHRL_BENCHMARK_DEVICE")
     if device == "GPU":
@@ -486,6 +505,37 @@ def test_geometric_trajectory_window_sampler_sample(
         benchmark(write_and_sample)
     else:
         benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("size", [1_000, 100_000])
+def test_geometric_trajectory_window_sampler_add_and_sample(benchmark, size):
+    trajectory_length = 128
+    trajectory = torch.arange(size) // trajectory_length
+    step = torch.arange(size) % trajectory_length
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=GeometricTrajectoryWindowSampler(
+            history=8,
+            continuation_probability=0.9,
+            trajectory_key="trajectory",
+            step_key="step",
+        ),
+        batch_size=64,
+    )
+    rb.extend(
+        TensorDict(
+            {"trajectory": trajectory, "step": step, "value": torch.arange(size)},
+            batch_size=[size],
+        )
+    )
+
+    counter = [size]
+    benchmark(
+        add_and_sample_geometric,
+        rb,
+        counter,
+        trajectory_length,
+    )
 
 
 class TestPrioritizedReplayBufferBenchmark:

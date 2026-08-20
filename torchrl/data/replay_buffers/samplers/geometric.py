@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -319,6 +320,26 @@ class GeometricTrajectoryWindowSampler(Sampler):
         self._pending_storage_id = None
         self._cache_storage_id = id(storage)
         self._cache_revision = revision
+
+    def _sample_future_offset(self, max_future: int) -> int:
+        """Sample from the geometric distribution truncated at ``max_future``."""
+        if not max_future or not self.continuation_probability:
+            return 0
+
+        device = self._rng.device if self._rng is not None else None
+        uniform = torch.rand(
+            (),
+            dtype=torch.float64,
+            device=device,
+            generator=self._rng,
+        )
+
+        log_y = math.log(self.continuation_probability)
+        truncation_mass = -math.expm1((max_future + 1) * log_y)
+        quantile = torch.log1p(-uniform * truncation_mass) / log_y
+        offset = torch.ceil(quantile).sub_(1).clamp_(0, max_future)
+
+        return int(offset.cpu().item())
 
     def _consume_pending(self) -> torch.Tensor:
         if len(self._pending_indices) == 1:
