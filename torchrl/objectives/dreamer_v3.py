@@ -48,6 +48,7 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import ValueEstimatorBase
+from torchrl.objectives.value.functional import td_lambda_return_estimate
 
 symexp = _symexp
 two_hot_decode = _two_hot_decode
@@ -942,22 +943,22 @@ def _replay_value_target(
     The output has one step less than the input: element ``k`` is the return
     for replay state ``k``, from the rewards and bootstraps at ``k + 1`` on.
     """
-    reward = reward.squeeze(-1)
-    done = done.squeeze(-1)
-    terminated = terminated.squeeze(-1)
-    discount = 1 - 1 / horizon
-    live = (~terminated[..., 1:]).to(reward.dtype) * discount
-    continuation = (~done[..., 1:]).to(reward.dtype) * lmbda
-    intermediate = reward[..., 1:] + (1 - continuation) * live * bootstrap[..., 1:]
-    next_return = bootstrap[..., -1]
-    returns = []
-    for time_index in reversed(range(intermediate.shape[-1])):
-        next_return = (
-            intermediate[..., time_index]
-            + live[..., time_index] * continuation[..., time_index] * next_return
+    reward = reward.squeeze(-1).unsqueeze(-1)
+    done = done.squeeze(-1).unsqueeze(-1)
+    terminated = terminated.squeeze(-1).unsqueeze(-1)
+    bootstrap = bootstrap.squeeze(-1).unsqueeze(-1)
+    return (
+        td_lambda_return_estimate(
+            gamma=1 - 1 / horizon,
+            lmbda=lmbda,
+            next_state_value=bootstrap[..., 1:, :],
+            reward=reward[..., 1:, :],
+            done=done[..., 1:, :],
+            terminated=terminated[..., 1:, :],
         )
-        returns.append(next_return)
-    return torch.stack(returns[::-1], -1).detach()
+        .squeeze(-1)
+        .detach()
+    )
 
 
 class DreamerV3ValueLoss(LossModule):
