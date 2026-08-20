@@ -733,7 +733,8 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
         )
 
-    def test_dreamer_v3_replay_value_loss_nested_keys(self, device):
+    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
+    def test_dreamer_v3_replay_value_loss_nested_keys(self, device, reduction):
         batch, time_steps = 2, 4
         state = torch.randn(
             batch,
@@ -763,9 +764,9 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             },
             [batch, time_steps],
         )
-        value_loss = DreamerV3ValueLoss(self._create_value_model().to(device)).to(
-            device
-        )
+        value_loss = DreamerV3ValueLoss(
+            self._create_value_model().to(device), reduction=reduction
+        ).to(device)
         value_loss.set_keys(
             reward=("replay", "reward"),
             done=("replay", "done"),
@@ -774,21 +775,27 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
 
         loss = value_loss.replay_value_loss(replay)["loss_replay_value"]
-        loss.backward()
+        expected_shape = (batch, time_steps - 1) if reduction == "none" else ()
+        assert loss.shape == expected_shape
+        loss.sum().backward()
         assert state.grad is not None and state.grad.abs().sum() > 0
 
     @pytest.mark.parametrize("discount_loss", [True, False])
-    def test_dreamer_v3_value_loss_symlog_mse(self, device, discount_loss):
+    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
+    def test_dreamer_v3_value_loss_symlog_mse(self, device, discount_loss, reduction):
         tensordict = self._create_value_data().to(device)
         value_model = self._create_value_model(out_features=1).to(device)
         loss_module = DreamerV3ValueLoss(
             value_model,
             value_loss="symlog_mse",
             discount_loss=discount_loss,
+            reduction=reduction,
         )
         loss_td, _ = loss_module(tensordict)
         assert "loss_value" in loss_td.keys()
-        loss_td["loss_value"].backward()
+        expected_shape = tensordict.batch_size if reduction == "none" else ()
+        assert loss_td["loss_value"].shape == expected_shape
+        loss_td["loss_value"].sum().backward()
         grad_total = sum(
             p.grad.pow(2).sum().item()
             for p in loss_module.parameters()

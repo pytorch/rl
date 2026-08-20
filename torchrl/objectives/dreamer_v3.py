@@ -1003,6 +1003,8 @@ class DreamerV3ValueLoss(LossModule):
         slow_critic_regularization (float, optional): Weight of the auxiliary
             loss that trains the online critic toward decoded target-critic
             predictions. Default: ``0.0``.
+        reduction ("none", "mean" or "sum", optional): Reduction applied to
+            the loss. Defaults to ``"mean"``.
 
     Examples:
         >>> import torch
@@ -1070,11 +1072,15 @@ class DreamerV3ValueLoss(LossModule):
         num_value_bins: int = _DEFAULT_NUM_BINS,
         actor_loss: DreamerV3ActorLoss | None = None,
         slow_critic_regularization: float = 0.0,
+        reduction: Literal["none", "mean", "sum"] | None = None,
     ):
         super().__init__()
+        if reduction is None:
+            reduction = "mean"
         if slow_critic_regularization < 0:
             raise ValueError("slow_critic_regularization must be non-negative.")
         self.slow_critic_regularization = slow_critic_regularization
+        self.reduction = reduction
         self.convert_to_functional(
             value_model,
             "value_model",
@@ -1202,7 +1208,7 @@ class DreamerV3ValueLoss(LossModule):
             )
 
         return TensorDict(
-            {"loss_replay_value": (weight.to(loss.dtype) * loss).mean()}, []
+            loss_replay_value=self._reduce_loss(weight.to(loss.dtype) * loss)
         )
 
     def _step_value_loss(
@@ -1287,13 +1293,11 @@ class DreamerV3ValueLoss(LossModule):
         else:
             slow_loss = torch.zeros_like(loss)
 
-        value_loss = (discount * loss).mean()
+        value_loss = self._reduce_loss(discount * loss)
 
         loss_tensordict = TensorDict(
-            {
-                "loss_value": value_loss,
-                "value_slow_loss": (discount * slow_loss).mean().detach(),
-            }
+            loss_value=value_loss,
+            value_slow_loss=self._reduce_loss(discount * slow_loss).detach(),
         )
         self._clear_weakrefs(fake_data, loss_tensordict)
         return loss_tensordict, fake_data.data
