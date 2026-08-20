@@ -2,6 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from .base import (
+    _REPLACEMENT_DISPATCH as _REPLACEMENT_DISPATCH,
+    _SamplerMeta as _SamplerMeta,
+    Sampler,
+)
 from .ensemble import SamplerEnsemble
 from .llm import PromptGroupSampler
 from .prioritized import (
@@ -17,12 +22,11 @@ from .prioritized import (
 )
 from .prioritized_slice import PrioritizedSliceSampler
 from .random import (
-    _default_staleness_weight,
+    _default_staleness_weight as _default_staleness_weight,
     ConsumingSampler,
     RandomSampler,
     SamplerWithoutReplacement,
 )
-from .base import _REPLACEMENT_DISPATCH, _SamplerMeta, Sampler
 from .slice import SliceSampler
 from .slice_without_replacement import SliceSamplerWithoutReplacement
 from .staleness import StalenessAwareSampler
@@ -38,6 +42,12 @@ _REPLACEMENT_DISPATCH.update(
 
 __all__ = [
     "ConsumingSampler",
+    "CudaMinSegmentTreeFp32",
+    "CudaMinSegmentTreeFp64",
+    "CudaSumSegmentTreeFp32",
+    "CudaSumSegmentTreeFp64",
+    "MinSegmentTreeFp32",
+    "MinSegmentTreeFp64",
     "PrioritizedSampler",
     "PrioritizedSliceSampler",
     "PromptGroupSampler",
@@ -48,4 +58,24 @@ __all__ = [
     "SliceSampler",
     "SliceSamplerWithoutReplacement",
     "StalenessAwareSampler",
+    "SumSegmentTreeFp32",
+    "SumSegmentTreeFp64",
 ]
+
+for _export in (
+    _SamplerMeta,
+    Sampler,
+    RandomSampler,
+    ConsumingSampler,
+    SamplerWithoutReplacement,
+    _default_staleness_weight,
+    StalenessAwareSampler,
+    PrioritizedSampler,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+    PrioritizedSliceSampler,
+    PromptGroupSampler,
+    SamplerEnsemble,
+):
+    _export.__module__ = __name__
+del _export

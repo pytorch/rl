@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import textwrap
 from collections.abc import Callable
-from typing import Any
+
+from typing import Any, TYPE_CHECKING, TypeVar
 
 import numpy as np
 import torch
-
-
-from typing import TYPE_CHECKING, TypeVar
 
 from tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import expand_right

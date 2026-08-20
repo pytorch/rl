@@ -16,8 +16,8 @@ from torchrl.data.replay_buffers.storages import Storage, TensorStorage
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
 
-from .random import _default_staleness_weight
 from .base import Sampler
+from .random import _default_staleness_weight
 
 
 class StalenessAwareSampler(Sampler):
