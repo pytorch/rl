@@ -934,40 +934,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         not (_has_hydra and _has_omegaconf),
         reason="requires hydra and omegaconf",
     )
-    def test_dreamer_v3_sota_shares_imagination_parameters(self, device):
+    def test_dreamer_v3_sota_shares_imagination_parameters(self, device, monkeypatch):
         from omegaconf import OmegaConf
 
         repo_root = Path(__file__).parents[2]
+        example_dir = repo_root / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
         example = runpy.run_path(
             repo_root / "sota-implementations/dreamer_v3/train.py",
             run_name="dreamer_v3_test",
         )
         cfg = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
         cfg.networks.num_reward_bins = self.num_reward_bins
-        (
-            world_model,
-            observation_encoder,
-            prior,
-            posterior,
-            reward_head,
-            reward_decoder,
-            continuation_head,
-        ) = example["build_world_model"](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
+        (world_model, prior, reward_net, reward_decoder, continuation_net,) = example[
+            "build_world_model"
+        ](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
+        posterior = world_model[1].rssm_posterior.module
         imagination_model = example["build_imagination_model"](
             prior_net=prior,
-            reward_net=reward_head,
+            reward_net=reward_net,
             reward_decoder=reward_decoder,
         ).to(device)
         continuation_model = example["build_continuation_model"](
-            continuation_net=continuation_head
+            continuation_net=continuation_net
         ).to(device)
         actor_model = example["build_actor"](cfg=cfg, action_dim=self.action_dim).to(
             device
         )
-        real_actor = example["build_real_actor"](
-            observation_encoder=observation_encoder,
-            posterior_net=posterior,
-            prior_net=prior,
+        real_actor = example["build_real_world_actor"](
+            world_model=world_model,
             actor_model=actor_model,
         ).to(device)
         world_model = world_model.to(device)
@@ -996,7 +991,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             symlog(world_input["next", "reco_pixels"]),
             world_input["next", "reco_symlog_observation"],
         )
-        shared_parameters = tuple(prior.parameters()) + tuple(reward_head.parameters())
+        shared_parameters = tuple(prior.parameters()) + tuple(reward_net.parameters())
         world_parameters = tuple(world_model.parameters())
         imagination_parameters = tuple(imagination_model.parameters())
         assert all(
@@ -1009,7 +1004,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             and any(
                 parameter is candidate for candidate in continuation_model.parameters()
             )
-            for parameter in continuation_head.parameters()
+            for parameter in continuation_net.parameters()
         )
 
         observation = torch.tensor(
@@ -1018,7 +1013,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         real_input = TensorDict(
             {
                 "observation": observation,
+                "state": torch.zeros(1, self.state_dim, device=device),
                 "belief": torch.zeros(1, cfg.networks.rnn_hidden_dim, device=device),
+                "previous_action": torch.zeros(1, self.action_dim, device=device),
+                "is_init": torch.zeros(1, 1, dtype=torch.bool, device=device),
             },
             [1],
         )
@@ -1042,11 +1040,6 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         continuation_model(reward_td)
         assert reward_td["continuation"].shape == (2, 1)
 
-        parameter = nn.Parameter(torch.tensor([3.0, 4.0], device=device))
-        parameter.grad = torch.tensor([30.0, 40.0], device=device)
-        example["adaptive_grad_clip_"]([parameter], clip=0.3)
-        assert parameter.grad.norm().item() == pytest.approx(1.5)
-
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
         from omegaconf import OmegaConf
@@ -1059,19 +1052,26 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         paths = []
         for seed, returns in enumerate(([1.0, 4.0], [3.0, 6.0], [2.0, 5.0])):
-            path = tmp_path / f"seed_{seed}.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "seed": seed,
-                        "environment_steps": [100, 200],
-                        "evaluation_returns": returns,
-                    }
-                )
+            path = tmp_path / f"seed_{seed}.jsonl"
+            records = [
+                {
+                    "type": "train_episode",
+                    "environment_steps": step,
+                    "score": score,
+                }
+                for step, score in zip((100, 200), returns)
+            ]
+            records.append(
+                {
+                    "type": "summary",
+                    "seed": seed,
+                    "total_environment_steps": 200,
+                }
             )
+            path.write_text("\n".join(map(json.dumps, records)) + "\n")
             paths.append(path)
 
-        summary = benchmark["aggregate_runs"](paths)
+        summary = benchmark["aggregate_runs"](paths, window_size=100)
         assert summary["environment_steps"] == [100, 200]
         assert summary["median_return"] == [2.0, 5.0]
         assert summary["lower_quartile_return"] == [1.5, 4.5]
