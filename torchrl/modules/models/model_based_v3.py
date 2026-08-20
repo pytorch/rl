@@ -14,8 +14,9 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
-from torch.nn import GRUCell
+from torch.nn import functional as F, GRUCell
 
+from torchrl._utils import implement_for
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 
 
@@ -40,11 +41,18 @@ class _DreamerV3RMSNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(features, device=device))
 
+    @implement_for("torch", None, "2.4", compilable=True)
     def forward(self, value: torch.Tensor) -> torch.Tensor:
         dtype = value.dtype
         value = value.float()
         value = value * torch.rsqrt(value.square().mean(-1, keepdim=True) + self.eps)
         return (value * self.weight.float()).to(dtype)
+
+    @implement_for("torch", "2.4", compilable=True)
+    def forward(self, value: torch.Tensor) -> torch.Tensor:  # noqa: F811
+        return F.rms_norm(
+            value.float(), (self.weight.shape[0],), self.weight.float(), self.eps
+        ).to(value.dtype)
 
 
 class _DreamerV3BlockLinear(nn.Module):

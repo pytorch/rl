@@ -272,6 +272,15 @@ class TestDreamerV3Components:
     def test_reference_normalization_and_block_fan_in(self):
         norm = _DreamerV3RMSNorm(8)
         assert set(dict(norm.named_parameters())) == {"weight"}
+        with torch.no_grad():
+            norm.weight.copy_(torch.linspace(0.5, 1.5, 8))
+        value = torch.randn(3, 8, dtype=torch.bfloat16)
+        expected = (
+            value.float()
+            * torch.rsqrt(value.float().square().mean(-1, keepdim=True) + norm.eps)
+            * norm.weight
+        )
+        torch.testing.assert_close(norm(value), expected.to(value.dtype))
 
         torch.manual_seed(0)
         one_block = _DreamerV3BlockLinear(1024, 1024, num_blocks=1)
