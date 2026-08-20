@@ -715,13 +715,17 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     # Value loss tests
     # ------------------------------------------------------------------ #
 
-    def test_dreamer_v3_replay_value_target(self, device):
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_dreamer_v3_replay_value_target(self, device, compiled):
         reward = torch.tensor([[0.0, 1.0, 2.0, 3.0]], device=device)
         bootstrap = torch.tensor([[10.0, 20.0, 30.0, 40.0]], device=device)
         done = torch.zeros_like(reward, dtype=torch.bool)
         terminated = torch.zeros_like(done)
 
-        target = _replay_value_target(
+        target_fn = _replay_value_target
+        if compiled:
+            target_fn = torch.compile(target_fn, backend="eager", fullgraph=True)
+        target = target_fn(
             reward,
             done,
             terminated,

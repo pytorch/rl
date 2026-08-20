@@ -48,7 +48,11 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import ValueEstimatorBase
-from torchrl.objectives.value.functional import td_lambda_return_estimate
+from torchrl.objectives.value.functional import (
+    is_dynamo_compiling as _is_dynamo_compiling,
+    td_lambda_return_estimate,
+    vec_td_lambda_return_estimate,
+)
 
 symexp = _symexp
 two_hot_decode = _two_hot_decode
@@ -947,8 +951,15 @@ def _replay_value_target(
     done = done.squeeze(-1).unsqueeze(-1)
     terminated = terminated.squeeze(-1).unsqueeze(-1)
     bootstrap = bootstrap.squeeze(-1).unsqueeze(-1)
+    # The vectorized path discovers and pads trajectory lengths dynamically,
+    # which cannot be captured by Dynamo in fullgraph mode.
+    return_estimate = (
+        td_lambda_return_estimate
+        if _is_dynamo_compiling()
+        else vec_td_lambda_return_estimate
+    )
     return (
-        td_lambda_return_estimate(
+        return_estimate(
             gamma=1 - 1 / horizon,
             lmbda=lmbda,
             next_state_value=bootstrap[..., 1:, :],
