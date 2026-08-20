@@ -934,6 +934,7 @@ class DreamerV3ActorLoss(LossModule):
 # ---------------------------------------------------------------------------
 
 
+@torch.no_grad()
 def _replay_value_target(
     reward: torch.Tensor,
     done: torch.Tensor,
@@ -958,18 +959,14 @@ def _replay_value_target(
         if _is_dynamo_compiling()
         else vec_td_lambda_return_estimate
     )
-    return (
-        return_estimate(
-            gamma=1 - 1 / horizon,
-            lmbda=lmbda,
-            next_state_value=bootstrap[..., 1:, :],
-            reward=reward[..., 1:, :],
-            done=done[..., 1:, :],
-            terminated=terminated[..., 1:, :],
-        )
-        .squeeze(-1)
-        .detach()
-    )
+    return return_estimate(
+        gamma=1 - 1 / horizon,
+        lmbda=lmbda,
+        next_state_value=bootstrap[..., 1:, :],
+        reward=reward[..., 1:, :],
+        done=done[..., 1:, :],
+        terminated=terminated[..., 1:, :],
+    ).squeeze(-1)
 
 
 class DreamerV3ValueLoss(LossModule):
