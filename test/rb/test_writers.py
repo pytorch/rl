@@ -17,7 +17,7 @@ from torchrl.data import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
-from torchrl.data.replay_buffers import samplers
+from torchrl.data.replay_buffers.samplers import prioritized as samplers
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     RandomSampler,
