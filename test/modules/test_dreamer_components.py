@@ -13,6 +13,14 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules import SafeModule
+from torchrl.modules.models.dreamer_v3 import (
+    _DreamerV3BlockLinear,
+    _DreamerV3RMSNorm,
+    DreamerV3MLP,
+    RSSMPosteriorV3,
+    RSSMPriorV3,
+    RSSMRolloutV3,
+)
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -20,14 +28,6 @@ from torchrl.modules.models.model_based import (
     RSSMPosterior,
     RSSMPrior,
     RSSMRollout,
-)
-from torchrl.modules.models.model_based_v3 import (
-    _DreamerV3BlockLinear,
-    _DreamerV3RMSNorm,
-    DreamerV3MLP,
-    RSSMPosteriorV3,
-    RSSMPriorV3,
-    RSSMRolloutV3,
 )
 
 from torchrl.testing import get_default_devices

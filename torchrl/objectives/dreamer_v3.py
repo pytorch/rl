@@ -32,7 +32,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.modules.functional import symexp as _symexp, symlog as symlog
-from torchrl.modules.models.model_based_v3 import (  # noqa: F401
+from torchrl.modules.models.dreamer_v3 import (  # noqa: F401
     _default_bins,
     _DEFAULT_NUM_BINS,
     _unimix_probs,
@@ -565,7 +565,7 @@ class DreamerV3ActorLoss(LossModule):
         >>> from torchrl.modules import MLP, SafeSequential, WorldModelWrapper
         >>> from torchrl.modules.distributions.continuous import TanhNormal
         >>> from torchrl.modules.models.model_based import DreamerActor
-        >>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+        >>> from torchrl.modules.models.dreamer_v3 import RSSMPriorV3
         >>> from torchrl.objectives import DreamerV3ActorLoss
         >>> from torchrl.objectives.utils import ValueEstimators
         >>> from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv

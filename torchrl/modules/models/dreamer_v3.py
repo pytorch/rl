@@ -501,7 +501,7 @@ class RSSMPriorV3(nn.Module):
 
     Examples:
         >>> import torch
-        >>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+        >>> from torchrl.modules.models.dreamer_v3 import RSSMPriorV3
         >>> prior = RSSMPriorV3(
         ...     action_shape=torch.Size([2]),
         ...     hidden_dim=16,
@@ -698,7 +698,7 @@ class RSSMPosteriorV3(nn.Module):
 
     Examples:
         >>> import torch
-        >>> from torchrl.modules.models.model_based_v3 import RSSMPosteriorV3
+        >>> from torchrl.modules.models.dreamer_v3 import RSSMPosteriorV3
         >>> posterior = RSSMPosteriorV3(
         ...     hidden_dim=16,
         ...     num_categoricals=4,
@@ -838,7 +838,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules.models.model_based_v3 import (
+        >>> from torchrl.modules.models.dreamer_v3 import (
         ...     RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3,
         ... )
         >>> prior = TensorDictModule(

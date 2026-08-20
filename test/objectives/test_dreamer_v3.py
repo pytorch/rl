@@ -31,12 +31,12 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.model_based import DreamerActor
-from torchrl.modules.models.model_based_v3 import (
+from torchrl.modules.models.dreamer_v3 import (
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,
 )
+from torchrl.modules.models.model_based import DreamerActor
 from torchrl.modules.models.models import MLP
 from torchrl.objectives import (
     DreamerV3ActorLoss,
