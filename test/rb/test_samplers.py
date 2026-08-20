@@ -2132,12 +2132,14 @@ class TestGeometricTrajectoryWindowSampler:
 
         sampler = GeometricTrajectoryWindowSampler(
             history=0,
+            max_future=max_future,
             continuation_probability=continuation_probability,
         )
         sampler._rng = torch.Generator().manual_seed(0)
 
-        samples = torch.tensor(
-            [sampler._sample_future_offset(max_future) for _ in range(num_samples)]
+        max_available = torch.tensor(max_future)
+        samples = torch.cat(
+            [sampler._sample_future_offset(max_available) for _ in range(num_samples)]
         )
 
         observed = torch.bincount(
