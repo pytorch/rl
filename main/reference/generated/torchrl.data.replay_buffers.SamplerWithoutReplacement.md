@@ -1,6 +1,6 @@
 # SamplerWithoutReplacement
 
-*class*torchrl.data.replay_buffers.SamplerWithoutReplacement(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#SamplerWithoutReplacement)
+*class*torchrl.data.replay_buffers.SamplerWithoutReplacement(**args*, ***kwargs*)
 
 A data-consuming sampler that ensures that the same sample is not present in consecutive batches.
 

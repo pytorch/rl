@@ -1,6 +1,6 @@
 # SliceSampler
 
-*class*torchrl.data.replay_buffers.SliceSampler(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#SliceSampler)
+*class*torchrl.data.replay_buffers.SliceSampler(**args*, ***kwargs*)
 
 Samples slices of data along the first dimension, given start and stop signals.
 

@@ -1,6 +1,6 @@
 # TensorDictMaxValueWriter
 
-*class*torchrl.data.replay_buffers.TensorDictMaxValueWriter(*rank_key=None*, *reduction: str = 'sum'*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictMaxValueWriter)
+*class*torchrl.data.replay_buffers.TensorDictMaxValueWriter(*rank_key=None*, *reduction: str = 'sum'*, ***kwargs*)
 
 A Writer class for composable replay buffers that keeps the top elements based on some ranking key.
 
@@ -119,14 +119,14 @@ This constructor isn't valid (notice the ndim argument):
 ... )
 ```
 
-add(*data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictMaxValueWriter.add)
+add(*data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/max_value.html#TensorDictMaxValueWriter.add)
 
 Inserts a single element of data at an appropriate index, and returns that index.
 
 The `rank_key` in the data passed to this module should be structured as [].
 If it has more dimensions, it will be reduced to a single value using the `reduction` method.
 
-extend(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictMaxValueWriter.extend)
+extend(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/data/replay_buffers/writers/max_value.html#TensorDictMaxValueWriter.extend)
 
 Inserts a series of data points at appropriate indices.
 
@@ -165,13 +165,6 @@ Return type:
 
 [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
 
-get_insert_index(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictMaxValueWriter.get_insert_index)
+get_insert_index(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/writers/max_value.html#TensorDictMaxValueWriter.get_insert_index)
 
 Returns the index where the data should be inserted, or `None` if it should not be inserted.
-
-tracks_generations*: bool**= False*
-
-Whether this writer stamps storage slots with a reuse generation. Always
-`False` unless the writer both supports generation tracking and was
-constructed with it enabled (see
-`RoundRobinWriter`).

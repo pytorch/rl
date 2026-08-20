@@ -1,6 +1,6 @@
 # CompressedListStorage
 
-*class*torchrl.data.replay_buffers.CompressedListStorage(*max_size: int*, ***, *compression_fn: Callable | None = None*, *decompression_fn: Callable | None = None*, *compression_level: int = 3*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) = 'cpu'*, *compilable: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage)
+*class*torchrl.data.replay_buffers.CompressedListStorage(*max_size: int*, ***, *compression_fn: Callable | None = None*, *decompression_fn: Callable | None = None*, *compression_level: int = 3*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) = 'cpu'*, *compilable: bool = False*)
 
 A storage that compresses and decompresses data.
 
@@ -58,7 +58,7 @@ Parameters:
 
 **buffer** - the object that reads from this storage.
 
-bytes()[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.bytes)
+bytes()[[source]](../../_modules/torchrl/data/replay_buffers/storages/list.html#CompressedListStorage.bytes)
 
 Return the number of bytes in the storage.
 
@@ -70,7 +70,7 @@ load(**args*, ***kwargs*)
 
 Alias for `loads()`.
 
-load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.load_state_dict)
+load_state_dict(*state_dict: dict[str, Any]*) → None[[source]](../../_modules/torchrl/data/replay_buffers/storages/list.html#CompressedListStorage.load_state_dict)
 
 Load the storage state.
 
@@ -90,10 +90,10 @@ save(**args*, ***kwargs*)
 
 Alias for `dumps()`.
 
-state_dict() → dict[str, Any][[source]](../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.state_dict)
+state_dict() → dict[str, Any][[source]](../../_modules/torchrl/data/replay_buffers/storages/list.html#CompressedListStorage.state_dict)
 
 Save the storage state.
 
-to_bytestream(*data_to_bytestream: [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | np.array | Any*) → bytes[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#CompressedListStorage.to_bytestream)
+to_bytestream(*data_to_bytestream: [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | np.array | Any*) → bytes[[source]](../../_modules/torchrl/data/replay_buffers/storages/list.html#CompressedListStorage.to_bytestream)
 
 Convert data to a byte stream.

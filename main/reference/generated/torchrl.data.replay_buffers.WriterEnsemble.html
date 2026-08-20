@@ -2483,7 +2483,7 @@ document.write(`
 <h1>WriterEnsemble<a class="headerlink" href="#writerensemble" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">WriterEnsemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">writers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#WriterEnsemble"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">WriterEnsemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">writers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble" title="Link to this definition">#</a></dt>
 <dd><p>An ensemble of writers.</p>
 <p>This class is designed to work with <a class="reference internal" href="torchrl.data.ReplayBufferEnsemble.html#torchrl.data.ReplayBufferEnsemble" title="torchrl.data.replay_buffers.replay_buffers.ReplayBufferEnsemble"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code></a>.
 It contains the writers but blocks writing with any of them.</p>
@@ -2500,13 +2500,13 @@ To extend one of the replay buffers, simply index the parent
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.add">
-<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#WriterEnsemble.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.add" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.add" title="Link to this definition">#</a></dt>
 <dd><p>Inserts one piece of data at an appropriate index, and returns that index.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.extend">
-<span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers.html#WriterEnsemble.extend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.extend" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">extend</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/writers/ensemble.html#WriterEnsemble.extend"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.extend" title="Link to this definition">#</a></dt>
 <dd><p>Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.</p>
 </dd></dl>
 
@@ -2539,15 +2539,6 @@ generation stamps a whole dim-0 slot.</p>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)">torch.Tensor</a></p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrl.data.replay_buffers.WriterEnsemble.tracks_generations">
-<span class="sig-name descname"><span class="pre">tracks_generations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrl.data.replay_buffers.WriterEnsemble.tracks_generations" title="Link to this definition">#</a></dt>
-<dd><p>Whether this writer stamps storage slots with a reuse generation. Always
-<code class="docutils literal notranslate"><span class="pre">False</span></code> unless the writer both supports generation tracking and was
-constructed with it enabled (see
-<code class="xref py py-class docutils literal notranslate"><span class="pre">RoundRobinWriter</span></code>).</p>
 </dd></dl>
 
 </dd></dl>
@@ -2675,7 +2666,6 @@ constructed with it enabled (see
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.add"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.add()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.extend"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.extend()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.generations_of"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.generations_of()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.data.replay_buffers.WriterEnsemble.tracks_generations"><code class="docutils literal notranslate"><span class="pre">WriterEnsemble.tracks_generations</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -2930,7 +2920,7 @@ constructed with it enabled (see
        "headline": "WriterEnsemble",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.data.replay_buffers.WriterEnsemble.html",
-       "articleBody": "WriterEnsemble# class torchrl.data.replay_buffers.WriterEnsemble(*writers)[source]# An ensemble of writers. This class is designed to work with ReplayBufferEnsemble. It contains the writers but blocks writing with any of them. Parameters: writers (sequence of Writer) \u2013 the writers to make the composite writer. Warning This class does not support writing. To extend one of the replay buffers, simply index the parent ReplayBufferEnsemble object. add()[source]# Inserts one piece of data at an appropriate index, and returns that index. extend()[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. generations_of(index: int | Tensor) \u2192 Tensor# Returns the generation stamp for each physical slot in index. A slot\u2019s stamp advances once per write it receives, so a single extend that wraps the storage advances a reused slot once per write. Comparing a stamp captured at sampling time against the current stamp tells you whether the slot still holds the data you sampled. Writers that do not track slot reuse \u2013 and writers constructed with track_generations=False, which is the default \u2013 report -1 everywhere. Never-written slots also report -1, so -1 means \u201cno usable stamp\u201d rather than \u201cgeneration zero\u201d. Parameters: index (int or torch.Tensor) \u2013 dim-0 slot indices. A 1-D tensor is always read as a batch of slot indices; for a storage with ndim \u003e 1, pass a tuple of per-dimension indices (as extend() returns) to identify a single cell \u2013 only its dim-0 component is used, since a generation stamps a whole dim-0 slot. Returns: int64 stamps shaped like the dim-0 component of index, on index\u2019s device. Return type: torch.Tensor tracks_generations: bool = False# Whether this writer stamps storage slots with a reuse generation. Always False unless the writer both supports generation tracking and was constructed with it enabled (see RoundRobinWriter).",
+       "articleBody": "WriterEnsemble# class torchrl.data.replay_buffers.WriterEnsemble(*writers)# An ensemble of writers. This class is designed to work with ReplayBufferEnsemble. It contains the writers but blocks writing with any of them. Parameters: writers (sequence of Writer) \u2013 the writers to make the composite writer. Warning This class does not support writing. To extend one of the replay buffers, simply index the parent ReplayBufferEnsemble object. add()[source]# Inserts one piece of data at an appropriate index, and returns that index. extend()[source]# Inserts a series of data points at appropriate indices, and returns a tensor containing the indices. generations_of(index: int | Tensor) \u2192 Tensor# Returns the generation stamp for each physical slot in index. A slot\u2019s stamp advances once per write it receives, so a single extend that wraps the storage advances a reused slot once per write. Comparing a stamp captured at sampling time against the current stamp tells you whether the slot still holds the data you sampled. Writers that do not track slot reuse \u2013 and writers constructed with track_generations=False, which is the default \u2013 report -1 everywhere. Never-written slots also report -1, so -1 means \u201cno usable stamp\u201d rather than \u201cgeneration zero\u201d. Parameters: index (int or torch.Tensor) \u2013 dim-0 slot indices. A 1-D tensor is always read as a batch of slot indices; for a storage with ndim \u003e 1, pass a tuple of per-dimension indices (as extend() returns) to identify a single cell \u2013 only its dim-0 component is used, since a generation stamps a whole dim-0 slot. Returns: int64 stamps shaped like the dim-0 component of index, on index\u2019s device. Return type: torch.Tensor",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

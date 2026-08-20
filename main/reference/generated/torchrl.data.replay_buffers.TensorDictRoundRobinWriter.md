@@ -1,6 +1,6 @@
 # TensorDictRoundRobinWriter
 
-*class*torchrl.data.replay_buffers.TensorDictRoundRobinWriter(*compilable: bool = False*, ***, *track_generations: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictRoundRobinWriter)
+*class*torchrl.data.replay_buffers.TensorDictRoundRobinWriter(*compilable: bool = False*, ***, *track_generations: bool = False*)
 
 A RoundRobin Writer class for composable, tensordict-based replay buffers.
 
@@ -11,11 +11,11 @@ Takes the same arguments as [`RoundRobinWriter`](torchrl.data.replay_buffers.Rou
 `track_generations`. When enabled, `"index_generation"` is written into
 the sampled tensordict alongside `"index"`.
 
-add(*data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictRoundRobinWriter.add)
+add(*data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#TensorDictRoundRobinWriter.add)
 
 Inserts one piece of data at an appropriate index, and returns that index.
 
-extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictRoundRobinWriter.extend)
+extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#TensorDictRoundRobinWriter.extend)
 
 Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.
 
@@ -59,7 +59,7 @@ Returns True when the argument x is true, False otherwise.
 The builtins True and False are the only two instances of the class bool.
 The class bool is a subclass of the class int, and cannot be subclassed.
 
-write_at(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#TensorDictRoundRobinWriter.write_at)
+write_at(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#TensorDictRoundRobinWriter.write_at)
 
 Writes data at explicit storage indices without moving the cursor.
 

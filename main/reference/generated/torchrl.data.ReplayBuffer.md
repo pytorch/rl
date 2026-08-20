@@ -1,6 +1,6 @@
 # ReplayBuffer
 
-*class*torchrl.data.ReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer)
+*class*torchrl.data.ReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)
 
 A generic, composable replay buffer class.
 
@@ -207,7 +207,7 @@ Examples
 >>> tree_map(assert0, s)
 ```
 
-add(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.add)
+add(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.add)
 
 Add a single element to the replay buffer.
 
@@ -219,7 +219,7 @@ Returns:
 
 index where the data lives in the replay buffer.
 
-append_transform(*transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → ReplayBuffer[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.append_transform)
+append_transform(*transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → ReplayBuffer[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.append_transform)
 
 Appends transform at the end.
 
@@ -270,15 +270,15 @@ The batch size can be overridden by setting the batch_size parameter in the `sam
 It defines both the number of samples returned by `sample()` and the number of samples that are
 yielded by the `ReplayBuffer` iterator.
 
-client() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.client)
+client() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.client)
 
 Return `self` for the zero-overhead direct backend.
 
-dump(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.dump)
+dump(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.dump)
 
 Alias for `dumps()`.
 
-dumps(*path*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.dumps)
+dumps(*path*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.dumps)
 
 Saves the replay buffer on disk at the specified path.
 
@@ -319,7 +319,7 @@ Examples
 ... assert len(rb) == len(rb_load)
 ```
 
-empty(*empty_write_count: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.empty)
+empty(*empty_write_count: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.empty)
 
 Empties the replay buffer and reset cursor to 0.
 
@@ -327,7 +327,7 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
-extend(*data: Sequence*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.extend)
+extend(*data: Sequence*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.extend)
 
 Extends the replay buffer with one or more elements contained in an iterable.
 
@@ -363,7 +363,7 @@ unbound elements can be provided (no PyTrees).
 
 Whether the replay buffer has been initialized.
 
-insert_transform(*index: int*, *transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → ReplayBuffer[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.insert_transform)
+insert_transform(*index: int*, *transform: [Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)*, ***, *invert: bool = False*) → ReplayBuffer[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.insert_transform)
 
 Inserts transform.
 
@@ -383,11 +383,11 @@ during writing and inverse calls during reading). Defaults to `False`.
 
 Whether this direct replay buffer remains available.
 
-load(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.load)
+load(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.load)
 
 Alias for `loads()`.
 
-loads(*path*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.loads)
+loads(*path*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.loads)
 
 Loads a replay buffer state at the given path.
 
@@ -399,14 +399,14 @@ Parameters:
 
 See `dumps()` for more info.
 
-next()[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.next)
+next()[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.next)
 
 Returns the next item in the replay buffer.
 
 This method is used to iterate over the replay buffer in contexts where __iter__ is not available,
 such as `RayReplayBuffer`.
 
-query(*predicate: Callable[[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)], bool] | None = None*, ***, *trajectory_key: NestedKey | None = None*) → list[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.query)
+query(*predicate: Callable[[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)], bool] | None = None*, ***, *trajectory_key: NestedKey | None = None*) → list[[Trajectory](torchrl.data.Trajectory.html#torchrl.data.Trajectory)][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.query)
 
 Filters the stored trajectories with a query predicate.
 
@@ -470,7 +470,7 @@ Examples
 >>> observations = good_trajs[0].observation
 ```
 
-read_all_in_order(*end: int | None = None*) → Any[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.read_all_in_order)
+read_all_in_order(*end: int | None = None*) → Any[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.read_all_in_order)
 
 Read storage contents in physical order.
 
@@ -485,7 +485,7 @@ Returns:
 
 A storage slice containing entries `[:end]`.
 
-register_load_hook(*hook: Callable[[Any], Any]*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.register_load_hook)
+register_load_hook(*hook: Callable[[Any], Any]*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.register_load_hook)
 
 Registers a load hook for the storage.
 
@@ -494,7 +494,7 @@ Note
 Hooks are currently not serialized when saving a replay buffer: they must
 be manually re-initialized every time the buffer is created.
 
-register_save_hook(*hook: Callable[[Any], Any]*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.register_save_hook)
+register_save_hook(*hook: Callable[[Any], Any]*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.register_save_hook)
 
 Registers a save hook for the storage.
 
@@ -503,7 +503,7 @@ Note
 Hooks are currently not serialized when saving a replay buffer: they must
 be manually re-initialized every time the buffer is created.
 
-sample(*batch_size: int | None = None*, *return_info: bool = False*) → Any[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.sample)
+sample(*batch_size: int | None = None*, *return_info: bool = False*) → Any[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.sample)
 
 Samples a batch of data from the replay buffer.
 
@@ -528,7 +528,7 @@ The sampler of the replay buffer.
 
 The sampler must be an instance of [`Sampler`](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler).
 
-save(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.save)
+save(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.save)
 
 Alias for `dumps()`.
 
@@ -536,7 +536,7 @@ Alias for `dumps()`.
 
 The canonical deployment backend for this replay buffer.
 
-set_(*key*, *value*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_)
+set_(*key*, *value*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.set_)
 
 Sets the value of a key across the entire replay buffer in-place.
 
@@ -549,7 +549,7 @@ Returns:
 
 self
 
-set_at_(*key*, *value*, *index*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_at_)
+set_at_(*key*, *value*, *index*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.set_at_)
 
 Sets the value of a key at specified indices in the replay buffer.
 
@@ -563,11 +563,11 @@ Returns:
 
 self
 
-set_sampler(*sampler: [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler)*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_sampler)
+set_sampler(*sampler: [Sampler](torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler)*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.set_sampler)
 
 Sets a new sampler in the replay buffer and returns the previous sampler.
 
-set_storage(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *collate_fn: Callable | None = None*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_storage)
+set_storage(*storage: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *collate_fn: Callable | None = None*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.set_storage)
 
 Sets a new storage in the replay buffer and returns the previous storage.
 
@@ -577,19 +577,19 @@ Parameters:
 - **collate_fn** (*callable**,**optional*) - if provided, the collate_fn is set to this
 value. Otherwise it is reset to a default value.
 
-set_writer(*writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.set_writer)
+set_writer(*writer: [Writer](torchrl.data.replay_buffers.Writer.html#torchrl.data.replay_buffers.Writer)*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.set_writer)
 
 Sets a new writer in the replay buffer and returns the previous writer.
 
-shutdown(*timeout: float | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.shutdown)
+shutdown(*timeout: float | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.shutdown)
 
 Mark this direct replay-buffer owner as shut down.
 
-start() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.start)
+start() → T[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.start)
 
 Return this already-started direct replay buffer.
 
-stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.stats)
+stats() → dict[str, int | float | bool][[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.stats)
 
 Returns a cheap, serializable snapshot of the buffer's operational state.
 
@@ -648,7 +648,7 @@ The transform of the replay buffer.
 
 The transform must be an instance of [`Transform`](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform).
 
-update_(*input_dict_or_td*, *clone=False*, ***, *keys_to_update=None*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.update_)
+update_(*input_dict_or_td*, *clone=False*, ***, *keys_to_update=None*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.update_)
 
 Updates the replay buffer in-place with the given dict or TensorDict.
 
@@ -664,7 +664,7 @@ Returns:
 
 self
 
-update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.update_if_present)
+update_if_present(***, *index: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *generation: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *patch: Mapping[NestedKey, [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)] | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, *version_key: NestedKey | None = None*, *version: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *require_newer: bool = False*) → [ConditionalUpdateResult](torchrl.data.ConditionalUpdateResult.html#torchrl.data.ConditionalUpdateResult)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.update_if_present)
 
 Conditionally updates stored records that are still live.
 
@@ -794,7 +794,7 @@ deterministically:
 0 4
 ```
 
-write_all(*data: Any*, *end: int | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBuffer.write_all)
+write_all(*data: Any*, *end: int | None = None*) → None[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/base.html#ReplayBuffer.write_all)
 
 Write data back to storage in physical order.
 

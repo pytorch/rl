@@ -1,6 +1,6 @@
 # SamplerEnsemble
 
-*class*torchrl.data.replay_buffers.SamplerEnsemble(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#SamplerEnsemble)
+*class*torchrl.data.replay_buffers.SamplerEnsemble(**args*, ***kwargs*)
 
 An ensemble of samplers.
 

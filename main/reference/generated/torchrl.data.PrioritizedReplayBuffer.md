@@ -1,6 +1,6 @@
 # PrioritizedReplayBuffer
 
-*class*torchrl.data.PrioritizedReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#PrioritizedReplayBuffer)
+*class*torchrl.data.PrioritizedReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)
 
 Prioritized replay buffer.
 
@@ -258,7 +258,7 @@ Examples
 ... assert len(rb) == len(rb_load)
 ```
 
-empty(*empty_write_count: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#PrioritizedReplayBuffer.empty)
+empty(*empty_write_count: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/prioritized.html#PrioritizedReplayBuffer.empty)
 
 Empties the replay buffer and reset cursor to 0.
 

@@ -1,6 +1,6 @@
 # StorageEnsemble
 
-*class*torchrl.data.replay_buffers.StorageEnsemble(**storages: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *transforms: list[[Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)] = None*)[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#StorageEnsemble)
+*class*torchrl.data.replay_buffers.StorageEnsemble(**storages: [Storage](torchrl.data.replay_buffers.Storage.html#torchrl.data.replay_buffers.Storage)*, *transforms: list[[Transform](torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)] = None*)
 
 An ensemble of storages.
 

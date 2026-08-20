@@ -1,6 +1,6 @@
 # RoundRobinWriter
 
-*class*torchrl.data.replay_buffers.RoundRobinWriter(*compilable: bool = False*, ***, *track_generations: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter)
+*class*torchrl.data.replay_buffers.RoundRobinWriter(*compilable: bool = False*, ***, *track_generations: bool = False*)
 
 A RoundRobin Writer class for composable replay buffers.
 
@@ -48,15 +48,15 @@ tensor([0, 0, 0, 0])
 tensor([1, 1, 0, 0])
 ```
 
-add(*data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.add)
+add(*data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#RoundRobinWriter.add)
 
 Inserts one piece of data at an appropriate index, and returns that index.
 
-extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.extend)
+extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#RoundRobinWriter.extend)
 
 Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.
 
-generations_of(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.generations_of)
+generations_of(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#RoundRobinWriter.generations_of)
 
 Returns the generation stamp for each physical slot in `index`.
 
@@ -96,7 +96,7 @@ Returns True when the argument x is true, False otherwise.
 The builtins True and False are the only two instances of the class bool.
 The class bool is a subclass of the class int, and cannot be subclassed.
 
-write_at(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#RoundRobinWriter.write_at)
+write_at(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *data: Any*) → int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/round_robin.html#RoundRobinWriter.write_at)
 
 Writes data at explicit storage indices without moving the cursor.
 

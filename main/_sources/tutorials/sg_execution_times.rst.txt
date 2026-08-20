@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**08:09.461** total execution time for 29 files **from tutorials**:
+**07:29.055** total execution time for 29 files **from tutorials**:
 
 .. container::
 
@@ -33,88 +33,88 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_mujoco_cube_bowl_macros.py` (``mujoco_cube_bowl_macros.py``)
-     - 02:18.655
+     - 02:15.496
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_dqn.py` (``coding_dqn.py``)
-     - 01:22.909
+     - 01:22.016
      - 0.0
    * - :ref:`sphx_glr_tutorials_pretrained_models.py` (``pretrained_models.py``)
-     - 00:57.255
+     - 00:33.573
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ddpg.py` (``coding_ddpg.py``)
-     - 00:31.007
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``coding_ppo.py``)
-     - 00:28.042
+     - 00:28.714
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_ppo.py` (``multiagent_ppo.py``)
-     - 00:27.545
+     - 00:27.026
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py` (``multiagent_competitive_ddpg.py``)
-     - 00:26.684
+     - 00:26.062
      - 0.0
    * - :ref:`sphx_glr_tutorials_torchrl_envs.py` (``torchrl_envs.py``)
-     - 00:25.410
+     - 00:25.224
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``coding_ppo.py``)
+     - 00:24.616
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``export.py``)
-     - 00:23.396
+     - 00:22.969
      - 0.0
    * - :ref:`sphx_glr_tutorials_llm_wrappers.py` (``llm_wrappers.py``)
-     - 00:10.072
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_getting-started-5.py` (``getting-started-5.py``)
-     - 00:07.451
+     - 00:08.344
      - 0.0
    * - :ref:`sphx_glr_tutorials_evaluator.py` (``evaluator.py``)
-     - 00:07.088
+     - 00:07.120
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_getting-started-5.py` (``getting-started-5.py``)
+     - 00:05.717
      - 0.0
    * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``dqn_with_rnn.py``)
-     - 00:06.050
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_pendulum.py` (``pendulum.py``)
-     - 00:05.797
+     - 00:05.641
      - 0.0
    * - :ref:`sphx_glr_tutorials_torchrl_demo.py` (``torchrl_demo.py``)
-     - 00:05.214
+     - 00:05.119
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_pendulum.py` (``pendulum.py``)
+     - 00:04.647
      - 0.0
    * - :ref:`sphx_glr_tutorials_multi_task.py` (``multi_task.py``)
-     - 00:04.349
+     - 00:04.333
      - 0.0
    * - :ref:`sphx_glr_tutorials_rb_tutorial.py` (``rb_tutorial.py``)
-     - 00:00.846
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_vla.py` (``vla.py``)
-     - 00:00.397
+     - 00:00.831
      - 0.0
    * - :ref:`sphx_glr_tutorials_collector_trajectory_assembly.py` (``collector_trajectory_assembly.py``)
-     - 00:00.389
+     - 00:00.387
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_vla.py` (``vla.py``)
+     - 00:00.380
      - 0.0
    * - :ref:`sphx_glr_tutorials_memory_efficient_rl.py` (``memory_efficient_rl.py``)
-     - 00:00.356
+     - 00:00.311
      - 0.0
    * - :ref:`sphx_glr_tutorials_recurrent_sequence_training.py` (``recurrent_sequence_training.py``)
-     - 00:00.169
+     - 00:00.152
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-3.py` (``getting-started-3.py``)
-     - 00:00.081
+     - 00:00.080
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-1.py` (``getting-started-1.py``)
-     - 00:00.075
+     - 00:00.074
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-4.py` (``getting-started-4.py``)
-     - 00:00.072
+     - 00:00.074
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-2.py` (``getting-started-2.py``)
-     - 00:00.064
+     - 00:00.063
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-0.py` (``getting-started-0.py``)
-     - 00:00.033
+     - 00:00.030
      - 0.0
    * - :ref:`sphx_glr_tutorials_checkpointing.py` (``checkpointing.py``)
      - 00:00.024
      - 0.0
    * - :ref:`sphx_glr_tutorials_rlrender.py` (``rlrender.py``)
-     - 00:00.017
+     - 00:00.016
      - 0.0
    * - :ref:`sphx_glr_tutorials_trl_interop.py` (``trl_interop.py``)
      - 00:00.015

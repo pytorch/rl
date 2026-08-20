@@ -1,6 +1,6 @@
 # PromptGroupSampler
 
-*class*torchrl.data.replay_buffers.PromptGroupSampler(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#PromptGroupSampler)
+*class*torchrl.data.replay_buffers.PromptGroupSampler(**args*, ***kwargs*)
 
 A sampler that draws complete groups of items sharing a common key.
 

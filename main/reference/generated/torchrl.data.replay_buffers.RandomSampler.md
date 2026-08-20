@@ -1,6 +1,6 @@
 # RandomSampler
 
-*class*torchrl.data.replay_buffers.RandomSampler(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#RandomSampler)
+*class*torchrl.data.replay_buffers.RandomSampler(**args*, ***kwargs*)
 
 A uniformly random sampler for composable replay buffers.
 

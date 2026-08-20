@@ -1,6 +1,6 @@
 # StalenessAwareSampler
 
-*class*torchrl.data.replay_buffers.StalenessAwareSampler(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#StalenessAwareSampler)
+*class*torchrl.data.replay_buffers.StalenessAwareSampler(**args*, ***kwargs*)
 
 A sampler that weights entries by freshness and filters stale entries.
 
@@ -86,7 +86,7 @@ would add complexity without benefit.
 
 The current training iteration / consumer version.
 
-increment_consumer_version()[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#StalenessAwareSampler.increment_consumer_version)
+increment_consumer_version()[[source]](../../_modules/torchrl/data/replay_buffers/samplers/staleness.html#StalenessAwareSampler.increment_consumer_version)
 
 Increment the consumer version by 1.
 

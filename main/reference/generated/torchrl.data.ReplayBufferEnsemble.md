@@ -1,6 +1,6 @@
 # ReplayBufferEnsemble
 
-*class*torchrl.data.ReplayBufferEnsemble(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ReplayBufferEnsemble)
+*class*torchrl.data.ReplayBufferEnsemble(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)
 
 An ensemble of replay buffers.
 

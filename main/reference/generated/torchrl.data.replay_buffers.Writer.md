@@ -1,18 +1,18 @@
 # Writer
 
-*class*torchrl.data.replay_buffers.Writer(*compilable: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#Writer)
+*class*torchrl.data.replay_buffers.Writer(*compilable: bool = False*)
 
 A ReplayBuffer base Writer class.
 
-*abstract*add(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#Writer.add)
+*abstract*add(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/writers/base.html#Writer.add)
 
 Inserts one piece of data at an appropriate index, and returns that index.
 
-*abstract*extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#Writer.extend)
+*abstract*extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/base.html#Writer.extend)
 
 Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.
 
-generations_of(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#Writer.generations_of)
+generations_of(*index: int | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/base.html#Writer.generations_of)
 
 Returns the generation stamp for each physical slot in `index`.
 
@@ -43,10 +43,3 @@ Returns:
 Return type:
 
 [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
-
-tracks_generations*: bool**= False*
-
-Whether this writer stamps storage slots with a reuse generation. Always
-`False` unless the writer both supports generation tracking and was
-constructed with it enabled (see
-`RoundRobinWriter`).

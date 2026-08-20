@@ -1,14 +1,14 @@
 # ImmutableDatasetWriter
 
-*class*torchrl.data.replay_buffers.ImmutableDatasetWriter(*compilable: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#ImmutableDatasetWriter)
+*class*torchrl.data.replay_buffers.ImmutableDatasetWriter(*compilable: bool = False*)
 
 A blocking writer for immutable datasets.
 
-add(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#ImmutableDatasetWriter.add)
+add(*data: Any*) → int[[source]](../../_modules/torchrl/data/replay_buffers/writers/base.html#ImmutableDatasetWriter.add)
 
 Inserts one piece of data at an appropriate index, and returns that index.
 
-extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers.html#ImmutableDatasetWriter.extend)
+extend(*data: Sequence*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/writers/base.html#ImmutableDatasetWriter.extend)
 
 Inserts a series of data points at appropriate indices, and returns a tensor containing the indices.
 
@@ -43,10 +43,3 @@ Returns:
 Return type:
 
 [torch.Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)
-
-tracks_generations*: bool**= False*
-
-Whether this writer stamps storage slots with a reuse generation. Always
-`False` unless the writer both supports generation tracking and was
-constructed with it enabled (see
-`RoundRobinWriter`).

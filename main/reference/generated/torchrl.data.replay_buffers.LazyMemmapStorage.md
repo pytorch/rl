@@ -1,6 +1,6 @@
 # LazyMemmapStorage
 
-*class*torchrl.data.replay_buffers.LazyMemmapStorage(*max_size: int*, ***, *scratch_dir=None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*, *ndim: int = 1*, *existsok: bool = False*, *compilable: bool = False*, *shared_init: bool = False*, *auto_cleanup: bool | None = None*)[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#LazyMemmapStorage)
+*class*torchrl.data.replay_buffers.LazyMemmapStorage(*max_size: int*, ***, *scratch_dir=None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*, *ndim: int = 1*, *existsok: bool = False*, *compilable: bool = False*, *shared_init: bool = False*, *auto_cleanup: bool | None = None*)
 
 A memory-mapped storage for tensors and tensordicts.
 
@@ -133,7 +133,7 @@ Parameters:
 
 **buffer** - the object that reads from this storage.
 
-cleanup() → bool[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#LazyMemmapStorage.cleanup)
+cleanup() → bool[[source]](../../_modules/torchrl/data/replay_buffers/storages/tensor.html#LazyMemmapStorage.cleanup)
 
 Clean up memmap files from disk.
 

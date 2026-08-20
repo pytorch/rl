@@ -1,6 +1,6 @@
 # TensorDictPrioritizedReplayBuffer
 
-*class*torchrl.data.TensorDictPrioritizedReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#TensorDictPrioritizedReplayBuffer)
+*class*torchrl.data.TensorDictPrioritizedReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)
 
 TensorDict-specific wrapper around the [`PrioritizedReplayBuffer`](torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer) class.
 
@@ -185,7 +185,7 @@ TensorDict(
 index tensor([2, 5, 5, 9, 7])
 ```
 
-add(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → int[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#TensorDictPrioritizedReplayBuffer.add)
+add(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → int[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/prioritized_tensordict.html#TensorDictPrioritizedReplayBuffer.add)
 
 Add a single element to the replay buffer.
 
@@ -297,7 +297,7 @@ Examples
 ... assert len(rb) == len(rb_load)
 ```
 
-empty(*empty_write_count: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#TensorDictPrioritizedReplayBuffer.empty)
+empty(*empty_write_count: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/prioritized_tensordict.html#TensorDictPrioritizedReplayBuffer.empty)
 
 Empties the replay buffer and reset cursor to 0.
 
@@ -305,7 +305,7 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
-extend(*tensordicts: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#TensorDictPrioritizedReplayBuffer.extend)
+extend(*tensordicts: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/prioritized_tensordict.html#TensorDictPrioritizedReplayBuffer.extend)
 
 Extends the replay buffer with a batch of data.
 

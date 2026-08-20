@@ -1,6 +1,6 @@
 # ConsumingSampler
 
-*class*torchrl.data.replay_buffers.ConsumingSampler(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#ConsumingSampler)
+*class*torchrl.data.replay_buffers.ConsumingSampler(**args*, ***kwargs*)
 
 A random sampler that consumes entries after they have been sampled.
 

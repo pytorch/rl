@@ -1,6 +1,6 @@
 # SliceSamplerWithoutReplacement
 
-*class*torchrl.data.replay_buffers.SliceSamplerWithoutReplacement(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#SliceSamplerWithoutReplacement)
+*class*torchrl.data.replay_buffers.SliceSamplerWithoutReplacement(**args*, ***kwargs*)
 
 Samples slices of data along the first dimension, given start and stop signals, without replacement.
 

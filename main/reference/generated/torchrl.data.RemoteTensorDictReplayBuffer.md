@@ -1,10 +1,10 @@
 # RemoteTensorDictReplayBuffer
 
-*class*torchrl.data.RemoteTensorDictReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#RemoteTensorDictReplayBuffer)
+*class*torchrl.data.RemoteTensorDictReplayBuffer(**args*, *use_ray_service=False*, *service_backend=None*, *service_backend_options=None*, ***kwargs*)
 
 A remote invocation friendly ReplayBuffer class. Public methods can be invoked by remote agents using torch.rpc or called locally as normal.
 
-add(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → int[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#RemoteTensorDictReplayBuffer.add)
+add(*data: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → int[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/remote.html#RemoteTensorDictReplayBuffer.add)
 
 Add a single element to the replay buffer.
 
@@ -124,7 +124,7 @@ Parameters:
 
 **empty_write_count** (*bool**,**optional*) - Whether to empty the write_count attribute. Defaults to True.
 
-extend(*tensordicts: list | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#RemoteTensorDictReplayBuffer.extend)
+extend(*tensordicts: list | [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *update_priority: bool | None = None*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/remote.html#RemoteTensorDictReplayBuffer.extend)
 
 Extends the replay buffer with a batch of data.
 
@@ -284,7 +284,7 @@ Note
 Hooks are currently not serialized when saving a replay buffer: they must
 be manually re-initialized every time the buffer is created.
 
-sample(*batch_size: int | None = None*, *include_info: bool | None = None*, *return_info: bool = False*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#RemoteTensorDictReplayBuffer.sample)
+sample(*batch_size: int | None = None*, *include_info: bool | None = None*, *return_info: bool = False*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers/remote.html#RemoteTensorDictReplayBuffer.sample)
 
 Samples a batch of data from the replay buffer.
 

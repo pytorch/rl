@@ -1,6 +1,6 @@
 # ListStorage
 
-*class*torchrl.data.replay_buffers.ListStorage(*max_size: int | None = None*, ***, *compilable: bool = False*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*)[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#ListStorage)
+*class*torchrl.data.replay_buffers.ListStorage(*max_size: int | None = None*, ***, *compilable: bool = False*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | int | None = None*)
 
 A storage stored in a list.
 

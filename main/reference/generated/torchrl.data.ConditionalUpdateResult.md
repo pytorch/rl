@@ -1,6 +1,6 @@
 # ConditionalUpdateResult
 
-*class*torchrl.data.ConditionalUpdateResult(*updated: 'torch.Tensor'*, *version_rejected: 'torch.Tensor | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/replay_buffers/replay_buffers.html#ConditionalUpdateResult)
+*class*torchrl.data.ConditionalUpdateResult(*updated: 'torch.Tensor'*, *version_rejected: 'torch.Tensor | None' = None*, ***, *batch_size*, *device=None*, *names=None*)
 
 cat(*dim: int = 0*, ***, *out=None*)
 

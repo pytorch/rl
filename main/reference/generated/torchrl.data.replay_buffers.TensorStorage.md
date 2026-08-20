@@ -1,6 +1,6 @@
 # TensorStorage
 
-*class*torchrl.data.replay_buffers.TensorStorage(*storage*, *max_size=None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*, *ndim: int = 1*, *compilable: bool = False*)[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#TensorStorage)
+*class*torchrl.data.replay_buffers.TensorStorage(*storage*, *max_size=None*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*, *ndim: int = 1*, *compilable: bool = False*)
 
 A storage for tensors and tensordicts.
 

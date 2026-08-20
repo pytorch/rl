@@ -1,6 +1,6 @@
 # LazyTensorStorage
 
-*class*torchrl.data.replay_buffers.LazyTensorStorage(*max_size: int*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*, *ndim: int = 1*, *compilable: bool = False*, *consolidated: bool = False*, *shared_init: bool = False*, *cleanup_memmap: bool = True*)[[source]](../../_modules/torchrl/data/replay_buffers/storages.html#LazyTensorStorage)
+*class*torchrl.data.replay_buffers.LazyTensorStorage(*max_size: int*, ***, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str = 'cpu'*, *ndim: int = 1*, *compilable: bool = False*, *consolidated: bool = False*, *shared_init: bool = False*, *cleanup_memmap: bool = True*)
 
 A pre-allocated tensor storage for tensors and tensordicts.
 

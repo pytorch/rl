@@ -1,6 +1,6 @@
 # PrioritizedSliceSampler
 
-*class*torchrl.data.replay_buffers.PrioritizedSliceSampler(**args*, ***kwargs*)[[source]](../../_modules/torchrl/data/replay_buffers/samplers.html#PrioritizedSliceSampler)
+*class*torchrl.data.replay_buffers.PrioritizedSliceSampler(**args*, ***kwargs*)
 
 Samples slices of data along the first dimension, given start and stop signals, using prioritized sampling.
 
