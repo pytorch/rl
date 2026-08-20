@@ -111,7 +111,6 @@ def categorical_kl_balanced(
     prior_logits: torch.Tensor,
     alpha: float = 0.8,
     free_bits: float = 1.0,
-    unimix: float = 0.01,
 ) -> torch.Tensor:
     """KL divergence with balancing between posterior and prior.
 
@@ -134,8 +133,6 @@ def categorical_kl_balanced(
         prior_logits: Shape ``[..., num_categoricals, num_classes]``.
         alpha (float): Balancing weight (0.8 in the paper). Default: 0.8.
         free_bits (float): Minimum per-categorical KL in nats. Default: 1.0.
-        unimix (float): Uniform mixture before the KL. Default: 0.01.
-
     Returns:
         Scalar KL loss.
 
@@ -147,8 +144,8 @@ def categorical_kl_balanced(
         >>> kl = categorical_kl_balanced(posterior, prior, alpha=0.8, free_bits=0.1)
         >>> kl.backward()
     """
-    posterior = _unimix_probs(posterior_logits, unimix)
-    prior = _unimix_probs(prior_logits, unimix)
+    posterior = torch.softmax(posterior_logits, dim=-1)
+    prior = torch.softmax(prior_logits, dim=-1)
 
     eps = 1e-8
     posterior = posterior.clamp(min=eps)
@@ -231,7 +228,8 @@ class DreamerV3ModelLoss(LossModule):
             Defaults to 1.0.
         lambda_representation (float, optional): Representation KL weight in
             separate mode. Defaults to 0.1.
-        unimix (float, optional): Uniform mixture for the KL. Default: 0.01.
+        unimix (float, optional): Uniform mixture used by the categorical KL
+            distributions. Defaults to 0.0 for compatibility.
         kl_alpha (float, optional): KL balancing factor (alpha in the paper).
             Default: 0.8.
         free_bits (float, optional): Minimum KL per categorical in nats.
@@ -347,7 +345,7 @@ class DreamerV3ModelLoss(LossModule):
         kl_mode: Literal["balanced", "separate"] = "balanced",
         lambda_dynamic: float = 1.0,
         lambda_representation: float = 0.1,
-        unimix: float = 0.01,
+        unimix: float = 0.0,
         continue_target_scale: float = 1.0,
         kl_alpha: float = 0.8,
         free_bits: float = 1.0,
@@ -417,7 +415,6 @@ class DreamerV3ModelLoss(LossModule):
                 prior_logits,
                 alpha=self.kl_alpha,
                 free_bits=self.free_bits,
-                unimix=self.unimix,
             ).unsqueeze(-1)
 
         # ---- Reconstruction loss ----
@@ -711,11 +708,6 @@ class DreamerV3ActorLoss(LossModule):
         self.return_normalization_rate = return_normalization_rate
         self.return_normalization_quantiles = return_normalization_quantiles
         self.return_normalization_min_scale = return_normalization_min_scale
-        self.register_buffer(
-            "_return_normalization_quantiles",
-            torch.tensor(return_normalization_quantiles),
-            persistent=False,
-        )
         self.register_buffer("return_low", torch.tensor(0.0))
         self.register_buffer("return_high", torch.tensor(0.0))
         if gamma is not None:
@@ -837,6 +829,11 @@ class DreamerV3ActorLoss(LossModule):
                 "return_low": self.return_low.detach().clone(),
                 "return_high": self.return_high.detach().clone(),
                 "return_scale": return_scale.detach().clone(),
+                "continuation_mean": (
+                    continuation.mean().detach()
+                    if continuation is not None
+                    else torch.ones((), device=actor_loss.device)
+                ),
             },
             [],
         )
@@ -847,9 +844,13 @@ class DreamerV3ActorLoss(LossModule):
         if not self.return_normalization:
             return torch.ones((), dtype=returns.dtype, device=returns.device)
         if self.training:
+            quantiles = torch.tensor(
+                self.return_normalization_quantiles,
+                dtype=self.return_low.dtype,
+                device=self.return_low.device,
+            )
             current_low, current_high = torch.quantile(
-                returns.detach().to(self.return_low),
-                self._return_normalization_quantiles,
+                returns.detach().to(self.return_low), quantiles
             )
             with torch.no_grad():
                 self.return_low.lerp_(current_low, self.return_normalization_rate)
@@ -1281,16 +1282,15 @@ class DreamerV3ValueLoss(LossModule):
                     symlog(value_pred.squeeze(-1)) - symlog(target_value.squeeze(-1))
                 ).pow(2)
             loss = loss + self.slow_critic_regularization * slow_loss
-            slow_metric = (discount * slow_loss).mean().detach()
         else:
-            slow_metric = torch.zeros((), device=loss.device, dtype=loss.dtype)
+            slow_loss = torch.zeros_like(loss)
 
         value_loss = (discount * loss).mean()
 
         loss_tensordict = TensorDict(
             {
                 "loss_value": value_loss,
-                "value_slow_loss": slow_metric,
+                "value_slow_loss": (discount * slow_loss).mean().detach(),
             }
         )
         self._clear_weakrefs(fake_data, loss_tensordict)

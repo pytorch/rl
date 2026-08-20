@@ -15,31 +15,12 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequ
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch.nn import GRUCell
-from torchrl._utils import implement_for
 
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 
 
 _DEFAULT_NUM_BINS = 255
 _DEFAULT_BIN_RANGE = 20.0
-
-
-@implement_for("torch", None, "2.4", compilable=True)
-def _dreamer_v3_compute_dtype(value: torch.Tensor) -> torch.dtype:
-    """Return the autocast dtype for ``value``, or its own dtype."""
-    if value.device.type == "cuda" and torch.is_autocast_enabled():
-        return torch.get_autocast_gpu_dtype()
-    if value.device.type == "cpu" and torch.is_autocast_cpu_enabled():
-        return torch.get_autocast_cpu_dtype()
-    return value.dtype
-
-
-@implement_for("torch", "2.4", compilable=True)
-def _dreamer_v3_compute_dtype(value: torch.Tensor) -> torch.dtype:  # noqa: F811
-    device_type = value.device.type
-    if torch.is_autocast_enabled(device_type):
-        return torch.get_autocast_dtype(device_type)
-    return value.dtype
 
 
 def _dreamer_v3_init(module: nn.Module) -> None:
@@ -101,8 +82,7 @@ class _DreamerV3BlockLinear(nn.Module):
             *value.shape[:-1], self.num_blocks, self.in_features // self.num_blocks
         )
         value = torch.einsum("...bi,bio->...bo", value, self.weight)
-        # An FP32 bias would promote a BF16 recurrence back to FP32.
-        return value.flatten(-2) + self.bias.to(value.dtype)
+        return value.flatten(-2) + self.bias
 
 
 class _DreamerV3BlockGRU(nn.Module):
@@ -168,11 +148,6 @@ class _DreamerV3BlockGRU(nn.Module):
         belief: torch.Tensor,
         action: torch.Tensor,
     ) -> torch.Tensor:
-        # Autocast covers only matmuls: without these casts the residual is FP32.
-        compute_dtype = _dreamer_v3_compute_dtype(belief)
-        state = state.to(compute_dtype)
-        belief = belief.to(compute_dtype)
-        action = action.to(compute_dtype)
         action = action / action.detach().abs().clamp_min(1)
         features = torch.cat(
             [
@@ -208,8 +183,7 @@ class DreamerV3MLP(nn.Module):
 
     Args:
         in_features (int): Input feature count.
-        out_features (int or None): Output feature count. If ``None``, the
-            module returns the last hidden activation.
+        out_features (int): Output feature count.
         depth (int, optional): Number of hidden layers. Defaults to 3.
         num_cells (int, optional): Hidden feature count. Defaults to 1024.
         outscale (float, optional): Multiplicative initialization scale for the
@@ -229,7 +203,7 @@ class DreamerV3MLP(nn.Module):
     def __init__(
         self,
         in_features: int,
-        out_features: int | None,
+        out_features: int,
         depth: int = 3,
         num_cells: int = 1024,
         outscale: float = 1.0,
@@ -248,15 +222,12 @@ class DreamerV3MLP(nn.Module):
                 ]
             )
             layer_in = num_cells
-        output = None
-        if out_features is not None:
-            output = nn.Linear(layer_in, out_features, device=device)
-            layers.append(output)
+        output = nn.Linear(layer_in, out_features, device=device)
+        layers.append(output)
         self.model = nn.Sequential(*layers)
         self.model.apply(_dreamer_v3_init)
-        if output is not None:
-            with torch.no_grad():
-                output.weight.mul_(outscale)
+        with torch.no_grad():
+            output.weight.mul_(outscale)
 
     def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
         value = inputs[0] if len(inputs) == 1 else torch.cat(inputs, -1)
@@ -293,11 +264,9 @@ def _default_bins(
 
 
 def _unimix_probs(logits: torch.Tensor, unimix: float) -> torch.Tensor:
-    """Mix categorical probabilities with a uniform distribution."""
+    """Return categorical probabilities mixed with a uniform distribution."""
     if not 0 <= unimix < 1:
         raise ValueError(f"unimix must be in [0, 1), got {unimix}.")
-    # Softmax needs FP32: autocast would otherwise drop the precision.
-    logits = logits.to(torch.promote_types(logits.dtype, torch.float32))
     probs = torch.softmax(logits, dim=-1)
     if unimix:
         probs = (1 - unimix) * probs + unimix / logits.shape[-1]
@@ -655,27 +624,6 @@ class RSSMPriorV3(nn.Module):
             belief (torch.Tensor): Updated GRU hidden state, shape
                 ``[..., rnn_hidden_dim]``.
         """
-        belief = self._update_belief(state, belief, action)
-        prior_logits_flat = self.rnn_to_prior_projector(belief)
-        prior_logits = prior_logits_flat.view(
-            *prior_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
-        )
-
-        state = _straight_through_categorical(prior_logits, self.unimix)
-        state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
-
-        return prior_logits, state, belief
-
-    def _update_belief(
-        self,
-        state: torch.Tensor,
-        belief: torch.Tensor,
-        action: torch.Tensor,
-    ) -> torch.Tensor:
-        """Advance the deterministic state and skip the prior head.
-
-        The acting path conditions on the observation, never on a prior sample.
-        """
         if self.recurrent_model == "block_gru":
             belief = self.rnn(state, belief, action)
         else:
@@ -691,7 +639,16 @@ class RSSMPriorV3(nn.Module):
                     belief.float() if belief is not None else None,
                 )
             belief = belief.to(dtype)
-        return belief
+
+        prior_logits_flat = self.rnn_to_prior_projector(belief)
+        prior_logits = prior_logits_flat.view(
+            *prior_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
+        )
+
+        state = _straight_through_categorical(prior_logits, self.unimix)
+        state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
+
+        return prior_logits, state, belief
 
 
 class RSSMPosteriorV3(nn.Module):
@@ -1006,10 +963,11 @@ def _straight_through_categorical(
         logits: ``[..., num_categoricals, num_classes]``
 
     Returns:
-        A one-hot tensor like ``logits``, with the gradient of the FP32 softmax.
+        one_hot tensor with same shape, gradients through softmax.
     """
     probs = _unimix_probs(logits, unimix)
     indices = torch.distributions.Categorical(probs=probs).sample()
     one_hot = torch.zeros_like(probs)
     one_hot.scatter_(-1, indices.unsqueeze(-1), 1.0)
-    return (probs + (one_hot - probs).detach()).to(logits.dtype)
+    # Straight-through: forward = one_hot, backward gradient = grad(probs).
+    return probs + (one_hot - probs).detach()

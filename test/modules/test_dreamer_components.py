@@ -10,6 +10,7 @@ import pytest
 import torch
 from packaging import version
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules import SafeModule
 from torchrl.modules.models.model_based import (
@@ -21,9 +22,12 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.model_based_v3 import (
+    _DreamerV3BlockLinear,
+    _DreamerV3RMSNorm,
     DreamerV3MLP,
     RSSMPosteriorV3,
     RSSMPriorV3,
+    RSSMRolloutV3,
 )
 
 from torchrl.testing import get_default_devices
@@ -265,6 +269,17 @@ class TestDreamerComponents:
 
 
 class TestDreamerV3Components:
+    def test_reference_normalization_and_block_fan_in(self):
+        norm = _DreamerV3RMSNorm(8)
+        assert set(dict(norm.named_parameters())) == {"weight"}
+
+        torch.manual_seed(0)
+        one_block = _DreamerV3BlockLinear(1024, 1024, num_blocks=1)
+        torch.manual_seed(1)
+        eight_blocks = _DreamerV3BlockLinear(1024, 1024, num_blocks=8)
+        ratio = eight_blocks.weight.std() / one_block.weight.std()
+        assert ratio.item() == pytest.approx(1.0, rel=0.05)
+
     def test_mlp_output_scale_and_multiple_inputs(self):
         module = DreamerV3MLP(
             6,
@@ -310,13 +325,18 @@ class TestDreamerV3Components:
 
         torch.testing.assert_close(
             logits,
-            torch.tensor([[[-0.2459, -0.0750], [0.0959, 0.2668]]], device=device),
+            torch.tensor(
+                [[[-0.2538432, -0.0850009], [0.0838414, 0.2526837]]],
+                device=device,
+            ),
             atol=5e-5,
             rtol=5e-5,
         )
         torch.testing.assert_close(
             next_belief,
-            torch.tensor([[0.0593, -0.1581, 0.2277, -0.2400]], device=device),
+            torch.tensor(
+                [[0.0575409, -0.1607322, 0.2253285, -0.2480658]], device=device
+            ),
             atol=5e-5,
             rtol=5e-5,
         )
@@ -394,6 +414,75 @@ class TestDreamerV3Components:
         logits, state = posterior(belief, embedding)
         assert logits.shape == (3, 2, 4)
         assert state.shape == (3, 8)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_key", ["action", ("agent", "action")])
+    def test_rssm_rollout_masks_action_on_reset(self, device, action_key):
+        num_categoricals = num_classes = 2
+        state_dim = num_categoricals * num_classes
+        belief_dim = 4
+        action_dim = 2
+        embedding_dim = 3
+        prior = RSSMPriorV3(
+            action_shape=(action_dim,),
+            hidden_dim=belief_dim,
+            rnn_hidden_dim=belief_dim,
+            num_categoricals=num_categoricals,
+            num_classes=num_classes,
+            action_dim=action_dim,
+            recurrent_model="block_gru",
+            num_blocks=2,
+            device=device,
+        )
+        posterior = RSSMPosteriorV3(
+            hidden_dim=belief_dim,
+            num_categoricals=num_categoricals,
+            num_classes=num_classes,
+            rnn_hidden_dim=belief_dim,
+            obs_embed_dim=embedding_dim,
+            device=device,
+        )
+        rollout = RSSMRolloutV3(
+            TensorDictModule(
+                prior,
+                in_keys=["state", "belief", action_key],
+                out_keys=[
+                    ("next", "prior_logits"),
+                    ("next", "state"),
+                    ("next", "belief"),
+                ],
+            ),
+            TensorDictModule(
+                posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[("next", "posterior_logits"), ("next", "state")],
+            ),
+        )
+
+        def run(action):
+            tensordict = TensorDict(
+                {
+                    "state": torch.zeros(1, 2, state_dim, device=device),
+                    "belief": torch.zeros(1, 2, belief_dim, device=device),
+                    "is_init": torch.ones(1, 2, 1, dtype=torch.bool, device=device),
+                    "next": {
+                        "encoded_latents": torch.zeros(
+                            1, 2, embedding_dim, device=device
+                        )
+                    },
+                },
+                [1, 2],
+            )
+            tensordict.set(action_key, action)
+            torch.manual_seed(0)
+            return rollout(tensordict)
+
+        zero_action = torch.zeros(1, 2, action_dim, device=device)
+        nonzero_action = torch.ones_like(zero_action)
+        torch.testing.assert_close(
+            run(zero_action)["next", "belief"],
+            run(nonzero_action)["next", "belief"],
+        )
 
 
 if __name__ == "__main__":

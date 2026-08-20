@@ -46,6 +46,7 @@ from torchrl.objectives import (
 from torchrl.objectives.dreamer_v3 import (
     _default_bins,
     _match_trailing_dim,
+    _replay_value_target,
     categorical_kl_balanced,
     categorical_kl_terms,
     symexp,
@@ -591,6 +592,18 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         }
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
+    @pytest.mark.parametrize("detach_output", [True, False])
+    def test_dreamer_v3_model_loss_detach_output(self, device, detach_output):
+        world_model = self._create_world_model().to(device)
+        loss_module = DreamerV3ModelLoss(
+            world_model,
+            num_reward_bins=self.num_reward_bins,
+            detach_output=detach_output,
+        )
+        _, features = loss_module(self._create_world_model_data().to(device))
+        posterior = features["next", "posterior_logits"]
+        assert posterior.requires_grad is not detach_output
+
     # ------------------------------------------------------------------ #
     # Actor loss tests
     # ------------------------------------------------------------------ #
@@ -664,7 +677,8 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         loss_td, fake_data = loss_module(
             self._create_actor_data().to(device).reshape(-1)
         )
-        expected_weight = torch.tensor([1.0, 0.5, 0.25], device=device)
+        # The initial state is weighted by its own continuation probability.
+        expected_weight = torch.tensor([0.5, 0.25, 0.125], device=device)
         torch.testing.assert_close(
             fake_data["discount_weight"][0, :, 0], expected_weight
         )
@@ -700,6 +714,68 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     # ------------------------------------------------------------------ #
     # Value loss tests
     # ------------------------------------------------------------------ #
+
+    def test_dreamer_v3_replay_value_target(self, device):
+        reward = torch.tensor([[0.0, 1.0, 2.0, 3.0]], device=device)
+        bootstrap = torch.tensor([[10.0, 20.0, 30.0, 40.0]], device=device)
+        done = torch.zeros_like(reward, dtype=torch.bool)
+        terminated = torch.zeros_like(done)
+
+        target = _replay_value_target(
+            reward,
+            done,
+            terminated,
+            bootstrap,
+            horizon=2.0,
+            lmbda=0.5,
+        )
+        torch.testing.assert_close(
+            target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
+        )
+
+    def test_dreamer_v3_replay_value_loss_nested_keys(self, device):
+        batch, time_steps = 2, 4
+        state = torch.randn(
+            batch,
+            time_steps,
+            self.state_dim,
+            device=device,
+            requires_grad=True,
+        )
+        replay = TensorDict(
+            {
+                "state": state,
+                "belief": torch.randn(
+                    batch, time_steps, self.rnn_hidden_dim, device=device
+                ),
+                "first_return": torch.randn(batch, time_steps, device=device),
+                "next": {
+                    "replay": {
+                        "reward": torch.randn(batch, time_steps, device=device),
+                        "done": torch.zeros(
+                            batch, time_steps, dtype=torch.bool, device=device
+                        ),
+                        "terminated": torch.zeros(
+                            batch, time_steps, dtype=torch.bool, device=device
+                        ),
+                    }
+                },
+            },
+            [batch, time_steps],
+        )
+        value_loss = DreamerV3ValueLoss(self._create_value_model().to(device)).to(
+            device
+        )
+        value_loss.set_keys(
+            reward=("replay", "reward"),
+            done=("replay", "done"),
+            terminated=("replay", "terminated"),
+            bootstrap="first_return",
+        )
+
+        loss = value_loss.replay_value_loss(replay)["loss_replay_value"]
+        loss.backward()
+        assert state.grad is not None and state.grad.abs().sum() > 0
 
     @pytest.mark.parametrize("discount_loss", [True, False])
     def test_dreamer_v3_value_loss_symlog_mse(self, device, discount_loss):
@@ -1236,10 +1312,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         out_c = rollout(td_c)
         torch.manual_seed(0)
         out_d = rollout(td_d)
-        action_effect = (
-            out_c["next", "prior_logits"][:, 2] - out_d["next", "prior_logits"][:, 2]
-        ).abs()
-        assert action_effect.max() > 1e-6
+        torch.testing.assert_close(
+            out_c["next", "prior_logits"][:, 2],
+            out_d["next", "prior_logits"][:, 2],
+        )
 
     # ------------------------------------------------------------------ #
     # Coverage for previously untested branches
