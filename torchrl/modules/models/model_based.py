@@ -1228,15 +1228,15 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 {"_uniform": posterior_uniform},
             )
             output = (
-                masked_state,
-                masked_belief,
+                masked_state.clone(),
+                masked_belief.clone(),
                 action_t,
                 prior_logits,
                 posterior_logits,
                 state.clone(),
                 belief.clone(),
             )
-            return (state, belief), output
+            return (state.clone(), belief.clone()), output
 
         _, output = scan(
             combine,
@@ -1302,7 +1302,13 @@ class RSSMRolloutV3(TensorDictModuleBase):
         if scope == "step":
             self._step_fn = torch.compile(self._step, **compile_kwargs)
         else:
-            self._scan_fn = torch.compile(self._scan, **compile_kwargs)
+            # Inductor lowers scan to a while loop whose index is extracted as
+            # a scalar. Capture that scalar in the graph instead of breaking
+            # or failing during the scan lowering.
+            scan_fn = torch._dynamo.config.patch(capture_scalar_outputs=True)(
+                self._scan
+            )
+            self._scan_fn = torch.compile(scan_fn, **compile_kwargs)
 
     def __getstate__(self) -> dict:
         # Pickle cannot store a compiled callable: the copy starts eager.
