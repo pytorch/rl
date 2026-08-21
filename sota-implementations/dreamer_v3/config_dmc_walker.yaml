@@ -9,32 +9,51 @@ env:
   max_episode_steps: 1000
 
 collector:
-  frames_per_batch: 1000
+  num_envs: 16
+  frames_per_batch: 16
+  # Match the reference implementation's driver counter, which includes
+  # initial and reset-only records.
+  count_reset_records: true
   total_frames: 1100000
 
 replay_buffer:
+  # Keep sampled sequences and latent-context refreshes on the learner device.
+  device: null
   buffer_size: 5000000
   batch_size: 16
   seq_len: 64
-  warmup_factor: 1
+  online: true
+  # Warmup gates on 65-record windows, so 128 records per stream gives 1024.
+  warmup_factor: 2
 
 networks:
   rnn_hidden_dim: 512
   num_categoricals: 32
   num_classes: 4
-  obs_embed_dim: 64
+  # The walker observation keys in sorted order: height, orientations,
+  # velocity.
+  decoder_event_dims: [1, 14, 9]
   hidden_dim: 64
 
 optimization:
-  updates_per_batch: 1
+  deferred_policy_sync: true
+  separate_policy_rng: true
+  mixed_precision: true
   train_ratio: 1024
 
 logger:
+  # Approximately the reference's 120-second learner logging cadence.
+  train_every: 4096
+  # The reference curve uses the stochastic train_episode returns; the
+  # evaluator adds a deterministic return on a separate environment.
   eval_every: 10000
   eval_episodes: 5
   output_plot: dreamer_v3_dmc_walker.png
-  metrics_json: dreamer_v3_dmc_walker.json
+  metrics_jsonl: dreamer_v3_dmc_walker.jsonl
 
+# Read by benchmark.py: the seeds it runs, the window it aggregates over, and
+# the final-window median it requires. Hydra overrides of this block win.
 benchmark:
   seeds: [0, 1, 2]
-  minimum_final_median_return: 700.0
+  minimum_final_median_return: 900.0
+  window_size: 50000

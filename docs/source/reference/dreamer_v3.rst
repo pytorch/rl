@@ -227,9 +227,9 @@ the update schedule explicit. A typical update cycle is:
 5. Update the online critic on those same detached returns.
 6. Soft-update the slow critic.
 
-The runnable ``sota-implementations/dreamer_v3`` example uses separate Adam
-optimizers for the world model, actor, and critic. They share a learning rate,
-Adam coefficients, linear learning-rate warmup, and adaptive gradient clipping.
+The runnable ``sota-implementations/dreamer_v3`` example uses a single optimizer
+over the world model, actor and critic parameters, reproducing the reference's
+adaptive gradient clipping, Adam and warmup chain.
 Those choices belong to the training recipe rather than the loss API, so users
 can substitute another optimizer or schedule without changing the objectives.
 
