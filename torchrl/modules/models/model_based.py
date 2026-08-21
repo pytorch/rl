@@ -631,6 +631,7 @@ class RSSMPriorV3(nn.Module):
             state: Previous stochastic state, shape ``[..., num_categoricals * num_classes]``.
             belief: Previous GRU hidden state, shape ``[..., rnn_hidden_dim]``.
             action: Current action, shape ``[..., action_dim]``.
+            _uniform: Optional pre-sampled uniforms used by the scan backend.
 
         Returns:
             prior_logits (torch.Tensor): Raw logits, shape
@@ -823,6 +824,7 @@ class RSSMPosteriorV3(nn.Module):
             belief: Deterministic GRU hidden state from prior, shape
                 ``[..., rnn_hidden_dim]``.
             obs_embedding: Encoded observation, shape ``[..., obs_embed_dim]``.
+            _uniform: Optional pre-sampled uniforms used by the scan backend.
 
         Returns:
             posterior_logits (torch.Tensor): Raw logits, shape
