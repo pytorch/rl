@@ -141,19 +141,19 @@ policy.eval()
 ```
 TensorDictSequential(
  module=ModuleList(
- (0): LSTMModule()
+ (0): LSTMModule(
+ lstm=LSTM(4, 16, batch_first=True),
+ in_keys=['observation', 'rs_h', 'rs_c', 'is_init'],
+ out_keys=['features', ('next', 'rs_h'), ('next', 'rs_c')])
  (1): TensorDictModule(
  module=Linear(in_features=16, out_features=2, bias=True),
- device=cpu,
  in_keys=['features'],
  out_keys=['logits'])
  (2): TensorDictModule(
- module=<function make_policy.<locals>.<lambda> at 0x7f7f42f1c900>,
- device=cpu,
+ module=<function make_policy.<locals>.<lambda> at 0x7f8850559ee0>,
  in_keys=['logits'],
  out_keys=['action'])
  ),
- device=cpu,
  in_keys=['observation', 'rs_h', 'rs_c', 'is_init'],
  out_keys=['features', ('next', 'rs_h'), ('next', 'rs_c'), 'logits', 'action'])
 ```
@@ -479,7 +479,7 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 ```
 
 ```
-Training loss trajectory: [0.4131, 0.4071, 0.4034, 0.4091]
+Training loss trajectory: [0.4124, 0.4066, 0.403, 0.4071]
 ```
 
 ## Conclusion
@@ -519,7 +519,7 @@ recurrent state.
 `TensorDictPrimer`, `recurrent mode`, `set_keys`, and other
 shorthand that appears throughout the recurrent code paths.
 
-**Total running time of the script:** (0 minutes 0.154 seconds)
+**Total running time of the script:** (0 minutes 0.155 seconds)
 
 [`Download Jupyter notebook: recurrent_sequence_training.ipynb`](../_downloads/70bdaea647addd62eb8379f8c256e50b/recurrent_sequence_training.ipynb)
 
