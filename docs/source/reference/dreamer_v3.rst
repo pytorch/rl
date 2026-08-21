@@ -256,8 +256,8 @@ each critic optimizer step:
 Replay critic loss
 ~~~~~~~~~~~~~~~~~~
 
-The reference implementation also fits the critic on the real replay sequences,
-not only on imagined trajectories.
+The author-maintained JAX implementation also fits the critic on the real
+replay sequences, not only on imagined trajectories.
 :meth:`~torchrl.objectives.DreamerV3ValueLoss.replay_value_loss` computes that
 term. Its return at each replay state uses the following replay reward and
 bootstraps from the first imagined lambda return of the next state, so the
@@ -292,8 +292,9 @@ the update schedule explicit. A typical update cycle is:
 6. Soft-update the slow critic.
 
 The runnable ``sota-implementations/dreamer_v3`` example uses a single optimizer
-over the world model, actor and critic parameters, reproducing the reference's
-adaptive gradient clipping, Adam and warmup chain.
+over the world model, actor and critic parameters, reproducing the current JAX
+implementation's adaptive gradient clipping, LaProp-style RMS scaling followed
+by momentum, and warmup chain.
 Those choices belong to the training recipe rather than the loss API, so users
 can substitute another optimizer or schedule without changing the objectives.
 

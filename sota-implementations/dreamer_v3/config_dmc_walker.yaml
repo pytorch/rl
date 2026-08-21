@@ -11,7 +11,7 @@ env:
 collector:
   num_envs: 16
   frames_per_batch: 16
-  # Match the reference implementation's driver counter, which includes
+  # Match the pinned JAX implementation's driver counter, which includes
   # initial and reset-only records.
   count_reset_records: true
   total_frames: 1100000
@@ -42,9 +42,9 @@ optimization:
   train_ratio: 1024
 
 logger:
-  # Approximately the reference's 120-second learner logging cadence.
+  # Approximately the JAX implementation's 120-second learner logging cadence.
   train_every: 4096
-  # The reference curve uses the stochastic train_episode returns; the
+  # The JAX curve uses the stochastic train_episode returns; the
   # evaluator adds a deterministic return on a separate environment.
   eval_every: 10000
   eval_episodes: 5

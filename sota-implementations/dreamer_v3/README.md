@@ -16,17 +16,34 @@ python sota-implementations/dreamer_v3/train.py \
   --config-name=config_dmc_walker
 ```
 
-The Walker preset matches the 640,867 trainable parameters of the reference
-implementation's `size1m` configuration, uses 16 environments, batches of 16
+The Walker preset tracks the author-maintained JAX implementation at commit
+`e3f02248693a79dc8b0ebd62c93683888ddaccfe`. It matches that implementation's
+640,867-parameter `size1m` configuration, uses 16 environments, batches of 16
 sequences of length 64, a replay ratio of 1024, and 1.1 million environment
 steps. BF16 training is enabled on CUDA. It logs stochastic training-episode
-returns against environment steps, matching the reference curve protocol
+returns against environment steps, matching the current JAX curve protocol
 without relying on wall-clock-dependent training iterations.
 
 The Walker task is seeded from `env.seed`, as every other TorchRL example is;
-pass `env.use_seed=false` for the reference's unseeded DMC resets. The step
-axis counts initial and reset-only driver records as the reference
+pass `env.use_seed=false` for the JAX implementation's unseeded DMC resets. The
+step axis counts initial and reset-only driver records as that
 implementation does.
+
+This is deliberately a reproduction of the pinned JAX `dmc_proprio` preset,
+not of the paper's proprioceptive protocol. The two protocols differ:
+
+| Setting | Pinned JAX `dmc_proprio` preset | DreamerV3 paper proprioceptive protocol |
+| --- | --- | --- |
+| Model size | `size1m` (640,867 parameters here) | 12M parameters |
+| Environment steps | 1.1M | 500K |
+| Action repeat | 1 | 2 |
+| Replay ratio | 1024 | 512 |
+| Optimizer | AGC, LaProp-style RMS scaling then momentum, 1,000-step warmup | Paper recipe |
+| Reported aggregation | Three-seed median and interquartile range in this benchmark | Five-seed mean and standard deviation |
+
+TorchRL's public DreamerV3 API documentation remains centered on the paper's
+algorithmic semantics. This named SOTA preset documents later choices in the
+evolving JAX codebase instead of silently treating them as paper requirements.
 
 Real collection and evaluation environments run on CPU; `optimization.device`
 selects where the models, losses and policy run and defaults to `null`, which

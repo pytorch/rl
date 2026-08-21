@@ -58,7 +58,7 @@ class DreamerV3UpdateRatio:
         ratio (float): Learner updates for each driver record.
     """
 
-    def __init__(self, ratio: float) -> None:
+    def __init__(self, ratio: float):
         self.ratio = ratio
         self._previous: float | None = None
 
@@ -134,7 +134,7 @@ def _refresh_replay_context(
 class DreamerV3ReplayPipeline:
     """Sample one batch ahead, and apply each latent refresh one update behind."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         self._prefetched: tuple[TensorDictBase, ReplaySampleInfo] | None = None
         self._pending_context: tuple[
             ReplaySampleInfo, torch.Tensor, torch.Tensor
@@ -191,7 +191,7 @@ class DreamerV3ReplayPipeline:
 class DreamerV3ReplayRecordBuilder:
     """Convert collector transitions into the replay stream."""
 
-    def __init__(self, num_streams: int) -> None:
+    def __init__(self, num_streams: int):
         self.num_streams = num_streams
         self._started = False
 
@@ -264,7 +264,7 @@ class DreamerV3ShiftedRecordExtender:
     The next collector batch completes it in place, at the same slot.
     """
 
-    def __init__(self, num_streams: int) -> None:
+    def __init__(self, num_streams: int):
         self.num_streams = num_streams
         self._tail_index: torch.Tensor | None = None
         self._tail_generation: torch.Tensor | None = None
@@ -359,7 +359,7 @@ class DreamerV3ShiftedRecordExtender:
 class DreamerV3ReplaySampler(SliceSampler):
     """Slice sampler that takes the oldest queued blocks before uniform ones."""
 
-    def __init__(self, *args, online: bool = True, **kwargs) -> None:
+    def __init__(self, *args, online: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.online = online
         self._stream_lengths: torch.Tensor | None = None
