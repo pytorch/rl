@@ -14,21 +14,19 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules import SafeModule
-from torchrl.modules.models.dreamer_v3 import (
+from torchrl.modules.models.model_based import (
     _DreamerV3BlockLinear,
     _DreamerV3RMSNorm,
-    DreamerV3MLP,
-    RSSMPosteriorV3,
-    RSSMPriorV3,
-    RSSMRolloutV3,
-)
-from torchrl.modules.models.model_based import (
     DreamerActor,
+    DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
+    RSSMPosteriorV3,
     RSSMPrior,
+    RSSMPriorV3,
     RSSMRollout,
+    RSSMRolloutV3,
 )
 from torchrl.testing import get_default_devices
 
@@ -579,6 +577,38 @@ class TestDreamerV3Components:
             else:
                 torch.testing.assert_close(fast_gradient, slow_gradient)
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_rssm_rollout_higher_order_scan_matches_loop(self, device):
+        scan_rollout = self._make_rollout(device)
+        loop_rollout = copy.deepcopy(scan_rollout)
+        scan_rollout._scan_fn = scan_rollout._scan
+        data = self._make_rollout_data(device)
+
+        torch.manual_seed(0)
+        scan_output = scan_rollout(data.clone())
+        torch.manual_seed(0)
+        loop_output = loop_rollout(data.clone())
+
+        for key in scan_rollout.out_keys:
+            torch.testing.assert_close(scan_output[key], loop_output[key])
+
+        scan_loss = sum(
+            scan_output[key].square().mean() for key in scan_rollout.out_keys
+        )
+        loop_loss = sum(
+            loop_output[key].square().mean() for key in loop_rollout.out_keys
+        )
+        scan_gradients = torch.autograd.grad(
+            scan_loss, tuple(scan_rollout.parameters())
+        )
+        loop_gradients = torch.autograd.grad(
+            loop_loss, tuple(loop_rollout.parameters())
+        )
+        for scan_gradient, loop_gradient in zip(scan_gradients, loop_gradients):
+            torch.testing.assert_close(
+                scan_gradient, loop_gradient, atol=2e-4, rtol=5e-5
+            )
+
     @pytest.mark.parametrize("scope", ["step", "scan"])
     def test_rssm_rollout_compile(self, scope):
         rollout = self._make_rollout(torch.device("cpu"))
@@ -586,7 +616,10 @@ class TestDreamerV3Components:
         rollout.compile_rollout(scope)
 
         output = rollout(data)
-        output["next", "posterior_logits"].square().mean().backward()
+        (
+            output["next", "posterior_logits"].square().mean()
+            + output["next", "prior_logits"].square().mean()
+        ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
 
 

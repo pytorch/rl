@@ -13,9 +13,11 @@ from typing import Literal
 import pytest
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl._utils import compile_with_warmup
 from torchrl.modules import GRUModule, LSTMModule
+from torchrl.modules.models import RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3
 
 
 RNNType = Literal["gru", "lstm"]
@@ -35,6 +37,15 @@ _DEFAULT_RNN_SHAPE: RNNShape = (256, 128, 32, 512)
 
 # Eager calls ``compile_with_warmup`` makes before compiling the module.
 _COMPILE_WARMUP = 1
+
+_RSSM_BATCH_SIZE = 16
+_RSSM_TIME_STEPS = 64
+_RSSM_NUM_CATEGORICALS = 32
+_RSSM_NUM_CLASSES = 4
+_RSSM_BELIEF_DIM = 512
+_RSSM_HIDDEN_DIM = 64
+_RSSM_EMBEDDING_DIM = 64
+_RSSM_ACTION_DIM = 6
 
 
 def _shape_id(shape: RNNShape) -> str:
@@ -133,6 +144,102 @@ def _call(
         out = module(tensordict)
     _sync(device)
     return out
+
+
+def _make_rssm_rollout(
+    backend: Literal["loop", "scan"], device: torch.device
+) -> RSSMRolloutV3:
+    torch.manual_seed(0)
+    prior = RSSMPriorV3(
+        action_shape=torch.Size([_RSSM_ACTION_DIM]),
+        hidden_dim=_RSSM_HIDDEN_DIM,
+        rnn_hidden_dim=_RSSM_BELIEF_DIM,
+        num_categoricals=_RSSM_NUM_CATEGORICALS,
+        num_classes=_RSSM_NUM_CLASSES,
+        action_dim=_RSSM_ACTION_DIM,
+        recurrent_model="block_gru",
+        num_blocks=8,
+        num_layers=1,
+        prior_num_layers=2,
+    )
+    posterior = RSSMPosteriorV3(
+        hidden_dim=_RSSM_HIDDEN_DIM,
+        num_categoricals=_RSSM_NUM_CATEGORICALS,
+        num_classes=_RSSM_NUM_CLASSES,
+        rnn_hidden_dim=_RSSM_BELIEF_DIM,
+        obs_embed_dim=_RSSM_EMBEDDING_DIM,
+        use_rms_norm=True,
+    )
+    rollout = RSSMRolloutV3(
+        TensorDictModule(
+            prior,
+            in_keys=["state", "belief", "action"],
+            out_keys=[
+                ("next", "prior_logits"),
+                ("next", "state"),
+                ("next", "belief"),
+            ],
+        ),
+        TensorDictModule(
+            posterior,
+            in_keys=[("next", "belief"), ("next", "encoded_latents")],
+            out_keys=[("next", "posterior_logits"), ("next", "state")],
+        ),
+    ).to(device)
+    if backend == "scan":
+        rollout._scan_fn = rollout._scan
+    return rollout
+
+
+def _make_rssm_tensordict(device: torch.device) -> TensorDict:
+    state_dim = _RSSM_NUM_CATEGORICALS * _RSSM_NUM_CLASSES
+    return TensorDict(
+        {
+            "state": torch.zeros(
+                _RSSM_BATCH_SIZE, _RSSM_TIME_STEPS, state_dim, device=device
+            ),
+            "belief": torch.zeros(
+                _RSSM_BATCH_SIZE, _RSSM_TIME_STEPS, _RSSM_BELIEF_DIM, device=device
+            ),
+            "action": torch.randn(
+                _RSSM_BATCH_SIZE, _RSSM_TIME_STEPS, _RSSM_ACTION_DIM, device=device
+            ),
+            "is_init": torch.zeros(
+                _RSSM_BATCH_SIZE,
+                _RSSM_TIME_STEPS,
+                1,
+                dtype=torch.bool,
+                device=device,
+            ),
+            "next": {
+                "encoded_latents": torch.randn(
+                    _RSSM_BATCH_SIZE,
+                    _RSSM_TIME_STEPS,
+                    _RSSM_EMBEDDING_DIM,
+                    device=device,
+                )
+            },
+        },
+        [_RSSM_BATCH_SIZE, _RSSM_TIME_STEPS],
+    )
+
+
+def _call_rssm_rollout(
+    rollout: RSSMRolloutV3, tensordict: TensorDict, device: torch.device
+) -> TensorDict:
+    with torch.inference_mode():
+        output = rollout(tensordict)
+    _sync(device)
+    return output
+
+
+def _call_rssm_rollout_train(
+    rollout: RSSMRolloutV3, tensordict: TensorDict, device: torch.device
+) -> None:
+    output = rollout(tensordict)
+    output.get(("next", "posterior_logits")).square().mean().backward()
+    rollout.zero_grad(set_to_none=True)
+    _sync(device)
 
 
 def _mib(num_bytes: int) -> float:
@@ -245,6 +352,42 @@ def test_rnn_rollout_with_intermediate_resets(
         _call(module, tensordict, device)
     memory_before = _reset_cuda_memory_stats(device)
     benchmark(_call, module, tensordict, device)
+    _sync(device)
+    record_cuda_memory_stats(
+        benchmark, _collect_cuda_memory_stats(device, memory_before)
+    )
+
+
+@pytest.mark.parametrize("mode", ["inference", "train"])
+@pytest.mark.parametrize("backend", ["loop", "scan"])
+def test_rssm_rollout_backend(
+    benchmark,
+    record_cuda_memory_stats,
+    backend: Literal["loop", "scan"],
+    mode: Literal["inference", "train"],
+) -> None:
+    device = torch.device("cuda:0" if torch.cuda.device_count() else "cpu")
+    rollout = _make_rssm_rollout(backend, device)
+    tensordict = _make_rssm_tensordict(device)
+
+    call = _call_rssm_rollout if mode == "inference" else _call_rssm_rollout_train
+    # The higher-order scan traces its forward and backward functions on first
+    # use, so benchmark only warm steady-state calls.
+    for _ in range(3):
+        call(rollout, tensordict, device)
+    memory_before = _reset_cuda_memory_stats(device)
+    benchmark.extra_info.update(
+        {
+            "backend": backend,
+            "mode": mode,
+            "batch_size": _RSSM_BATCH_SIZE,
+            "sequence_length": _RSSM_TIME_STEPS,
+            "belief_dim": _RSSM_BELIEF_DIM,
+            "transitions_per_call": _RSSM_BATCH_SIZE * _RSSM_TIME_STEPS,
+            "device": str(device),
+        }
+    )
+    benchmark(call, rollout, tensordict, device)
     _sync(device)
     record_cuda_memory_stats(
         benchmark, _collect_cuda_memory_stats(device, memory_before)

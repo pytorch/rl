@@ -31,12 +31,12 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.dreamer_v3 import (
+from torchrl.modules.models.model_based import (
+    DreamerActor,
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,
 )
-from torchrl.modules.models.model_based import DreamerActor
 from torchrl.modules.models.models import MLP
 from torchrl.objectives import (
     DreamerV3ActorLoss,
@@ -939,7 +939,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
         repo_root = Path(__file__).parents[2]
         example = runpy.run_path(
-            repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
+            repo_root / "sota-implementations/dreamer_v3/train.py",
             run_name="dreamer_v3_test",
         )
         cfg = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
