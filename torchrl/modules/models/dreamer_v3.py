@@ -14,8 +14,9 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
-from torch.nn import GRUCell
+from torch.nn import functional as F, GRUCell
 
+from torchrl._utils import implement_for
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 
 
@@ -33,19 +34,25 @@ def _dreamer_v3_init(module: nn.Module) -> None:
 
 
 class _DreamerV3RMSNorm(nn.Module):
-    """RMS normalization with learned scale and shift."""
+    """RMS normalization with a learned scale and no shift."""
 
     def __init__(self, features: int, eps: float = 1e-4, device=None):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(features, device=device))
-        self.bias = nn.Parameter(torch.zeros(features, device=device))
 
+    @implement_for("torch", None, "2.4", compilable=True)
     def forward(self, value: torch.Tensor) -> torch.Tensor:
         dtype = value.dtype
         value = value.float()
         value = value * torch.rsqrt(value.square().mean(-1, keepdim=True) + self.eps)
-        return (value * self.weight.float() + self.bias.float()).to(dtype)
+        return (value * self.weight.float()).to(dtype)
+
+    @implement_for("torch", "2.4", compilable=True)
+    def forward(self, value: torch.Tensor) -> torch.Tensor:  # noqa: F811
+        return F.rms_norm(
+            value.float(), (self.weight.shape[0],), self.weight.float(), self.eps
+        ).to(value.dtype)
 
 
 class _DreamerV3BlockLinear(nn.Module):
@@ -74,7 +81,8 @@ class _DreamerV3BlockLinear(nn.Module):
             torch.empty(num_blocks, block_in, block_out, device=device)
         )
         self.bias = nn.Parameter(torch.zeros(out_features, device=device))
-        std = 1.1368 / block_in**0.5
+        # Fan-in spans the whole kernel: divide by in_features, not block_in.
+        std = 1.1368 / in_features**0.5
         nn.init.trunc_normal_(self.weight, std=std, a=-2 * std, b=2 * std)
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
@@ -493,7 +501,7 @@ class RSSMPriorV3(nn.Module):
 
     Examples:
         >>> import torch
-        >>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+        >>> from torchrl.modules.models.dreamer_v3 import RSSMPriorV3
         >>> prior = RSSMPriorV3(
         ...     action_shape=torch.Size([2]),
         ...     hidden_dim=16,
@@ -690,7 +698,7 @@ class RSSMPosteriorV3(nn.Module):
 
     Examples:
         >>> import torch
-        >>> from torchrl.modules.models.model_based_v3 import RSSMPosteriorV3
+        >>> from torchrl.modules.models.dreamer_v3 import RSSMPosteriorV3
         >>> posterior = RSSMPosteriorV3(
         ...     hidden_dim=16,
         ...     num_categoricals=4,
@@ -820,14 +828,17 @@ class RSSMRolloutV3(TensorDictModuleBase):
         rssm_posterior (TensorDictModule): Posterior module wrapping
             :class:`RSSMPosteriorV3`.
         reset_key (NestedKey or None, optional): Boolean key marking the first
-            transition of an episode. State and belief are zeroed at those
-            positions. Defaults to ``"is_init"``.
+            transition of an episode. The rollout zeroes the state, belief and
+            action there. Defaults to ``"is_init"``.
+        action_key (NestedKey or None, optional): Action key, zeroed on a reset
+            step. Defaults to ``None``: the module then takes the
+            ``rssm_prior`` input key that is not ``"state"`` or ``"belief"``.
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules.models.model_based_v3 import (
+        >>> from torchrl.modules.models.dreamer_v3 import (
         ...     RSSMPosteriorV3, RSSMPriorV3, RSSMRolloutV3,
         ... )
         >>> prior = TensorDictModule(
@@ -860,6 +871,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
         rssm_prior: TensorDictModule,
         rssm_posterior: TensorDictModule,
         reset_key: NestedKey | None = "is_init",
+        action_key: NestedKey | None = None,
     ):
         super().__init__()
         _module = TensorDictSequential(rssm_prior, rssm_posterior)
@@ -868,6 +880,21 @@ class RSSMRolloutV3(TensorDictModuleBase):
         self.rssm_prior = rssm_prior
         self.rssm_posterior = rssm_posterior
         self.reset_key = unravel_key(reset_key) if reset_key is not None else None
+        if action_key is not None:
+            self.action_key = unravel_key(action_key)
+        else:
+            candidates = [
+                key
+                for key in map(unravel_key, rssm_prior.in_keys)
+                if key not in ("state", "belief")
+            ]
+            if len(candidates) > 1:
+                raise ValueError(
+                    "Could not infer the action key from the prior in_keys "
+                    f"{list(rssm_prior.in_keys)}: {candidates} are all "
+                    "candidates. Pass action_key explicitly."
+                )
+            self.action_key = candidates[0] if candidates else None
 
     def forward(self, tensordict):
         """Roll out the RSSM for one episode chunk.
@@ -903,6 +930,21 @@ class RSSMRolloutV3(TensorDictModuleBase):
                     reset = reset.unsqueeze(-1)
                 _tensordict.set("state", torch.where(reset, 0, state))
                 _tensordict.set("belief", torch.where(reset, 0, belief))
+                # A reset step must not use the previous action either.
+                action = (
+                    _tensordict.get(self.action_key, None)
+                    if self.action_key is not None
+                    else None
+                )
+                if action is not None:
+                    action_reset = reset
+                    while action_reset.ndim > action.ndim:
+                        action_reset = action_reset.squeeze(-1)
+                    while action_reset.ndim < action.ndim:
+                        action_reset = action_reset.unsqueeze(-1)
+                    _tensordict.set(
+                        self.action_key, torch.where(action_reset, 0, action)
+                    )
             self.rssm_prior(_tensordict)
             self.rssm_posterior(_tensordict)
 

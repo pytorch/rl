@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import torch
-from tensordict import TensorDict, TensorDictParams
+from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.utils import NestedKey, unravel_key
 
@@ -32,7 +32,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.modules.distributions import HAS_ENTROPY
 from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.modules.functional import symexp as _symexp, symlog as symlog
-from torchrl.modules.models.model_based_v3 import (  # noqa: F401
+from torchrl.modules.models.dreamer_v3 import (  # noqa: F401
     _default_bins,
     _DEFAULT_NUM_BINS,
     _unimix_probs,
@@ -48,6 +48,11 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import ValueEstimatorBase
+from torchrl.objectives.value.functional import (
+    is_dynamo_compiling as _is_dynamo_compiling,
+    td_lambda_return_estimate,
+    vec_td_lambda_return_estimate,
+)
 
 symexp = _symexp
 two_hot_decode = _two_hot_decode
@@ -119,9 +124,12 @@ def categorical_kl_balanced(
              + (1 - alpha) * KL(posterior || sg(prior))
 
     The first term trains only the *prior*; the second trains only the
-    *posterior*. Free bits are applied **per categorical** (clamped before
-    averaging across categoricals and batch), matching Hafner et al. 2023
-    eq. 5: ``L_KL = max(free_bits, KL_per_categorical)``.
+    *posterior*. ``free_bits`` lower-limits each categorical KL, then the
+    function averages over the categoricals and the batch.
+
+    .. note::
+        The reference clamps the KL *sum* over the categoricals, not each
+        one. Use :func:`categorical_kl_terms` for that behavior.
 
     Reference: https://arxiv.org/abs/2301.04104
 
@@ -155,7 +163,6 @@ def categorical_kl_balanced(
     prior_sg = prior.detach()
     kl_term2 = (posterior * (posterior.log() - prior_sg.log())).sum(-1)
 
-    # Free bits per categorical (clamp before reducing). Hafner et al. 2023, eq. 5.
     kl_term1 = kl_term1.clamp_min(free_bits).mean()
     kl_term2 = kl_term2.clamp_min(free_bits).mean()
 
@@ -197,8 +204,8 @@ class DreamerV3ModelLoss(LossModule):
 
     1. **KL loss** — balanced KL between prior and posterior categorical
        distributions (see :func:`categorical_kl_balanced`).
-    2. **Reconstruction loss** — symlog MSE between predicted and true
-       observations.
+    2. **Reconstruction loss** — squared (``"l2"``) or absolute (``"l1"``)
+       error between the decoded and the true observations, in symlog space.
     3. **Reward loss** — two-hot cross-entropy or symlog MSE for the predicted
        reward.
 
@@ -233,8 +240,7 @@ class DreamerV3ModelLoss(LossModule):
             Default: 0.8.
         free_bits (float, optional): Minimum KL per categorical in nats.
             Default: 1.0.
-        reco_loss (str, optional): Reconstruction loss type (``"l2"`` or
-            ``"l1"``). Default: ``"l2"``.
+        reco_loss ("l1" or "l2", optional): Loss type. Default: ``"l2"``.
         reward_two_hot (bool, optional): If ``True``, the reward head is
             expected to output **logits over** ``num_reward_bins`` and the loss
             is two-hot cross-entropy. If ``False``, the reward head outputs a
@@ -244,6 +250,9 @@ class DreamerV3ModelLoss(LossModule):
         global_average (bool, optional): If ``True``, averages losses over all
             dimensions. Otherwise sums over non-batch/time dims first. Default:
             ``False``.
+        detach_output (bool, optional): If ``True``, the returned world model
+            output is detached. Set it to ``False`` when a replay value loss
+            must train the representation. Default: ``True``.
 
     Examples:
         >>> import torch
@@ -346,10 +355,11 @@ class DreamerV3ModelLoss(LossModule):
         continue_target_scale: float = 1.0,
         kl_alpha: float = 0.8,
         free_bits: float = 1.0,
-        reco_loss: str = "l2",
+        reco_loss: Literal["l1", "l2"] = "l2",
         reward_two_hot: bool = True,
         num_reward_bins: int = _DEFAULT_NUM_BINS,
         global_average: bool = False,
+        detach_output: bool = True,
     ):
         super().__init__()
         self.world_model = world_model
@@ -374,6 +384,7 @@ class DreamerV3ModelLoss(LossModule):
         self.reward_two_hot = reward_two_hot
         self.num_reward_bins = num_reward_bins
         self.global_average = global_average
+        self.detach_output = detach_output
         self.register_buffer(
             "reward_bins",
             _default_bins(num_reward_bins),
@@ -487,7 +498,7 @@ class DreamerV3ModelLoss(LossModule):
                 td_out.set("loss_model_continue", self.lambda_continue * continue_loss)
 
         self._clear_weakrefs(tensordict, td_out)
-        return td_out, tensordict.data
+        return td_out, tensordict.data if self.detach_output else tensordict
 
 
 # ---------------------------------------------------------------------------
@@ -558,7 +569,7 @@ class DreamerV3ActorLoss(LossModule):
         >>> from torchrl.modules import MLP, SafeSequential, WorldModelWrapper
         >>> from torchrl.modules.distributions.continuous import TanhNormal
         >>> from torchrl.modules.models.model_based import DreamerActor
-        >>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+        >>> from torchrl.modules.models.dreamer_v3 import RSSMPriorV3
         >>> from torchrl.objectives import DreamerV3ActorLoss
         >>> from torchrl.objectives.utils import ValueEstimators
         >>> from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv
@@ -733,37 +744,50 @@ class DreamerV3ActorLoss(LossModule):
             next_tensordict = step_mdp(fake_data, keep_other=True)
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
+        next_value = next_tensordict.get(self.tensor_keys.value)
 
         reward = fake_data.get(("next", self.tensor_keys.reward))
-        next_value = next_tensordict.get(self.tensor_keys.value)
         continuation = None
+        root_continuation = None
         continuation_model = self.__dict__.get("continuation_model")
         if continuation_model is not None:
+            # step_mdp shifts by one: only index 0 needs a new forward pass.
+            first_td = fake_data[..., :1].select(
+                *continuation_model.in_keys, strict=False
+            )
             continuation_td = next_tensordict.select(
                 *continuation_model.in_keys, strict=False
             )
             with hold_out_net(continuation_model):
+                continuation_model(first_td)
                 continuation_model(continuation_td)
             continuation = continuation_td.get(self.tensor_keys.continuation)
+            root_continuation = torch.cat(
+                [
+                    first_td.get(self.tensor_keys.continuation),
+                    continuation[..., :-1, :],
+                ],
+                dim=-2,
+            )
+            fake_data.set(self.tensor_keys.continuation, root_continuation)
             fake_data.set(("next", self.tensor_keys.continuation), continuation)
         lambda_target = self.lambda_target(reward, next_value, continuation)
         fake_data.set("lambda_target", lambda_target)
 
-        if self.discount_loss:
+        if not self.discount_loss:
+            discount = torch.ones_like(lambda_target)
+        else:
             gamma = self.value_estimator.gamma.to(tensordict.device)
-            if continuation is None:
-                step_discount = gamma.expand(lambda_target.shape)
-            else:
-                step_discount = gamma * continuation
+            # w_t uses the root continuations (0..H-1), the returns use 1..H.
+            continuations = (
+                root_continuation
+                if continuation is not None
+                else torch.ones_like(lambda_target)
+            )
             discount = torch.cat(
-                [
-                    torch.ones_like(step_discount[..., :1, :]),
-                    step_discount[..., :-1, :],
-                ],
+                [continuations[..., :1, :], gamma * continuations[..., 1:, :]],
                 dim=-2,
             ).cumprod(dim=-2)
-        else:
-            discount = torch.ones_like(lambda_target)
         discount = discount.detach()
         fake_data.set(self.tensor_keys.discount_weight, discount)
 
@@ -910,6 +934,41 @@ class DreamerV3ActorLoss(LossModule):
 # ---------------------------------------------------------------------------
 
 
+@torch.no_grad()
+def _replay_value_target(
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    terminated: torch.Tensor,
+    bootstrap: torch.Tensor,
+    horizon: float,
+    lmbda: float,
+) -> torch.Tensor:
+    """Compute the lambda returns along a replay sequence.
+
+    The output has one step less than the input: element ``k`` is the return
+    for replay state ``k``, from the rewards and bootstraps at ``k + 1`` on.
+    """
+    reward = reward.squeeze(-1).unsqueeze(-1)
+    done = done.squeeze(-1).unsqueeze(-1)
+    terminated = terminated.squeeze(-1).unsqueeze(-1)
+    bootstrap = bootstrap.squeeze(-1).unsqueeze(-1)
+    # The vectorized path discovers and pads trajectory lengths dynamically,
+    # which cannot be captured by Dynamo in fullgraph mode.
+    return_estimate = (
+        td_lambda_return_estimate
+        if _is_dynamo_compiling()
+        else vec_td_lambda_return_estimate
+    )
+    return return_estimate(
+        gamma=1 - 1 / horizon,
+        lmbda=lmbda,
+        next_state_value=bootstrap[..., 1:, :],
+        reward=reward[..., 1:, :],
+        done=done[..., 1:, :],
+        terminated=terminated[..., 1:, :],
+    ).squeeze(-1)
+
+
 class DreamerV3ValueLoss(LossModule):
     """DreamerV3 Value Loss.
 
@@ -938,7 +997,7 @@ class DreamerV3ValueLoss(LossModule):
 
     Args:
         value_model (TensorDictModule): The value network.
-        value_loss (str, optional): Loss type — ``"symlog_mse"`` or ``"two_hot"``.
+        value_loss ("symlog_mse" or "two_hot", optional): Loss type.
             Default: ``"symlog_mse"``.
         discount_loss (bool, optional): If ``True``, discounts the loss with
             a cumulative gamma factor. Default: ``True``.
@@ -952,6 +1011,8 @@ class DreamerV3ValueLoss(LossModule):
         slow_critic_regularization (float, optional): Weight of the auxiliary
             loss that trains the online critic toward decoded target-critic
             predictions. Default: ``0.0``.
+        reduction ("none", "mean" or "sum", optional): Reduction applied to
+            the loss. Defaults to ``"mean"``.
 
     Examples:
         >>> import torch
@@ -985,11 +1046,23 @@ class DreamerV3ValueLoss(LossModule):
                 ``"state_value_logits"``.
             discount_weight (NestedKey): Optional cumulative imagination
                 weight. Defaults to ``"discount_weight"``.
+            reward (NestedKey): Replay reward, read under ``"next"``.
+                Defaults to ``"reward"``.
+            done (NestedKey): Replay episode end, read under ``"next"``.
+                Defaults to ``"done"``.
+            terminated (NestedKey): Replay terminal, read under ``"next"``.
+                Defaults to ``"terminated"``.
+            bootstrap (NestedKey): First imagined lambda return of each replay
+                state, read at the root. Defaults to ``"bootstrap"``.
         """
 
         value: NestedKey = "state_value"
         value_logits: NestedKey = "state_value_logits"
         discount_weight: NestedKey = "discount_weight"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
+        bootstrap: NestedKey = "bootstrap"
 
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
@@ -1001,17 +1074,21 @@ class DreamerV3ValueLoss(LossModule):
     def __init__(
         self,
         value_model: TensorDictModule,
-        value_loss: str = "symlog_mse",
+        value_loss: Literal["symlog_mse", "two_hot"] = "symlog_mse",
         discount_loss: bool = True,
         gamma: float = 0.99,
         num_value_bins: int = _DEFAULT_NUM_BINS,
         actor_loss: DreamerV3ActorLoss | None = None,
         slow_critic_regularization: float = 0.0,
+        reduction: Literal["none", "mean", "sum"] | None = None,
     ):
         super().__init__()
+        if reduction is None:
+            reduction = "mean"
         if slow_critic_regularization < 0:
             raise ValueError("slow_critic_regularization must be non-negative.")
         self.slow_critic_regularization = slow_critic_regularization
+        self.reduction = reduction
         self.convert_to_functional(
             value_model,
             "value_model",
@@ -1051,6 +1128,104 @@ class DreamerV3ValueLoss(LossModule):
             estimator_gamma = estimator_gamma.item()
         self.gamma = float(estimator_gamma)
 
+    def replay_value_loss(
+        self,
+        tensordict: TensorDictBase,
+        *,
+        horizon: float = 333.0,
+        lmbda: float = 0.95,
+    ) -> TensorDictBase:
+        """Compute the DreamerV3 critic loss on a replay sequence.
+
+        The return of each replay state uses the reward of the next step and
+        bootstraps from ``bootstrap``, the first imagined return of that
+        state. The gradient stays on the input features, so the loss can
+        train the RSSM representation when the model loss does not detach.
+
+        Args:
+            tensordict (TensorDictBase): Posterior replay features, batch size
+                ``[B, T]``, with the ``value_model`` input keys and the
+                ``reward``, ``done``, ``terminated`` and ``bootstrap`` entries
+                that :attr:`tensor_keys` names.
+            horizon (float, optional): Discount horizon; the step discount is
+                ``1 - 1 / horizon``. Defaults to ``333.0``.
+            lmbda (float, optional): Lambda-return coefficient. Default: 0.95.
+
+        Returns:
+            A tensordict with the scalar, unweighted ``loss_replay_value``.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import TensorDictModule
+            >>> from torchrl.modules import MLP
+            >>> from torchrl.objectives import DreamerV3ValueLoss
+            >>> value_model = TensorDictModule(
+            ...     MLP(out_features=1, depth=1, num_cells=8),
+            ...     in_keys=["state"],
+            ...     out_keys=["state_value"],
+            ... )
+            >>> loss = DreamerV3ValueLoss(value_model)
+            >>> replay = TensorDict({
+            ...     "state": torch.randn(2, 5, 4),
+            ...     "bootstrap": torch.randn(2, 5),
+            ...     "next": {
+            ...         "reward": torch.randn(2, 5, 1),
+            ...         "done": torch.zeros(2, 5, 1, dtype=torch.bool),
+            ...         "terminated": torch.zeros(2, 5, 1, dtype=torch.bool),
+            ...     },
+            ... }, [2, 5])
+            >>> loss_td = loss.replay_value_loss(replay)
+            >>> loss_td["loss_replay_value"].shape
+            torch.Size([])
+        """
+        reward = tensordict.get(("next", self.tensor_keys.reward))
+        done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated))
+        bootstrap = tensordict.get(self.tensor_keys.bootstrap)
+        target = _replay_value_target(
+            reward, done, terminated, bootstrap, horizon, lmbda
+        )
+        done = done.squeeze(-1)
+        # Drop the last step (no next state) and the steps that end an episode.
+        weight = ~done[..., :-1]
+
+        value_tensordict = tensordict.select(*self.value_model.in_keys, strict=False)
+        with self.value_model_params.to_module(
+            self.value_model, preserve_module_state=False
+        ):
+            self.value_model(value_tensordict)
+        prediction = (
+            value_tensordict.get(self.tensor_keys.value_logits)[..., :-1, :]
+            if self.value_loss == "two_hot"
+            else value_tensordict.get(self.tensor_keys.value)[..., :-1, 0]
+        )
+        loss = self._step_value_loss(prediction, target)
+
+        if self.slow_critic_regularization:
+            target_tensordict = tensordict.select(
+                *self.value_model.in_keys, strict=False
+            )
+            with torch.no_grad(), self.target_value_model_params.to_module(
+                self.value_model, preserve_module_state=False
+            ):
+                self.value_model(target_tensordict)
+            slow_target = target_tensordict.get(self.tensor_keys.value)[..., :-1, 0]
+            loss = loss + self.slow_critic_regularization * self._step_value_loss(
+                prediction, slow_target
+            )
+
+        return TensorDict(
+            loss_replay_value=self._reduce_loss(weight.to(loss.dtype) * loss)
+        )
+
+    def _step_value_loss(
+        self, prediction: torch.Tensor, target: torch.Tensor
+    ) -> torch.Tensor:
+        if self.value_loss == "two_hot":
+            return two_hot_cross_entropy(prediction, target, self.value_bins)
+        return (symlog(prediction) - symlog(target)).square()
+
     @_maybe_record_function_decorator("dreamer_v3/value_loss")
     def forward(self, fake_data) -> tuple[TensorDict, TensorDict]:
         lambda_target = fake_data.get("lambda_target")
@@ -1065,10 +1240,10 @@ class DreamerV3ValueLoss(LossModule):
         target_sq = lambda_target.squeeze(-1)  # [N] or [B, T]
 
         provided_discount = fake_data.get(self.tensor_keys.discount_weight, None)
-        gamma = self._resolved_gamma()
         if provided_discount is not None:
             discount = provided_discount.squeeze(-1)
         elif self.discount_loss and target_sq.ndim >= 2:
+            gamma = self._resolved_gamma()
             discount = gamma * torch.ones_like(target_sq)
             discount[..., 0] = 1
             discount = discount.cumprod(dim=-1)
@@ -1126,13 +1301,11 @@ class DreamerV3ValueLoss(LossModule):
         else:
             slow_loss = torch.zeros_like(loss)
 
-        value_loss = (discount * loss).mean()
+        value_loss = self._reduce_loss(discount * loss)
 
         loss_tensordict = TensorDict(
-            {
-                "loss_value": value_loss,
-                "value_slow_loss": (discount * slow_loss).mean().detach(),
-            }
+            loss_value=value_loss,
+            value_slow_loss=self._reduce_loss(discount * slow_loss).detach(),
         )
         self._clear_weakrefs(fake_data, loss_tensordict)
         return loss_tensordict, fake_data.data

@@ -57,7 +57,7 @@ from torchrl.envs.transforms import (
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DreamerV3MLP, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.model_based_v3 import (
+from torchrl.modules.models.dreamer_v3 import (
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,
