@@ -55,7 +55,7 @@ optimization:
   # changes the random stream; see the README.
   compile_rssm: null
   lr: 4.0e-5
-  adam_eps: 1.0e-20
+  optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3
   warmup_steps: 1000
   updates_per_batch: 8
