@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 
 import pytest
 import torch
@@ -29,7 +30,6 @@ from torchrl.modules.models.model_based import (
     RSSMPrior,
     RSSMRollout,
 )
-
 from torchrl.testing import get_default_devices
 
 
@@ -289,6 +289,59 @@ class TestDreamerV3Components:
         ratio = eight_blocks.weight.std() / one_block.weight.std()
         assert ratio.item() == pytest.approx(1.0, rel=0.05)
 
+    @staticmethod
+    def _make_rollout(device):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            action_dim=2,
+            recurrent_model="block_gru",
+            num_blocks=2,
+            device=device,
+        )
+        posterior = RSSMPosteriorV3(
+            hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            rnn_hidden_dim=8,
+            obs_embed_dim=6,
+            device=device,
+        )
+        return RSSMRolloutV3(
+            TensorDictModule(
+                prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    ("next", "prior_logits"),
+                    ("next", "state"),
+                    ("next", "belief"),
+                ],
+            ),
+            TensorDictModule(
+                posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[("next", "posterior_logits"), ("next", "state")],
+            ),
+        )
+
+    @staticmethod
+    def _make_rollout_data(device):
+        return TensorDict(
+            {
+                "state": torch.zeros(2, 4, 8, device=device),
+                "belief": torch.zeros(2, 4, 8, device=device),
+                "action": torch.randn(2, 4, 2, device=device),
+                "is_init": torch.tensor(
+                    [[[True], [False], [True], [False]]], device=device
+                ).expand(2, -1, -1),
+                "next": {"encoded_latents": torch.randn(2, 4, 6, device=device)},
+            },
+            [2, 4],
+        )
+
     def test_mlp_output_scale_and_multiple_inputs(self):
         module = DreamerV3MLP(
             6,
@@ -496,6 +549,45 @@ class TestDreamerV3Components:
             run(zero_action)["next", "belief"],
             run(nonzero_action)["next", "belief"],
         )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_rssm_rollout_fast_path_matches_tensordict_path(self, device):
+        fast = self._make_rollout(device)
+        slow = copy.deepcopy(fast)
+        slow._fast_path = False
+        assert fast._fast_path
+        data = self._make_rollout_data(device)
+
+        torch.manual_seed(0)
+        fast_output = fast(data.clone())
+        torch.manual_seed(0)
+        slow_output = slow(data.clone())
+        for key in fast.out_keys:
+            torch.testing.assert_close(fast_output[key], slow_output[key])
+
+        fast_loss = sum(fast_output[key].square().mean() for key in fast.out_keys)
+        slow_loss = sum(slow_output[key].square().mean() for key in slow.out_keys)
+        fast_gradients = torch.autograd.grad(
+            fast_loss, tuple(fast.parameters()), allow_unused=True
+        )
+        slow_gradients = torch.autograd.grad(
+            slow_loss, tuple(slow.parameters()), allow_unused=True
+        )
+        for fast_gradient, slow_gradient in zip(fast_gradients, slow_gradients):
+            if fast_gradient is None or slow_gradient is None:
+                assert fast_gradient is slow_gradient
+            else:
+                torch.testing.assert_close(fast_gradient, slow_gradient)
+
+    @pytest.mark.parametrize("scope", ["step", "scan"])
+    def test_rssm_rollout_compile(self, scope):
+        rollout = self._make_rollout(torch.device("cpu"))
+        data = self._make_rollout_data(torch.device("cpu"))
+        rollout.compile_rollout(scope)
+
+        output = rollout(data)
+        output["next", "posterior_logits"].square().mean().backward()
+        assert all(parameter.grad is not None for parameter in rollout.parameters())
 
 
 if __name__ == "__main__":
