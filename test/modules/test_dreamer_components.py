@@ -383,6 +383,10 @@ class TestDreamerV3Components:
         assert belief.grad is not None
         assert all(parameter.grad is not None for parameter in prior.parameters())
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.4.0"),
+        reason="the native RMSNorm compile path requires Torch >= 2.4.0",
+    )
     def test_block_gru_torch_compile(self):
         prior = RSSMPriorV3(
             action_shape=(2,),
