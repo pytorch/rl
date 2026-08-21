@@ -242,8 +242,14 @@ class TruncatedNormal(D.Independent):
         self.device = loc.device
         self.upscale = torch.as_tensor(upscale, device=self.device)
 
-        high = torch.as_tensor(high, device=self.device)
-        low = torch.as_tensor(low, device=self.device)
+        if not isinstance(high, torch.Tensor):
+            high = torch.as_tensor(high, device=self.device, dtype=loc.dtype)
+        else:
+            high = high.to(self.device)
+        if not isinstance(low, torch.Tensor):
+            low = torch.as_tensor(low, device=self.device, dtype=loc.dtype)
+        else:
+            low = low.to(self.device)
         self.low = low
         self.high = high
         self.update(loc, scale)
