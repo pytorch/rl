@@ -12,6 +12,8 @@ from typing import Literal
 
 import pytest
 import torch
+
+from hoptorch.scan import ensure_scan_backward
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
@@ -187,6 +189,9 @@ def _make_rssm_rollout(
         ),
     ).to(device)
     if backend == "scan":
+        # Match the recurrent modules: probe/patch scan backward before an
+        # inference-mode benchmark can disable autograd for the health check.
+        ensure_scan_backward(device)
         rollout._scan_fn = rollout._scan
     return rollout
 
