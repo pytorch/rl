@@ -23,10 +23,13 @@ from tensordict.nn import (
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch._higher_order_ops import scan
-from torch.func import functional_call
 from torch.nn import functional as F, GRUCell
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 from torchrl.modules.models.models import MLP
+from torchrl.modules.tensordict_module.rnn import (
+    _maybe_warm_scan_backward,
+    _scan as _higher_order_scan,
+)
 
 
 _DEFAULT_NUM_BINS = 255
@@ -1159,14 +1162,6 @@ class RSSMRolloutV3(TensorDictModuleBase):
 
     def _scan(self, state, belief, action, embedding, reset):
         """Run the recurrence with the higher-order :func:`torch.scan`."""
-        # Work around pytorch/pytorch#184528: scan must trace a carry that
-        # requires gradients to preserve parameter gradients through time.
-        if torch.is_grad_enabled():
-            if not state.requires_grad:
-                state.requires_grad_()
-            if not belief.requires_grad:
-                belief.requires_grad_()
-
         prior_net = self.rssm_prior.module
         posterior_net = self.rssm_posterior.module
         length = action.shape[-2]
@@ -1178,25 +1173,6 @@ class RSSMRolloutV3(TensorDictModuleBase):
             device=action.device,
         )
 
-        # ``scan`` does not support lifted tensor arguments, so module state is
-        # supplied explicitly to keep the combine function pure.
-        prior_parameters = {
-            name: parameter.unsqueeze(0).expand(length, *parameter.shape)
-            for name, parameter in prior_net.named_parameters()
-        }
-        prior_buffers = {
-            name: buffer.unsqueeze(0).expand(length, *buffer.shape)
-            for name, buffer in prior_net.named_buffers()
-        }
-        posterior_parameters = {
-            name: parameter.unsqueeze(0).expand(length, *parameter.shape)
-            for name, parameter in posterior_net.named_parameters()
-        }
-        posterior_buffers = {
-            name: buffer.unsqueeze(0).expand(length, *buffer.shape)
-            for name, buffer in posterior_net.named_buffers()
-        }
-
         def combine(carry, xs):
             state, belief = carry
             (
@@ -1205,27 +1181,17 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 reset_t,
                 prior_uniform,
                 posterior_uniform,
-                prior_parameters_t,
-                prior_buffers_t,
-                posterior_parameters_t,
-                posterior_buffers_t,
             ) = xs
             state = torch.where(reset_t, 0, state)
             belief = torch.where(reset_t, 0, belief)
             action_t = torch.where(reset_t, 0, action_t)
             masked_state = state
             masked_belief = belief
-            prior_logits, _, belief = functional_call(
-                prior_net,
-                (prior_parameters_t, prior_buffers_t),
-                (state, belief, action_t),
-                {"_uniform": prior_uniform},
+            prior_logits, _, belief = prior_net(
+                state, belief, action_t, _uniform=prior_uniform
             )
-            posterior_logits, state = functional_call(
-                posterior_net,
-                (posterior_parameters_t, posterior_buffers_t),
-                (belief, embedding_t),
-                {"_uniform": posterior_uniform},
+            posterior_logits, state = posterior_net(
+                belief, embedding_t, _uniform=posterior_uniform
             )
             output = (
                 masked_state.clone(),
@@ -1238,7 +1204,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
             )
             return (state.clone(), belief.clone()), output
 
-        _, output = scan(
+        # Keep the module weights as closure inputs, as the recurrent modules
+        # do. The higher-order operator lifts them once instead of scanning
+        # time-expanded parameter views at every step.
+        _, output = _higher_order_scan(
             combine,
             (state, belief),
             (
@@ -1247,11 +1216,8 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 reset.movedim(-2, 0),
                 uniforms[:, 0],
                 uniforms[:, 1],
-                prior_parameters,
-                prior_buffers,
-                posterior_parameters,
-                posterior_buffers,
             ),
+            dim=0,
         )
         (
             input_states,
@@ -1302,13 +1268,11 @@ class RSSMRolloutV3(TensorDictModuleBase):
         if scope == "step":
             self._step_fn = torch.compile(self._step, **compile_kwargs)
         else:
-            # Inductor lowers scan to a while loop whose index is extracted as
-            # a scalar. Capture that scalar in the graph instead of breaking
-            # or failing during the scan lowering.
-            scan_fn = torch._dynamo.config.patch(capture_scalar_outputs=True)(
-                self._scan
-            )
-            self._scan_fn = torch.compile(scan_fn, **compile_kwargs)
+            devices = {value.device for value in self.parameters()}
+            devices.update(value.device for value in self.buffers())
+            for device in devices:
+                _maybe_warm_scan_backward(device)
+            self._scan_fn = torch.compile(self._scan, **compile_kwargs)
 
     def __getstate__(self) -> dict:
         # Pickle cannot store a compiled callable: the copy starts eager.
