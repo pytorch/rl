@@ -200,7 +200,8 @@ class DreamerV3MLP(nn.Module):
 
     Args:
         in_features (int): Input feature count.
-        out_features (int): Output feature count.
+        out_features (int or None): Output feature count. If ``None``, the
+            module returns the last hidden activation.
         depth (int, optional): Number of hidden layers. Defaults to 3.
         num_cells (int, optional): Hidden feature count. Defaults to 1024.
         outscale (float, optional): Multiplicative initialization scale for the
@@ -220,7 +221,7 @@ class DreamerV3MLP(nn.Module):
     def __init__(
         self,
         in_features: int,
-        out_features: int,
+        out_features: int | None,
         depth: int = 3,
         num_cells: int = 1024,
         outscale: float = 1.0,
@@ -239,12 +240,15 @@ class DreamerV3MLP(nn.Module):
                 ]
             )
             layer_in = num_cells
-        output = nn.Linear(layer_in, out_features, device=device)
-        layers.append(output)
+        output = None
+        if out_features is not None:
+            output = nn.Linear(layer_in, out_features, device=device)
+            layers.append(output)
         self.model = nn.Sequential(*layers)
         self.model.apply(_dreamer_v3_init)
-        with torch.no_grad():
-            output.weight.mul_(outscale)
+        if output is not None:
+            with torch.no_grad():
+                output.weight.mul_(outscale)
 
     def forward(self, *inputs: torch.Tensor) -> torch.Tensor:
         value = inputs[0] if len(inputs) == 1 else torch.cat(inputs, -1)
