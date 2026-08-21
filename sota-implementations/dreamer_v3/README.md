@@ -6,13 +6,13 @@ and a proprioceptive DeepMind Control Walker Walk reproduction configuration.
 Run the small example with:
 
 ```bash
-python sota-implementations/dreamer_v3/dreamer_v3.py
+python sota-implementations/dreamer_v3/train.py
 ```
 
 Run the full Walker Walk configuration with:
 
 ```bash
-python sota-implementations/dreamer_v3/dreamer_v3.py \
+python sota-implementations/dreamer_v3/train.py \
   --config-name=config_dmc_walker
 ```
 
