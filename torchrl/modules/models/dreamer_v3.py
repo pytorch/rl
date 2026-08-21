@@ -86,11 +86,15 @@ class _DreamerV3BlockLinear(nn.Module):
         nn.init.trunc_normal_(self.weight, std=std, a=-2 * std, b=2 * std)
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
+        batch_shape = value.shape[:-1]
         value = value.reshape(
-            *value.shape[:-1], self.num_blocks, self.in_features // self.num_blocks
+            -1, self.num_blocks, self.in_features // self.num_blocks
+        ).transpose(0, 1)
+        value = torch.bmm(value, self.weight).transpose(0, 1)
+        # An FP32 bias would promote a BF16 recurrence back to FP32.
+        return value.reshape(*batch_shape, self.out_features) + self.bias.to(
+            value.dtype
         )
-        value = torch.einsum("...bi,bio->...bo", value, self.weight)
-        return value.flatten(-2) + self.bias
 
 
 class _DreamerV3BlockGRU(nn.Module):
@@ -632,6 +636,36 @@ class RSSMPriorV3(nn.Module):
             belief (torch.Tensor): Updated GRU hidden state, shape
                 ``[..., rnn_hidden_dim]``.
         """
+        prior_logits, belief = self._belief_and_logits(state, belief, action)
+        state = _straight_through_categorical(prior_logits, self.unimix)
+        state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
+
+        return prior_logits, state, belief
+
+    def _belief_and_logits(
+        self,
+        state: torch.Tensor,
+        belief: torch.Tensor,
+        action: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the prior logits and the new belief, without sampling."""
+        belief = self._update_belief(state, belief, action)
+        prior_logits_flat = self.rnn_to_prior_projector(belief)
+        prior_logits = prior_logits_flat.view(
+            *prior_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
+        )
+        return prior_logits, belief
+
+    def _update_belief(
+        self,
+        state: torch.Tensor,
+        belief: torch.Tensor,
+        action: torch.Tensor,
+    ) -> torch.Tensor:
+        """Advance the deterministic state and skip the prior head.
+
+        The acting path conditions on the observation, never on a prior sample.
+        """
         if self.recurrent_model == "block_gru":
             belief = self.rnn(state, belief, action)
         else:
@@ -647,16 +681,7 @@ class RSSMPriorV3(nn.Module):
                     belief.float() if belief is not None else None,
                 )
             belief = belief.to(dtype)
-
-        prior_logits_flat = self.rnn_to_prior_projector(belief)
-        prior_logits = prior_logits_flat.view(
-            *prior_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
-        )
-
-        state = _straight_through_categorical(prior_logits, self.unimix)
-        state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
-
-        return prior_logits, state, belief
+        return belief
 
 
 class RSSMPosteriorV3(nn.Module):
@@ -797,15 +822,20 @@ class RSSMPosteriorV3(nn.Module):
             state (torch.Tensor): Sampled state (straight-through), shape
                 ``[..., num_categoricals * num_classes]``.
         """
-        post_logits_flat = self.obs_rnn_to_post_projector(
-            torch.cat([belief, obs_embedding], dim=-1)
-        )
-        posterior_logits = post_logits_flat.view(
-            *post_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
-        )
+        posterior_logits = self._logits(belief, obs_embedding)
         state = _straight_through_categorical(posterior_logits, self.unimix)
         state = state.view(*state.shape[:-2], self.num_categoricals * self.num_classes)
         return posterior_logits, state
+
+    def _logits(
+        self, belief: torch.Tensor, obs_embedding: torch.Tensor
+    ) -> torch.Tensor:
+        post_logits_flat = self.obs_rnn_to_post_projector(
+            torch.cat([belief, obs_embedding], dim=-1)
+        )
+        return post_logits_flat.view(
+            *post_logits_flat.shape[:-1], self.num_categoricals, self.num_classes
+        )
 
 
 class RSSMRolloutV3(TensorDictModuleBase):
@@ -820,6 +850,11 @@ class RSSMRolloutV3(TensorDictModuleBase):
 
     The previous posterior state ``z_t`` is used as the prior input for step
     ``t+1``, matching the recurrent structure of DreamerV3.
+
+    The module picks one of two paths at construction: tensors when the
+    modules use the standard DreamerV3 key wiring, TensorDicts otherwise. Both
+    give identical results, and the tensor path shares storage for the entries
+    it does not overwrite. See :meth:`compile_rollout`.
 
     Reference: https://arxiv.org/abs/2301.04104
 
@@ -896,6 +931,33 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 )
             self.action_key = candidates[0] if candidates else None
 
+        self._fast_path = self._check_fast_path()
+        self._step_fn = None
+        self._scan_fn = None
+
+    def _check_fast_path(self) -> bool:
+        """Return ``True`` for the standard DreamerV3 key wiring."""
+
+        def keys(module_keys):
+            return [unravel_key(key) for key in module_keys]
+
+        # The tensor path calls the modules by position: only action is free.
+        return (
+            type(getattr(self.rssm_prior, "module", None)) is RSSMPriorV3
+            and type(getattr(self.rssm_posterior, "module", None)) is RSSMPosteriorV3
+            and keys(self.rssm_prior.in_keys) == ["state", "belief", self.action_key]
+            and keys(self.rssm_prior.out_keys)
+            == [
+                ("next", "prior_logits"),
+                ("next", "state"),
+                ("next", "belief"),
+            ]
+            and keys(self.rssm_posterior.in_keys)
+            == [("next", "belief"), ("next", "encoded_latents")]
+            and keys(self.rssm_posterior.out_keys)
+            == [("next", "posterior_logits"), ("next", "state")]
+        )
+
     def forward(self, tensordict):
         """Roll out the RSSM for one episode chunk.
 
@@ -906,6 +968,9 @@ class RSSMRolloutV3(TensorDictModuleBase):
         Returns:
             TensorDictBase: Stacked outputs with shape ``[*batch, T]``.
         """
+        if self._fast_path:
+            return self._forward_fast(tensordict)
+
         tensordict_out = []
         *batch, time_steps = tensordict.shape
 
@@ -957,6 +1022,158 @@ class RSSMRolloutV3(TensorDictModuleBase):
                 _tensordict.set("belief", next_belief)
 
         return torch.stack(tensordict_out, tensordict.ndim - 1)
+
+    def _forward_fast(self, tensordict):
+        """Run the recurrence on tensors, writing the TensorDict once."""
+        action = tensordict.get(self.action_key)
+        embedding = tensordict.get(("next", "encoded_latents"))
+        state = tensordict.get("state")[..., 0, :]
+        belief = tensordict.get("belief")[..., 0, :]
+        reset = (
+            tensordict.get(self.reset_key, None) if self.reset_key is not None else None
+        )
+        if reset is None:
+            reset = torch.zeros_like(action[..., :1], dtype=torch.bool)
+        while reset.ndim > action.ndim and reset.shape[-1] == 1:
+            reset = reset.squeeze(-1)
+        while reset.ndim < action.ndim:
+            reset = reset.unsqueeze(-1)
+
+        scan = self._scan_fn or self._scan
+        (
+            input_states,
+            input_beliefs,
+            masked_actions,
+            prior_logits,
+            posterior_logits,
+            next_states,
+            next_beliefs,
+        ) = scan(state, belief, action, embedding, reset)
+
+        # Write back the masked inputs, as the TensorDict path does.
+        output = tensordict.exclude(*self.out_keys)
+        output.set("state", input_states)
+        output.set("belief", input_beliefs)
+        output.set(self.action_key, masked_actions)
+        output.set(("next", "prior_logits"), prior_logits)
+        output.set(("next", "posterior_logits"), posterior_logits)
+        output.set(("next", "state"), next_states)
+        output.set(("next", "belief"), next_beliefs)
+        return output
+
+    def _step(self, state, belief, action_t, embedding_t, reset_t):
+        """Run one deterministic step of the recurrence.
+
+        The two categorical draws stay outside, in :meth:`_scan`, so that
+        :func:`torch.compile` leaves the random stream unchanged.
+        """
+        prior_net = self.rssm_prior.module
+        posterior_net = self.rssm_posterior.module
+        state = torch.where(reset_t, 0, state)
+        belief = torch.where(reset_t, 0, belief)
+        action_t = torch.where(reset_t, 0, action_t)
+        prior_logits_t, next_belief = prior_net._belief_and_logits(
+            state, belief, action_t
+        )
+        posterior_logits_t = posterior_net._logits(next_belief, embedding_t)
+        return state, belief, action_t, prior_logits_t, next_belief, posterior_logits_t
+
+    def _scan(self, state, belief, action, embedding, reset):
+        """Run the recurrence on tensors along the time dimension."""
+        prior_net = self.rssm_prior.module
+        posterior_net = self.rssm_posterior.module
+        step = self._step_fn or self._step
+        input_states = []
+        input_beliefs = []
+        masked_actions = []
+        prior_logits = []
+        posterior_logits = []
+        next_states = []
+        next_beliefs = []
+
+        for time_index in range(action.shape[-2]):
+            (
+                masked_state,
+                masked_belief,
+                action_t,
+                prior_logits_t,
+                belief,
+                posterior_logits_t,
+            ) = step(
+                state,
+                belief,
+                action[..., time_index, :],
+                embedding[..., time_index, :],
+                reset[..., time_index, :],
+            )
+            input_states.append(masked_state)
+            input_beliefs.append(masked_belief)
+            masked_actions.append(action_t)
+
+            # Discarded draw: it keeps the random stream equal to the TD path.
+            _straight_through_categorical(prior_logits_t, prior_net.unimix)
+            state = _straight_through_categorical(
+                posterior_logits_t, posterior_net.unimix
+            )
+            state = state.view(
+                *state.shape[:-2],
+                posterior_net.num_categoricals * posterior_net.num_classes,
+            )
+            prior_logits.append(prior_logits_t)
+            posterior_logits.append(posterior_logits_t)
+            next_states.append(state)
+            next_beliefs.append(belief)
+
+        return (
+            torch.stack(input_states, -2),
+            torch.stack(input_beliefs, -2),
+            torch.stack(masked_actions, -2),
+            torch.stack(prior_logits, -3),
+            torch.stack(posterior_logits, -3),
+            torch.stack(next_states, -2),
+            torch.stack(next_beliefs, -2),
+        )
+
+    def compile_rollout(
+        self, scope: Literal["step", "scan"] = "step", **compile_kwargs
+    ) -> None:
+        """Compile the recurrence with :func:`torch.compile`.
+
+        ``"step"`` compiles one deterministic step and leaves the categorical
+        draws in eager mode, so it samples the same categories as the eager
+        rollout; only the float rounding changes.
+
+        ``"scan"`` compiles the whole unrolled recurrence and runs faster, but
+        the draws fall inside the compiled region, where Inductor does not
+        reproduce the eager random numbers: a seeded run then diverges.
+
+        Both scopes need the tensor path.
+
+        Args:
+            scope ("step" or "scan", optional): Part of the recurrence to
+                compile. Defaults to ``"step"``.
+            **compile_kwargs: Keyword arguments for :func:`torch.compile`.
+                ``dynamic`` defaults to ``False``.
+        """
+        if not self._fast_path:
+            raise RuntimeError(
+                "compile_rollout() requires the tensor path, which needs the "
+                "standard DreamerV3 module wiring."
+            )
+        if scope not in ("step", "scan"):
+            raise ValueError(f"scope must be 'step' or 'scan', got {scope!r}.")
+        compile_kwargs.setdefault("dynamic", False)
+        self._step_fn = self._scan_fn = None
+        if scope == "step":
+            self._step_fn = torch.compile(self._step, **compile_kwargs)
+        else:
+            self._scan_fn = torch.compile(self._scan, **compile_kwargs)
+
+    def __getstate__(self) -> dict:
+        # Pickle cannot store a compiled callable: the copy starts eager.
+        state = super().__getstate__()
+        state["_step_fn"] = state["_scan_fn"] = None
+        return state
 
 
 def _straight_through_categorical(
