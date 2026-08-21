@@ -360,14 +360,18 @@ def test_rnn_rollout_with_intermediate_resets(
 
 @pytest.mark.parametrize("mode", ["inference", "train"])
 @pytest.mark.parametrize("backend", ["loop", "scan"])
+@pytest.mark.parametrize("compile", [False, True])
 def test_rssm_rollout_backend(
     benchmark,
     record_cuda_memory_stats,
     backend: Literal["loop", "scan"],
+    compile: bool,
     mode: Literal["inference", "train"],
 ) -> None:
     device = torch.device("cuda:0" if torch.cuda.device_count() else "cpu")
     rollout = _make_rssm_rollout(backend, device)
+    if compile:
+        rollout.compile_rollout("step" if backend == "loop" else "scan")
     tensordict = _make_rssm_tensordict(device)
 
     call = _call_rssm_rollout if mode == "inference" else _call_rssm_rollout_train
@@ -379,6 +383,7 @@ def test_rssm_rollout_backend(
     benchmark.extra_info.update(
         {
             "backend": backend,
+            "compile": compile,
             "mode": mode,
             "batch_size": _RSSM_BATCH_SIZE,
             "sequence_length": _RSSM_TIME_STEPS,
