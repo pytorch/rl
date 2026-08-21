@@ -433,7 +433,7 @@ plt.imshow(data.get("pixels").numpy())
 ![torchrl envs](../_images/sphx_glr_torchrl_envs_001.png)
 
 ```
-<matplotlib.image.AxesImage object at 0x7f914a53c6d0>
+<matplotlib.image.AxesImage object at 0x7f7d10e24f10>
 ```
 
 Let's have a look at what the tensordict contains:
@@ -1015,7 +1015,7 @@ env.foo
 ```
 
 ```
-'bar_6729bf72-9cbc-11f1-8b8a-0242ac110002'
+'bar_7d47ea5e-9d2a-11f1-b8ed-0242ac110002'
 ```
 
 ```
@@ -1043,7 +1043,7 @@ foo_list # needs to be instantiated, for instance using list
 ```
 
 ```
-<torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f9130a62ed0>
+<torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f7d2b0b8c50>
 ```
 
 ```
@@ -1051,7 +1051,7 @@ list(foo_list)
 ```
 
 ```
-['bar_68beb3ec-9cbc-11f1-8119-0242ac110002', 'bar_68c175aa-9cbc-11f1-8c58-0242ac110002', 'bar_68c554ae-9cbc-11f1-9cf3-0242ac110002']
+['bar_7ee25f66-9d2a-11f1-9fb2-0242ac110002', 'bar_7ed6b8b4-9d2a-11f1-bd95-0242ac110002', 'bar_7ee22398-9d2a-11f1-8d25-0242ac110002']
 ```
 
 Similarly, methods can also be accessed:
@@ -1197,8 +1197,8 @@ print("std: :", data.get("observation").std(0)) # Approx 1
 ```
 
 ```
-mean: : tensor([-0.3784, 0.3400, 0.1683])
-std: : tensor([0.9131, 1.0502, 1.0952])
+mean: : tensor([-0.0458, 0.1568, 0.3136])
+std: : tensor([1.1086, 1.1802, 1.1658])
 ```
 
 In **parallel envs** things are slightly more complicated, as we need to
@@ -1266,8 +1266,8 @@ data: TensorDict(
  batch_size=torch.Size([3, 5]),
  device=None,
  is_shared=False)
-mean: : tensor([-0.3594, 0.0981, 0.2709])
-std: : tensor([1.0764, 1.1852, 1.1472])
+mean: : tensor([-0.1252, 0.0394, 0.1152])
+std: : tensor([1.0999, 1.1372, 1.0004])
 ```
 
 The count is slightly higher than the number of steps (since we
@@ -1290,7 +1290,7 @@ del env
 update counts: tensor([18.])
 ```
 
-**Total running time of the script:** (0 minutes 25.224 seconds)
+**Total running time of the script:** (0 minutes 25.282 seconds)
 
 [`Download Jupyter notebook: torchrl_envs.ipynb`](../_downloads/3cb02b3346194d0f8cfea19dd5243c89/torchrl_envs.ipynb)
 

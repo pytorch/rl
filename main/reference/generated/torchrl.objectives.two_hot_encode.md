@@ -1,6 +1,6 @@
 # torchrl.objectives.two_hot_encode
 
-torchrl.objectives.two_hot_encode(*x: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *bins: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#two_hot_encode)
+torchrl.objectives.two_hot_encode(*x: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *bins: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#two_hot_encode)
 
 Encode raw scalar values on a sorted two-hot support.
 

@@ -92,6 +92,7 @@ total_loss = sum(v for k, v in loss_vals.items() if k.startswith("loss_"))
 - [DreamerV3](objectives_other.html#dreamerv3)
 - [DreamerV3 in a nutshell](dreamer_v3.html)
 
+- [Paper and maintained implementation](dreamer_v3.html#paper-and-maintained-implementation)
 - [Nomenclature](dreamer_v3.html#nomenclature)
 - [How the RSSM works](dreamer_v3.html#how-the-rssm-works)
 - [The three objectives](dreamer_v3.html#the-three-objectives)

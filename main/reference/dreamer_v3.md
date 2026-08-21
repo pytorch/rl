@@ -6,6 +6,20 @@ experience, then trains an actor and a critic on trajectories generated inside
 that model. The real environment supplies data for the world model; most policy
 improvement happens in latent-space imagination.
 
+## Paper and maintained implementation
+
+This page treats the [DreamerV3 paper](https://arxiv.org/abs/2301.04104) as
+the source of truth for the algorithm. The author-maintained
+[JAX implementation](https://github.com/danijar/dreamerv3) continues to
+evolve and its named experiment presets can differ from the protocol reported
+in the paper. TorchRL documents those presets as separate reproduction targets
+rather than redefining the paper algorithm around the latest JAX configuration.
+
+Some constructor defaults predate full paper parity and remain for backward
+compatibility. The runnable DreamerV3 recipes pass the paper-compatible loss
+settings explicitly; changes to public defaults require the normal deprecation
+cycle.
+
 The high-level data flow is:
 
 ```
@@ -139,6 +153,28 @@ slow_critic_updater = SoftUpdate(value_loss, tau=0.02)
 # After loss.backward() and optimizer.step():
 slow_critic_updater.step()
 ```
+
+### Replay critic loss
+
+The reference implementation also fits the critic on the real replay sequences,
+not only on imagined trajectories.
+[`replay_value_loss()`](generated/torchrl.objectives.DreamerV3ValueLoss.html#torchrl.objectives.DreamerV3ValueLoss.replay_value_loss) computes that
+term. Its return at each replay state uses the following replay reward and
+bootstraps from the first imagined lambda return of the next state, so the
+critic is fitted on real replay states as well as imagined states. The method
+reads its
+`reward`, `done`, `terminated` and `bootstrap` entries through
+`tensor_keys`, so
+[`set_keys()`](generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.set_keys) can redirect them:
+
+```
+value_loss.set_keys(bootstrap="first_imagined_return")
+replay_td = value_loss.replay_value_loss(replay_features)
+loss = replay_td["loss_replay_value"]
+```
+
+Because the input features stay attached, this term also trains the RSSM
+representation when the world-model loss returns live features.
 
 ## Optimization and training loop
 

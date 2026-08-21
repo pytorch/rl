@@ -1,6 +1,6 @@
 # SymExpTwoHot
 
-*class*torchrl.modules.SymExpTwoHot(*num_bins: int = 255*)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#SymExpTwoHot)
+*class*torchrl.modules.SymExpTwoHot(*num_bins: int = 255*)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#SymExpTwoHot)
 
 DreamerV3 categorical scalar representation.
 
@@ -27,18 +27,18 @@ Examples
 True
 ```
 
-decode(*logits: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#SymExpTwoHot.decode)
+decode(*logits: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#SymExpTwoHot.decode)
 
 Decode categorical logits to raw scalar values.
 
-encode(*target: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#SymExpTwoHot.encode)
+encode(*target: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#SymExpTwoHot.encode)
 
 Encode raw scalar targets as two-hot categorical targets.
 
-forward(*logits: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#SymExpTwoHot.forward)
+forward(*logits: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#SymExpTwoHot.forward)
 
 Decode logits and retain a trailing scalar event dimension.
 
-loss(*logits: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *target: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#SymExpTwoHot.loss)
+loss(*logits: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *target: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#SymExpTwoHot.loss)
 
 Compute two-hot cross entropy against raw scalar targets.

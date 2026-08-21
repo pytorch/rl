@@ -11,8 +11,8 @@ Computes three terms:
 
 1. **KL loss** -- balanced KL between prior and posterior categorical
 distributions (see `categorical_kl_balanced()`).
-2. **Reconstruction loss** -- symlog MSE between predicted and true
-observations.
+2. **Reconstruction loss** -- squared (`"l2"`) or absolute (`"l1"`)
+error between the decoded and the true observations, in symlog space.
 3. **Reward loss** -- two-hot cross-entropy or symlog MSE for the predicted
 reward.
 
@@ -48,8 +48,7 @@ distributions. Defaults to 0.0 for compatibility.
 Default: 0.8.
 - **free_bits** (*float**,**optional*) - Minimum KL per categorical in nats.
 Default: 1.0.
-- **reco_loss** (*str**,**optional*) - Reconstruction loss type (`"l2"` or
-`"l1"`). Default: `"l2"`.
+- **reco_loss** (*"l1"**or**"l2"**,**optional*) - Loss type. Default: `"l2"`.
 - **reward_two_hot** (*bool**,**optional*) - If `True`, the reward head is
 expected to output **logits over** `num_reward_bins` and the loss
 is two-hot cross-entropy. If `False`, the reward head outputs a
@@ -59,6 +58,9 @@ distribution. Default: 255.
 - **global_average** (*bool**,**optional*) - If `True`, averages losses over all
 dimensions. Otherwise sums over non-batch/time dims first. Default:
 `False`.
+- **detach_output** (*bool**,**optional*) - If `True`, the returned world model
+output is detached. Set it to `False` when a replay value loss
+must train the representation. Default: `True`.
 
 Examples
 

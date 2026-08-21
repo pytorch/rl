@@ -1,6 +1,6 @@
 # DreamerV3MLP
 
-*class*torchrl.modules.DreamerV3MLP(*in_features: int*, *out_features: int*, *depth: int = 3*, *num_cells: int = 1024*, *outscale: float = 1.0*, *norm_eps: float = 0.0001*, *device=None*)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#DreamerV3MLP)
+*class*torchrl.modules.DreamerV3MLP(*in_features: int*, *out_features: int*, *depth: int = 3*, *num_cells: int = 1024*, *outscale: float = 1.0*, *norm_eps: float = 0.0001*, *device=None*)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#DreamerV3MLP)
 
 RMS-normalized multilayer perceptron used by DreamerV3 heads.
 
@@ -26,7 +26,7 @@ Examples
 torch.Size([3, 4])
 ```
 
-forward(**inputs: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/model_based_v3.html#DreamerV3MLP.forward)
+forward(**inputs: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/modules/models/dreamer_v3.html#DreamerV3MLP.forward)
 
 Define the computation performed at every call.
 

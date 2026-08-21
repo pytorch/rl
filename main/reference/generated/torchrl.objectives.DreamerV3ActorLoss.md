@@ -67,7 +67,7 @@ Examples
 >>> from torchrl.modules import MLP, SafeSequential, WorldModelWrapper
 >>> from torchrl.modules.distributions.continuous import TanhNormal
 >>> from torchrl.modules.models.model_based import DreamerActor
->>> from torchrl.modules.models.model_based_v3 import RSSMPriorV3
+>>> from torchrl.modules.models.dreamer_v3 import RSSMPriorV3
 >>> from torchrl.objectives import DreamerV3ActorLoss
 >>> from torchrl.objectives.utils import ValueEstimators
 >>> from torchrl.testing.mocking_classes import ContinuousActionConvMockEnv

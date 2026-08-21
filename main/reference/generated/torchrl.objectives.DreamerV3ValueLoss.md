@@ -30,7 +30,7 @@ Reference: [https://arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104)
 Parameters:
 
 - **value_model** (*TensorDictModule*) - The value network.
-- **value_loss** (*str**,**optional*) - Loss type -- `"symlog_mse"` or `"two_hot"`.
+- **value_loss** (*"symlog_mse"**or**"two_hot"**,**optional*) - Loss type.
 Default: `"symlog_mse"`.
 - **discount_loss** (*bool**,**optional*) - If `True`, discounts the loss with
 a cumulative gamma factor. Default: `True`.
@@ -44,6 +44,8 @@ avoiding any chance of a mismatch. Default: `None`.
 - **slow_critic_regularization** (*float**,**optional*) - Weight of the auxiliary
 loss that trains the online critic toward decoded target-critic
 predictions. Default: `0.0`.
+- **reduction** (*"none"**,**"mean"**or**"sum"**,**optional*) - Reduction applied to
+the loss. Defaults to `"mean"`.
 
 Examples
 
@@ -88,6 +90,57 @@ Returns:
 A new tensordict with no batch dimension containing various loss scalars which will be named "loss*". It
 is essential that the losses are returned with this name as they will be read by the trainer before
 backpropagation.
+
+replay_value_loss(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***, *horizon: float = 333.0*, *lmbda: float = 0.95*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3ValueLoss.replay_value_loss)
+
+Compute the DreamerV3 critic loss on a replay sequence.
+
+The return of each replay state uses the reward of the next step and
+bootstraps from `bootstrap`, the first imagined return of that
+state. The gradient stays on the input features, so the loss can
+train the RSSM representation when the model loss does not detach.
+
+Parameters:
+
+- **tensordict** (*TensorDictBase*) - Posterior replay features, batch size
+`[B, T]`, with the `value_model` input keys and the
+`reward`, `done`, `terminated` and `bootstrap` entries
+that `tensor_keys` names.
+- **horizon** (*float**,**optional*) - Discount horizon; the step discount is
+`1 - 1 / horizon`. Defaults to `333.0`.
+- **lmbda** (*float**,**optional*) - Lambda-return coefficient. Default: 0.95.
+
+Returns:
+
+A tensordict with the scalar, unweighted `loss_replay_value`.
+
+Examples
+
+```
+>>> import torch
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import TensorDictModule
+>>> from torchrl.modules import MLP
+>>> from torchrl.objectives import DreamerV3ValueLoss
+>>> value_model = TensorDictModule(
+... MLP(out_features=1, depth=1, num_cells=8),
+... in_keys=["state"],
+... out_keys=["state_value"],
+... )
+>>> loss = DreamerV3ValueLoss(value_model)
+>>> replay = TensorDict({
+... "state": torch.randn(2, 5, 4),
+... "bootstrap": torch.randn(2, 5),
+... "next": {
+... "reward": torch.randn(2, 5, 1),
+... "done": torch.zeros(2, 5, 1, dtype=torch.bool),
+... "terminated": torch.zeros(2, 5, 1, dtype=torch.bool),
+... },
+... }, [2, 5])
+>>> loss_td = loss.replay_value_loss(replay)
+>>> loss_td["loss_replay_value"].shape
+torch.Size([])
+```
 
 sync_gamma_with_actor_loss(*actor_loss: [DreamerV3ActorLoss](torchrl.objectives.DreamerV3ActorLoss.html#torchrl.objectives.DreamerV3ActorLoss)*) → None[[source]](../../_modules/torchrl/objectives/dreamer_v3.html#DreamerV3ValueLoss.sync_gamma_with_actor_loss)
 
