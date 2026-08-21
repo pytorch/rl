@@ -301,6 +301,8 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
         Note: If sync=True (default), this is a blocking call that ensures
         specified workers are updated before returning.
         """
+        from torchrl.collectors.utils import _stage_unshareable_weights_on_cpu
+
         if not self.initialized_on_sender:
             raise RuntimeError("Must be initialized on sender before sending weights")
         if not self.synchronized_on_sender:
@@ -316,6 +318,7 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             strategy=self._strategy,
             context=context,
         )
+        prepared_weights = _stage_unshareable_weights_on_cpu(prepared_weights)
 
         transports = list(self._iterate_transports(worker_ids))
 
