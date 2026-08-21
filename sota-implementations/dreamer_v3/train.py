@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""DreamerV3 training script that reproduces the reference implementation.
+"""DreamerV3 training script that reproduces a pinned JAX configuration.
 
 The script is proprioceptive, not pixel-based, and writes its metrics to a
-JSONL file on the same step axis as the reference.
+JSONL file on the same step axis as the author-maintained JAX implementation.
 
 Usage::
 
@@ -192,7 +192,7 @@ def _build_learner(
         trainable_parameters,
         lr=cfg.optimization.lr,
         agc=cfg.optimization.adaptive_grad_clip,
-        eps=cfg.optimization.adam_eps,
+        eps=cfg.optimization.optimizer_eps,
         warmup_steps=cfg.optimization.warmup_steps,
     )
 

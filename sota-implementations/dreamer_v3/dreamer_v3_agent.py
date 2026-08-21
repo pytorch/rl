@@ -65,7 +65,7 @@ class _DreamerV3Decoder(torch.nn.Module):
         cfg: DictConfig,
         input_dim: int,
         event_dims: tuple[int, ...],
-    ) -> None:
+    ):
         super().__init__()
         if not event_dims or any(size <= 0 for size in event_dims):
             raise ValueError(
@@ -89,7 +89,7 @@ class _DreamerV3Decoder(torch.nn.Module):
 
 
 class _DreamerV3Actor(torch.nn.Module):
-    def __init__(self, cfg: DictConfig, action_dim: int) -> None:
+    def __init__(self, cfg: DictConfig, action_dim: int):
         super().__init__()
         state_dim = latent_state_dim(cfg)
         self.backbone = DreamerV3MLP(
@@ -128,7 +128,7 @@ class _DreamerV3PolicyFilter(torch.nn.Module):
         self,
         prior_net: torch.nn.Module,
         posterior_net: torch.nn.Module,
-    ) -> None:
+    ):
         super().__init__()
         self.prior_net = prior_net
         self.posterior_net = posterior_net
@@ -167,7 +167,7 @@ class _DreamerV3PolicyCarry(torch.nn.Module):
 class _DreamerV3AutocastPolicy(TensorDictModuleBase):
     """Run the real-environment policy in BF16 on CUDA devices."""
 
-    def __init__(self, module: TensorDictModuleBase, enabled: bool) -> None:
+    def __init__(self, module: TensorDictModuleBase, enabled: bool):
         super().__init__()
         self.module = module
         self.enabled = enabled
@@ -195,7 +195,7 @@ class DreamerV3BehaviorPolicySync:
         self,
         learner_policy: torch.nn.Module,
         behavior_policy: torch.nn.Module,
-    ) -> None:
+    ):
         self._learner_policy = learner_policy
         self._behavior_policy = behavior_policy
         learner_parameters = tuple(learner_policy.named_parameters())
@@ -246,7 +246,7 @@ class DreamerV3BehaviorPolicySync:
 class DreamerV3SeededPolicy(TensorDictModuleBase):
     """Give the policy its own random stream, with a new seed for each call."""
 
-    def __init__(self, module: TensorDictModuleBase, seed: int) -> None:
+    def __init__(self, module: TensorDictModuleBase, seed: int):
         super().__init__()
         self.module = module
         self.seed = seed
@@ -289,7 +289,7 @@ class DreamerV3Optimizer(torch.optim.Optimizer):
         beta2: float = 0.999,
         eps: float = 1e-20,
         warmup_steps: int = 1000,
-    ) -> None:
+    ):
         super().__init__(
             parameters,
             {
