@@ -8,6 +8,7 @@ from .base import (
     Sampler,
 )
 from .ensemble import SamplerEnsemble
+from .geometric import GeometricTrajectoryWindowSampler
 from .llm import PromptGroupSampler
 from .prioritized import (
     CudaMinSegmentTreeFp32,
@@ -46,6 +47,7 @@ __all__ = [
     "CudaMinSegmentTreeFp64",
     "CudaSumSegmentTreeFp32",
     "CudaSumSegmentTreeFp64",
+    "GeometricTrajectoryWindowSampler",
     "MinSegmentTreeFp32",
     "MinSegmentTreeFp64",
     "PrioritizedSampler",
@@ -74,6 +76,7 @@ for _export in (
     SliceSampler,
     SliceSamplerWithoutReplacement,
     PrioritizedSliceSampler,
+    GeometricTrajectoryWindowSampler,
     PromptGroupSampler,
     SamplerEnsemble,
 ):

@@ -35,6 +35,7 @@ from .replay_buffers import (
 from .sample_units import SampleUnit, Sequence, Transition
 from .samplers import (
     ConsumingSampler,
+    GeometricTrajectoryWindowSampler,
     PrioritizedSampler,
     PrioritizedSliceSampler,
     PromptGroupSampler,
@@ -105,6 +106,7 @@ __all__ = [
     "TensorDictPrioritizedReplayBuffer",
     "TensorDictReplayBuffer",
     "ConsumingSampler",
+    "GeometricTrajectoryWindowSampler",
     "PrioritizedSampler",
     "PrioritizedSliceSampler",
     "PromptGroupSampler",
