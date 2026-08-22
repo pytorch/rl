@@ -1638,3 +1638,65 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer
+
+
+@dataclass
+class GRPOTrainerConfig(TrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.GRPOTrainer`.
+
+    Every kwarg accepted by ``GRPOTrainer.__init__`` is exposed as a field here.
+    """
+
+    collector: Any
+    total_frames: int
+    loss_module: Any
+    optimizer: Any | None = None
+    optimization_stepper: Any | None = None
+    weight_sync_sender: Any | None = None
+    weight_update_frequency: int = 1
+    empty_replay_buffer_on_weight_update: bool = False
+    mixed_precision: bool = False
+    autocast_dtype: Any | None = None
+    gradient_accumulation_steps: int = 1
+    clip_norm: float | None = None
+    logger: Any | None = None
+    log_interval: int = 10000
+    num_epochs: int = 1
+    async_collection: bool = False
+    log_rewards: bool = True
+    log_kl: bool = False
+    frame_skip: int = 1
+    optim_steps_per_batch: int = 1
+    replay_buffer: Any | None = None
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_grpo_trainer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_grpo_trainer(**kwargs):
+    from torchrl.trainers.algorithms.grpo import GRPOTrainer
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    loss_module = kwargs.pop("loss_module")
+
+    if (
+        "logger" in kwargs
+        and kwargs["logger"] is not None
+        and not isinstance(kwargs["logger"], Logger)
+    ):
+        raise TypeError(
+            f"logger must be a Logger or None, got {type(kwargs['logger'])}"
+        )
+
+    trainer = GRPOTrainer(
+        collector=collector,
+        total_frames=total_frames,
+        loss_module=loss_module,
+        **kwargs,
+    )
+    return trainer

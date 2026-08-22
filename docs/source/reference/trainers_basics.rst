@@ -35,6 +35,7 @@ Algorithm-specific trainers
     IQLTrainer
     CQLTrainer
     TD3Trainer
+    GRPOTrainer
 
 Builders
 --------

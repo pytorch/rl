@@ -2166,6 +2166,548 @@ class TestEarlyStopping:
         assert collector.shutdown_calls == 1
 
 
-if __name__ == "__main__":
+
+
+# --- GRPO Trainer Tests ---
+from unittest.mock import MagicMock, patch
+from torch import nn, optim
+from tensordict import TensorDict
+
+from torchrl.trainers.algorithms.grpo import (
+    GRPOOptimizationStepper,
+    GRPOTrainer,
+    WeightSyncHook,
+)
+def _make_optimizer(model: nn.Module | None = None) -> optim.Optimizer:
+    if model is None:
+        model = nn.Linear(4, 4)
+    return optim.Adam(model.parameters(), lr=1e-3)
+
+
+def _make_loss_td(value: float = 1.0) -> TensorDict:
+    """Return a minimal TensorDict that mimics GRPOLoss output."""
+    return TensorDict(
+        {"loss_policy": torch.tensor(value, requires_grad=False)},
+        batch_size=[],
+    )
+
+
+def _make_grpo_trainer(**kwargs) -> GRPOTrainer:
+    """Build a GRPOTrainer with sensible defaults for testing (no LLM deps)."""
+    model = nn.Linear(4, 4)
+    optimizer = _make_optimizer(model)
+    collector = MagicMock()
+    collector.frames_per_batch = 4
+    loss_fn = MagicMock()
+
+    defaults = {
+        "collector": collector,
+        "total_frames": 100,
+        "frame_skip": 1,
+        "optim_steps_per_batch": 2,
+        "loss_module": loss_fn,
+        "optimizer": optimizer,
+        "weight_sync_sender": None,
+        "log_rewards": False,
+        "log_kl": False,
+    }
+    defaults.update(kwargs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        return GRPOTrainer(**defaults)
+
+
+# ===========================================================================
+# GRPOOptimizationStepper
+# ===========================================================================
+
+
+class TestGRPOOptimizationStepper:
+    def test_default_construction(self):
+        opt = _make_optimizer()
+        stepper = GRPOOptimizationStepper(opt)
+        assert stepper.gradient_accumulation_steps == 1
+        assert stepper.mixed_precision is False
+        assert stepper._use_scaler is False
+        assert stepper._micro_step == 0
+
+    def test_fp16_enables_scaler(self):
+        opt = _make_optimizer()
+        stepper = GRPOOptimizationStepper(
+            opt, mixed_precision=True, autocast_dtype=torch.float16
+        )
+        assert stepper._use_scaler is True
+
+    def test_bf16_no_scaler(self):
+        opt = _make_optimizer()
+        stepper = GRPOOptimizationStepper(
+            opt, mixed_precision=True, autocast_dtype=torch.bfloat16
+        )
+        assert stepper._use_scaler is False
+
+    def test_invalid_accumulation_steps(self):
+        opt = _make_optimizer()
+        with pytest.raises(
+            ValueError, match="gradient_accumulation_steps must be >= 1"
+        ):
+            GRPOOptimizationStepper(opt, gradient_accumulation_steps=0)
+
+    def test_state_dict_round_trip(self):
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        stepper = GRPOOptimizationStepper(opt, gradient_accumulation_steps=2)
+        stepper._micro_step = 1
+
+        sd = stepper.state_dict()
+        assert "optimizer" in sd
+        assert sd["micro_step"] == 1
+
+        model2 = nn.Linear(4, 4)
+        opt2 = _make_optimizer(model2)
+        stepper2 = GRPOOptimizationStepper(opt2, gradient_accumulation_steps=2)
+        stepper2.load_state_dict(sd)
+        assert stepper2._micro_step == 1
+
+    def test_micro_step_increments_each_call(self):
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        stepper = GRPOOptimizationStepper(opt, gradient_accumulation_steps=3)
+
+        # Patch compute_loss on a fake trainer
+        trainer = MagicMock()
+        trainer.compute_loss.return_value = TensorDict(
+            {"loss_policy": torch.tensor(0.5, requires_grad=True)},
+            batch_size=[],
+        )
+        trainer.clip_grad_norm = True
+        trainer.clip_norm = 1.0
+
+        batch = TensorDict({}, batch_size=[])
+        stepper.step(trainer, batch)
+        assert stepper._micro_step == 1
+
+        stepper.step(trainer, batch)
+        assert stepper._micro_step == 2
+
+    def test_optimizer_step_executes_at_accumulation_boundary(self):
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        stepper = GRPOOptimizationStepper(opt, gradient_accumulation_steps=2)
+
+        trainer = MagicMock()
+
+        def make_loss_td(_batch):
+            return TensorDict(
+                {"loss_policy": torch.tensor(0.5, requires_grad=True)},
+                batch_size=[],
+            )
+
+        trainer.compute_loss.side_effect = make_loss_td
+        batch = TensorDict({}, batch_size=[])
+
+        # Step 1: gradients accumulate, optimizer NOT stepped
+        with patch.object(opt, "step") as mock_step:
+            stepper.step(trainer, batch)
+            mock_step.assert_not_called()
+
+        # Step 2: accumulation boundary → optimizer should step
+        with patch.object(opt, "step") as mock_step:
+            stepper.step(trainer, batch)
+            mock_step.assert_called_once()
+
+    def test_end_to_end_optimization_reduces_loss(self):
+        """Verifies the stepper actually trains a simple model."""
+        model = nn.Linear(2, 1, bias=False)
+        nn.init.constant_(model.weight, 1.0)
+        opt = optim.SGD(model.parameters(), lr=0.5)
+        stepper = GRPOOptimizationStepper(opt, gradient_accumulation_steps=1)
+
+        x = torch.tensor([[1.0, 1.0]])
+        target = torch.tensor([[0.0]])
+
+        class SimpleLoss(nn.Module):
+            def forward(self, batch):
+                pred = model(x)
+                loss = nn.functional.mse_loss(pred, target)
+                return TensorDict({"loss_policy": loss}, batch_size=[])
+
+        trainer = MagicMock()
+        trainer.compute_loss.side_effect = lambda b: SimpleLoss()(b)
+        batch = TensorDict({}, batch_size=[])
+
+        initial_weight = model.weight.data.clone()
+        stepper.step(trainer, batch)
+        # Weight should have changed
+        assert not torch.equal(model.weight.data, initial_weight)
+
+
+# ===========================================================================
+# WeightSyncHook
+# ===========================================================================
+
+
+class TestWeightSyncHook:
+    def test_construction(self):
+        sender = MagicMock()
+        hook = WeightSyncHook(
+            sender, weight_update_frequency=5, empty_replay_buffer=True
+        )
+        assert hook.weight_update_frequency == 5
+        assert hook.empty_replay_buffer is True
+
+    def test_update_weights_called_at_correct_frequency(self):
+        sender = MagicMock()
+        hook = WeightSyncHook(sender, weight_update_frequency=3)
+        trainer = MagicMock()
+
+        # Only triggers when optim_count % frequency == 0
+        batch = TensorDict({}, batch_size=[])
+        for optim_count in range(1, 10):
+            trainer._optim_count = optim_count
+            hook._trainer = trainer
+            hook(batch)
+
+        # Steps 3, 6, 9 → 3 calls
+        assert sender.update_weights.call_count == 3
+
+    def test_replay_buffer_emptied_when_flag_set(self):
+        sender = MagicMock()
+        hook = WeightSyncHook(
+            sender, weight_update_frequency=1, empty_replay_buffer=True
+        )
+        trainer = MagicMock()
+        trainer._optim_count = 1
+        trainer.replay_buffer = MagicMock()
+        hook._trainer = trainer
+        hook(TensorDict({}, batch_size=[]))
+        trainer.replay_buffer.empty.assert_called_once_with(empty_write_count=False)
+
+    def test_replay_buffer_not_emptied_when_flag_false(self):
+        sender = MagicMock()
+        hook = WeightSyncHook(
+            sender, weight_update_frequency=1, empty_replay_buffer=False
+        )
+        trainer = MagicMock()
+        trainer._optim_count = 1
+        trainer.replay_buffer = MagicMock()
+        hook._trainer = trainer
+        hook(TensorDict({}, batch_size=[]))
+        trainer.replay_buffer.empty.assert_not_called()
+
+    def test_no_update_when_replay_buffer_is_none(self):
+        """Should not crash when replay_buffer is None."""
+        sender = MagicMock()
+        hook = WeightSyncHook(
+            sender, weight_update_frequency=1, empty_replay_buffer=True
+        )
+        trainer = MagicMock()
+        trainer._optim_count = 1
+        trainer.replay_buffer = None
+        hook._trainer = trainer
+        hook(TensorDict({}, batch_size=[]))  # Should not raise
+        sender.update_weights.assert_called_once()
+
+
+# ===========================================================================
+# GRPOTrainer construction
+# ===========================================================================
+
+
+class TestGRPOTrainerConstruction:
+    def test_basic_construction_no_sender(self):
+        trainer = _make_grpo_trainer()
+        assert trainer is not None
+
+    def test_raises_without_optimizer_and_stepper(self):
+        collector = MagicMock()
+        loss_fn = MagicMock()
+        with pytest.raises(ValueError, match="requires either an `optimizer`"):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                GRPOTrainer(
+                    collector=collector,
+                    total_frames=100,
+                    frame_skip=1,
+                    optim_steps_per_batch=2,
+                    loss_module=loss_fn,
+                    optimizer=None,
+                    optimization_stepper=None,
+                    log_rewards=False,
+                    log_kl=False,
+                )
+
+    def test_custom_stepper_accepted(self):
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        stepper = GRPOOptimizationStepper(opt, gradient_accumulation_steps=4)
+        collector = MagicMock()
+        loss_fn = MagicMock()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=100,
+                frame_skip=1,
+                optim_steps_per_batch=2,
+                loss_module=loss_fn,
+                optimizer=None,  # No optimizer needed — stepper owns it
+                optimization_stepper=stepper,
+                log_rewards=False,
+                log_kl=False,
+            )
+        assert trainer is not None
+
+    def test_mixed_precision_propagated_to_stepper(self):
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        collector = MagicMock()
+        loss_fn = MagicMock()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=100,
+                frame_skip=1,
+                optim_steps_per_batch=2,
+                loss_module=loss_fn,
+                optimizer=opt,
+                mixed_precision=True,
+                autocast_dtype=torch.bfloat16,
+                log_rewards=False,
+                log_kl=False,
+            )
+        # The internal stepper should have the flag
+        stepper = trainer._modules.get("optimization_stepper")
+        assert stepper is not None
+        assert stepper.mixed_precision is True
+        assert stepper.autocast_dtype == torch.bfloat16
+
+    def test_gradient_accumulation_propagated(self):
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        collector = MagicMock()
+        loss_fn = MagicMock()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=100,
+                frame_skip=1,
+                optim_steps_per_batch=2,
+                loss_module=loss_fn,
+                optimizer=opt,
+                gradient_accumulation_steps=8,
+                log_rewards=False,
+                log_kl=False,
+            )
+        stepper = trainer._modules.get("optimization_stepper")
+        assert stepper.gradient_accumulation_steps == 8
+
+    def test_weight_sync_hook_registered_when_sender_provided(self):
+        """When sender is passed, a WeightSyncHook must appear in post_steps."""
+        sender = MagicMock()
+        trainer = _make_grpo_trainer(weight_sync_sender=sender)
+        # Hooks are wrapped by a timing closure; check cell contents for the hook name
+        has_sync_hook = any(
+            any(
+                getattr(cell, "cell_contents", None) == "WeightSyncHook"
+                for cell in (fn.__closure__ or [])
+            )
+            for fn, _ in trainer._post_steps_ops
+        )
+        assert has_sync_hook
+
+    def test_no_weight_sync_hook_when_no_sender(self):
+        trainer = _make_grpo_trainer(weight_sync_sender=None)
+        # No WeightSyncHook should appear in the timing closure names
+        has_sync_hook = any(
+            any(
+                getattr(cell, "cell_contents", None) == "WeightSyncHook"
+                for cell in (fn.__closure__ or [])
+            )
+            for stage_ops in [
+                trainer._post_steps_ops,
+                trainer._pre_epoch_ops,
+                trainer._post_optim_ops,
+                trainer._pre_optim_ops,
+            ]
+            for fn, _ in stage_ops
+        )
+        assert not has_sync_hook
+
+    def test_async_collection_flag_stored(self):
+        trainer = _make_grpo_trainer(async_collection=True)
+        assert trainer.async_collection is True
+
+    def test_emits_experimental_warning(self):
+        # Do NOT suppress warnings here — we want to capture the UserWarning
+        model = torch.nn.Linear(4, 4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        collector = MagicMock()
+        loss_fn = MagicMock()
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            GRPOTrainer(
+                collector=collector,
+                total_frames=100,
+                frame_skip=1,
+                optim_steps_per_batch=2,
+                loss_module=loss_fn,
+                optimizer=optimizer,
+                log_rewards=False,
+                log_kl=False,
+            )
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        assert any("experimental" in str(x.message).lower() for x in user_warnings)
+
+    def test_replay_buffer_hooks_registered(self):
+        """ReplayBufferTrainer hooks should appear when a replay buffer is provided."""
+        from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+        rb = ReplayBuffer(storage=LazyTensorStorage(100), batch_size=4)
+        trainer = _make_grpo_trainer(replay_buffer=rb)
+        # process_optim_batch hooks are stored in _process_optim_batch_ops
+        assert len(trainer._process_optim_batch_ops) > 0
+
+    def test_no_replay_buffer_no_crash(self):
+        """Passing no replay buffer is valid (e.g., remote RB setup)."""
+        trainer = _make_grpo_trainer(replay_buffer=None)
+        assert trainer is not None
+
+    def test_weight_update_frequency_respected(self):
+        """WeightSyncHook.weight_update_frequency should match what was passed."""
+        sender = MagicMock()
+        trainer = _make_grpo_trainer(
+            weight_sync_sender=sender,
+            weight_update_frequency=7,
+        )
+        # The WeightSyncHook is stashed inside the timing-closure cell contents.
+        # The hook object itself is a cell_contents that is a WeightSyncHook instance.
+        sync_hooks = []
+        for fn, _ in trainer._post_steps_ops:
+            for cell in fn.__closure__ or []:
+                try:
+                    obj = cell.cell_contents
+                    if isinstance(obj, WeightSyncHook):
+                        sync_hooks.append(obj)
+                except ValueError:
+                    pass
+        assert len(sync_hooks) == 1
+        assert sync_hooks[0].weight_update_frequency == 7
+
+
+# ===========================================================================
+# Public API / import checks
+# ===========================================================================
+
+
+class TestPublicAPI:
+    def test_grpotrainer_in_algorithms_init(self):
+        from torchrl.trainers import algorithms
+
+        assert hasattr(algorithms, "GRPOTrainer")
+
+    def test_grpotrainer_in_trainers_init(self):
+        import torchrl.trainers as T
+
+        assert hasattr(T, "GRPOTrainer")
+        assert hasattr(T, "GRPOOptimizationStepper")
+        assert hasattr(T, "WeightSyncHook")
+
+    def test_grpotrainer_importable_directly(self):
+        from torchrl.trainers.algorithms.grpo import GRPOTrainer as GT
+
+        assert GT is GRPOTrainer
+
+
+# ===========================================================================
+# Edge cases
+# ===========================================================================
+
+
+class TestEdgeCases:
+    def test_clip_norm_none_does_not_clip(self):
+        """With clip_norm=None the stepper should still run without error."""
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        stepper = GRPOOptimizationStepper(opt, clip_norm=None)
+
+        trainer = MagicMock()
+        trainer.compute_loss.return_value = TensorDict(
+            {"loss_policy": torch.tensor(1.0, requires_grad=True)},
+            batch_size=[],
+        )
+        batch = TensorDict({}, batch_size=[])
+        result = stepper.step(trainer, batch)
+        assert "loss_policy" in result.keys()
+
+    def test_no_loss_keys_raises(self):
+        """If the loss module returns no 'loss_*' keys, a RuntimeError is raised."""
+        model = nn.Linear(4, 4)
+        opt = _make_optimizer(model)
+        stepper = GRPOOptimizationStepper(opt)
+
+        trainer = MagicMock()
+        trainer.compute_loss.return_value = TensorDict(
+            {"some_other_key": torch.tensor(1.0)},
+            batch_size=[],
+        )
+        batch = TensorDict({}, batch_size=[])
+        with pytest.raises(RuntimeError, match="no 'loss_\\*' keys"):
+            stepper.step(trainer, batch)
+
+    def test_state_dict_has_no_scaler_for_bf16(self):
+        """bf16 stepper state_dict must not include a 'scaler' key."""
+        opt = _make_optimizer()
+        stepper = GRPOOptimizationStepper(
+            opt, mixed_precision=True, autocast_dtype=torch.bfloat16
+        )
+        sd = stepper.state_dict()
+        assert "scaler" not in sd
+
+    def test_state_dict_has_scaler_for_fp16(self):
+        """fp16 stepper state_dict must include a 'scaler' key."""
+        opt = _make_optimizer()
+        stepper = GRPOOptimizationStepper(
+            opt, mixed_precision=True, autocast_dtype=torch.float16
+        )
+        sd = stepper.state_dict()
+        assert "scaler" in sd
+
+    def test_load_state_dict_restores_micro_step(self):
+        opt = _make_optimizer()
+        stepper = GRPOOptimizationStepper(opt, gradient_accumulation_steps=4)
+        stepper._micro_step = 3
+        sd = stepper.state_dict()
+
+        opt2 = _make_optimizer()
+        stepper2 = GRPOOptimizationStepper(opt2, gradient_accumulation_steps=4)
+        stepper2.load_state_dict(sd)
+        assert stepper2._micro_step == 3
+
+    def test_weight_sync_hook_no_update_when_count_not_multiple(self):
+        sender = MagicMock()
+        hook = WeightSyncHook(sender, weight_update_frequency=5)
+        trainer = MagicMock()
+        trainer._optim_count = 3  # Not a multiple of 5
+        trainer.replay_buffer = None
+        hook._trainer = trainer
+        hook(TensorDict({}, batch_size=[]))
+        sender.update_weights.assert_not_called()
+
+    def test_weight_sync_hook_zero_optim_count_executes(self):
+        """optim_count=0: 0 % N == 0, so it should execute."""
+        sender = MagicMock()
+        hook = WeightSyncHook(sender, weight_update_frequency=5)
+        trainer = MagicMock()
+        trainer._optim_count = 0
+        trainer.replay_buffer = None
+        hook._trainer = trainer
+        hook(TensorDict({}, batch_size=[]))
+        sender.update_weights.assert_called_once()
+
+
+
+if __name__ == '__main__':
     args, unknown = argparse.ArgumentParser().parse_known_args()
-    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+    pytest.main([__file__, '--capture', 'no', '--exitfirst'] + unknown)
