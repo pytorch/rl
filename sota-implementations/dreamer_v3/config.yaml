@@ -3,17 +3,22 @@ env:
   name: Pendulum-v1
   task: null
   seed: 0
+  use_seed: true
   max_episode_steps: 200
 
 collector:
+  num_envs: 1
   frames_per_batch: 200
   total_frames: 5000
+  count_reset_records: false
   exploration: random  # one of: random, mode
 
 replay_buffer:
+  device: cpu  # null keeps replay on the training device
   buffer_size: 10000
   batch_size: 16
   seq_len: 16
+  online: true
   warmup_factor: 2  # collect (warmup_factor * batch_size * seq_len) frames before training
 
 networks:
@@ -27,7 +32,9 @@ networks:
   prior_layers: 2
   posterior_layers: 1
   norm_eps: 1.0e-4
-  obs_embed_dim: 32
+  # Sizes of the per-observation decoder heads, summing to the observation
+  # size. null builds a single head over the whole observation.
+  decoder_event_dims: null
   num_reward_bins: 255
   num_value_bins: 255
   hidden_dim: 64
@@ -40,9 +47,15 @@ networks:
   policy_max_std: 1.0
 
 optimization:
-  device:            # training device (models, losses, policy). null=auto
+  device: null       # training device (models, losses, policy). null=auto
+  deferred_policy_sync: false
+  separate_policy_rng: false
+  mixed_precision: false
+  # Compile the RSSM recurrence: null, "step" or "scan". "scan" is faster but
+  # changes the random stream; see the README.
+  compile_rssm: null
   lr: 4.0e-5
-  adam_eps: 1.0e-20
+  optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3
   warmup_steps: 1000
   updates_per_batch: 8
@@ -54,6 +67,7 @@ optimization:
   return_normalization_min_scale: 1.0
   slow_critic_regularization: 1.0
   slow_critic_tau: 0.02
+  replay_value_loss_weight: 0.3
   free_bits: 1.0
   dynamic_loss_weight: 1.0
   representation_loss_weight: 0.1
@@ -61,10 +75,11 @@ optimization:
   lmbda: 0.95
 
 logger:
+  train_every: 200
   eval_every: 500
   eval_episodes: 3
   output_plot: dreamer_v3_pendulum.png
-  metrics_json: null
+  metrics_jsonl: null
 
 hydra:
   job:
