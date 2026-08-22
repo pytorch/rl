@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .brax import BraxEnv, BraxWrapper
+from .craftground import CraftGroundEnv, CraftGroundWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
 from .genesis import GenesisEnv, GenesisWrapper
@@ -42,6 +43,8 @@ from .vmas import VmasEnv, VmasWrapper
 __all__ = [
     "BraxEnv",
     "BraxWrapper",
+    "CraftGroundEnv",
+    "CraftGroundWrapper",
     "DMControlEnv",
     "DMControlWrapper",
     "GenesisEnv",
