@@ -244,11 +244,11 @@ class TruncatedNormal(D.Independent):
 
         if not isinstance(high, torch.Tensor):
             high = torch.as_tensor(high, device=self.device, dtype=loc.dtype)
-        else:
+        elif high.device != self.device:
             high = high.to(self.device)
         if not isinstance(low, torch.Tensor):
             low = torch.as_tensor(low, device=self.device, dtype=loc.dtype)
-        else:
+        elif low.device != self.device:
             low = low.to(self.device)
         self.low = low
         self.high = high
