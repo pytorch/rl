@@ -4,15 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
-
 from torchrl.data.tensor_specs import Bounded, Composite, TensorSpec
 from torchrl.envs.utils import step_mdp
+from torchrl.modules.value_transforms import ValueTransform
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -57,6 +58,15 @@ class TD3Loss(LossModule):
         loss_function (str, optional): loss function to be used for the Q-value.
             Can be one of  ``"smooth_l1"``, ``"l2"``,
             ``"l1"``, Default is ``"smooth_l1"``.
+        value_transform (ValueTransform, optional): invertible transform used by
+            the critic prediction space. Bellman targets and actor objectives
+            remain in raw value space. Defaults to ``None``. See also
+            :class:`~torchrl.modules.ValueOperator` and
+            :class:`~torchrl.objectives.value.ValueEstimatorBase`.
+        priority_function (Callable[[Tensor, Tensor], Tensor], optional): a
+            callable that receives each critic prediction and the Bellman target
+            in prediction space and returns their per-element replay priority.
+            Defaults to the squared residual used by TD3.
         delay_actor (bool, optional): whether to separate the target actor
             networks from the actor networks used for
             data collection. Default is ``True``.
@@ -232,6 +242,9 @@ class TD3Loss(LossModule):
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
         loss_function: str = "smooth_l1",
+        value_transform: ValueTransform | None = None,
+        priority_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | None = None,
         delay_actor: bool = True,
         delay_qvalue: bool = True,
         gamma: float | None = None,
@@ -244,6 +257,8 @@ class TD3Loss(LossModule):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self._set_value_transform(value_transform)
+        self._set_priority_function(priority_function)
         self.use_prioritized_weights = use_prioritized_weights
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -393,13 +408,16 @@ class TD3Loss(LossModule):
         ).expand(
             self.num_qvalue_nets, *tensordict_actor_grad.batch_size
         )  # for actor loss
-        state_action_value_actor = (
+        state_action_value_actor_transformed = (
             self._vmap_qvalue_network00(
                 actor_loss_td,
                 self._cached_detach_qvalue_network_params,
             )
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
+        )
+        state_action_value_actor = self._inverse_value_transform(
+            state_action_value_actor_transformed
         )
         loss_actor = -(state_action_value_actor[0])
         metadata = {
@@ -448,7 +466,7 @@ class TD3Loss(LossModule):
             ).expand(
                 self.num_qvalue_nets, *next_td_actor.batch_size
             )  # for next value estimation
-            next_target_q1q2 = (
+            next_target_q1q2_transformed = (
                 self._vmap_qvalue_network00(
                     next_val_td,
                     self.target_qvalue_network_params,
@@ -456,21 +474,18 @@ class TD3Loss(LossModule):
                 .get(self.tensor_keys.state_action_value)
                 .squeeze(-1)
             )
+            next_target_q1q2 = self._inverse_value_transform(
+                next_target_q1q2_transformed
+            )
         # min over the next target qvalues
         next_target_qvalue = next_target_q1q2.min(0)[0]
-
-        # set next target qvalues
-        tensordict.set(
-            ("next", self.tensor_keys.state_action_value),
-            next_target_qvalue.unsqueeze(-1),
-        )
 
         qval_td = tensordict.select(*self.qvalue_network.in_keys, strict=False).expand(
             self.num_qvalue_nets,
             *tensordict.batch_size,
         )
         # preditcted current qvalues
-        current_qvalue = (
+        current_qvalue_transformed = (
             self._vmap_qvalue_network00(
                 qval_td,
                 self.qvalue_network_params,
@@ -478,14 +493,28 @@ class TD3Loss(LossModule):
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
         )
+        current_qvalue = self._inverse_value_transform(current_qvalue_transformed)
 
         # compute target values for the qvalue loss (reward + gamma * next_target_qvalue * (1 - done))
-        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        target_value = self.value_estimator.value_estimate(
+            tensordict, next_value=next_target_qvalue.unsqueeze(-1)
+        ).squeeze(-1)
+        target_value_transformed = self._transform_value(target_value)
 
-        td_error = (current_qvalue - target_value).pow(2)
+        target_value_transformed_expanded = target_value_transformed.expand_as(
+            current_qvalue_transformed
+        )
+        if self.priority_function is None:
+            td_error = (
+                current_qvalue_transformed - target_value_transformed_expanded
+            ).pow(2)
+        else:
+            td_error = self.priority_function(
+                current_qvalue_transformed, target_value_transformed_expanded
+            )
         loss_qval = distance_loss(
-            current_qvalue,
-            target_value.expand_as(current_qvalue),
+            current_qvalue_transformed,
+            target_value_transformed_expanded,
             loss_function=self.loss_function,
         ).sum(0)
         metadata = {

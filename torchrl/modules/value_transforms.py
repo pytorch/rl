@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """Invertible transforms for scalar value targets and predictions."""
+
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
@@ -42,7 +43,13 @@ class ValueTransform(nn.Module, metaclass=ABCMeta):
     .. seealso::
         :class:`IdentityValueTransform`, :class:`SymLogValueTransform`,
         :class:`SignedHyperbolicValueTransform`, and
-        :class:`ComposeValueTransform`.
+        :class:`ComposeValueTransform` for concrete transforms;
+        :class:`~torchrl.modules.ValueOperator` for the prediction-space
+        contract; and :class:`~torchrl.objectives.value.ValueEstimatorBase`,
+        :class:`~torchrl.objectives.DDPGLoss`,
+        :class:`~torchrl.objectives.TD3Loss`,
+        :class:`~torchrl.objectives.SACLoss`, and
+        :class:`~torchrl.objectives.PPOLoss` for consumers.
     """
 
     @abstractmethod

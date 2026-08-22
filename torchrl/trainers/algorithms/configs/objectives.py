@@ -76,6 +76,8 @@ class SACLossConfig(LossConfig):
     deactivate_vmap: bool = False
     use_prioritized_weights: str | bool = "auto"
     scalar_output_mode: str | None = None
+    value_transform: Any = None
+    priority_function: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_sac_loss"
 
     def __post_init__(self) -> None:
@@ -86,6 +88,20 @@ class SACLossConfig(LossConfig):
 def _make_sac_loss(*args, **kwargs) -> SACLoss:
     discrete_loss_type = kwargs.pop("discrete", False)
     gamma = kwargs.pop("gamma", None)
+    value_transform = kwargs.pop("value_transform", None)
+    priority_function = kwargs.pop("priority_function", None)
+
+    if discrete_loss_type and (
+        value_transform is not None or priority_function is not None
+    ):
+        raise ValueError(
+            "value_transform and priority_function are only supported by the "
+            "continuous SACLoss; DiscreteSACLoss uses a different value "
+            "representation."
+        )
+    if not discrete_loss_type:
+        kwargs["value_transform"] = value_transform
+        kwargs["priority_function"] = priority_function
 
     # Instantiate networks if they are config objects
     actor_network = kwargs.get("actor_network")
@@ -174,6 +190,7 @@ class PPOLossConfig(LossConfig):
     decrement: float = 0.5
     samples_mc_kl: int = 1
     device: Any = None
+    value_transform: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_ppo_loss"
 
     def __post_init__(self) -> None:
@@ -345,6 +362,8 @@ class TD3LossConfig(LossConfig):
     reduction: str | None = None
     deactivate_vmap: bool = False
     use_prioritized_weights: str | bool = "auto"
+    value_transform: Any = None
+    priority_function: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_td3_loss"
 
 
@@ -413,6 +432,7 @@ class GAEConfig(LossConfig):
     time_dim: int | None = None
     auto_reset_env: bool = False
     deactivate_vmap: bool = False
+    value_transform: Any = None
     value_chunk_size: int | None = None
     num_chunks: int | None = None
     num_chunk: int | None = None
@@ -558,6 +578,8 @@ class DDPGLossConfig(LossConfig):
     separate_losses: bool = False
     reduction: str | None = None
     use_prioritized_weights: str | bool = "auto"
+    value_transform: Any = None
+    priority_function: Any = None
     _target_: str = "torchrl.trainers.algorithms.configs.objectives._make_ddpg_loss"
 
     def __post_init__(self) -> None:
