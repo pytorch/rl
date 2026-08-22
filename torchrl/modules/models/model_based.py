@@ -22,7 +22,6 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
-from torch._higher_order_ops import scan
 from torch.nn import functional as F, GRUCell
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 from torchrl.modules.models.models import MLP
@@ -1245,8 +1244,8 @@ class RSSMRolloutV3(TensorDictModuleBase):
 
         ``"step"`` compiles one deterministic step of the default explicit
         loop. ``"scan"`` selects and compiles the higher-order scan backend.
-        Random samples are supplied as scan inputs, so both backends preserve
-        the same categorical draws for a fixed seed.
+        Random samples are supplied as higher-order scan inputs. Eager and
+        compiled executions are not expected to consume identical RNG streams.
 
         Both scopes need the tensor path.
 
@@ -1706,7 +1705,7 @@ class RSSMRollout(TensorDictModuleBase):
             return _td, output_td
 
         # Run scan
-        _, outputs = scan(scan_fn, [init_td], [stacked_updates])
+        _, outputs = _higher_order_scan(scan_fn, [init_td], [stacked_updates])
 
         # outputs is stacked along dim 0, move to time dimension
         out = outputs.transpose(0, tensordict.ndim - 1)

@@ -340,7 +340,7 @@ commands = {
   replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
 """,
-    "dreamer_v3": """python sota-implementations/dreamer_v3/dreamer_v3.py \
+    "dreamer_v3": """python sota-implementations/dreamer_v3/train.py \
   collector.total_frames=400 \
   collector.frames_per_batch=200 \
   replay_buffer.batch_size=2 \

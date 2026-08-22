@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from unittest import mock
 
 import pytest
 import torch
@@ -17,6 +18,7 @@ from torchrl.modules import SafeModule
 from torchrl.modules.models.model_based import (
     _DreamerV3BlockLinear,
     _DreamerV3RMSNorm,
+    _straight_through_categorical,
     DreamerActor,
     DreamerV3MLP,
     ObsDecoder,
@@ -452,12 +454,11 @@ class TestDreamerV3Components:
         state = torch.randn(3, 8)
         belief = torch.randn(3, 8)
         action = torch.randn(3, 2)
+        uniform = torch.rand(3, 2)
         compiled = torch.compile(prior, fullgraph=True)
 
-        torch.manual_seed(0)
-        expected = prior(state, belief, action)
-        torch.manual_seed(0)
-        actual = compiled(state, belief, action)
+        expected = prior(state, belief, action, _uniform=uniform)
+        actual = compiled(state, belief, action, _uniform=uniform)
         for expected_item, actual_item in zip(expected, actual):
             torch.testing.assert_close(expected_item, actual_item)
 
@@ -556,10 +557,16 @@ class TestDreamerV3Components:
         assert fast._fast_path
         data = self._make_rollout_data(device)
 
-        torch.manual_seed(0)
-        fast_output = fast(data.clone())
-        torch.manual_seed(0)
-        slow_output = slow(data.clone())
+        def deterministic_sample(logits, unimix=0.0, uniform=None):
+            uniform = logits.new_full(logits.shape[:-1], 0.5)
+            return _straight_through_categorical(logits, unimix, uniform)
+
+        with mock.patch(
+            "torchrl.modules.models.model_based._straight_through_categorical",
+            side_effect=deterministic_sample,
+        ):
+            fast_output = fast(data.clone())
+            slow_output = slow(data.clone())
         for key in fast.out_keys:
             torch.testing.assert_close(fast_output[key], slow_output[key])
 
