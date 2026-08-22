@@ -18,6 +18,7 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.modules import (
     MultiAgentMLP,
+    PercentileValueNorm,
     PopArtValueNorm,
     ProbabilisticActor,
     RunningValueNorm,
@@ -169,6 +170,22 @@ class TestValueNormBase:
         with pytest.raises(TypeError):
             ValueNorm(shape=1)  # type: ignore[abstract]
 
+    @pytest.mark.parametrize(
+        "cls", [PopArtValueNorm, RunningValueNorm, PercentileValueNorm]
+    )
+    def test_scale_is_normalize_slope(self, cls):
+        """scale() must be the multiplicative factor applied by normalize():
+        normalize(a) - normalize(b) == (a - b) / scale()."""
+        torch.manual_seed(0)
+        vn = cls(shape=1)
+        for _ in range(5):
+            vn.update(torch.randn(256, 1) * 3.0 + 1.0)
+        a = torch.randn(16, 1)
+        b = torch.randn(16, 1)
+        torch.testing.assert_close(
+            (vn.normalize(a) - vn.normalize(b)) * vn.scale(), a - b
+        )
+
 
 class TestPopArtValueNorm:
     def test_running_stats_converge(self):
@@ -230,6 +247,74 @@ class TestRunningValueNorm:
         vn.update(b)
         # Combined mean of 1000 ones + 1000 fives = 3.0 exactly.
         assert abs(vn.mean.item() - 3.0) < 1e-4
+
+
+class TestPercentileValueNorm:
+    def test_ema_tracks_batch_quantiles(self):
+        vn = PercentileValueNorm(shape=1, rate=0.5)
+        # linspace(0, 100, 101) has exact 5th / 95th percentiles at 5 and 95.
+        x = torch.linspace(0.0, 100.0, steps=101).unsqueeze(-1)
+        vn.update(x)
+        torch.testing.assert_close(vn.low, torch.tensor([2.5]))
+        torch.testing.assert_close(vn.high, torch.tensor([47.5]))
+        vn.update(x)
+        torch.testing.assert_close(vn.low, torch.tensor([3.75]))
+        torch.testing.assert_close(vn.high, torch.tensor([71.25]))
+
+    def test_min_scale_clamps_degenerate_span(self):
+        """Constant targets give a zero span; normalize must not blow up."""
+        vn = PercentileValueNorm(shape=1, rate=1.0)
+        vn.update(torch.full((100, 1), 0.5))
+        torch.testing.assert_close(vn.scale(), torch.tensor([1.0]))
+        torch.testing.assert_close(
+            vn.normalize(torch.tensor([0.25])), torch.tensor([0.25])
+        )
+
+    def test_scale_only_by_default(self):
+        """center=False (default) must rescale without shifting."""
+        vn = PercentileValueNorm(shape=1, rate=1.0)
+        vn.update(torch.linspace(0.0, 200.0, steps=201).unsqueeze(-1))
+        # low=10, high=190 -> span 180
+        torch.testing.assert_close(
+            vn.normalize(torch.tensor([90.0])), torch.tensor([0.5])
+        )
+        torch.testing.assert_close(
+            vn.normalize(torch.tensor([0.0])), torch.tensor([0.0])
+        )
+        y = torch.randn(32, 1)
+        torch.testing.assert_close(vn.denormalize(vn.normalize(y)), y)
+
+    def test_center_maps_percentile_range_to_unit_interval(self):
+        vn = PercentileValueNorm(shape=1, rate=1.0, center=True)
+        vn.update(torch.linspace(0.0, 200.0, steps=201).unsqueeze(-1))
+        torch.testing.assert_close(
+            vn.normalize(torch.tensor([10.0])), torch.tensor([0.0])
+        )
+        torch.testing.assert_close(
+            vn.normalize(torch.tensor([190.0])), torch.tensor([1.0])
+        )
+        y = torch.randn(32, 1)
+        torch.testing.assert_close(vn.denormalize(vn.normalize(y)), y)
+
+    def test_per_element_shape(self):
+        """Quantiles are tracked per trailing element (e.g. per agent)."""
+        vn = PercentileValueNorm(shape=(2, 1), rate=1.0)
+        a = torch.linspace(0.0, 100.0, steps=101)
+        b = torch.linspace(0.0, 200.0, steps=101)
+        x = torch.stack([a, b], dim=-1).unsqueeze(-1)  # (101, 2, 1)
+        vn.update(x)
+        torch.testing.assert_close(vn.scale(), torch.tensor([[90.0], [180.0]]))
+
+    def test_bad_args_raise(self):
+        with pytest.raises(ValueError, match="quantiles"):
+            PercentileValueNorm(quantiles=(0.9, 0.1))
+        with pytest.raises(ValueError, match="rate"):
+            PercentileValueNorm(rate=1.5)
+        with pytest.raises(ValueError, match="min_scale"):
+            PercentileValueNorm(min_scale=0.0)
+        vn = PercentileValueNorm(shape=1)
+        with pytest.raises(ValueError, match="trailing shape"):
+            vn.update(torch.randn(4, 8))
 
 
 # --------------------------------------------------------------------------
