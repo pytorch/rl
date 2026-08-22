@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import functools as ft
 from unittest import mock
 
 import pytest
@@ -585,10 +586,11 @@ class TestDreamerV3Components:
                 torch.testing.assert_close(fast_gradient, slow_gradient)
 
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_rssm_rollout_higher_order_scan_matches_loop(self, device):
+    @pytest.mark.parametrize("unroll", [1, 3, 8])
+    def test_rssm_rollout_higher_order_scan_matches_loop(self, device, unroll):
         scan_rollout = self._make_rollout(device)
         loop_rollout = copy.deepcopy(scan_rollout)
-        scan_rollout._scan_fn = scan_rollout._scan
+        scan_rollout._scan_fn = ft.partial(scan_rollout._scan, unroll=unroll)
         data = self._make_rollout_data(device)
 
         torch.manual_seed(0)
@@ -620,7 +622,7 @@ class TestDreamerV3Components:
     def test_rssm_rollout_compile(self, scope):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
-        rollout.compile_rollout(scope)
+        rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)
 
         output = rollout(data)
         (

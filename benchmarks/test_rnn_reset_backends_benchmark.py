@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import gc
 import os
+import time
 from collections.abc import Callable, Iterator
 from typing import Literal
 
@@ -364,37 +365,52 @@ def test_rnn_rollout_with_intermediate_resets(
 
 
 @pytest.mark.parametrize("mode", ["inference", "train"])
-@pytest.mark.parametrize("backend", ["loop", "scan"])
-@pytest.mark.parametrize("compile", [False, True])
+@pytest.mark.parametrize(
+    ("backend", "compile", "unroll"),
+    [
+        ("loop", False, 1),
+        ("loop", True, 1),
+        ("scan", False, 1),
+        ("scan", True, 1),
+        ("scan", True, 2),
+        ("scan", True, 4),
+        ("scan", True, 8),
+    ],
+)
 def test_rssm_rollout_backend(
     benchmark,
     record_cuda_memory_stats,
     backend: Literal["loop", "scan"],
     compile: bool,
+    unroll: int,
     mode: Literal["inference", "train"],
 ) -> None:
     device = torch.device("cuda:0" if torch.cuda.device_count() else "cpu")
     rollout = _make_rssm_rollout(backend, device)
     if compile:
-        rollout.compile_rollout("step" if backend == "loop" else "scan")
+        rollout.compile_rollout("step" if backend == "loop" else "scan", unroll=unroll)
     tensordict = _make_rssm_tensordict(device)
 
     call = _call_rssm_rollout if mode == "inference" else _call_rssm_rollout_train
     # The higher-order scan traces its forward and backward functions on first
     # use, so benchmark only warm steady-state calls.
+    warmup_start = time.perf_counter()
     for _ in range(3):
         call(rollout, tensordict, device)
+    warmup_seconds = time.perf_counter() - warmup_start
     memory_before = _reset_cuda_memory_stats(device)
     benchmark.extra_info.update(
         {
             "backend": backend,
             "compile": compile,
+            "unroll": unroll,
             "mode": mode,
             "batch_size": _RSSM_BATCH_SIZE,
             "sequence_length": _RSSM_TIME_STEPS,
             "belief_dim": _RSSM_BELIEF_DIM,
             "transitions_per_call": _RSSM_BATCH_SIZE * _RSSM_TIME_STEPS,
             "device": str(device),
+            "warmup_seconds": warmup_seconds,
         }
     )
     benchmark(call, rollout, tensordict, device)

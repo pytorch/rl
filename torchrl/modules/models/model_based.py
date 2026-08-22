@@ -8,6 +8,7 @@ Includes the continuous Dreamer RSSM and the discrete DreamerV3 RSSM.
 """
 from __future__ import annotations
 
+import functools as ft
 import warnings
 
 from typing import Literal
@@ -1159,8 +1160,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
             torch.stack(next_beliefs, -2),
         )
 
-    def _scan(self, state, belief, action, embedding, reset):
+    def _scan(self, state, belief, action, embedding, reset, *, unroll: int = 1):
         """Run the recurrence with the higher-order :func:`torch.scan`."""
+        if not isinstance(unroll, int) or isinstance(unroll, bool) or unroll < 1:
+            raise ValueError(f"unroll must be a positive integer, got {unroll!r}.")
         prior_net = self.rssm_prior.module
         posterior_net = self.rssm_posterior.module
         length = action.shape[-2]
@@ -1172,7 +1175,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
             device=action.device,
         )
 
-        def combine(carry, xs):
+        def step(carry, xs):
             state, belief = carry
             (
                 action_t,
@@ -1203,21 +1206,56 @@ class RSSMRolloutV3(TensorDictModuleBase):
             )
             return (state.clone(), belief.clone()), output
 
+        scan_inputs = (
+            action.movedim(-2, 0),
+            embedding.movedim(-2, 0),
+            reset.movedim(-2, 0),
+            uniforms[:, 0],
+            uniforms[:, 1],
+        )
+        if unroll > 1:
+            padding = (-length) % unroll
+            if padding:
+                scan_inputs = tuple(
+                    torch.cat(
+                        (
+                            value,
+                            value.new_zeros((padding, *value.shape[1:])),
+                        ),
+                        dim=0,
+                    )
+                    for value in scan_inputs
+                )
+            padded_length = length + padding
+            scan_inputs = tuple(
+                value.reshape(padded_length // unroll, unroll, *value.shape[1:])
+                for value in scan_inputs
+            )
+
+            def combine(carry, xs):
+                outputs = tuple([] for _ in range(7))
+                for index in range(unroll):
+                    carry, output = step(carry, tuple(value[index] for value in xs))
+                    for output_list, value in zip(outputs, output):
+                        output_list.append(value)
+                return carry, tuple(
+                    torch.stack(output_list, 0) for output_list in outputs
+                )
+
+        else:
+            combine = step
+
         # Keep the module weights as closure inputs, as the recurrent modules
         # do. The higher-order operator lifts them once instead of scanning
         # time-expanded parameter views at every step.
         _, output = _higher_order_scan(
             combine,
             (state, belief),
-            (
-                action.movedim(-2, 0),
-                embedding.movedim(-2, 0),
-                reset.movedim(-2, 0),
-                uniforms[:, 0],
-                uniforms[:, 1],
-            ),
+            scan_inputs,
             dim=0,
         )
+        if unroll > 1:
+            output = tuple(value.flatten(0, 1)[:length] for value in output)
         (
             input_states,
             input_beliefs,
@@ -1238,7 +1276,11 @@ class RSSMRolloutV3(TensorDictModuleBase):
         )
 
     def compile_rollout(
-        self, scope: Literal["step", "scan"] = "step", **compile_kwargs
+        self,
+        scope: Literal["step", "scan"] = "step",
+        *,
+        unroll: int = 1,
+        **compile_kwargs,
     ) -> None:
         """Compile the recurrence with :func:`torch.compile`.
 
@@ -1252,6 +1294,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
         Args:
             scope ("step" or "scan", optional): Part of the recurrence to
                 compile. Defaults to ``"step"``.
+            unroll (int, optional): Number of scan steps to trace in each
+                higher-order scan iteration. Larger values can improve runtime
+                at the cost of compilation time and graph size. Only applies
+                to ``scope="scan"``. Defaults to ``1``.
             **compile_kwargs: Keyword arguments for :func:`torch.compile`.
                 ``dynamic`` defaults to ``False``.
         """
@@ -1262,6 +1308,10 @@ class RSSMRolloutV3(TensorDictModuleBase):
             )
         if scope not in ("step", "scan"):
             raise ValueError(f"scope must be 'step' or 'scan', got {scope!r}.")
+        if not isinstance(unroll, int) or isinstance(unroll, bool) or unroll < 1:
+            raise ValueError(f"unroll must be a positive integer, got {unroll!r}.")
+        if scope != "scan" and unroll != 1:
+            raise ValueError("unroll only applies when scope='scan'.")
         compile_kwargs.setdefault("dynamic", False)
         self._step_fn = self._scan_fn = None
         if scope == "step":
@@ -1271,7 +1321,9 @@ class RSSMRolloutV3(TensorDictModuleBase):
             devices.update(value.device for value in self.buffers())
             for device in devices:
                 _maybe_warm_scan_backward(device)
-            self._scan_fn = torch.compile(self._scan, **compile_kwargs)
+            self._scan_fn = torch.compile(
+                ft.partial(self._scan, unroll=unroll), **compile_kwargs
+            )
 
     def __getstate__(self) -> dict:
         # Pickle cannot store a compiled callable: the copy starts eager.
