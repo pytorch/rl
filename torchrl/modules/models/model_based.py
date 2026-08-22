@@ -1159,7 +1159,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
             torch.stack(next_beliefs, -2),
         )
 
-    def _scan(self, state, belief, action, embedding, reset):
+    def _scan(self, state, belief, action, embedding, reset, *, _unroll: int = 1):
         """Run the recurrence with the higher-order :func:`torch.scan`."""
         prior_net = self.rssm_prior.module
         posterior_net = self.rssm_posterior.module
@@ -1172,7 +1172,7 @@ class RSSMRolloutV3(TensorDictModuleBase):
             device=action.device,
         )
 
-        def combine(carry, xs):
+        def step(carry, xs):
             state, belief = carry
             (
                 action_t,
@@ -1203,21 +1203,47 @@ class RSSMRolloutV3(TensorDictModuleBase):
             )
             return (state.clone(), belief.clone()), output
 
+        scan_inputs = (
+            action.movedim(-2, 0),
+            embedding.movedim(-2, 0),
+            reset.movedim(-2, 0),
+            uniforms[:, 0],
+            uniforms[:, 1],
+        )
+        if _unroll > 1:
+            if length % _unroll:
+                raise RuntimeError(
+                    f"scan length {length} must be divisible by unroll {_unroll}."
+                )
+            scan_inputs = tuple(
+                value.reshape(length // _unroll, _unroll, *value.shape[1:])
+                for value in scan_inputs
+            )
+
+            def combine(carry, xs):
+                outputs = tuple([] for _ in range(7))
+                for index in range(_unroll):
+                    carry, output = step(carry, tuple(value[index] for value in xs))
+                    for output_list, value in zip(outputs, output):
+                        output_list.append(value)
+                return carry, tuple(
+                    torch.stack(output_list, 0) for output_list in outputs
+                )
+
+        else:
+            combine = step
+
         # Keep the module weights as closure inputs, as the recurrent modules
         # do. The higher-order operator lifts them once instead of scanning
         # time-expanded parameter views at every step.
         _, output = _higher_order_scan(
             combine,
             (state, belief),
-            (
-                action.movedim(-2, 0),
-                embedding.movedim(-2, 0),
-                reset.movedim(-2, 0),
-                uniforms[:, 0],
-                uniforms[:, 1],
-            ),
+            scan_inputs,
             dim=0,
         )
+        if _unroll > 1:
+            output = tuple(value.flatten(0, 1) for value in output)
         (
             input_states,
             input_beliefs,
