@@ -1499,6 +1499,61 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             torch.tensor(10.0, device=device),
         )
 
+    def test_dreamer_v3_reparam_return_normalization(self, device):
+        """The reparameterization branch must divide the objective by the
+        EMA return-percentile span, like the REINFORCE branch."""
+        actor_model = self._create_actor_model().to(device)
+        value_model = self._create_value_model().to(device)
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            value_model,
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            discount_loss=False,
+            entropy_bonus=0.0,
+            use_reinforce=False,
+        ).to(device)
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_module.return_low.fill_(-2.0)
+        loss_module.return_high.fill_(8.0)
+        loss_module.eval()
+
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        expected = -(fake_data["lambda_target"] / 10.0).mean()
+        torch.testing.assert_close(loss_td["loss_actor"], expected)
+        torch.testing.assert_close(
+            loss_td["return_scale"], torch.tensor(10.0, device=device)
+        )
+
+    def test_dreamer_v3_reparam_return_statistics_update(self, device):
+        """Training-mode forward in the reparameterization branch must update
+        the EMA return statistics."""
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            entropy_bonus=0.0,
+            use_reinforce=False,
+            return_normalization_rate=0.01,
+        ).to(device)
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        expected_low, expected_high = torch.quantile(
+            fake_data["lambda_target"].detach(),
+            torch.tensor([0.05, 0.95], device=device),
+        )
+        torch.testing.assert_close(loss_module.return_low, 0.01 * expected_low)
+        torch.testing.assert_close(loss_module.return_high, 0.01 * expected_high)
+        torch.testing.assert_close(
+            loss_td["return_scale"],
+            (loss_module.return_high - loss_module.return_low).clamp_min(1.0),
+        )
+
     def test_dreamer_v3_return_statistics_checkpoint(self, device):
         loss_module = DreamerV3ActorLoss(
             self._create_actor_model_with_log_prob().to(device),
