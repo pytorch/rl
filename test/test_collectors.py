@@ -287,6 +287,18 @@ class ParametricPolicy(Actor):
         )
 
 
+class RandomPolicy(torch.nn.Module):
+    def __init__(self, action_dim):
+        super().__init__()
+        self.action_dim = action_dim
+
+    def forward(self, observation):
+        return torch.randn(
+            *observation.shape[:-1], self.action_dim, device=observation.device
+        )
+
+
+
 class DeterministicZeroPolicyNet(nn.Module):
     """A simple policy that always outputs action 0 (for discrete action spaces)."""
 
@@ -2330,6 +2342,45 @@ if __name__ == "__main__":
 
         assert_allclose_td(data1, data20)
         assert_allclose_td(data10, data20)
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
+    @pytest.mark.skipif(IS_WINDOWS, reason="torch.compile not fully supported on windows")
+    def test_cudagraph_policy_stochastic_diversity(self):
+
+        def create_env():
+            return ContinuousActionVecMockEnv(device="cuda:0")
+
+        env = create_env()
+        n_actions = env.action_spec.shape[-1]
+
+        policy = TensorDictModule(
+            RandomPolicy(n_actions), in_keys=["observation"], out_keys=["action"]
+        )
+
+        collector = Collector(
+            create_env_fn=create_env,
+            policy=policy,
+            total_frames=20,
+            frames_per_batch=20,
+            device="cuda:0",
+            storing_device="cuda:0",
+            cudagraph_policy=True,
+            compile_policy={"mode": "default", "fullgraph": False},
+        )
+
+        actions = None
+        try:
+            for data in collector:
+                actions = data["action"]
+                break
+        finally:
+            collector.shutdown()
+
+        assert actions is not None, "Collector yielded no data"
+        # If RNG is frozen by cudagraph, standard deviation will be exactly 0 across steps
+        std = actions.std(dim=0).mean().item()
+        assert std > 0.1, f"Actions have abnormally low variance (std={std}). cudagraph RNG state might be frozen."
 
     @pytest.mark.parametrize("use_async", [False, True])
     @pytest.mark.parametrize(
