@@ -86,4 +86,6 @@ about 48 episodes each.
 since a short run never repays the build. `step` compiles the deterministic work
 and draws the same categories as an eager run; `scan` compiles the unrolled
 recurrence and the imagination prior, and is faster, but its draws fall inside
-the compiled region, so a seeded run diverges from an eager one.
+the compiled region, so a seeded run diverges from an eager one. The scan uses
+`optimization.rssm_scan_unroll=8` by default; lower values reduce compilation
+time and graph size, while `1` disables manual unrolling.
