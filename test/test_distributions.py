@@ -542,6 +542,30 @@ class TestIndependentNormal:
 
 
 class TestTruncatedNormal:
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.float64])
+    @pytest.mark.parametrize("tensor_bounds", [False, True])
+    def test_truncnormal_rsample_dtype(self, device, dtype, tensor_bounds):
+        torch.manual_seed(0)
+        loc = torch.zeros(3, device=device, dtype=dtype, requires_grad=True)
+        scale = torch.ones(3, device=device, dtype=dtype, requires_grad=True)
+        if tensor_bounds:
+            low = torch.full_like(loc, -1)
+            high = torch.full_like(loc, 1)
+        else:
+            low = -1.0
+            high = 1.0
+
+        dist = TruncatedNormal(loc, scale, low=low, high=high)
+        sample = dist.rsample((4,))
+
+        assert sample.dtype == dtype
+        assert sample.isfinite().all()
+        sample.sum().backward()
+        for grad in (loc.grad, scale.grad):
+            assert grad is not None and grad.dtype == dtype
+            assert grad.isfinite().all()
+
     @pytest.mark.parametrize(
         "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
     )
