@@ -54,6 +54,8 @@ optimization:
   # Compile the RSSM recurrence: null, "step" or "scan". "scan" is faster but
   # changes the random stream; see the README.
   compile_rssm: null
+  # Number of RSSM steps traced per higher-order scan iteration.
+  rssm_scan_unroll: 8
   lr: 4.0e-5
   optimizer_eps: 1.0e-20
   adaptive_grad_clip: 0.3
