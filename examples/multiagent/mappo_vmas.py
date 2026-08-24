@@ -129,9 +129,9 @@ def main(args: argparse.Namespace) -> None:
         ),
     )
 
-    actor = make_actor(env)
+    actor = make_actor(env).to(device)
     centralised = args.algo == "mappo"
-    critic = make_critic(env, centralized=centralised)
+    critic = make_critic(env, centralized=centralised).to(device)
 
     LossCls = MAPPOLoss if args.algo == "mappo" else IPPOLoss
     value_norm = (

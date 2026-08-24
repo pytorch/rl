@@ -155,6 +155,7 @@ if __name__ == "__main__":
             device=device,
             env_device=env_device,
             policy_device=policy_device,
+            auto_register_policy_transforms=True,
         )
         exp_buffer = ReplayBuffer(
             storage=LazyTensorStorage(

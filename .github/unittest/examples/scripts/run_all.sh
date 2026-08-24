@@ -52,7 +52,7 @@ uv_pip_install \
   "gym==0.26.2" "gymnasium[mujoco]>=1.1.0" \
   "hydra-core<1.4" imageio matplotlib moviepy packaging psutil pygame \
   "pybind11[global]" pytest pytest-cov pytest-instafail pytest-json-report \
-  pytest-timeout pyyaml "pyvers>=0.2.3" ray scipy tensorboard tqdm \
+  pytest-timeout pyyaml "pyvers>=0.2.3" ray scipy tensorboard tqdm trimesh \
   transformers vmas wandb
 uv_pip_install "mujoco==3.7.0"
 uv_pip_install --no-deps "mujoco-torch==0.2.0"
