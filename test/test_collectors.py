@@ -287,7 +287,7 @@ class ParametricPolicy(Actor):
         )
 
 
-class RandomPolicy(torch.nn.Module):
+class MockRandomPolicy(torch.nn.Module):
     def __init__(self, action_dim):
         super().__init__()
         self.action_dim = action_dim
@@ -296,7 +296,6 @@ class RandomPolicy(torch.nn.Module):
         return torch.randn(
             *observation.shape[:-1], self.action_dim, device=observation.device
         )
-
 
 
 class DeterministicZeroPolicyNet(nn.Module):
@@ -2345,8 +2344,18 @@ if __name__ == "__main__":
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires cuda")
-    @pytest.mark.skipif(IS_WINDOWS, reason="torch.compile not fully supported on windows")
+    @pytest.mark.skipif(
+        IS_WINDOWS, reason="torch.compile not fully supported on windows"
+    )
     def test_cudagraph_policy_stochastic_diversity(self):
+        try:
+            from torch.compiler import cudagraph_mark_step_begin
+
+            _ = cudagraph_mark_step_begin
+        except ImportError:
+            pytest.skip(
+                "cudagraph_mark_step_begin not available in this PyTorch version."
+            )
 
         def create_env():
             return ContinuousActionVecMockEnv(device="cuda:0")
@@ -2355,7 +2364,7 @@ if __name__ == "__main__":
         n_actions = env.action_spec.shape[-1]
 
         policy = TensorDictModule(
-            RandomPolicy(n_actions), in_keys=["observation"], out_keys=["action"]
+            MockRandomPolicy(n_actions), in_keys=["observation"], out_keys=["action"]
         )
 
         collector = Collector(
@@ -2380,7 +2389,9 @@ if __name__ == "__main__":
         assert actions is not None, "Collector yielded no data"
         # If RNG is frozen by cudagraph, standard deviation will be exactly 0 across steps
         std = actions.std(dim=0).mean().item()
-        assert std > 0.1, f"Actions have abnormally low variance (std={std}). cudagraph RNG state might be frozen."
+        assert (
+            std > 0.1
+        ), f"Actions have abnormally low variance (std={std}). cudagraph RNG state might be frozen."
 
     @pytest.mark.parametrize("use_async", [False, True])
     @pytest.mark.parametrize(

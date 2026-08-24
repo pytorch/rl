@@ -1488,8 +1488,13 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     policy_input = self._carrier.copy()
                     if self.policy_device:
                         policy_input = policy_input.to(self.policy_device)
-                    if self.compiled_policy or self.cudagraphed_policy:
+                    if self.compiled_policy:
                         cudagraph_mark_step_begin()
+                    elif self.cudagraphed_policy:
+                        try:
+                            cudagraph_mark_step_begin()
+                        except NotImplementedError:
+                            pass
                     policy_output = self._wrapped_policy(policy_input)
                 policy_output_keys = set(policy_output.keys(True, True))
                 missing_out_keys = [
@@ -1548,8 +1553,13 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                 policy_input_clone = (
                     policy_input.clone()
                 )  # to test if values have changed in-place
-                if self.compiled_policy or self.cudagraphed_policy:
+                if self.compiled_policy:
                     cudagraph_mark_step_begin()
+                elif self.cudagraphed_policy:
+                    try:
+                        cudagraph_mark_step_begin()
+                    except NotImplementedError:
+                        pass
                 policy_output = self._wrapped_policy(policy_input)
 
                 # check that we don't have exclusive keys, because they don't appear in keys
@@ -2097,8 +2107,13 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     else:
                         policy_input = self._carrier
                     # we still do the assignment for security
-                    if self.compiled_policy or self.cudagraphed_policy:
+                    if self.compiled_policy:
                         cudagraph_mark_step_begin()
+                    elif self.cudagraphed_policy:
+                        try:
+                            cudagraph_mark_step_begin()
+                        except NotImplementedError:
+                            pass
                     with _maybe_record_function("Collector.policy"):
                         policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy or self.cudagraphed_policy:
