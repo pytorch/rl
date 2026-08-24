@@ -16,12 +16,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from tensordict import (
-    is_tensor_collection,
-    MemoryMappedTensor,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict import MemoryMappedTensor, TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModule
 from torchrl._utils import print_directory_tree
 from torchrl.data.llm import TensorDictTokenizer
@@ -217,7 +212,6 @@ def test_dataset_to_tensordict(tmpdir, suffix):
 )
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("split", ["train"])
-@pytest.mark.parametrize("infinite", [True, False])
 def test_get_dataloader(
     tmpdir1,
     tensorclass_type,
@@ -226,7 +220,6 @@ def test_get_dataloader(
     device,
     dataset,
     split,
-    infinite,
     minidata_dir_tldr,
     minidata_dir_comparison,
 ):
@@ -236,29 +229,48 @@ def test_get_dataloader(
         dataset = minidata_dir_comparison
     else:
         raise NotImplementedError
-    dl = get_dataloader(
+    finite_dataloader = get_dataloader(
         batch_size,
         block_size,
         tensorclass_type,
         device,
         dataset_name=dataset,
-        infinite=infinite,
+        infinite=False,
         prefetch=0,
         split=split,
         root_dir=tmpdir1,
         from_disk=True,
     )
-    for data in dl:  # noqa: B007
-        break
-    assert data.shape[0] == batch_size
-    for value in data.values():
-        if value.ndim > 1:
-            assert value.shape[1] == block_size
-    assert data.device == device
-    if infinite:
-        assert not is_tensor_collection(dl)
-    else:
-        assert not is_tensor_collection(dl)
+    num_batches = len(finite_dataloader) // batch_size
+    assert num_batches > 0
+
+    finite_iterator = iter(finite_dataloader)
+    for _ in range(num_batches):
+        finite_batch = next(finite_iterator)
+    with pytest.raises(StopIteration):
+        next(finite_iterator)
+
+    infinite_iterator = get_dataloader(
+        batch_size,
+        block_size,
+        tensorclass_type,
+        device,
+        dataset_name=dataset,
+        infinite=True,
+        prefetch=0,
+        split=split,
+        root_dir=tmpdir1,
+        from_disk=True,
+    )
+    for _ in range(num_batches + 1):
+        infinite_batch = next(infinite_iterator)
+
+    for data in (finite_batch, infinite_batch):
+        assert data.shape[0] == batch_size
+        for value in data.values():
+            if value.ndim > 1:
+                assert value.shape[1] == block_size
+        assert data.device == device
 
 
 @pytest.mark.skipif(
