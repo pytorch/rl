@@ -20,7 +20,7 @@ Plots ``dreamer_v3_pendulum.png`` with two curves: (a) average eval reward,
 
 Usage::
 
-    python sota-implementations/dreamer_v3/dreamer_v3.py \\
+    python sota-implementations/dreamer_v3/train.py \\
         collector.total_frames=5000 logger.eval_every=500
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ from torchrl.envs.transforms import (
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DreamerV3MLP, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.dreamer_v3 import (
+from torchrl.modules.models.model_based import (
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,

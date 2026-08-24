@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import functools as ft
+from unittest import mock
 
 import pytest
 import torch
@@ -13,23 +16,21 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules import SafeModule
-from torchrl.modules.models.dreamer_v3 import (
+from torchrl.modules.models.model_based import (
     _DreamerV3BlockLinear,
     _DreamerV3RMSNorm,
-    DreamerV3MLP,
-    RSSMPosteriorV3,
-    RSSMPriorV3,
-    RSSMRolloutV3,
-)
-from torchrl.modules.models.model_based import (
+    _straight_through_categorical,
     DreamerActor,
+    DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
+    RSSMPosteriorV3,
     RSSMPrior,
+    RSSMPriorV3,
     RSSMRollout,
+    RSSMRolloutV3,
 )
-
 from torchrl.testing import get_default_devices
 
 
@@ -289,6 +290,59 @@ class TestDreamerV3Components:
         ratio = eight_blocks.weight.std() / one_block.weight.std()
         assert ratio.item() == pytest.approx(1.0, rel=0.05)
 
+    @staticmethod
+    def _make_rollout(device):
+        prior = RSSMPriorV3(
+            action_shape=(2,),
+            hidden_dim=8,
+            rnn_hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            action_dim=2,
+            recurrent_model="block_gru",
+            num_blocks=2,
+            device=device,
+        )
+        posterior = RSSMPosteriorV3(
+            hidden_dim=8,
+            num_categoricals=2,
+            num_classes=4,
+            rnn_hidden_dim=8,
+            obs_embed_dim=6,
+            device=device,
+        )
+        return RSSMRolloutV3(
+            TensorDictModule(
+                prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    ("next", "prior_logits"),
+                    ("next", "state"),
+                    ("next", "belief"),
+                ],
+            ),
+            TensorDictModule(
+                posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[("next", "posterior_logits"), ("next", "state")],
+            ),
+        )
+
+    @staticmethod
+    def _make_rollout_data(device):
+        return TensorDict(
+            {
+                "state": torch.zeros(2, 4, 8, device=device),
+                "belief": torch.zeros(2, 4, 8, device=device),
+                "action": torch.randn(2, 4, 2, device=device),
+                "is_init": torch.tensor(
+                    [[[True], [False], [True], [False]]], device=device
+                ).expand(2, -1, -1),
+                "next": {"encoded_latents": torch.randn(2, 4, 6, device=device)},
+            },
+            [2, 4],
+        )
+
     def test_mlp_output_scale_and_multiple_inputs(self):
         module = DreamerV3MLP(
             6,
@@ -401,12 +455,11 @@ class TestDreamerV3Components:
         state = torch.randn(3, 8)
         belief = torch.randn(3, 8)
         action = torch.randn(3, 2)
+        uniform = torch.rand(3, 2)
         compiled = torch.compile(prior, fullgraph=True)
 
-        torch.manual_seed(0)
-        expected = prior(state, belief, action)
-        torch.manual_seed(0)
-        actual = compiled(state, belief, action)
+        expected = prior(state, belief, action, _uniform=uniform)
+        actual = compiled(state, belief, action, _uniform=uniform)
         for expected_item, actual_item in zip(expected, actual):
             torch.testing.assert_close(expected_item, actual_item)
 
@@ -496,6 +549,87 @@ class TestDreamerV3Components:
             run(zero_action)["next", "belief"],
             run(nonzero_action)["next", "belief"],
         )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_rssm_rollout_fast_path_matches_tensordict_path(self, device):
+        fast = self._make_rollout(device)
+        slow = copy.deepcopy(fast)
+        slow._fast_path = False
+        assert fast._fast_path
+        data = self._make_rollout_data(device)
+
+        def deterministic_sample(logits, unimix=0.0, uniform=None):
+            uniform = logits.new_full(logits.shape[:-1], 0.5)
+            return _straight_through_categorical(logits, unimix, uniform)
+
+        with mock.patch(
+            "torchrl.modules.models.model_based._straight_through_categorical",
+            side_effect=deterministic_sample,
+        ):
+            fast_output = fast(data.clone())
+            slow_output = slow(data.clone())
+        for key in fast.out_keys:
+            torch.testing.assert_close(fast_output[key], slow_output[key])
+
+        fast_loss = sum(fast_output[key].square().mean() for key in fast.out_keys)
+        slow_loss = sum(slow_output[key].square().mean() for key in slow.out_keys)
+        fast_gradients = torch.autograd.grad(
+            fast_loss, tuple(fast.parameters()), allow_unused=True
+        )
+        slow_gradients = torch.autograd.grad(
+            slow_loss, tuple(slow.parameters()), allow_unused=True
+        )
+        for fast_gradient, slow_gradient in zip(fast_gradients, slow_gradients):
+            if fast_gradient is None or slow_gradient is None:
+                assert fast_gradient is slow_gradient
+            else:
+                torch.testing.assert_close(fast_gradient, slow_gradient)
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("unroll", [1, 3, 8])
+    def test_rssm_rollout_higher_order_scan_matches_loop(self, device, unroll):
+        scan_rollout = self._make_rollout(device)
+        loop_rollout = copy.deepcopy(scan_rollout)
+        scan_rollout._scan_fn = ft.partial(scan_rollout._scan, unroll=unroll)
+        data = self._make_rollout_data(device)
+
+        torch.manual_seed(0)
+        scan_output = scan_rollout(data.clone())
+        torch.manual_seed(0)
+        loop_output = loop_rollout(data.clone())
+
+        for key in scan_rollout.out_keys:
+            torch.testing.assert_close(scan_output[key], loop_output[key])
+
+        scan_loss = sum(
+            scan_output[key].square().mean() for key in scan_rollout.out_keys
+        )
+        loop_loss = sum(
+            loop_output[key].square().mean() for key in loop_rollout.out_keys
+        )
+        scan_gradients = torch.autograd.grad(
+            scan_loss, tuple(scan_rollout.parameters())
+        )
+        loop_gradients = torch.autograd.grad(
+            loop_loss, tuple(loop_rollout.parameters())
+        )
+        for scan_gradient, loop_gradient in zip(scan_gradients, loop_gradients):
+            torch.testing.assert_close(
+                scan_gradient, loop_gradient, atol=2e-4, rtol=5e-5
+            )
+
+    @pytest.mark.parametrize("scope", ["step", "scan"])
+    def test_rssm_rollout_compile(self, scope):
+        rollout = self._make_rollout(torch.device("cpu"))
+        data = self._make_rollout_data(torch.device("cpu"))
+        rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)
+
+        output = rollout(data)
+        (
+            output["next", "posterior_logits"].square().mean()
+            + output["next", "prior_logits"].square().mean()
+        ).backward()
+        assert all(parameter.grad is not None for parameter in rollout.parameters())
 
 
 if __name__ == "__main__":
