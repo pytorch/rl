@@ -460,7 +460,7 @@ class TargetNetUpdater:
             self._distinct_and_params[key] = (
                 target.is_leaf
                 and source.requires_grad
-                and target.data_ptr() != source.data.data_ptr()
+                and not target.is_set_to(source.data)
             )
             found_distinct = found_distinct or self._distinct_and_params[key]
             target.data.copy_(source.data)
