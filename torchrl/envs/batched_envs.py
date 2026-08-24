@@ -507,6 +507,8 @@ class BatchedEnvBase(EnvBase):
     """
 
     _verbose: bool = VERBOSE
+    # Worker metadata contains the final key layout, including transforms.
+    auto_complete_done_specs = False
     _excluded_wrapped_keys = [
         "is_closed",
         "parent_channels",
