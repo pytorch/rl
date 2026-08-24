@@ -313,13 +313,34 @@ class IQLLoss(LossModule):
             )
         else:
             qvalue_policy_params = None
+        if (
+            num_qvalue_nets == 1
+            and isinstance(qvalue_network, (list, tuple))
+            and len(qvalue_network) == 1
+        ):
+            qvalue_network = qvalue_network[0]
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
-            num_qvalue_nets,
+            None if num_qvalue_nets == 1 else num_qvalue_nets,
             create_target_params=True,
             compare_against=qvalue_policy_params,
         )
+        if num_qvalue_nets == 1:
+
+            def load_legacy_single_qvalue_state_dict(
+                module, state_dict, prefix, *load_args
+            ):
+                for key, current in module.state_dict().items():
+                    full_key = prefix + key
+                    if (
+                        key.removeprefix("target_").startswith("qvalue_network_params.")
+                        and full_key in state_dict
+                        and state_dict[full_key].shape == (1, *current.shape)
+                    ):
+                        state_dict[full_key] = state_dict[full_key].squeeze(0)
+
+            self.register_load_state_dict_pre_hook(load_legacy_single_qvalue_state_dict)
 
         self.loss_function = loss_function
         if gamma is not None:
@@ -344,12 +365,20 @@ class IQLLoss(LossModule):
         self.scalar_output_mode = scalar_output_mode
 
     def _make_vmap(self):
-        self._vmap_qvalue_networkN0 = _vmap_func(
+        vectorized_qvalue_network = _vmap_func(
             self.qvalue_network,
             (None, 0),
             randomness=self.vmap_randomness,
             pseudo_vmap=self.deactivate_vmap,
         )
+        if self.qvalue_network_params.ndim == 0:
+
+            def call_single_qvalue_network(tensordict, params):
+                return vectorized_qvalue_network(tensordict, params.unsqueeze(0))
+
+            self._vmap_qvalue_networkN0 = call_single_qvalue_network
+        else:
+            self._vmap_qvalue_networkN0 = vectorized_qvalue_network
 
     @property
     def device(self) -> torch.device:
