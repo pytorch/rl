@@ -334,9 +334,7 @@ class IQLLoss(LossModule):
                 for key, current in module.state_dict().items():
                     full_key = prefix + key
                     if (
-                        key.startswith(
-                            ("qvalue_network_params.", "target_qvalue_network_params.")
-                        )
+                        key.removeprefix("target_").startswith("qvalue_network_params.")
                         and full_key in state_dict
                         and state_dict[full_key].shape == (1, *current.shape)
                     ):
