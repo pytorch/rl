@@ -1650,24 +1650,40 @@ class GRPOTrainerConfig(TrainerConfig):
     collector: Any
     total_frames: int
     loss_module: Any
+    optim_steps_per_batch: int = 1
     optimizer: Any | None = None
     optimization_stepper: Any | None = None
+    # LLM-specific
     weight_sync_sender: Any | None = None
     weight_update_frequency: int = 1
     empty_replay_buffer_on_weight_update: bool = False
+    # Replay buffer
+    replay_buffer: Any | None = None
+    batch_size: int | None = None
+    # Mixed precision / gradient accumulation
     mixed_precision: bool = False
-    autocast_dtype: Any | None = None
+    autocast_dtype: Any = None
     gradient_accumulation_steps: int = 1
-    clip_norm: float | None = None
+    # Standard trainer args
     logger: Any | None = None
+    clip_grad_norm: bool = True
+    clip_norm: float | None = 1.0
+    progress_bar: bool = True
+    seed: int | None = None
+    save_trainer_interval: int = 10000
     log_interval: int = 10000
+    save_trainer_file: Any | None = None
+    checkpoint: Any | None = None
+    checkpoint_rotation: Any | None = None
+    checkpoint_metadata: Any | None = None
     num_epochs: int = 1
     async_collection: bool = False
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    # Logging toggles
     log_rewards: bool = True
-    log_kl: bool = False
+    log_kl: bool = True
     frame_skip: int = 1
-    optim_steps_per_batch: int = 1
-    replay_buffer: Any | None = None
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_grpo_trainer"
 
     def __post_init__(self) -> None:
