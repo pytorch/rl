@@ -3298,8 +3298,10 @@ class TestCollectorDevices:
                 no_cuda_sync=no_cuda_sync,
             )
             assert collector.env.device == torch.device(env_device)
+            caller_stream = torch.cuda.current_stream()
             i = 0
             for d in collector:
+                assert torch.cuda.current_stream() == caller_stream
                 for _d in d.unbind(0):
                     u = _d["observation"].unique()
                     assert u.numel() == 1, i
