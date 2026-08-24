@@ -24,8 +24,6 @@ class COMALoss(LossModule):
         action_value: NestedKey = ("agents", "action_value")
         chosen_action_value: NestedKey = ("agents", "chosen_action_value")
         logits: NestedKey = ("agents", "logits")
-        sample_log_prob: NestedKey = ("agents", "sample_log_prob")
-        advantage_old: NestedKey = ("agents", "advantage_old")
         reward: NestedKey = ("agents", "reward")
         done: NestedKey = ("agents", "done")
         terminated: NestedKey = ("agents", "terminated")
@@ -60,13 +58,10 @@ class COMALoss(LossModule):
         entropy_coef: float = 0.0,
         n_step: int = 1,
         normalize_advantage: bool = False,
-        clip_epsilon: float | None = None,
     ) -> None:
         super().__init__()
         if n_step < 1:
             raise ValueError(f"n_step must be >= 1, got {n_step}.")
-        if clip_epsilon is not None and not 0.0 < clip_epsilon < 1.0:
-            raise ValueError(f"clip_epsilon must be in (0, 1), got {clip_epsilon}.")
         self.convert_to_functional(actor_network, "actor_network")
         self.convert_to_functional(qvalue_network, "qvalue_network", create_target_params=True)
         self.gamma = gamma
@@ -74,7 +69,6 @@ class COMALoss(LossModule):
         self.entropy_coef = entropy_coef
         self.n_step = n_step
         self.normalize_advantage = normalize_advantage
-        self.clip_epsilon = clip_epsilon
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         td_copy = tensordict.clone(False)
@@ -84,37 +78,17 @@ class COMALoss(LossModule):
             self.qvalue_network(td_copy)
 
         chosen_action_value = self._chosen_action_value(td_copy)
-        if self.clip_epsilon is not None:
-            # PPO-COMA: the advantage was computed once per batch against the
-            # collection policy (pi_old) and frozen; see
-            # compute_counterfactual_advantage. Anchoring A and the ratio on
-            # the same pi_old is what makes the clipped surrogate coherent.
-            if self.tensor_keys.advantage_old not in tensordict.keys(True):
-                raise KeyError(
-                    "clip_epsilon is set: call compute_counterfactual_advantage on the batch before the update passes."
-                )
-            advantage = tensordict.get(self.tensor_keys.advantage_old).detach()
-        else:
-            advantage = self._counterfactual_advantage(td_copy, chosen_action_value).detach()
+
+        advantage = self._counterfactual_advantage(td_copy, chosen_action_value).detach()
+
         if self.normalize_advantage:
             # MAPPO-style per-batch standardisation: same counterfactual
             # advantage, rescaled so the actor step size is batch-invariant.
             advantage = (advantage - advantage.mean()) / advantage.std().clamp_min(1e-6)
 
         log_prob = dist.log_prob(td_copy.get(self.tensor_keys.action))
-        extra_outputs: dict[str, torch.Tensor] = {}
-        if self.clip_epsilon is not None:
-            old_log_prob = tensordict.get(self.tensor_keys.sample_log_prob).detach()
-            ratio = (log_prob - old_log_prob.reshape(log_prob.shape)).exp()
-            flat_advantage = advantage.squeeze(-1)
-            unclipped = ratio * flat_advantage
-            clipped = ratio.clamp(1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * flat_advantage
-            loss_actor = -torch.min(unclipped, clipped).mean()
-            outside = (ratio < 1.0 - self.clip_epsilon) | (ratio > 1.0 + self.clip_epsilon)
-            extra_outputs["ratio_mean"] = ratio.detach().mean()
-            extra_outputs["clip_fraction"] = outside.float().mean()
-        else:
-            loss_actor = -(log_prob * advantage.squeeze(-1)).mean()
+
+        loss_actor = -(log_prob * advantage.squeeze(-1)).mean()
 
         target_value = td_copy.get(self.tensor_keys.value_target)
         loss_qvalue = F.mse_loss(chosen_action_value, target_value) * self.qvalue_loss_coef
@@ -131,7 +105,6 @@ class COMALoss(LossModule):
                 "pred_value": chosen_action_value.detach().mean(),
                 "target_value": target_value.detach().mean(),
                 "advantage": advantage.detach().mean(),
-                **extra_outputs,
             },
             batch_size=[],
         )
@@ -173,22 +146,7 @@ class COMALoss(LossModule):
         tensordict.set(self.tensor_keys.value_target, value_target.detach())
         return tensordict
 
-    def compute_counterfactual_advantage(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Write the frozen counterfactual advantage of the collection policy.
 
-        PPO-style anchoring: the baseline is computed from the *stored*
-        collection-time logits (pi_old) — the actor is deliberately not run
-        here — and the result is written once per batch under
-        ``advantage_old`` so that every reuse epoch optimises the same fixed
-        coefficient, coherent with the importance ratio's anchor.
-        """
-        td_copy = tensordict.clone(False)
-        with self.qvalue_network_params.to_module(self.qvalue_network):
-            self.qvalue_network(td_copy)
-        chosen_action_value = self._chosen_action_value(td_copy)
-        advantage = self._counterfactual_advantage(td_copy, chosen_action_value)
-        tensordict.set(self.tensor_keys.advantage_old, advantage.detach())
-        return tensordict
 
     def diagnostics(self, tensordict: TensorDictBase) -> dict[str, torch.Tensor]:
         """Return unreduced COMA quantities for trainer-side observability.

@@ -28,7 +28,7 @@ def _one_hot(index, n_actions=3):
 
 
 def _make_loss(
-    gamma=0.5, qvalue_loss_coef=0.5, entropy_coef=0.0, n_step=1, normalize_advantage=False, clip_epsilon=None
+    gamma=0.5, qvalue_loss_coef=0.5, entropy_coef=0.0, n_step=1, normalize_advantage=False,
 ):
     obs_dim = 4
     n_actions = 3
@@ -60,7 +60,6 @@ def _make_loss(
         entropy_coef=entropy_coef,
         n_step=n_step,
         normalize_advantage=normalize_advantage,
-        clip_epsilon=clip_epsilon,
     )
 
 
@@ -233,34 +232,3 @@ def test_diagnostics_report_q_contrast_measures():
     torch.testing.assert_close(diag["target_contrast"], torch.tensor(1.0))
 
 
-def test_clipped_loss_uses_frozen_old_advantage_and_clips_ratio():
-    """PPO-COMA: A frozen on stored pi_old logits; ratio vs stored log-probs;
-    min(unclipped, clipped) freezes over-drifted samples, keeps corrections."""
-    loss = _make_loss(clip_epsilon=0.2)
-    action = _one_hot([[0, 2]], n_actions=3)
-    tensordict = TensorDict(
-        {
-            ("agents", "observation"): torch.zeros(1, 2, 4),
-            ("agents", "action"): action,
-            ("agents", "logits"): torch.zeros(1, 2, 3),  # stored pi_old: uniform
-            ("agents", "sample_log_prob"): torch.full((1, 2), 0.5).log(),
-            "value_target": torch.zeros(1, 2, 1),
-        },
-        batch_size=[1],
-    )
-    add_action_without_self(tensordict)
-
-    loss.compute_counterfactual_advantage(tensordict)
-    # baseline under uniform pi_old = mean([1,2,4]) = 7/3 -> A = [1-7/3, 4-7/3]
-    expected_advantage = torch.tensor([[[-4.0 / 3.0], [5.0 / 3.0]]])
-    torch.testing.assert_close(tensordict.get(("agents", "advantage_old")), expected_advantage)
-
-    out = loss(tensordict)
-
-    # current policy uniform (1/3) vs stored 0.5 -> ratio 2/3, outside [0.8, 1.2]
-    torch.testing.assert_close(out["ratio_mean"], torch.tensor(2.0 / 3.0))
-    torch.testing.assert_close(out["clip_fraction"], torch.tensor(1.0))
-    # agent1 (A<0, already drifted far in A's direction): clipped branch -> 0.8*(-4/3)
-    # agent2 (A>0, drifted the wrong way): unclipped branch stays -> (2/3)*(5/3)
-    expected_loss = -((0.8 * (-4.0 / 3.0) + (2.0 / 3.0) * (5.0 / 3.0)) / 2.0)
-    torch.testing.assert_close(out["loss_actor"], torch.tensor(expected_loss))
