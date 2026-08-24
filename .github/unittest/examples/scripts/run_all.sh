@@ -13,7 +13,7 @@ apt-get install -y --no-install-recommends \
   libglx-mesa0 libglew-dev libosmesa6 libosmesa6-dev python3-dev tzdata
 
 this_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-root_dir="$(git rev-parse --show-toplevel)"
+root_dir="$(cd "${this_dir}/../../../.." >/dev/null 2>&1 && pwd)"
 env_dir="${root_dir}/venv"
 
 cp "${root_dir}/.github/unittest/tutorials/scripts/10_nvidia.json" \
