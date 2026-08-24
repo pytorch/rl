@@ -527,7 +527,8 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    def test_distributional_dqn_lazy_target(self):
+    @pytest.mark.parametrize("actor_first", [False, True])
+    def test_distributional_dqn_lazy_target(self, actor_first):
         torch.manual_seed(self.seed)
         atoms = 3
         action_dim = 2
@@ -546,6 +547,9 @@ class TestDQN(LossModuleTestBase):
             atoms=atoms,
         )
 
+        if actor_first:
+            actor(td)
+            updater.step()
         assert torch.isfinite(loss_fn(td)["loss"])
 
         source_params = loss_fn.value_network_params

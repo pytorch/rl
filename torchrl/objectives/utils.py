@@ -499,6 +499,8 @@ class TargetNetUpdater:
                 f"{self.__class__.__name__} must be "
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
+        for name in self._target_names:
+            getattr(self.loss_module, name)
         for key, param in self._sources.items():
             target = self._targets.get(f"target_{key}")
             if target.requires_grad:
