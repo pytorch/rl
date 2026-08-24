@@ -525,6 +525,12 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
         )
         sd = loss_fn.state_dict()
+        if num_qvalue == 1:
+            for key, tensor in list(sd.items()):
+                if key.startswith(
+                    ("qvalue_network_params.", "target_qvalue_network_params.")
+                ):
+                    sd[key] = tensor.unsqueeze(0)
         loss_fn2 = IQLLoss(
             actor_network=actor,
             qvalue_network=qvalue,

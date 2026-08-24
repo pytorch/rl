@@ -326,6 +326,23 @@ class IQLLoss(LossModule):
             create_target_params=True,
             compare_against=qvalue_policy_params,
         )
+        if num_qvalue_nets == 1:
+
+            def load_legacy_single_qvalue_state_dict(
+                module, state_dict, prefix, *load_args
+            ):
+                for key, current in module.state_dict().items():
+                    full_key = prefix + key
+                    if (
+                        key.startswith(
+                            ("qvalue_network_params.", "target_qvalue_network_params.")
+                        )
+                        and full_key in state_dict
+                        and state_dict[full_key].shape == (1, *current.shape)
+                    ):
+                        state_dict[full_key] = state_dict[full_key].squeeze(0)
+
+            self.register_load_state_dict_pre_hook(load_legacy_single_qvalue_state_dict)
 
         self.loss_function = loss_function
         if gamma is not None:
