@@ -23,7 +23,7 @@ def init_transformer(
         "summary_first_dropout": dropout,
     }
     model = GPT2LMHeadModel.from_pretrained(
-        name_or_path, return_dict=False, **model_kwargs
+        name_or_path, return_dict=as_tensordictmodule, **model_kwargs
     )
     model.to(device)
 

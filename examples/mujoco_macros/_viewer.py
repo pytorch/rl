@@ -71,6 +71,11 @@ def ensure_mjpython_for_passive_viewer() -> None:
 def add_rollout_video_args(parser: Any) -> None:
     """Add common finite-rollout and MP4-recording options."""
     parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Run one bounded headless rollout without launching the viewer.",
+    )
+    parser.add_argument(
         "--max-rollouts",
         type=int,
         default=None,
@@ -101,6 +106,8 @@ def maybe_add_video_recorder(
 ) -> tuple[Any, VideoRecorder | None, CSVLogger | None]:
     """Append ``PixelRenderTransform`` / ``VideoRecorder`` when requested."""
     video_dir = args.video_dir
+    if args.smoke and video_dir is None:
+        return env, None, None
     if video_dir is None and args.max_rollouts is not None:
         video_dir = _DEFAULT_VIDEO_DIR
     if video_dir is None:
@@ -166,11 +173,13 @@ class MujocoViewerLoop:
         self,
         env: Any,
         *,
+        enabled: bool = True,
         realtime: bool = True,
         speed: float = 1.0,
         camera_distance_scale: float = _DEFAULT_VIEWER_DISTANCE_SCALE,
     ) -> None:
         self.env = env
+        self.enabled = enabled
         self.backend = getattr(env, "_backend", None)
         if self.backend is None or not all(
             hasattr(self.backend, attr) for attr in ("_m", "_d")
@@ -194,6 +203,8 @@ class MujocoViewerLoop:
         ] | None = None
 
     def __enter__(self) -> MujocoViewerLoop:
+        if not self.enabled:
+            return self
         ensure_mjpython_for_passive_viewer()
         if not _has_mujoco_viewer:
             raise ImportError(
@@ -253,4 +264,6 @@ class MujocoViewerLoop:
         return exc_type is ViewerClosed
 
     def is_running(self) -> bool:
+        if not self.enabled:
+            return True
         return self.viewer is not None and self.viewer.is_running()

@@ -762,6 +762,7 @@ def main(argv: list[str] | None = None) -> int:
             exploration_type=ExplorationType.RANDOM,
             postproc=postproc,
             update_at_each_batch=True,
+            auto_register_policy_transforms=True,
         )
     else:
         collector = Collector(
@@ -774,6 +775,7 @@ def main(argv: list[str] | None = None) -> int:
             exploration_type=ExplorationType.RANDOM,
             compile_policy=cfg.compile_policy,
             postproc=postproc,
+            auto_register_policy_transforms=True,
         )
 
     # ----- WandB -----

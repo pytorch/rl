@@ -382,6 +382,7 @@ def make_loss(actor, critic, critic_head):
         shifted=True,
     )
     loss_fn = ClipPPOLoss(actor, critic_head)
+    loss_fn.set_keys(sample_log_prob="sample_log_prob")
     return loss_fn, advantage
 
 

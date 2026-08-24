@@ -51,6 +51,7 @@ that your policy's parameters are kept in sync.
 
 """
 
+import argparse
 import logging
 import time
 
@@ -110,6 +111,11 @@ def make_env(env_name: str):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--smoke", action="store_true", help="Run one batch per device configuration."
+    )
+    args = parser.parse_args()
 
     for env_device, policy_device, device in (
         (None, None, "cuda"),
@@ -144,14 +150,16 @@ if __name__ == "__main__":
         collector = Collector(
             env,
             agent_explore,
-            frames_per_batch=FRAMES_PER_BATCH,
-            init_random_frames=INIT_RND_STEPS,
+            frames_per_batch=8 if args.smoke else FRAMES_PER_BATCH,
+            init_random_frames=0 if args.smoke else INIT_RND_STEPS,
             device=device,
             env_device=env_device,
             policy_device=policy_device,
         )
         exp_buffer = ReplayBuffer(
-            storage=LazyTensorStorage(BUFFER_SIZE, device="cuda:0")
+            storage=LazyTensorStorage(
+                32 if args.smoke else BUFFER_SIZE, device="cuda:0"
+            )
         )
 
         loss = DQNLoss(
@@ -180,6 +188,9 @@ if __name__ == "__main__":
                 assert data["done"].device == torch.device("cuda:0")
 
             exp_buffer.extend(data)
+            if args.smoke:
+                collector.update_policy_weights_()
+                break
             max_length = exp_buffer["next", "step_count"].max()
             max_reward = exp_buffer["next", "episode_reward"].max()
             if len(exp_buffer) > INIT_RND_STEPS:
