@@ -1764,8 +1764,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
+        use_cuda_streams = self.return_same_td and not self.no_cuda_sync
         if (
-            not self.no_cuda_sync
+            use_cuda_streams
             and self.storing_device
             and self.storing_device.type == "cuda"
         ):
@@ -1773,7 +1774,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             event = stream.record_event()
             streams = [stream]
             events = [event]
-        elif not self.no_cuda_sync and self.storing_device is None:
+        elif use_cuda_streams and self.storing_device is None:
             streams = []
             events = []
             # this way of checking cuda is robust to lazy stacks with mismatching shapes

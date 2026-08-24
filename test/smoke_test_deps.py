@@ -54,7 +54,7 @@ def test_dreamer_v3_dmc_walker_env():
 
     repo_root = Path(__file__).parents[1]
     example = runpy.run_path(
-        repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
+        repo_root / "sota-implementations/dreamer_v3/train.py",
         run_name="dreamer_v3_dmc_smoke",
     )
     base = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")

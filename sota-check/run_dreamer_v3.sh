@@ -11,7 +11,7 @@ current_commit=$(git rev-parse --short HEAD)
 project_name="torchrl-example-check-$current_commit"
 group_name="dreamer_v3"
 export PYTHONPATH=$(dirname $(dirname $PWD))
-python $PYTHONPATH/sota-implementations/dreamer_v3/dreamer_v3.py \
+python $PYTHONPATH/sota-implementations/dreamer_v3/train.py \
   collector.total_frames=5000 \
   logger.eval_every=500
 
