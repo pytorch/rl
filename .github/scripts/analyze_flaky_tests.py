@@ -53,6 +53,12 @@ MIN_EXECUTIONS = 3
 # Days to consider a test "newly flaky"
 NEW_FLAKY_DAYS = 7
 
+# Artifact downloads are redirected away from api.github.com and can fail
+# transiently on the runner even when the GitHub API itself is healthy.
+ARTIFACT_DOWNLOAD_ATTEMPTS = 3
+ARTIFACT_DOWNLOAD_BACKOFF_SECONDS = 2
+RETRYABLE_ARTIFACT_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
 
 # =============================================================================
 # GitHub API Helpers
@@ -117,15 +123,39 @@ def download_artifact(artifact_url: str, token: str) -> bytes | None:
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    response = requests.get(
-        artifact_url, headers=headers, timeout=120, allow_redirects=True
-    )
+    for attempt in range(ARTIFACT_DOWNLOAD_ATTEMPTS):
+        try:
+            response = requests.get(
+                artifact_url, headers=headers, timeout=120, allow_redirects=True
+            )
+        except requests.RequestException as error:
+            if attempt == ARTIFACT_DOWNLOAD_ATTEMPTS - 1:
+                log(f"Warning: Failed to download artifact: {error}")
+                return None
+            delay = ARTIFACT_DOWNLOAD_BACKOFF_SECONDS * 2**attempt
+            log(f"Warning: Artifact download failed; retrying in {delay}s: {error}")
+            time.sleep(delay)
+            continue
 
-    if response.status_code != 200:
+        if response.status_code == 200:
+            return response.content
+
+        if (
+            response.status_code in RETRYABLE_ARTIFACT_STATUS_CODES
+            and attempt < ARTIFACT_DOWNLOAD_ATTEMPTS - 1
+        ):
+            delay = ARTIFACT_DOWNLOAD_BACKOFF_SECONDS * 2**attempt
+            log(
+                "Warning: Artifact download returned "
+                f"{response.status_code}; retrying in {delay}s"
+            )
+            time.sleep(delay)
+            continue
+
         log(f"Warning: Failed to download artifact ({response.status_code})")
         return None
 
-    return response.content
+    return None
 
 
 # =============================================================================
