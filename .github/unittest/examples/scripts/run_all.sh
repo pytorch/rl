@@ -9,7 +9,7 @@ echo "${TZ}" >/etc/timezone || true
 
 apt-get update
 apt-get install -y --no-install-recommends \
-  curl ffmpeg g++ gcc git libegl1 libgl1 libgles2 libglfw3 libglvnd0 \
+  cmake curl ffmpeg g++ gcc git libegl1 libgl1 libgles2 libglfw3 libglvnd0 \
   libglx-mesa0 libglew-dev libosmesa6 libosmesa6-dev python3-dev tzdata
 
 this_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
