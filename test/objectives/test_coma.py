@@ -1,0 +1,266 @@
+import torch
+from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
+from torch import nn
+from torchrl.modules import OneHotCategorical, ProbabilisticActor
+
+from torchrl.objectives.multiagent import COMALoss
+
+from torchrl.objectives.multiagent.coma import (
+    add_action_without_self,
+    add_joint_observation,
+    add_masked_joint_action,
+)
+
+
+class FixedActionValue(nn.Module):
+    def __init__(self, values: torch.Tensor):
+        super().__init__()
+        self.values = nn.Parameter(values.clone())
+
+    def forward(self, observation, action_without_self):
+        del action_without_self
+        return self.values.expand(*observation.shape[:-1], -1)
+
+
+def _one_hot(index, n_actions=3):
+    return torch.nn.functional.one_hot(torch.as_tensor(index), n_actions).to(torch.float)
+
+
+def _make_loss(
+    gamma=0.5, qvalue_loss_coef=0.5, entropy_coef=0.0, n_step=1, normalize_advantage=False, clip_epsilon=None
+):
+    obs_dim = 4
+    n_actions = 3
+    actor_net = nn.Linear(obs_dim, n_actions)
+    nn.init.zeros_(actor_net.weight)
+    nn.init.zeros_(actor_net.bias)
+    actor_module = TensorDictModule(
+        actor_net,
+        in_keys=[("agents", "observation")],
+        out_keys=[("agents", "logits")],
+    )
+    actor = ProbabilisticActor(
+        module=actor_module,
+        in_keys=[("agents", "logits")],
+        out_keys=[("agents", "action")],
+        distribution_class=OneHotCategorical,
+        return_log_prob=True,
+    )
+    qvalue_module = TensorDictModule(
+        FixedActionValue(torch.tensor([1.0, 2.0, 4.0])),
+        in_keys=[("agents", "observation"), ("agents", "action_without_self")],
+        out_keys=[("agents", "action_value")],
+    )
+    return COMALoss(
+        actor_network=actor,
+        qvalue_network=qvalue_module,
+        gamma=gamma,
+        qvalue_loss_coef=qvalue_loss_coef,
+        entropy_coef=entropy_coef,
+        n_step=n_step,
+        normalize_advantage=normalize_advantage,
+        clip_epsilon=clip_epsilon,
+    )
+
+
+def test_add_action_without_self_flattens_other_agents_actions():
+    action = _one_hot([[0, 1, 2]], n_actions=3)
+    tensordict = TensorDict({("agents", "action"): action}, batch_size=[1])
+
+    add_action_without_self(tensordict)
+
+    expected = torch.tensor(
+        [
+            [
+                [0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            ]
+        ]
+    )
+    torch.testing.assert_close(tensordict.get(("agents", "action_without_self")), expected)
+
+
+def test_coma_loss_uses_counterfactual_baseline_and_qvalue_target():
+    loss = _make_loss(qvalue_loss_coef=0.25, entropy_coef=0.0)
+    action = _one_hot([[0, 2]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(1, 2, 4),
+            ("agents", "action"): action,
+            "value_target": torch.zeros(1, 2, 1),
+        },
+        batch_size=[1],
+    )
+    add_action_without_self(tensordict)
+
+    loss_values = loss(tensordict)
+
+    expected_advantage = torch.tensor([1.0, 4.0]).mean() - torch.tensor([1.0, 2.0, 4.0]).mean()
+    expected_qvalue_loss = ((torch.tensor([1.0, 4.0]) ** 2).mean()) * 0.25
+    torch.testing.assert_close(loss_values["advantage"], expected_advantage)
+    torch.testing.assert_close(loss_values["loss_qvalue"], expected_qvalue_loss)
+    assert set(loss.out_keys).issubset(set(loss_values.keys()))
+
+
+def test_compute_value_target_bootstraps_along_time_dimension():
+    loss = _make_loss(gamma=0.5)
+    actions = _one_hot([[[0, 0], [1, 1], [2, 2]]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(1, 3, 2, 4),
+            ("agents", "action"): actions,
+            "next": {
+                "agents": {
+                    "reward": torch.zeros(1, 3, 2, 1),
+                    "done": torch.tensor([[[[False], [False]], [[False], [False]], [[True], [True]]]]),
+                }
+            },
+        },
+        batch_size=[1, 3],
+    )
+    add_action_without_self(tensordict)
+
+    loss.compute_value_target(tensordict)
+
+    expected = torch.tensor([[[[1.0], [1.0]], [[2.0], [2.0]], [[0.0], [0.0]]]])
+    torch.testing.assert_close(tensordict["value_target"], expected)
+
+
+def test_compute_value_target_supports_nstep_returns():
+    """n_step=2 accumulates two rewards then bootstraps, stopping at done."""
+    loss = _make_loss(gamma=0.5, n_step=2)
+    actions = _one_hot([[[0, 0], [1, 1], [2, 2]]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(1, 3, 2, 4),
+            ("agents", "action"): actions,
+            "next": {
+                "agents": {
+                    "reward": torch.ones(1, 3, 2, 1),
+                    "done": torch.tensor([[[[False], [False]], [[False], [False]], [[True], [True]]]]),
+                }
+            },
+        },
+        batch_size=[1, 3],
+    )
+    add_action_without_self(tensordict)
+
+    loss.compute_value_target(tensordict)
+
+    # G2(t0) = r0 + g*r1 + g^2*Q(t2) = 1 + 0.5 + 0.25*4 = 2.5
+    # G2(t1) = r1 + g*r2 = 1.5 (done at t2 stops the bootstrap)
+    # G2(t2) = r2 = 1.0
+    expected = torch.tensor([[[[2.5], [2.5]], [[1.5], [1.5]], [[1.0], [1.0]]]])
+    torch.testing.assert_close(tensordict["value_target"], expected)
+
+
+def test_add_joint_observation_repeats_team_observation_per_agent():
+    observation = torch.tensor([[[1.0, 2.0], [3.0, 4.0]]])
+    tensordict = TensorDict({("agents", "observation"): observation}, batch_size=[1])
+
+    add_joint_observation(tensordict)
+
+    expected = torch.tensor([[[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]]])
+    torch.testing.assert_close(tensordict.get(("agents", "joint_observation")), expected)
+
+
+def test_add_masked_joint_action_zeroes_own_action_block():
+    action = _one_hot([[0, 2]], n_actions=3)
+    tensordict = TensorDict({("agents", "action"): action}, batch_size=[1])
+
+    add_masked_joint_action(tensordict)
+
+    expected = torch.tensor(
+        [
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ]
+        ]
+    )
+    torch.testing.assert_close(tensordict.get(("agents", "masked_joint_action")), expected)
+
+
+def test_normalize_advantage_zero_centres_the_actor_signal():
+    """With a uniform policy, log-probs are constant, so the actor loss equals
+    -log(1/3) * mean(A); standardised advantages have zero mean, so the
+    normalized actor loss must vanish while the raw one does not."""
+    action = _one_hot([[0, 2]], n_actions=3)
+    data = {
+        ("agents", "observation"): torch.zeros(1, 2, 4),
+        ("agents", "action"): action,
+        "value_target": torch.zeros(1, 2, 1),
+    }
+    raw = TensorDict(dict(data), batch_size=[1])
+    add_action_without_self(raw)
+    norm = TensorDict(dict(data), batch_size=[1])
+    add_action_without_self(norm)
+
+    raw_loss = _make_loss(normalize_advantage=False)(raw)
+    norm_loss = _make_loss(normalize_advantage=True)(norm)
+
+    assert abs(raw_loss["loss_actor"].item()) > 1e-3
+    torch.testing.assert_close(norm_loss["loss_actor"], torch.tensor(0.0), atol=1e-5, rtol=0)
+
+
+def test_diagnostics_report_q_contrast_measures():
+    """Flat-critic instrumentation: own-action spread, others-sensitivity,
+    and empirical target contrast by chosen action."""
+    loss = _make_loss()
+    action = _one_hot([[0, 2]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(1, 2, 4),
+            ("agents", "action"): action,
+            ("agents", "logits"): torch.zeros(1, 2, 3),
+            "value_target": torch.tensor([[[0.5], [2.5]]]),
+        },
+        batch_size=[1],
+    )
+    add_action_without_self(tensordict)
+
+    diag = loss.diagnostics(tensordict)
+
+    # FixedActionValue outputs [1, 2, 4] for every input:
+    # population std of [1, 2, 4] = sqrt(14/9)
+    expected_spread = torch.tensor([1.0, 2.0, 4.0]).std(correction=0)
+    torch.testing.assert_close(diag["action_value_spread"], expected_spread.expand(1, 2))
+    # the fixed critic ignores other agents' actions entirely
+    torch.testing.assert_close(diag["others_sensitivity"], torch.zeros(1, 2))
+    # targets grouped by chosen action: {action0: 0.5, action2: 2.5} -> pop std 1.0
+    torch.testing.assert_close(diag["target_contrast"], torch.tensor(1.0))
+
+
+def test_clipped_loss_uses_frozen_old_advantage_and_clips_ratio():
+    """PPO-COMA: A frozen on stored pi_old logits; ratio vs stored log-probs;
+    min(unclipped, clipped) freezes over-drifted samples, keeps corrections."""
+    loss = _make_loss(clip_epsilon=0.2)
+    action = _one_hot([[0, 2]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(1, 2, 4),
+            ("agents", "action"): action,
+            ("agents", "logits"): torch.zeros(1, 2, 3),  # stored pi_old: uniform
+            ("agents", "sample_log_prob"): torch.full((1, 2), 0.5).log(),
+            "value_target": torch.zeros(1, 2, 1),
+        },
+        batch_size=[1],
+    )
+    add_action_without_self(tensordict)
+
+    loss.compute_counterfactual_advantage(tensordict)
+    # baseline under uniform pi_old = mean([1,2,4]) = 7/3 -> A = [1-7/3, 4-7/3]
+    expected_advantage = torch.tensor([[[-4.0 / 3.0], [5.0 / 3.0]]])
+    torch.testing.assert_close(tensordict.get(("agents", "advantage_old")), expected_advantage)
+
+    out = loss(tensordict)
+
+    # current policy uniform (1/3) vs stored 0.5 -> ratio 2/3, outside [0.8, 1.2]
+    torch.testing.assert_close(out["ratio_mean"], torch.tensor(2.0 / 3.0))
+    torch.testing.assert_close(out["clip_fraction"], torch.tensor(1.0))
+    # agent1 (A<0, already drifted far in A's direction): clipped branch -> 0.8*(-4/3)
+    # agent2 (A>0, drifted the wrong way): unclipped branch stays -> (2/3)*(5/3)
+    expected_loss = -((0.8 * (-4.0 / 3.0) + (2.0 / 3.0) * (5.0 / 3.0)) / 2.0)
+    torch.testing.assert_close(out["loss_actor"], torch.tensor(expected_loss))
