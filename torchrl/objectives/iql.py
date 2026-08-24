@@ -313,10 +313,16 @@ class IQLLoss(LossModule):
             )
         else:
             qvalue_policy_params = None
+        if (
+            num_qvalue_nets == 1
+            and isinstance(qvalue_network, (list, tuple))
+            and len(qvalue_network) == 1
+        ):
+            qvalue_network = qvalue_network[0]
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
-            num_qvalue_nets,
+            None if num_qvalue_nets == 1 else num_qvalue_nets,
             create_target_params=True,
             compare_against=qvalue_policy_params,
         )
@@ -344,12 +350,20 @@ class IQLLoss(LossModule):
         self.scalar_output_mode = scalar_output_mode
 
     def _make_vmap(self):
-        self._vmap_qvalue_networkN0 = _vmap_func(
+        vectorized_qvalue_network = _vmap_func(
             self.qvalue_network,
             (None, 0),
             randomness=self.vmap_randomness,
             pseudo_vmap=self.deactivate_vmap,
         )
+        if self.qvalue_network_params.ndim == 0:
+
+            def call_single_qvalue_network(tensordict, params):
+                return vectorized_qvalue_network(tensordict, params.unsqueeze(0))
+
+            self._vmap_qvalue_networkN0 = call_single_qvalue_network
+        else:
+            self._vmap_qvalue_networkN0 = vectorized_qvalue_network
 
     @property
     def device(self) -> torch.device:
