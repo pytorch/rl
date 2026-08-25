@@ -131,7 +131,7 @@ def download_artifact(artifact_url: str, token: str) -> bytes | None:
         except requests.RequestException as error:
             if attempt == ARTIFACT_DOWNLOAD_ATTEMPTS - 1:
                 log(f"Warning: Failed to download artifact: {error}")
-                return None
+                raise
             delay = ARTIFACT_DOWNLOAD_BACKOFF_SECONDS * 2**attempt
             log(f"Warning: Artifact download failed; retrying in {delay}s: {error}")
             time.sleep(delay)
