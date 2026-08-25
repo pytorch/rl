@@ -30,11 +30,9 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 import torch
-
 from tensordict import TensorDictBase
 from torch import nn, optim
 from torch.amp import GradScaler
-
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -98,6 +96,7 @@ class GRPOOptimizationStepper(OptimizationStepper):
 
         # Internal micro-batch counter (reset after every optimizer step).
         self._micro_step: int = 0
+        self._optimizer_step_count: int = 0
 
     # ------------------------------------------------------------------
     # Checkpointing (optimizer + scaler state)
@@ -107,6 +106,7 @@ class GRPOOptimizationStepper(OptimizationStepper):
         sd: dict[str, Any] = {
             "optimizer": self.optimizer.state_dict(),
             "micro_step": self._micro_step,
+            "optimizer_step_count": self._optimizer_step_count,
         }
         if self._use_scaler:
             sd["scaler"] = self.scaler.state_dict()
@@ -115,6 +115,7 @@ class GRPOOptimizationStepper(OptimizationStepper):
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         self.optimizer.load_state_dict(state_dict["optimizer"])
         self._micro_step = state_dict.get("micro_step", 0)
+        self._optimizer_step_count = state_dict.get("optimizer_step_count", 0)
         if self._use_scaler and "scaler" in state_dict:
             self.scaler.load_state_dict(state_dict["scaler"])
 
@@ -178,6 +179,7 @@ class GRPOOptimizationStepper(OptimizationStepper):
             else:
                 self.optimizer.step()
 
+            self._optimizer_step_count += 1
             self.optimizer.zero_grad(set_to_none=True)
             losses_td["grad_norm"] = torch.tensor(grad_norm)
 
@@ -209,17 +211,38 @@ class WeightSyncHook(TrainerHookBase):
         sender: Any,
         weight_update_frequency: int = 1,
         empty_replay_buffer: bool = False,
-    ) -> None:
+    ):
+        if weight_update_frequency < 1:
+            raise ValueError("weight_update_frequency must be >= 1")
         self.sender = sender
         self.weight_update_frequency = weight_update_frequency
         self.empty_replay_buffer = empty_replay_buffer
+        self._last_update = 0
 
-    def __call__(self, batch: TensorDictBase) -> None:
+    def __call__(self) -> None:
         trainer = self._trainer
-        if (trainer._optim_count % self.weight_update_frequency) == 0:
-            self.sender.update_weights()
-            if self.empty_replay_buffer and trainer.replay_buffer is not None:
-                trainer.replay_buffer.empty(empty_write_count=False)
+        optim_count = getattr(
+            trainer.optimization_stepper,
+            "_optimizer_step_count",
+            trainer._optim_count,
+        )
+        if optim_count - self._last_update < self.weight_update_frequency:
+            return
+        self.sender.update_weights()
+        self._last_update = optim_count
+        if self.empty_replay_buffer and trainer.replay_buffer is not None:
+            trainer.replay_buffer.empty(empty_write_count=False)
+
+    def state_dict(self) -> dict[str, Any]:
+        return {"last_update": self._last_update}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self._last_update = state_dict.get("last_update", 0)
+
+    def register(self, trainer: Trainer, name: str = "weight_sync") -> None:
+        self._trainer = trainer
+        trainer.register_module(name, self)
+        trainer.register_op("post_steps", self)
 
 
 class GRPOTrainer(Trainer):
@@ -459,7 +482,7 @@ class GRPOTrainer(Trainer):
                 weight_update_frequency=weight_update_frequency,
                 empty_replay_buffer=empty_replay_buffer_on_weight_update,
             )
-            self.register_op("post_steps", ws_hook)
+            ws_hook.register(self)
 
         # --- Logging hooks ---
         if log_rewards:
@@ -486,12 +509,18 @@ class GRPOTrainer(Trainer):
 
     def _setup_kl_logging(self) -> None:
         """Register hooks to log KL divergence keys emitted by GRPOLoss."""
+        self.register_op("post_optim_complete_log", self._log_kl_metrics)
+
+    def _log_kl_metrics(
+        self, optim_steps: int, average_losses: TensorDictBase | None
+    ) -> dict[str, float]:
+        """Read KL metrics from the averaged optimization output."""
+        del optim_steps
+        if average_losses is None:
+            return {}
+        metrics = {}
         for kl_key in ("kl_to_ref", "kl_to_inference"):
-            hook = LogScalar(
-                key=kl_key,
-                logname=kl_key,
-                log_pbar=False,
-                include_std=False,
-                reduction="mean",
-            )
-            self.register_op("post_optim_complete_log", hook)
+            value = average_losses.get(kl_key, None)
+            if value is not None:
+                metrics[kl_key] = value.float().mean().item()
+        return metrics
