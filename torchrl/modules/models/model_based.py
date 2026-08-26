@@ -153,6 +153,21 @@ def _dreamer_v3_block_linear(
     return value.reshape(*batch_shape, num_blocks * block_out) + bias.to(value.dtype)
 
 
+def _dreamer_v3_block_linear_compute(
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+) -> torch.Tensor:
+    """Apply block-linear operands that already share a compute dtype."""
+    num_blocks, _, block_out = weight.shape
+    batch_shape = value.shape[:-1]
+    value = value.reshape(-1, num_blocks, value.shape[-1] // num_blocks)
+    value = value.transpose(0, 1)
+    value = torch.bmm(value, weight).transpose(0, 1)
+    value = value.reshape(*batch_shape, num_blocks * block_out)
+    return value if bias is None else value + bias
+
+
 def _dreamer_v3_block_gru_update(
     features: torch.Tensor,
     belief: torch.Tensor,
@@ -316,7 +331,7 @@ def _block_linear_backward_input(
     batch_shape = grad_output.shape[:-1]
     grad_blocks = grad_output.reshape(-1, num_blocks, block_out)
     grad_blocks = grad_blocks.transpose(0, 1)
-    grad_input = torch.bmm(grad_blocks, weight.to(grad_output.dtype).transpose(1, 2))
+    grad_input = torch.bmm(grad_blocks, weight.transpose(1, 2))
     return grad_input.transpose(0, 1).reshape(*batch_shape, num_blocks * block_in)
 
 
@@ -351,12 +366,43 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
         gate_weight, gate_bias = tensors[3 * num_layers :]
         hidden_size = initial_hidden.shape[-1]
         block_size = hidden_size // num_blocks
+        projected_size = projected_input.shape[-1]
+        compute_dtype = projected_input.dtype
+
+        hidden_weight_compute = hidden_weight.to(compute_dtype)
+        hidden_bias_compute = hidden_bias.to(compute_dtype)
+        dynamic_compute = [
+            (weight.to(compute_dtype), bias.to(compute_dtype), norm_weight)
+            for weight, bias, norm_weight in dynamic
+        ]
+        gate_weight_compute = gate_weight.to(compute_dtype)
+        gate_bias_compute = gate_bias.to(compute_dtype)
+
+        first_weight_compute, first_bias_compute, _ = dynamic_compute[0]
+        first_carry_weight = first_weight_compute[:, :block_size]
+        first_input_weight = first_weight_compute[
+            :, block_size : block_size + projected_size
+        ]
+        first_hidden_weight = first_weight_compute[:, block_size + projected_size :]
+        first_recurrent_weight = torch.cat(
+            (first_carry_weight, first_hidden_weight), 1
+        ).contiguous()
+        flat_projected = projected_input.flatten(0, 1)
+        projected_contribution = torch.bmm(
+            flat_projected.unsqueeze(0).expand(num_blocks, -1, -1),
+            first_input_weight,
+        )
+        projected_contribution = (
+            projected_contribution.transpose(0, 1)
+            .reshape(*projected_input.shape[:-1], hidden_size)
+            .add(first_bias_compute)
+        )
 
         def step(hidden, inputs):
-            projected_t, init_t = inputs
+            projected_contribution_t, init_t = inputs
             previous = torch.where(init_t.unsqueeze(-1), 0, hidden)
 
-            hidden_pre = _dreamer_v3_linear(previous, hidden_weight, hidden_bias)
+            hidden_pre = F.linear(previous, hidden_weight_compute, hidden_bias_compute)
             (
                 hidden_norm,
                 hidden_normalized,
@@ -365,20 +411,31 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
             hidden_features, hidden_activation_derivative = _activation_with_derivative(
                 activation, hidden_norm
             )
-            features = torch.cat((projected_t, hidden_features), -1)
             grouped_hidden = previous.reshape(previous.shape[0], num_blocks, block_size)
-            repeated_features = features.unsqueeze(-2).expand(
-                features.shape[0], num_blocks, features.shape[-1]
+            repeated_hidden_features = hidden_features.unsqueeze(-2).expand(
+                hidden_features.shape[0], num_blocks, hidden_features.shape[-1]
             )
-            layer_value = torch.cat((grouped_hidden, repeated_features), -1).flatten(-2)
+            layer_value = torch.cat(
+                (grouped_hidden, repeated_hidden_features), -1
+            ).flatten(-2)
 
             layer_inputs = []
             layer_normalized = []
             layer_inv_rms = []
             layer_derivatives = []
-            for weight, bias, norm_weight in dynamic:
+            for layer_index, (weight, bias, norm_weight) in enumerate(dynamic_compute):
                 layer_inputs.append(layer_value)
-                layer_pre = _dreamer_v3_block_linear(layer_value, weight, bias)
+                if layer_index == 0:
+                    layer_pre = (
+                        _dreamer_v3_block_linear_compute(
+                            layer_value, first_recurrent_weight, None
+                        )
+                        + projected_contribution_t
+                    )
+                else:
+                    layer_pre = _dreamer_v3_block_linear_compute(
+                        layer_value, weight, bias
+                    )
                 layer_norm, normalized, inv_rms = _rms_norm_with_backward_state(
                     layer_pre, norm_weight, norm_eps
                 )
@@ -389,8 +446,8 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
                 layer_inv_rms.append(inv_rms)
                 layer_derivatives.append(derivative)
 
-            gate_values = _dreamer_v3_block_linear(
-                layer_value, gate_weight, gate_bias
+            gate_values = _dreamer_v3_block_linear_compute(
+                layer_value, gate_weight_compute, gate_bias_compute
             ).reshape(previous.shape[0], num_blocks, 3, block_size)
             reset_pre, candidate_pre, update_pre = gate_values.unbind(-2)
             reset = reset_pre.flatten(-2).sigmoid()
@@ -419,7 +476,7 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
         final_hidden, scan_output = _higher_order_scan(
             step,
             initial_hidden,
-            (projected_input, is_init),
+            (projected_contribution, is_init),
             dim=0,
         )
         outputs, saved = scan_output[0], scan_output[1:]
@@ -461,6 +518,10 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
             for index in range(0, 3 * num_layers, 3)
         ]
         gate_weight, _ = parameter_tensors[3 * num_layers :]
+        compute_dtype = projected_input.dtype
+        hidden_weight_compute = hidden_weight.to(compute_dtype)
+        dynamic_weight_compute = [weight.to(compute_dtype) for weight, _, _ in dynamic]
+        gate_weight_compute = gate_weight.to(compute_dtype)
         outputs = saved_tensors[5 + parameter_count]
         saved = saved_tensors[6 + parameter_count :]
 
@@ -493,6 +554,14 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
         hidden_size = initial_hidden.shape[-1]
         block_size = hidden_size // num_blocks
         projected_size = projected_input.shape[-1]
+        first_weight_compute = dynamic_weight_compute[0]
+        first_recurrent_weight = torch.cat(
+            (
+                first_weight_compute[:, :block_size],
+                first_weight_compute[:, block_size + projected_size :],
+            ),
+            1,
+        ).contiguous()
 
         reversed_inputs = tuple(
             value.flip(0)
@@ -551,11 +620,12 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
                 -2,
             ).flatten(-3)
 
-            grad_layer = _block_linear_backward_input(grad_gates, gate_weight)
+            grad_layer = _block_linear_backward_input(grad_gates, gate_weight_compute)
             dynamic_pre_grads = []
             dynamic_norm_grads = []
             for layer_index in range(num_layers - 1, -1, -1):
-                weight, _, norm_weight = dynamic[layer_index]
+                _, _, norm_weight = dynamic[layer_index]
+                weight_compute = dynamic_weight_compute[layer_index]
                 grad_norm = grad_layer * layer_derivatives_t[layer_index]
                 grad_pre, grad_norm_weight = _rms_norm_backward(
                     grad_norm,
@@ -565,15 +635,18 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
                 )
                 dynamic_pre_grads.append(grad_pre)
                 dynamic_norm_grads.append(grad_norm_weight)
-                grad_layer = _block_linear_backward_input(grad_pre, weight)
+                if layer_index == 0:
+                    grad_layer = _block_linear_backward_input(
+                        grad_pre, first_recurrent_weight
+                    )
+                else:
+                    grad_layer = _block_linear_backward_input(grad_pre, weight_compute)
             dynamic_pre_grads.reverse()
             dynamic_norm_grads.reverse()
 
             grad_first = grad_layer.reshape(grad_layer.shape[0], num_blocks, -1)
             grad_previous = grad_previous + grad_first[..., :block_size].flatten(-2)
-            grad_features = grad_first[..., block_size:].sum(-2)
-            grad_projected = grad_features[..., :projected_size]
-            grad_hidden_features = grad_features[..., projected_size:]
+            grad_hidden_features = grad_first[..., block_size:].sum(-2)
 
             grad_hidden_norm = grad_hidden_features * hidden_derivative_t
             grad_hidden_pre, grad_hidden_norm_weight = _rms_norm_backward(
@@ -582,12 +655,11 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
                 hidden_inv_rms_t,
                 hidden_norm_weight,
             )
-            grad_previous = grad_previous + _dreamer_v3_linear(
-                grad_hidden_pre, hidden_weight.t(), None
+            grad_previous = grad_previous + F.linear(
+                grad_hidden_pre, hidden_weight_compute.t()
             )
             next_cotangent = torch.where(init_t.unsqueeze(-1), 0, grad_previous)
             local = (
-                grad_projected,
                 grad_hidden_pre,
                 grad_hidden_norm_weight,
                 *dynamic_pre_grads,
@@ -604,10 +676,9 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
         )
         local = tuple(value.flip(0) for value in local)
         index = 0
-        grad_projected = local[index]
-        grad_hidden_pre = local[index + 1]
-        grad_hidden_norm_contrib = local[index + 2]
-        index += 3
+        grad_hidden_pre = local[index]
+        grad_hidden_norm_contrib = local[index + 1]
+        index += 2
         dynamic_pre_grads = local[index : index + num_layers]
         index += num_layers
         dynamic_norm_contribs = local[index : index + num_layers]
@@ -622,12 +693,49 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
             tuple(range(grad_hidden_norm_contrib.ndim - 1))
         )
 
-        dynamic_parameter_grads = []
+        first_grad_pre = dynamic_pre_grads[0]
+        first_grad_blocks = first_grad_pre.reshape(
+            -1, num_blocks, block_size
+        ).transpose(0, 1)
+        grad_projected = torch.bmm(
+            first_grad_blocks,
+            first_weight_compute[:, block_size : block_size + projected_size].transpose(
+                1, 2
+            ),
+        ).sum(0)
+        grad_projected = grad_projected.reshape_as(projected_input)
+
+        first_recurrent_weight_grad = _block_weight_grad(
+            layer_inputs[0], first_grad_pre, first_recurrent_weight
+        )
+        repeated_projected = projected_input.unsqueeze(-2).expand(
+            *projected_input.shape[:-1], num_blocks, projected_size
+        )
+        first_input_weight_grad = _block_weight_grad(
+            repeated_projected.flatten(-2),
+            first_grad_pre,
+            first_weight_compute[:, block_size : block_size + projected_size],
+        )
+        first_weight_grad = torch.cat(
+            (
+                first_recurrent_weight_grad[:, :block_size],
+                first_input_weight_grad,
+                first_recurrent_weight_grad[:, block_size:],
+            ),
+            1,
+        )
+        dynamic_parameter_grads = [
+            first_weight_grad,
+            first_grad_pre.float().sum(tuple(range(first_grad_pre.ndim - 1))),
+            dynamic_norm_contribs[0].sum(
+                tuple(range(dynamic_norm_contribs[0].ndim - 1))
+            ),
+        ]
         for layer_input, grad_pre, norm_contrib, (weight, _, _) in zip(
-            layer_inputs,
-            dynamic_pre_grads,
-            dynamic_norm_contribs,
-            dynamic,
+            layer_inputs[1:],
+            dynamic_pre_grads[1:],
+            dynamic_norm_contribs[1:],
+            dynamic[1:],
         ):
             dynamic_parameter_grads.extend(
                 (

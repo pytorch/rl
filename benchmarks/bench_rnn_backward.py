@@ -25,7 +25,10 @@ Example::
 
 The block-GRU grid compares its reference and specialized scan backends across
 batch size, horizon, hidden width, and block count. Timings are CUDA-synchronized
-means with 95% confidence intervals. The script is a no-op on CPU/MPS.
+means with 95% confidence intervals. ``--compile-modes`` optionally compares
+uncompiled execution with the default, reduce-overhead, and max-autotune
+``torch.compile`` modes using full graphs and static shapes. The script is a
+no-op on CPU/MPS.
 """
 from __future__ import annotations
 
@@ -40,6 +43,7 @@ from torchrl import cuda_memory_stats, reset_cuda_peak_stats
 from torchrl.modules import DreamerV3BlockGRU, GRUModule, LSTMModule
 
 RNNType = Literal["lstm", "gru", "block_gru"]
+CompileMode = Literal["none", "default", "reduce-overhead", "max-autotune"]
 # User-facing backend name -> recurrent_backend value.
 _BACKENDS: dict[str, str] = {
     "cudnn": "pad",
@@ -187,6 +191,7 @@ def _bench_one(
     num_blocks: int,
     device: torch.device,
     dtype: torch.dtype,
+    compile_mode: CompileMode,
     warmup: int,
     iters: int,
 ) -> dict[str, float]:
@@ -202,6 +207,13 @@ def _bench_one(
         device=device,
         dtype=dtype,
     )
+    if compile_mode != "none":
+        module = torch.compile(
+            module,
+            fullgraph=True,
+            dynamic=False,
+            mode=compile_mode,
+        )
     data = _build_inputs(
         rnn_type,
         batch=batch,
@@ -284,9 +296,14 @@ def main() -> None:
     parser.add_argument("--projection-size", type=int, default=128)
     parser.add_argument("--blocks", default="1,8", type=_parse_int_list)
     parser.add_argument("--dtype", choices=["float32", "bfloat16"], default="float32")
+    parser.add_argument(
+        "--compile-modes",
+        default="none",
+        help="Comma list among none,default,reduce-overhead,max-autotune.",
+    )
     parser.add_argument("--recompute", choices=["none", "full"], default="none")
-    parser.add_argument("--warmup", type=int, default=3)
-    parser.add_argument("--iters", type=int, default=10)
+    parser.add_argument("--warmup", type=int, default=10)
+    parser.add_argument("--iters", type=int, default=30)
     parser.add_argument(
         "--device", default="cuda" if torch.cuda.is_available() else "cpu"
     )
@@ -303,6 +320,16 @@ def main() -> None:
             "reference,scan" if args.rnn == "block_gru" else "cudnn,scan,triton"
         )
     backends = [b.strip() for b in backend_arg.split(",") if b.strip()]
+    compile_modes = [
+        mode.strip() for mode in args.compile_modes.split(",") if mode.strip()
+    ]
+    valid_compile_modes = {"none", "default", "reduce-overhead", "max-autotune"}
+    invalid_compile_modes = set(compile_modes) - valid_compile_modes
+    if invalid_compile_modes:
+        parser.error(
+            "--compile-modes contains invalid values: "
+            + ", ".join(sorted(invalid_compile_modes))
+        )
     dtype = torch.float32 if args.dtype == "float32" else torch.bfloat16
     if args.recompute == "full":
         backends = [b for b in backends if b != "cudnn"]
@@ -312,10 +339,12 @@ def main() -> None:
         f"rnn={args.rnn} layers={args.num_layers} input_size={args.input_size} "
         f"projection_size={args.projection_size} dtype={args.dtype} "
         f"recompute={args.recompute} warmup={args.warmup} iters={args.iters}\n"
+        f"compile_modes={','.join(compile_modes)}\n"
         f"device={torch.cuda.get_device_name(device)}\n"
     )
     header = (
         f"{'batch':>6} {'T':>4} {'H':>5} {'blocks':>6} {'backend':>9} "
+        f"{'compile':>15} "
         f"{'fwd_ms (95% CI)':>21} {'bwd_ms (95% CI)':>21} "
         f"{'total_ms (95% CI)':>23} {'peak_gb':>8}"
     )
@@ -327,41 +356,44 @@ def main() -> None:
                 blocks = args.blocks if args.rnn == "block_gru" else [1]
                 for num_blocks in blocks:
                     for name in backends:
-                        recurrent_backend = _BACKENDS[name]
-                        try:
-                            r = _bench_one(
-                                args.rnn,
-                                recurrent_backend,
-                                args.recompute,
-                                batch=batch,
-                                seq_len=seq_len,
-                                input_size=args.input_size,
-                                hidden_size=hidden,
-                                num_layers=args.num_layers,
-                                projection_size=args.projection_size,
-                                num_blocks=num_blocks,
-                                device=device,
-                                dtype=dtype,
-                                warmup=args.warmup,
-                                iters=args.iters,
-                            )
-                            print(
-                                f"{batch:>6} {seq_len:>4} {hidden:>5} "
-                                f"{num_blocks:>6} {name:>9} "
-                                f"{r['fwd_ms']:>9.3f} +/- {r['fwd_ci_ms']:<7.3f} "
-                                f"{r['bwd_ms']:>9.3f} +/- {r['bwd_ci_ms']:<7.3f} "
-                                f"{r['total_ms']:>9.3f} +/- {r['total_ci_ms']:<7.3f} "
-                                f"{r['peak_gb']:>8.3f}"
-                            )
-                        except Exception as exc:  # noqa: BLE001
-                            print(
-                                f"{batch:>6} {seq_len:>4} {hidden:>5} "
-                                f"{num_blocks:>6} {name:>9} ERROR: "
-                                f"{type(exc).__name__}: {str(exc)[:80]}"
-                            )
-                        finally:
-                            if device.type == "cuda":
-                                torch.cuda.empty_cache()
+                        for compile_mode in compile_modes:
+                            recurrent_backend = _BACKENDS[name]
+                            try:
+                                r = _bench_one(
+                                    args.rnn,
+                                    recurrent_backend,
+                                    args.recompute,
+                                    batch=batch,
+                                    seq_len=seq_len,
+                                    input_size=args.input_size,
+                                    hidden_size=hidden,
+                                    num_layers=args.num_layers,
+                                    projection_size=args.projection_size,
+                                    num_blocks=num_blocks,
+                                    device=device,
+                                    dtype=dtype,
+                                    compile_mode=compile_mode,
+                                    warmup=args.warmup,
+                                    iters=args.iters,
+                                )
+                                print(
+                                    f"{batch:>6} {seq_len:>4} {hidden:>5} "
+                                    f"{num_blocks:>6} {name:>9} {compile_mode:>15} "
+                                    f"{r['fwd_ms']:>9.3f} +/- {r['fwd_ci_ms']:<7.3f} "
+                                    f"{r['bwd_ms']:>9.3f} +/- {r['bwd_ci_ms']:<7.3f} "
+                                    f"{r['total_ms']:>9.3f} +/- {r['total_ci_ms']:<7.3f} "
+                                    f"{r['peak_gb']:>8.3f}"
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                print(
+                                    f"{batch:>6} {seq_len:>4} {hidden:>5} "
+                                    f"{num_blocks:>6} {name:>9} "
+                                    f"{compile_mode:>15} ERROR: "
+                                    f"{type(exc).__name__}: {str(exc)[:80]}"
+                                )
+                            finally:
+                                if device.type == "cuda":
+                                    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
