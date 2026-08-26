@@ -1024,8 +1024,7 @@ class TestUCB1TunedScore:
         assert 0.25 + bias_correction > 0.25
         expected = torch.tensor(
             [
-                0.5
-                + math.sqrt(log_parent_visits / 1000 * bias_correction),
+                0.5 + math.sqrt(log_parent_visits / 1000 * bias_correction),
                 0.5 + math.sqrt(log_parent_visits / 1000 * 0.25),
             ]
         )
