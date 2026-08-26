@@ -356,9 +356,11 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
             previous = torch.where(init_t.unsqueeze(-1), 0, hidden)
 
             hidden_pre = _dreamer_v3_linear(previous, hidden_weight, hidden_bias)
-            hidden_norm, hidden_normalized, hidden_inv_rms = (
-                _rms_norm_with_backward_state(hidden_pre, hidden_norm_weight, norm_eps)
-            )
+            (
+                hidden_norm,
+                hidden_normalized,
+                hidden_inv_rms,
+            ) = _rms_norm_with_backward_state(hidden_pre, hidden_norm_weight, norm_eps)
             hidden_features, hidden_activation_derivative = _activation_with_derivative(
                 activation, hidden_norm
             )
@@ -442,9 +444,13 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
         saved_tensors = ctx.saved_tensors
         num_layers = ctx.num_layers
         parameter_count = 3 * num_layers + 2
-        projected_input, initial_hidden, is_init, hidden_weight, hidden_norm_weight = (
-            saved_tensors[:5]
-        )
+        (
+            projected_input,
+            initial_hidden,
+            is_init,
+            hidden_weight,
+            hidden_norm_weight,
+        ) = saved_tensors[:5]
         parameter_tensors = saved_tensors[5 : 5 + parameter_count]
         dynamic = [
             parameter_tensors[index : index + 3]
