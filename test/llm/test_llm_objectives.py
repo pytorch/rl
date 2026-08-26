@@ -1627,6 +1627,21 @@ class TestRewardModel:
         # total differentiable loss is the sum of the loss_ terms
         (out.loss_reward_model + out.loss_center).backward()
 
+    def test_negative_center_coeff_raises(self):
+        """A negative coefficient would reward score blow-up instead of penalizing it."""
+        with pytest.raises(ValueError, match="center_coeff"):
+            RewardModelLoss(score_network=self._score_network(), center_coeff=-1.0)
+
+    def test_forward_does_not_modify_input(self):
+        """The score network runs on a shallow clone, leaving the caller's data intact."""
+        loss_fn = RewardModelLoss(score_network=self._score_network())
+        data = self._make_data()
+        keys_before = set(data.keys(True, True))
+        loss_fn(data)
+        assert set(data.keys(True, True)) == keys_before
+        assert "score" not in data["chosen"].keys()
+        assert "score" not in data["rejected"].keys()
+
     def test_nested_keys(self):
         """Exercise NestedKey inputs via set_keys (CLAUDE.md requirement)."""
         loss_fn = RewardModelLoss(score_network=self._score_network())

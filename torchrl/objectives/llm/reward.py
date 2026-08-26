@@ -239,7 +239,7 @@ class RewardModelLoss(LossModule):
                 f"tensordict with keys {set(tensordict.keys())}."
             )
         if self.score_network is not None:
-            sub_td = self.score_network(sub_td)
+            sub_td = self.score_network(sub_td.clone(False))
             score_keys = self.score_network.out_keys
             if self.tensor_keys.score in score_keys:
                 score_key = self.tensor_keys.score
