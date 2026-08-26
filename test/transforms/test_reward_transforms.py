@@ -843,9 +843,7 @@ class TestReward2Go(TransformBase):
         rb.extend(td)
         sample = rb.sample(13)
         assert sample[out_key].shape == (13, t, 1)
-        expected = reward2go(
-            sample["next", "reward"], sample["next", "done"], gamma
-        )
+        expected = reward2go(sample["next", "reward"], sample["next", "done"], gamma)
         torch.testing.assert_close(sample[out_key], expected)
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -874,9 +872,7 @@ class TestReward2Go(TransformBase):
         rb.extend(td)
         sample = rb.sample(13)
         assert sample[out_key].shape == (13, t, 1)
-        expected = reward2go(
-            sample["next", "reward"], sample["next", "done"], gamma
-        )
+        expected = reward2go(sample["next", "reward"], sample["next", "done"], gamma)
         torch.testing.assert_close(sample[out_key], expected)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
