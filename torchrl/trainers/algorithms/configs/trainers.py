@@ -21,6 +21,7 @@ from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, Con
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
@@ -1690,8 +1691,7 @@ class GRPOTrainerConfig(TrainerConfig):
         super().__post_init__()
 
 
-def _make_grpo_trainer(**kwargs):
-    from torchrl.trainers.algorithms.grpo import GRPOTrainer
+def _make_grpo_trainer(**kwargs) -> GRPOTrainer:
     from torchrl.trainers.trainers import Logger
 
     collector = kwargs.pop("collector")

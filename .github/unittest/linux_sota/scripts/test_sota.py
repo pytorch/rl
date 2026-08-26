@@ -25,18 +25,6 @@ commands = {
   logger.eval_episodes=4 \
   checkpoint.save_iter=2
 """,
-    "grpo_sync": """python sota-implementations/grpo/grpo-sync.py \
-  train.epochs=1 \
-  train.total_dialog_turns=4 \
-  train.mixed_precision=False \
-  logger.backend=
-""",
-    "grpo_async": """python sota-implementations/grpo/grpo-async.py \
-  train.epochs=1 \
-  train.total_dialog_turns=4 \
-  train.mixed_precision=False \
-  logger.backend=
-""",
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
   replay_buffer.dataset= \
