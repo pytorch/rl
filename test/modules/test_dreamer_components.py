@@ -19,6 +19,9 @@ from tensordict.nn import TensorDictModule
 from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules import SafeModule
+from torchrl.modules.models._dreamer_v3_block_gru_triton import (
+    _has_triton as _has_dreamer_v3_triton,
+)
 from torchrl.modules.models.model_based import (
     _DreamerV3BlockLinear,
     _DreamerV3RMSNorm,
@@ -859,6 +862,167 @@ class TestDreamerV3Components:
             + output["next", "prior_logits"].square().mean()
         ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
+
+
+def test_public_block_gru_triton_errors():
+    with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", False):
+        with pytest.raises(RuntimeError, match="requires Triton"):
+            DreamerV3BlockGRU(6, 8, recurrent_backend="triton")
+
+    class CustomActivation(torch.nn.Module):
+        def forward(self, value):
+            return value.sigmoid()
+
+    with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", True):
+        with pytest.raises(ValueError, match="supports nn.SiLU, nn.Tanh, and nn.ReLU"):
+            DreamerV3BlockGRU(
+                6,
+                8,
+                projection_size=4,
+                num_blocks=2,
+                activation_class=CustomActivation,
+                recurrent_backend="triton",
+            )
+
+    with (
+        mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", True),
+        mock.patch(
+            "torchrl.modules.models._dreamer_v3_block_gru_triton._has_triton", True
+        ),
+    ):
+        module = DreamerV3BlockGRU(
+            6,
+            8,
+            projection_size=4,
+            num_blocks=2,
+            recurrent_backend="triton",
+        )
+        with pytest.raises(RuntimeError, match="requires CUDA tensors"):
+            module(torch.randn(2, 3, 6))
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+@pytest.mark.parametrize(
+    ("activation_class", "num_blocks", "num_layers", "batch", "time", "dtype"),
+    [
+        (torch.nn.SiLU, 1, 1, 1, 1, torch.float32),
+        (torch.nn.Tanh, 8, 2, 2, 3, torch.float32),
+        (torch.nn.ReLU, 8, 1, 3, 2, torch.bfloat16),
+    ],
+)
+def test_public_block_gru_triton_gradient_parity(
+    activation_class, num_blocks, num_layers, batch, time, dtype
+):
+    torch.manual_seed(0)
+    kwargs = {
+        "input_size": 12,
+        "hidden_size": 32,
+        "projection_size": 32,
+        "num_blocks": num_blocks,
+        "num_layers": num_layers,
+        "activation_class": activation_class,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    triton_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    triton_module.load_state_dict(reference.state_dict())
+    value_source = torch.randn(batch, time, 12, device="cuda", dtype=dtype)
+    hidden_source = torch.randn(batch, 32, device="cuda", dtype=dtype)
+    is_init = torch.zeros(batch, time, dtype=torch.bool, device="cuda")
+    if time > 1:
+        is_init[0, 1] = True
+        is_init[-1, 0] = True
+    output_cotangent = torch.randn(batch, time, 32, device="cuda", dtype=dtype) / (
+        batch * time * 32
+    )
+    hidden_cotangent = torch.randn(batch, 32, device="cuda", dtype=dtype) / (batch * 32)
+
+    def run(module):
+        value = value_source.detach().clone().requires_grad_()
+        hidden = hidden_source.detach().clone().requires_grad_()
+        output, final_hidden = module(value, hidden, is_init)
+        loss = (output * output_cotangent).float().sum() + (
+            final_hidden * hidden_cotangent
+        ).float().sum()
+        loss.backward()
+        return (
+            output.detach(),
+            final_hidden.detach(),
+            value.grad,
+            hidden.grad,
+            {name: parameter.grad for name, parameter in module.named_parameters()},
+        )
+
+    expected = run(reference)
+    actual = run(triton_module)
+    tolerance = (
+        {"atol": 4e-2, "rtol": 6e-2}
+        if dtype is torch.bfloat16
+        else {"atol": 3e-4, "rtol": 3e-4}
+    )
+    for expected_value, actual_value in zip(expected[:4], actual[:4]):
+        torch.testing.assert_close(actual_value, expected_value, **tolerance)
+    assert actual[4].keys() == expected[4].keys()
+    for name in expected[4]:
+        torch.testing.assert_close(actual[4][name], expected[4][name], **tolerance)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+def test_public_block_gru_triton_compile_recurrent_loss():
+    torch.manual_seed(1)
+    kwargs = {
+        "input_size": 16,
+        "hidden_size": 32,
+        "projection_size": 32,
+        "num_blocks": 8,
+        "num_layers": 2,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    module.load_state_dict(reference.state_dict())
+    compiled = torch.compile(
+        module, fullgraph=True, dynamic=False, mode="reduce-overhead"
+    )
+    value_source = torch.randn(2, 5, 16, device="cuda", requires_grad=True)
+    hidden_source = torch.randn(2, 32, device="cuda", requires_grad=True)
+    is_init = torch.tensor(
+        [[False, False, True, False, False], [True, False, False, False, True]],
+        device="cuda",
+    )
+
+    def run(candidate, value, hidden):
+        output, final_hidden = candidate(value, hidden, is_init)
+        loss = F.smooth_l1_loss(output[:, :-1, :16], value.detach()[:, 1:])
+        loss = loss + 0.01 * final_hidden.square().mean()
+        loss.backward()
+        return output.detach(), final_hidden.detach()
+
+    expected_value = value_source.detach().clone().requires_grad_()
+    expected_hidden = hidden_source.detach().clone().requires_grad_()
+    expected = run(reference, expected_value, expected_hidden)
+    actual = run(compiled, value_source, hidden_source)
+    torch.testing.assert_close(actual, expected, atol=3e-4, rtol=3e-4)
+    torch.testing.assert_close(
+        value_source.grad, expected_value.grad, atol=3e-4, rtol=3e-4
+    )
+    torch.testing.assert_close(
+        hidden_source.grad, expected_hidden.grad, atol=3e-4, rtol=3e-4
+    )
+    for parameter, expected_parameter in zip(
+        module.parameters(), reference.parameters()
+    ):
+        torch.testing.assert_close(
+            parameter.grad, expected_parameter.grad, atol=3e-4, rtol=3e-4
+        )
 
 
 if __name__ == "__main__":

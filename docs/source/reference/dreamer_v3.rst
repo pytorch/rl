@@ -115,7 +115,9 @@ exposes the same block-diagonal update as a single-step module, while
 :class:`~torchrl.modules.DreamerV3BlockGRU` executes batch-major sequences with
 mixed episode resets. The sequence module uses an ordinary-autograd reference
 loop by default and offers an opt-in compiled scan backend for long training
-sequences.
+sequences. On CUDA, the explicit ``"triton"`` backend supports SiLU, Tanh, and
+ReLU dynamics and fuses the complete forward and reverse-time recurrences. It
+requires Triton 3.3 or newer and never silently falls back to another backend.
 
 The three objectives
 --------------------

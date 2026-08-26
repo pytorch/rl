@@ -23,6 +23,13 @@ Example::
     python benchmarks/bench_rnn_backward.py --rnn gru \
         --batches 256,1024,4096 --seq-lens 16,32,64 --hiddens 128,256,512
 
+Representative DreamerV3 performance gate::
+
+    python benchmarks/bench_rnn_backward.py --rnn block_gru \
+        --backends scan,triton --batches 16 --seq-lens 64,512 \
+        --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
+        --dtype bfloat16 --compile-modes default,reduce-overhead,max-autotune
+
 The block-GRU grid compares its reference and specialized scan backends across
 batch size, horizon, hidden width, and block count. Timings are CUDA-synchronized
 means with 95% confidence intervals. ``--compile-modes`` optionally compares
@@ -317,7 +324,7 @@ def main() -> None:
     backend_arg = args.backends
     if backend_arg is None:
         backend_arg = (
-            "reference,scan" if args.rnn == "block_gru" else "cudnn,scan,triton"
+            "reference,scan,triton" if args.rnn == "block_gru" else "cudnn,scan,triton"
         )
     backends = [b.strip() for b in backend_arg.split(",") if b.strip()]
     compile_modes = [
