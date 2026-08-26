@@ -635,7 +635,7 @@ if _has_triton:
                         grad_gate_slice = grad_candidate_pre
                     else:
                         grad_gate_slice = grad_update_pre
-                    weight_t = tl.load(
+                    gate_weight_transposed = tl.load(
                         gate_weight_t_ptr
                         + block * G_PAD * D_PAD
                         + (gate * D_PAD + d_off)[:, None] * D_PAD
@@ -646,7 +646,9 @@ if _has_triton:
                     if COMPUTE_BF16:
                         grad_gate_slice = grad_gate_slice.to(tl.bfloat16)
                     grad_value += tl.dot(
-                        grad_gate_slice, weight_t, input_precision="ieee"
+                        grad_gate_slice,
+                        gate_weight_transposed,
+                        input_precision="ieee",
                     )
                 tl.store(
                     grad_layer_ptr + b64[:, None] * H + index[None, :],
@@ -728,7 +730,7 @@ if _has_triton:
                                 mask=mask_b[:, None] & (kk[None, :] < D),
                                 other=0.0,
                             )
-                            weight_t = tl.load(
+                            later_weight_transposed = tl.load(
                                 later_weight_t_ptr
                                 + ((layer - 1) * NUM_BLOCKS + block) * D_PAD * D_PAD
                                 + kk[:, None] * D_PAD
@@ -739,7 +741,9 @@ if _has_triton:
                             if COMPUTE_BF16:
                                 grad_chunk = grad_chunk.to(tl.bfloat16)
                             grad_previous += tl.dot(
-                                grad_chunk, weight_t, input_precision="ieee"
+                                grad_chunk,
+                                later_weight_transposed,
+                                input_precision="ieee",
                             )
                         tl.store(
                             grad_layer_ptr + b64[:, None] * H + index[None, :],
@@ -843,7 +847,7 @@ if _has_triton:
                     mask=mask_b[:, None] & (kk[None, :] < P),
                     other=0.0,
                 )
-                weight_t = tl.load(
+                hidden_weight_transposed = tl.load(
                     hidden_weight_t_ptr + kk[:, None] * H_PAD + h_off[None, :],
                     mask=(kk[:, None] < P_PAD) & (h_off[None, :] < H_PAD),
                     other=0.0,
@@ -851,7 +855,9 @@ if _has_triton:
                 if COMPUTE_BF16:
                     grad_chunk = grad_chunk.to(tl.bfloat16)
                 hidden_carry_grad += tl.dot(
-                    grad_chunk, weight_t, input_precision="ieee"
+                    grad_chunk,
+                    hidden_weight_transposed,
+                    input_precision="ieee",
                 )
             dh_previous += hidden_carry_grad
             dh_previous = tl.where(reset_t[:, None], 0.0, dh_previous)
