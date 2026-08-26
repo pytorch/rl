@@ -299,10 +299,20 @@ class TestPrefillReplayBuffer:
         result = prefill_replay_buffer(target, offline, n_samples=50)
         assert result is target
 
-    def test_prefill_respects_chunk_size(self):
+    def test_prefill_respects_chunk_size(self, monkeypatch):
         offline = _make_offline_buffer(n=1000)
         target = ReplayBuffer(storage=LazyTensorStorage(10_000))
+        chunk_sizes = []
+        extend = target.extend
+
+        def record_extend(data):
+            chunk_sizes.append(data.batch_size[0])
+            return extend(data)
+
+        monkeypatch.setattr(target, "extend", record_extend)
         prefill_replay_buffer(target, offline, n_samples=250, chunk_size=37)
+
+        assert chunk_sizes == [37, 37, 37, 37, 37, 37, 28]
         assert len(target) == 250
 
     def test_prefill_string_dataset_uses_chunk_size_as_dataset_batch_size(
