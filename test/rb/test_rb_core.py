@@ -675,9 +675,7 @@ def test_rb_trajectories(stack, reduction):
         generator=torch.Generator().manual_seed(0),
     )
     rb.extend(traj_td)
-    update = traj_td.clone().set(
-        "index", torch.arange(3).view(3, 1).expand(3, 4)
-    )
+    update = traj_td.clone().set("index", torch.arange(3).view(3, 1).expand(3, 4))
     update.set("td_error", priorities)
     rb.update_tensordict_priority(update)
 
@@ -693,9 +691,9 @@ def test_rb_trajectories(stack, reduction):
     assert indices.unique().numel() == 3
     torch.testing.assert_close(
         sampled_td["priority_weight"],
-        expected_weights[indices].unsqueeze(-1).expand_as(
-            sampled_td["priority_weight"]
-        ),
+        expected_weights[indices]
+        .unsqueeze(-1)
+        .expand_as(sampled_td["priority_weight"]),
     )
 
 
