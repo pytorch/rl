@@ -1051,9 +1051,7 @@ class TestSFT:
     def test_sft_reduction_and_sequence_normalization(
         self, normalize_by_seq_length, reduction, expected
     ):
-        policy = _FixedSFTPolicy(
-            torch.tensor([[-2.0, -100.0], [-1.0, -3.0]])
-        )
+        policy = _FixedSFTPolicy(torch.tensor([[-2.0, -100.0], [-1.0, -3.0]]))
         loss = SFTLoss(
             policy,
             tokenizer=object(),
@@ -1064,12 +1062,8 @@ class TestSFT:
         torch.testing.assert_close(loss.loss_sft, torch.tensor(expected))
 
     def test_minor_sft_uses_reference_log_probs(self):
-        policy = _FixedSFTPolicy(
-            torch.tensor([[-2.0, -100.0], [-1.0, -3.0]])
-        )
-        data = _sft_loss_data(
-            ref_log_probs=torch.tensor([[-4.0, 0.0], [-1.0, -1.0]])
-        )
+        policy = _FixedSFTPolicy(torch.tensor([[-2.0, -100.0], [-1.0, -3.0]]))
+        data = _sft_loss_data(ref_log_probs=torch.tensor([[-4.0, 0.0], [-1.0, -1.0]]))
         loss = SFTLoss(
             policy,
             tokenizer=object(),
@@ -1079,9 +1073,7 @@ class TestSFT:
             beta=0.5,
         )(data)
 
-        torch.testing.assert_close(
-            loss.loss_sft, torch.tensor([0.3132617, 1.3132617])
-        )
+        torch.testing.assert_close(loss.loss_sft, torch.tensor([0.3132617, 1.3132617]))
 
     def test_sft_assistant_only(self, data):
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
