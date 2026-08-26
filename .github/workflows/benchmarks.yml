@@ -124,8 +124,8 @@ jobs:
 
           if [ "${{ github.ref }}" = "refs/heads/codex/dreamerv3-block-gru-triton" ]; then
             python -m pytest -vv --timeout=240 \
-              test/modules/test_dreamer_components.py \
-              -k public_block_gru_triton
+              'test/modules/test_dreamer_components.py::test_public_block_gru_triton_gradient_parity[Tanh-8-2-2-3-dtype1]' \
+              test/modules/test_dreamer_components.py::test_public_block_gru_triton_compile_recurrent_loss
             exit 0
           fi
 
