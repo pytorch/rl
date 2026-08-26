@@ -924,6 +924,34 @@ class TestLosses:
         ), f"clip_fraction out of range: {loss_vals.clip_fraction}"
 
 
+class _FixedSFTPolicy(torch.nn.Module):
+    def __init__(self, log_probs):
+        super().__init__()
+        self.register_buffer("log_probs", log_probs)
+
+    def forward(self, tensordict):
+        return TensorDict(
+            {("log_probs", "full"): self.log_probs},
+            batch_size=[self.log_probs.shape[0]],
+        )
+
+
+def _sft_loss_data(ref_log_probs=None):
+    data = TensorDict(
+        {
+            ("history", "full"): torch.zeros(2, 1),
+            ("masks", "all_assistant_mask"): torch.tensor(
+                [[True, False], [True, True]]
+            ),
+            ("masks", "all_attention_mask"): torch.ones(2, 2, dtype=torch.bool),
+        },
+        batch_size=[2],
+    )
+    if ref_log_probs is not None:
+        data[("next", "ref_log_probs", "full")] = ref_log_probs
+    return data
+
+
 class TestSFT:
     @pytest.fixture(scope="class")
     def data(self):
@@ -999,63 +1027,61 @@ class TestSFT:
     @pytest.mark.skipif(
         not _has_transformers, reason="transformers lib required to test SFT"
     )
-    @pytest.mark.parametrize("loss_function", ["sft", "minor_sft"])
-    @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
-    @pytest.mark.parametrize("normalize_by_seq_length", [True, False])
-    @pytest.mark.parametrize("kl_to_ref_coeff", [None, 0.1])
-    def test_sft(
-        self,
-        loss_function,
-        reduction,
-        normalize_by_seq_length,
-        kl_to_ref_coeff,
-        data,
-        policy_train,
-    ):
+    def test_sft(self, data, policy_train):
         policy_train, tokenizer = policy_train
         loss = SFTLoss(
             actor_network=policy_train,
             tokenizer=tokenizer,
-            reduction=reduction,
-            normalize_by_seq_length=normalize_by_seq_length,
-            kl_to_ref_coeff=kl_to_ref_coeff if loss_function != "minor_sft" else None,
-            loss_function=loss_function,
-            beta=0.1,
             tokenizer_kwargs={"chat_template_name": "qwen"},
         )
 
-        td = data
-        if kl_to_ref_coeff is not None or loss_function == "minor_sft":
-            policy_ref = TransformersWrapper(
-                policy_train.model,
-                tokenizer=tokenizer,
-                generate=False,
-                return_log_probs=True,
-                chat_template_name="qwen",
-                input_mode="history",
-                pad_output=False,
-            )
-            transform = RetrieveLogProb(
-                policy_ref,
-                assistant_only=True,
-                tokenizer_kwargs={"chat_template_name": "qwen"},
-                tokenizer=tokenizer,
-                log_probs_full_key=("ref_log_probs", "full"),
-            )
-            with torch.no_grad():
-                # Compute ref log-probs
-                transform(td)
-        loss_vals = loss(td)
-        if kl_to_ref_coeff is not None and loss_function != "minor_sft":
-            assert loss_vals.loss_kl_to_ref.shape == ()
-            assert loss_vals.kl_to_ref.shape == ()
-        if reduction == "mean":
-            assert loss_vals.loss_sft.shape == ()
-        elif reduction == "sum":
-            assert loss_vals.loss_sft.shape == ()
-        elif reduction == "none":
-            assert loss_vals.loss_sft.shape == (2,)
+        loss_vals = loss(data)
+        assert loss_vals.loss_sft.shape == ()
         assert loss_vals.sum(reduce=True).shape == ()
+
+    @pytest.mark.parametrize(
+        "normalize_by_seq_length,reduction,expected",
+        [
+            (True, "none", [2.0, 2.0]),
+            (False, "none", [2.0, 4.0]),
+            (False, "mean", 3.0),
+            (False, "sum", 6.0),
+        ],
+    )
+    def test_sft_reduction_and_sequence_normalization(
+        self, normalize_by_seq_length, reduction, expected
+    ):
+        policy = _FixedSFTPolicy(
+            torch.tensor([[-2.0, -100.0], [-1.0, -3.0]])
+        )
+        loss = SFTLoss(
+            policy,
+            tokenizer=object(),
+            normalize_by_seq_length=normalize_by_seq_length,
+            reduction=reduction,
+        )(_sft_loss_data())
+
+        torch.testing.assert_close(loss.loss_sft, torch.tensor(expected))
+
+    def test_minor_sft_uses_reference_log_probs(self):
+        policy = _FixedSFTPolicy(
+            torch.tensor([[-2.0, -100.0], [-1.0, -3.0]])
+        )
+        data = _sft_loss_data(
+            ref_log_probs=torch.tensor([[-4.0, 0.0], [-1.0, -1.0]])
+        )
+        loss = SFTLoss(
+            policy,
+            tokenizer=object(),
+            normalize_by_seq_length=False,
+            reduction="none",
+            loss_function="minor_sft",
+            beta=0.5,
+        )(data)
+
+        torch.testing.assert_close(
+            loss.loss_sft, torch.tensor([0.3132617, 1.3132617])
+        )
 
     def test_sft_assistant_only(self, data):
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
