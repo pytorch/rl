@@ -79,7 +79,22 @@ Strongly encouraged (not mandatory):
   `pytest.main(...)`, so the file can be executed directly.
 - New algorithms: also tested in the sota-implementations CI.
 
-### 7a. The `gpu` marker (load-bearing!)
+### 7a. Behavioral regression tests
+
+- **Test the bug fix, not its implementation.** A regression test must assert
+  the behavior that was broken and fail if the bug is reintroduced.
+- **Use mocks and monkeypatching sparingly.** A test that only proves an
+  internal method was called is incomplete. For example, for a retry bug, make
+  the dependency fail once and then succeed, and assert that the operation
+  returns the expected result; do not only mock `_retry()` and assert that it
+  was called.
+- Prefer small deterministic inputs and expected results derived independently
+  from the code under test. Shape, finiteness, key-presence, and no-exception
+  checks are not enough unless they are the behavior being fixed.
+- Parametrize only when cases exercise distinguishable behavior. Every
+  parameter must reach the code under test and affect an assertion.
+
+### 7b. The `gpu` marker (load-bearing!)
 
 The unified Linux CI (`.github/workflows/test-linux.yml`) collects tests with
 **two mutually-exclusive marker filters**:
@@ -121,7 +136,7 @@ CPU and GPU paths via parametrization (e.g.
 `device = "cpu" if torch.cuda.device_count() == 0 else "cuda"`); those
 must continue to run on the CPU side.
 
-### 7b. PR-gated CI suites: `ci/olddeps` and `ci/optdeps` labels
+### 7c. PR-gated CI suites: `ci/olddeps` and `ci/optdeps` labels
 
 Two expensive suites in `.github/workflows/test-linux.yml` do NOT run on
 pull requests by default. They run fully on every push to main and on the
