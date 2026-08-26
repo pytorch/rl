@@ -66,11 +66,11 @@ if _has_triton:
     import triton.language as tl
 
     _CONFIGS = [
-        triton.Config({"BLOCK_B": 1, "BLOCK_K": 16}, num_warps=1),
-        triton.Config({"BLOCK_B": 2, "BLOCK_K": 16}, num_warps=2),
-        triton.Config({"BLOCK_B": 4, "BLOCK_K": 32}, num_warps=4),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=4),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=8),
+        triton.Config({"BLOCK_B": 1, "BLOCK_K": 16}, num_warps=1, num_stages=1),
+        triton.Config({"BLOCK_B": 2, "BLOCK_K": 16}, num_warps=2, num_stages=1),
+        triton.Config({"BLOCK_B": 4, "BLOCK_K": 32}, num_warps=4, num_stages=1),
+        triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=4, num_stages=1),
+        triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=8, num_stages=1),
     ]
 
     def _prune_configs(configs, named_args, **kwargs):
@@ -656,7 +656,7 @@ if _has_triton:
 
             hidden_feature_grad = tl.zeros([BLOCK_B, P_PAD], tl.float32)
             for layer_inv in tl.static_range(NUM_LAYERS):
-                layer: tl.constexpr = NUM_LAYERS - 1 - layer_inv
+                layer = NUM_LAYERS - 1 - layer_inv
                 correction_sum = tl.zeros([BLOCK_B], tl.float32)
                 inv = tl.load(
                     dynamic_inv_rms_ptr + (layer * B + b64) * T + t,
