@@ -68,7 +68,7 @@ class TestMLP:
             norm_kwargs=norm_kwargs,
             dropout=dropout,
             bias_last_layer=bias_last_layer,
-            single_bias_last_layer=False,
+            single_bias_last_layer=single_bias_last_layer,
             layer_class=layer_class,
             device=device,
         )
@@ -80,6 +80,34 @@ class TestMLP:
             [out_features] if isinstance(out_features, Number) else out_features
         )
         assert y.shape == torch.Size([batch, *out_features])
+
+    def test_single_bias_last_layer(self):
+        mlp = MLP(
+            in_features=2,
+            out_features=(2, 3),
+            depth=0,
+            single_bias_last_layer=True,
+        )
+        parameters = list(mlp.parameters())
+        shared_bias = [parameter for parameter in parameters if parameter.numel() == 1]
+        assert len(shared_bias) == 1
+
+        with torch.no_grad():
+            for parameter in parameters:
+                parameter.zero_()
+            shared_bias[0].fill_(2)
+
+        output = mlp(torch.zeros(4, 2))
+        torch.testing.assert_close(output, torch.full((4, 2, 3), 2.0))
+
+        mlp_without_bias = MLP(
+            in_features=2,
+            out_features=3,
+            depth=0,
+            bias_last_layer=False,
+            single_bias_last_layer=True,
+        )
+        assert all(parameter.numel() != 1 for parameter in mlp_without_bias.parameters())
 
     def test_kwargs(self):
         def make_activation(shift):

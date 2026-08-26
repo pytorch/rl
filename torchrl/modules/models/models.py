@@ -26,6 +26,15 @@ from torchrl.modules.models.utils import (
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet  # noqa
 
 
+class _SharedBias(nn.Module):
+    def __init__(self, device: DEVICE_TYPING | None = None, dtype=None):
+        super().__init__()
+        self.bias = nn.Parameter(torch.zeros(1, device=device, dtype=dtype))
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input + self.bias
+
+
 class MLP(nn.Sequential):
     """A multi-layer perceptron.
 
@@ -70,9 +79,8 @@ class MLP(nn.Sequential):
             dropout);
         bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
-        single_bias_last_layer (bool): if ``True``, the last dimension of the bias of the last layer will be a singleton
-            dimension.
-            default: True;
+        single_bias_last_layer (bool): if ``True``, the bias of the last layer is
+            shared across its output features. Defaults to ``False``.
         layer_class (Type[nn.Module] or callable, optional): class to be used
             for the linear layers;
         layer_kwargs (dict or list of dicts, optional): kwargs for the linear
@@ -209,9 +217,6 @@ class MLP(nn.Sequential):
         self.layer_kwargs = layer_kwargs
 
         self.activate_last_layer = activate_last_layer
-        if single_bias_last_layer:
-            raise NotImplementedError
-
         if not (isinstance(num_cells, Sequence) or depth is not None):
             raise RuntimeError(
                 "If num_cells is provided as an integer, \
@@ -252,16 +257,15 @@ class MLP(nn.Sequential):
             _bias = layer_kwargs.pop(
                 "bias", self.bias_last_layer if i == self.depth else True
             )
+            single_bias = i == self.depth and self.single_bias_last_layer and _bias
             if _in is not None:
-                layers.append(
-                    create_on_device(
-                        self.layer_class,
-                        device,
-                        _in,
-                        _out,
-                        bias=_bias,
-                        **layer_kwargs,
-                    )
+                layer = create_on_device(
+                    self.layer_class,
+                    device,
+                    _in,
+                    _out,
+                    bias=_bias and not single_bias,
+                    **layer_kwargs,
                 )
             else:
                 try:
@@ -271,9 +275,20 @@ class MLP(nn.Sequential):
                         f"The lazy version of {self.layer_class.__name__} is not implemented yet. "
                         "Consider providing the input feature dimensions explicitly when creating an MLP module"
                     )
+                layer = create_on_device(
+                    lazy_version,
+                    device,
+                    _out,
+                    bias=_bias and not single_bias,
+                    **layer_kwargs,
+                )
+            layers.append(layer)
+            if single_bias:
+                parameter = next(layer.parameters(), None)
                 layers.append(
-                    create_on_device(
-                        lazy_version, device, _out, bias=_bias, **layer_kwargs
+                    _SharedBias(
+                        device=parameter.device if parameter is not None else device,
+                        dtype=parameter.dtype if parameter is not None else None,
                     )
                 )
 
