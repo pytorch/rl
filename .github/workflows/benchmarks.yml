@@ -20,7 +20,7 @@ permissions:
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: benchmarks-ci-${{ github.run_id }}
+  group: benchmarks-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
@@ -120,16 +120,6 @@ jobs:
             nvcc --version
             python -c "import torch; assert torch.cuda.device_count()"
             python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
-          fi
-
-          if [ "${{ github.ref }}" = "refs/heads/codex/dreamerv3-block-gru-triton" ]; then
-            python benchmarks/bench_rnn_backward.py --rnn block_gru \
-              --backends scan,triton --batches 16 --seq-lens 64,512 \
-              --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
-              --dtype bfloat16 \
-              --compile-modes default,reduce-overhead,max-autotune \
-              --warmup 10 --iters 30
-            exit 0
           fi
 
           cd benchmarks/
