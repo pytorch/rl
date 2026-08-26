@@ -1080,28 +1080,18 @@ class TestNoisyLinear:
         assert not torch.allclose(y2, y3, atol=1e-6)
 
     def test_factorized_gaussian_noise(self, device):
-        """Test that the noise follows factorized Gaussian distribution."""
         torch.manual_seed(0)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
-        # Get noise samples
-        noise_samples = []
         with set_exploration_type(ExplorationType.RANDOM):
-            for _ in range(1000):
-                layer.reset_noise()
-                # Extract the actual noise used
-                weight_noise = layer.weight - layer.weight_mu
-                noise_samples.append(weight_noise.flatten())
+            weight_noise = (layer.weight - layer.weight_mu) / layer.weight_sigma
+            bias_noise = (layer.bias - layer.bias_mu) / layer.bias_sigma
 
-        noise_samples = torch.stack(noise_samples)
-
-        # Check that noise has approximately zero mean
-        assert abs(noise_samples.mean()) < 0.1
-
-        # Check that noise has reasonable variance
-        noise_std = noise_samples.std()
-        expected_std = layer.std_init / math.sqrt(10)  # Based on initialization
-        assert 0.5 * expected_std < noise_std < 2.0 * expected_std
+        reference = bias_noise.abs().argmax()
+        input_noise = weight_noise[reference] / bias_noise[reference]
+        torch.testing.assert_close(
+            weight_noise, torch.outer(bias_noise, input_noise)
+        )
 
     def test_weight_property_behavior(self, device):
         """Test that weight property returns correct values based on exploration mode."""
@@ -1158,37 +1148,25 @@ class TestNoisyLinear:
         assert torch.allclose(y_det_1, y_det_2, atol=1e-6)
 
     def test_noise_reset_function(self, device):
-        """Test the reset_noise utility function."""
         torch.manual_seed(0)
-
-        # Create network with multiple NoisyLinear layers using new behavior
         network = nn.Sequential(
             NoisyLinear(10, 20, device=device, use_exploration_type=True),
             nn.ReLU(),
             NoisyLinear(20, 5, device=device, use_exploration_type=True),
         ).to(device)
+        noisy_layers = [module for module in network if isinstance(module, NoisyLinear)]
+        noise_before = [
+            (layer.weight_epsilon.clone(), layer.bias_epsilon.clone())
+            for layer in noisy_layers
+        ]
 
-        x = torch.randn(3, 10, device=device)
+        network.apply(reset_noise)
 
-        with set_exploration_type(ExplorationType.RANDOM):
-            # First forward pass
-            network(x)
-
-            # Reset noise using utility function
-            reset_noise(network)
-            network(x)
-
-            # Check that at least one of the layers has noise
-            changed = False
-            for module in network.modules():
-                if hasattr(module, "weight_mu"):
-                    # Check if the actual weights have noise
-                    if not torch.allclose(module.weight, module.weight_mu, atol=1e-6):
-                        changed = True
-                        break
-
-        # In RANDOM mode, there should be noise
-        assert changed, "Expected noise to be present in RANDOM exploration mode"
+        for layer, (weight_epsilon, bias_epsilon) in zip(
+            noisy_layers, noise_before, strict=True
+        ):
+            assert not torch.equal(layer.weight_epsilon, weight_epsilon)
+            assert not torch.equal(layer.bias_epsilon, bias_epsilon)
 
     def test_noisy_linear_gradients(self, device):
         """Test that gradients flow through NoisyLinear parameters."""
