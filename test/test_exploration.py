@@ -1089,9 +1089,7 @@ class TestNoisyLinear:
 
         reference = bias_noise.abs().argmax()
         input_noise = weight_noise[reference] / bias_noise[reference]
-        torch.testing.assert_close(
-            weight_noise, torch.outer(bias_noise, input_noise)
-        )
+        torch.testing.assert_close(weight_noise, torch.outer(bias_noise, input_noise))
 
     def test_weight_property_behavior(self, device):
         """Test that weight property returns correct values based on exploration mode."""
