@@ -265,9 +265,7 @@ class TestRNDLoss:
         target = nn.Linear(1, 1, bias=False)
         target.weight.data.zero_()
         predictor = nn.Identity()
-        loss_fn = RNDLoss(
-            predictor, target, update_fraction=0.5, reduction="none"
-        )
+        loss_fn = RNDLoss(predictor, target, update_fraction=0.5, reduction="none")
         batch = TensorDict(
             {"next": {"observation": torch.tensor([[1.0], [2.0], [3.0], [4.0]])}},
             [4],
