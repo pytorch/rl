@@ -4,7 +4,7 @@
 TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 ==========================================================================
 
-**Author**: TorchRL contributors
+**Author**: `Jay Prajapati <https://github.com/coder-jayp>`_
 
 This tutorial demonstrates how to bridge TorchRL and Hugging Face ``trl``
 using the adapter classes documented in :ref:`trl_interop_section`:
@@ -359,3 +359,5 @@ assert result_rt["reward"].shape == torch.Size([8])
 #   generate rollout data for a TorchRL replay buffer.
 # * :class:`~torchrl.objectives.llm.GRPOLoss` -- GRPO training objective that
 #   pairs naturally with :class:`~torchrl.modules.llm.HFRewardModelWrapper`.
+# * :ref:`coding_grpo_trl` -- A complete, end-to-end tutorial demonstrating how
+#   to use these adapters in an actual training loop with a micro-LLM.

@@ -640,3 +640,4 @@ integration dependencies with ``pip install torchrl[llm] trl``.
     * :class:`TorchRLBufferDataset`
     * :class:`HFRewardModelWrapper`
     * Tutorial: :ref:`trl_interop_tutorial`
+    * Tutorial: :ref:`coding_grpo_trl`

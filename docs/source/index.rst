@@ -138,6 +138,7 @@ Advanced
    tutorials/coding_ddpg
    tutorials/coding_dqn
    tutorials/trl_interop
+   tutorials/coding_grpo_trl
 
 References
 ==========
