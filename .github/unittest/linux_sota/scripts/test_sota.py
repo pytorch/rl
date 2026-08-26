@@ -314,6 +314,13 @@ commands = {
   train.minibatch_size=100 \
   logger.backend=
 """,
+    "coma": """python sota-implementations/multiagent/coma.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+""",
     "marl_sac": """python sota-implementations/multiagent/sac.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \

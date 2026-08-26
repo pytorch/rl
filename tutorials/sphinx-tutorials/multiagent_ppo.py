@@ -787,8 +787,10 @@ plt.show()
 # These are code-only scripts of many popular MARL algorithms such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
 #
-# You can also check out our other multi-agent tutorial on how to train competitive
-# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups: :doc:`/tutorials/multiagent_competitive_ddpg`.
+# You can also check out our other multi-agent tutorials: how to train competitive
+# MADDPG/IDDPG in PettingZoo/VMAS with multiple agent groups
+# (:doc:`/tutorials/multiagent_competitive_ddpg`), and how to address multi-agent
+# credit assignment with a counterfactual critic in COMA (:doc:`/tutorials/multiagent_coma`).
 #
 # If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
 # you can check out the dedicated

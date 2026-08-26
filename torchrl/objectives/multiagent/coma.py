@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,12 +15,164 @@ from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 
 
-class COMALoss(LossModule):
-    """Counterfactual multi-agent policy-gradient loss.
+def _resolve_time_dim(tensordict: TensorDictBase) -> int:
+    """Locate the rollout time dimension of ``tensordict``.
 
-    The actor is decentralised. The Q-value network is centralised through its
-    inputs and must emit one action value per agent action under
-    ``("agents", "action_value")``.
+    Mirrors :meth:`~torchrl.objectives.value.ValueEstimatorBase._get_time_dim`:
+    the dimension named ``"time"`` if the tensordict carries dimension names,
+    otherwise the last batch dimension. A ``[T]`` rollout from an unbatched
+    collector therefore resolves to dimension 0 and a ``[B, T]`` batch to
+    dimension 1, rather than assuming time is always dimension 1.
+    """
+    if tensordict._has_names():
+        for i, name in enumerate(tensordict.names):
+            if name == "time":
+                return i
+    return tensordict.ndim - 1
+
+
+def _shift_time(
+    tensor: torch.Tensor, time_dim: int, fill_value: float | bool = 0
+) -> torch.Tensor:
+    """Advance ``tensor`` by one step along ``time_dim``, backfilling the freed slot with ``fill_value``."""
+    length = tensor.shape[time_dim]
+    shifted = torch.full_like(tensor, fill_value)
+    if length > 1:
+        shifted.narrow(time_dim, 0, length - 1).copy_(
+            tensor.narrow(time_dim, 1, length - 1)
+        )
+    return shifted
+
+
+class COMALoss(LossModule):
+    """Counterfactual multi-agent policy-gradient loss (COMA).
+
+    Reference: Foerster, J. et al. *Counterfactual Multi-Agent Policy
+    Gradients.* AAAI 2018. https://arxiv.org/abs/1705.08926
+
+    COMA trains a *decentralised* actor (each agent's policy conditions only
+    on its own local observation) together with a *centralised* critic. The
+    critic is centralised through its inputs -- it typically conditions on
+    the joint observation/action of the team (see :func:`add_joint_observation`,
+    :func:`add_masked_joint_action` and :func:`add_action_without_self`) --
+    and must emit one action value per possible action of the acting agent,
+    under ``("agents", "action_value")``.
+
+    The actor's learning signal is a counterfactual advantage: for agent
+    ``i``, the critic's own output is marginalised over agent ``i``'s action
+    (holding every other agent's action fixed) to obtain a baseline. The
+    advantage, ``chosen_action_value - baseline``, credits agent ``i`` only
+    for the part of the outcome its own action choice affected, addressing
+    the multi-agent credit-assignment problem without factorising the joint
+    reward.
+
+    The critic is trained with an n-step TD target bootstrapped from a target
+    network; see :meth:`compute_value_target`.
+
+    Args:
+        actor_network (ProbabilisticTensorDictSequential): the decentralised
+            policy. Conditions on ``("agents", "observation")`` and outputs a
+            distribution over ``("agents", "action")`` -- build with e.g.
+            :class:`~torchrl.modules.ProbabilisticActor` wrapping a
+            :class:`~torchrl.modules.MultiAgentMLP` with
+            ``centralized=False``.
+        qvalue_network (TensorDictModule): the centralised critic. Must
+            output one action value per possible action of the acting agent
+            under ``("agents", "action_value")``.
+
+    Keyword Args:
+        gamma (float, optional): discount factor. Defaults to ``0.99``.
+        qvalue_loss_coef (float, optional): weight of the critic's MSE loss
+            relative to the actor loss. Defaults to ``0.5``.
+        entropy_coef (float, optional): weight of the entropy bonus.
+            Defaults to ``0.0`` (no bonus).
+        n_step (int, optional): number of Bellman backups applied by
+            :meth:`compute_value_target`. ``1`` is the TD(0) target; higher
+            values match EPyMARL's ``q_nstep``. Defaults to ``1``.
+        normalize_advantage (bool, optional): if ``True``, standardises the
+            counterfactual advantage (zero mean, unit variance) across the
+            batch before scaling the actor loss, MAPPO-style. Defaults to
+            ``False``.
+        reduction (str, optional): the reduction to apply to the elementwise
+            actor / critic / entropy losses. Can be one of ``"mean"``,
+            ``"sum"`` or ``"none"``. Padded or otherwise invalid positions
+            (``("collector", "mask")``, or the ``"shifted_valid"`` mask
+            written by :meth:`compute_value_target`) are excluded from the
+            reduction automatically. Defaults to ``"mean"``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> from torchrl.modules import OneHotCategorical, ProbabilisticActor
+        >>> from torchrl.objectives.multiagent import COMALoss
+        >>> from torchrl.objectives.multiagent.coma import add_action_without_self
+        >>> n_agents, obs_dim, n_actions = 3, 4, 5
+        >>> actor_net = TensorDictModule(
+        ...     nn.Linear(obs_dim, n_actions),
+        ...     in_keys=[("agents", "observation")],
+        ...     out_keys=[("agents", "logits")],
+        ... )
+        >>> actor = ProbabilisticActor(
+        ...     module=actor_net,
+        ...     in_keys=[("agents", "logits")],
+        ...     out_keys=[("agents", "action")],
+        ...     distribution_class=OneHotCategorical,
+        ...     return_log_prob=True,
+        ... )
+        >>> class Critic(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.net = nn.Linear(obs_dim + (n_agents - 1) * n_actions, n_actions)
+        ...     def forward(self, observation, action_without_self):
+        ...         return self.net(torch.cat([observation, action_without_self], dim=-1))
+        >>> qvalue_net = TensorDictModule(
+        ...     Critic(),
+        ...     in_keys=[("agents", "observation"), ("agents", "action_without_self")],
+        ...     out_keys=[("agents", "action_value")],
+        ... )
+        >>> loss = COMALoss(actor, qvalue_net)
+        >>> batch, time = 2, 4
+        >>> tensordict = TensorDict(
+        ...     {
+        ...         "agents": TensorDict(
+        ...             {"observation": torch.zeros(batch, time, n_agents, obs_dim)},
+        ...             [batch, time, n_agents],
+        ...         ),
+        ...         "next": TensorDict(
+        ...             {
+        ...                 "agents": TensorDict(
+        ...                     {
+        ...                         "reward": torch.zeros(batch, time, n_agents, 1),
+        ...                         "done": torch.zeros(batch, time, n_agents, 1, dtype=torch.bool),
+        ...                         "terminated": torch.zeros(batch, time, n_agents, 1, dtype=torch.bool),
+        ...                     },
+        ...                     [batch, time, n_agents],
+        ...                 ),
+        ...             },
+        ...             [batch, time],
+        ...         ),
+        ...     },
+        ...     [batch, time],
+        ... )
+        >>> with torch.no_grad():
+        ...     _ = actor(tensordict)
+        >>> _ = add_action_without_self(tensordict)
+        >>> _ = loss.compute_value_target(tensordict)
+        >>> loss(tensordict)
+        TensorDict(
+            fields={
+                advantage: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
     """
 
     @dataclass
@@ -58,10 +215,13 @@ class COMALoss(LossModule):
         entropy_coef: float = 0.0,
         n_step: int = 1,
         normalize_advantage: bool = False,
+        reduction: str | None = None,
     ) -> None:
         super().__init__()
         if n_step < 1:
             raise ValueError(f"n_step must be >= 1, got {n_step}.")
+        if reduction is None:
+            reduction = "mean"
         self.convert_to_functional(actor_network, "actor_network")
         self.convert_to_functional(qvalue_network, "qvalue_network", create_target_params=True)
         self.gamma = gamma
@@ -69,6 +229,7 @@ class COMALoss(LossModule):
         self.entropy_coef = entropy_coef
         self.n_step = n_step
         self.normalize_advantage = normalize_advantage
+        self.reduction = reduction
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         td_copy = tensordict.clone(False)
@@ -88,23 +249,36 @@ class COMALoss(LossModule):
 
         log_prob = dist.log_prob(td_copy.get(self.tensor_keys.action))
 
-        loss_actor = -(log_prob * advantage.squeeze(-1)).mean()
+        actor_loss = -log_prob * advantage.squeeze(-1)
+        loss_actor = self._reduce_loss(actor_loss, tensordict=tensordict)
 
         target_value = td_copy.get(self.tensor_keys.value_target)
-        loss_qvalue = F.mse_loss(chosen_action_value, target_value) * self.qvalue_loss_coef
+        qvalue_loss = (
+            F.mse_loss(chosen_action_value, target_value, reduction="none")
+            * self.qvalue_loss_coef
+        )
+        loss_qvalue = self._reduce_loss(qvalue_loss, tensordict=tensordict)
 
-        entropy = dist.entropy().mean()
-        loss_entropy = -self.entropy_coef * entropy
+        entropy = dist.entropy()
+        loss_entropy = self._reduce_loss(
+            -self.entropy_coef * entropy, tensordict=tensordict
+        )
 
         return TensorDict(
             {
                 "loss_actor": loss_actor,
                 "loss_qvalue": loss_qvalue,
                 "loss_entropy": loss_entropy,
-                "entropy": entropy.detach(),
-                "pred_value": chosen_action_value.detach().mean(),
-                "target_value": target_value.detach().mean(),
-                "advantage": advantage.detach().mean(),
+                "entropy": self._reduce_loss(entropy.detach(), tensordict=tensordict),
+                "pred_value": self._reduce_loss(
+                    chosen_action_value.detach().squeeze(-1), tensordict=tensordict
+                ),
+                "target_value": self._reduce_loss(
+                    target_value.detach().squeeze(-1), tensordict=tensordict
+                ),
+                "advantage": self._reduce_loss(
+                    advantage.detach().squeeze(-1), tensordict=tensordict
+                ),
             },
             batch_size=[],
         )
@@ -116,13 +290,30 @@ class COMALoss(LossModule):
     ) -> TensorDictBase:
         """Write the n-step Q-value target before flattening rollout data.
 
-        The collector batch is expected to keep time in dimension 1. Targets
-        follow the recursion G_k(t) = r(t) + gamma * (1 - done(t)) * G_{k-1}(t+1)
-        with G_0 = target-network chosen-action Q-values, applied ``n_step``
-        times. ``n_step=1`` is the TD(0) target; ``n_step=10`` matches
-        EPyMARL's ``q_nstep: 10`` within episodes. Values past the end of the
-        batch are treated as zero, so the last ``n_step`` transitions of a
-        batch are biased low unless they end an episode.
+        Targets follow the recursion ``G_k(t) = r(t) + gamma * (1 -
+        terminated(t)) * G_{k-1}(t+1)`` with ``G_0`` the target-network
+        chosen-action Q-values, applied ``n_step`` times along the rollout's
+        time dimension. The time dimension is resolved via
+        :func:`~torchrl.objectives.multiagent.coma._resolve_time_dim` (the
+        dimension named ``"time"`` if any, otherwise the last batch
+        dimension), so a ``[T]`` rollout from an unbatched collector, a ``[B,
+        T]`` batch, and inputs with additional leading batch dimensions all
+        shift the correct axis. ``n_step=1`` is the TD(0) target;
+        ``n_step=10`` matches EPyMARL's ``q_nstep: 10`` within episodes.
+
+        Bootstrapping is gated on ``terminated`` rather than ``done``: a
+        ``done`` flag raised by truncation (time-limit, or the sampled window
+        simply ending mid-episode) must not zero the return, since the
+        trajectory continues past the sampled window. But that also means the
+        true bootstrap value at those positions -- the target Q at the real
+        next transition -- can fall outside the rollout handed to this
+        method. Rather than fabricate one from a zero-filled shift, this
+        writes a ``"shifted_valid"`` mask (picked up automatically by
+        :meth:`~torchrl.objectives.common.LossModule._reduce_loss`, see
+        :data:`~torchrl.objectives.common.AUTO_LOSS_MASK_KEYS`) that excludes
+        the tail transitions -- up to ``n_step`` of them at every
+        non-terminated rollout end -- whose target would otherwise be
+        silently biased low.
         """
         if params is None:
             params = self.target_qvalue_network_params
@@ -135,18 +326,26 @@ class COMALoss(LossModule):
         if chosen_action_value.ndim < 2:
             raise ValueError("COMALoss.compute_value_target expects an environment/time rollout batch.")
 
-        reward = tensordict.get(("next",) + tuple(self.tensor_keys.reward))
-        done = tensordict.get(("next",) + tuple(self.tensor_keys.done)).to(chosen_action_value.dtype)
+        time_dim = _resolve_time_dim(tensordict)
+
+        reward = tensordict.get(("next", self.tensor_keys.reward))
+        done = tensordict.get(("next", self.tensor_keys.done)).to(chosen_action_value.dtype)
+        terminated = tensordict.get(
+            ("next", self.tensor_keys.terminated), default=done
+        ).to(chosen_action_value.dtype)
+        not_terminated = 1.0 - terminated
 
         value_target = chosen_action_value
+        valid = torch.ones_like(terminated, dtype=torch.bool)
         for _ in range(self.n_step):
-            next_value = torch.zeros_like(value_target)
-            next_value[:, :-1] = value_target[:, 1:]
-            value_target = reward + self.gamma * (1.0 - done) * next_value
+            next_value = _shift_time(value_target, time_dim, fill_value=0.0)
+            next_valid = _shift_time(valid, time_dim, fill_value=False)
+            value_target = reward + self.gamma * not_terminated * next_value
+            valid = terminated.to(torch.bool) | next_valid
+
         tensordict.set(self.tensor_keys.value_target, value_target.detach())
+        tensordict.set("shifted_valid", valid)
         return tensordict
-
-
 
     def diagnostics(self, tensordict: TensorDictBase) -> dict[str, torch.Tensor]:
         """Return unreduced COMA quantities for trainer-side observability.
