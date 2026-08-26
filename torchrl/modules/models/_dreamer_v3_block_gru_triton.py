@@ -132,6 +132,7 @@ if _has_triton:
         hidden_weight_ptr,
         hidden_bias_ptr,
         hidden_norm_ptr,
+        hidden_value_ptr,
         first_recurrent_weight_ptr,
         later_weight_ptr,
         dynamic_bias_ptr,
@@ -175,24 +176,22 @@ if _has_triton:
         k_off = tl.arange(0, BLOCK_K)
         for t in range(T):
             reset = tl.load(is_init_ptr + b64 * T + t, mask=mask_b, other=False) != 0
-            if t == 0:
-                previous = tl.load(
-                    initial_ptr + b64[:, None] * H + h_off[None, :],
-                    mask=mask_b[:, None] & (h_off[None, :] < H),
-                    other=0.0,
-                )
-            else:
-                previous = tl.load(
-                    output_ptr + (b64[:, None] * T + t - 1) * H + h_off[None, :],
-                    mask=mask_b[:, None] & (h_off[None, :] < H),
-                    other=0.0,
-                )
-            previous = tl.where(reset[:, None], 0.0, previous)
-
             hidden_pre = tl.zeros([BLOCK_B, P_PAD], tl.float32)
             for k_iter in tl.static_range(tl.cdiv(H_PAD, BLOCK_K)):
                 hk = k_iter * BLOCK_K + k_off
-                h_chunk = tl.where(hk[None, :] < H, previous[:, hk], 0.0)
+                if t == 0:
+                    h_chunk = tl.load(
+                        initial_ptr + b64[:, None] * H + hk[None, :],
+                        mask=mask_b[:, None] & (hk[None, :] < H),
+                        other=0.0,
+                    )
+                else:
+                    h_chunk = tl.load(
+                        output_ptr + (b64[:, None] * T + t - 1) * H + hk[None, :],
+                        mask=mask_b[:, None] & (hk[None, :] < H),
+                        other=0.0,
+                    )
+                h_chunk = tl.where(reset[:, None], 0.0, h_chunk)
                 weight = tl.load(
                     hidden_weight_ptr + hk[:, None] * P_PAD + p_off[None, :],
                     mask=(hk[:, None] < H_PAD) & (p_off[None, :] < P_PAD),
@@ -209,6 +208,11 @@ if _has_triton:
             hidden_xhat = hidden_pre * hidden_inv[:, None]
             hidden_value = _activate(hidden_xhat * hidden_scale[None, :], ACTIVATION)
             hidden_value = tl.where(p_off[None, :] < P, hidden_value, 0.0)
+            tl.store(
+                hidden_value_ptr + b64[:, None] * P + p_off[None, :],
+                hidden_value,
+                mask=mask_b[:, None] & (p_off[None, :] < P),
+            )
 
             if SAVE_STATE:
                 hidden_base = (b64[:, None] * T + t) * P + p_off[None, :]
@@ -227,9 +231,23 @@ if _has_triton:
                         for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
                             kk = k_iter * BLOCK_K + k_off
                             carry_index = block * D + kk
-                            recurrent = tl.where(
-                                kk[None, :] < D, previous[:, carry_index], 0.0
-                            )
+                            if t == 0:
+                                recurrent = tl.load(
+                                    initial_ptr
+                                    + b64[:, None] * H
+                                    + carry_index[None, :],
+                                    mask=mask_b[:, None] & (kk[None, :] < D),
+                                    other=0.0,
+                                )
+                            else:
+                                recurrent = tl.load(
+                                    output_ptr
+                                    + (b64[:, None] * T + t - 1) * H
+                                    + carry_index[None, :],
+                                    mask=mask_b[:, None] & (kk[None, :] < D),
+                                    other=0.0,
+                                )
+                            recurrent = tl.where(reset[:, None], 0.0, recurrent)
                             weight = tl.load(
                                 first_recurrent_weight_ptr
                                 + block * K_REC_PAD * D_PAD
@@ -244,8 +262,10 @@ if _has_triton:
                             pre += tl.dot(recurrent, weight, input_precision="ieee")
                         for k_iter in tl.static_range(tl.cdiv(P_PAD, BLOCK_K)):
                             kk = k_iter * BLOCK_K + k_off
-                            recurrent = tl.where(
-                                kk[None, :] < P, hidden_value[:, kk], 0.0
+                            recurrent = tl.load(
+                                hidden_value_ptr + b64[:, None] * P + kk[None, :],
+                                mask=mask_b[:, None] & (kk[None, :] < P),
+                                other=0.0,
                             )
                             weight = tl.load(
                                 first_recurrent_weight_ptr
@@ -281,7 +301,7 @@ if _has_triton:
                                 other=0.0,
                             )
                             scale = tl.load(
-                                dynamic_norm_ptr + (layer - 1) * H + block * D + kk,
+                                dynamic_norm_ptr + (layer - 1) * H_PAD + block * D + kk,
                                 mask=kk < D,
                                 other=0.0,
                             )
@@ -300,7 +320,7 @@ if _has_triton:
                                 previous = previous.to(tl.bfloat16)
                             pre += tl.dot(previous, weight, input_precision="ieee")
                         bias = tl.load(
-                            dynamic_bias_ptr + layer * H + block * D + d_off,
+                            dynamic_bias_ptr + layer * H_PAD + block * D + d_off,
                             mask=d_off < D,
                             other=0.0,
                         )
@@ -347,8 +367,9 @@ if _has_triton:
                 last_base = (
                     ((NUM_LAYERS - 1) * B + b64[:, None]) * T + t
                 ) * H + block * D
-                gate_pre = tl.zeros([BLOCK_B, G_PAD], tl.float32)
-                gate_off = tl.arange(0, G_PAD)
+                reset_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
+                candidate_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
+                update_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                 for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
                     kk = k_iter * BLOCK_K + k_off
                     xhat = tl.load(
@@ -357,38 +378,57 @@ if _has_triton:
                         other=0.0,
                     )
                     scale = tl.load(
-                        dynamic_norm_ptr + (NUM_LAYERS - 1) * H + block * D + kk,
+                        dynamic_norm_ptr + (NUM_LAYERS - 1) * H_PAD + block * D + kk,
                         mask=kk < D,
                         other=0.0,
                     )
                     layer_value = _activate(xhat * scale[None, :], ACTIVATION)
-                    weight = tl.load(
-                        gate_weight_ptr
-                        + block * D_PAD * G_PAD
-                        + kk[:, None] * G_PAD
-                        + gate_off[None, :],
-                        mask=(kk[:, None] < D_PAD) & (gate_off[None, :] < G_PAD),
-                        other=0.0,
-                    )
                     if COMPUTE_BF16:
                         layer_value = layer_value.to(tl.bfloat16)
-                    gate_pre += tl.dot(layer_value, weight, input_precision="ieee")
+                    for gate in tl.static_range(3):
+                        weight = tl.load(
+                            gate_weight_ptr
+                            + block * D_PAD * G_PAD
+                            + kk[:, None] * G_PAD
+                            + gate * D_PAD
+                            + d_off[None, :],
+                            mask=(kk[:, None] < D_PAD) & (d_off[None, :] < D_PAD),
+                            other=0.0,
+                        )
+                        gate_value = tl.dot(layer_value, weight, input_precision="ieee")
+                        if gate == 0:
+                            reset_pre += gate_value
+                        elif gate == 1:
+                            candidate_pre += gate_value
+                        else:
+                            update_pre += gate_value
                 for gate in tl.static_range(3):
                     bias = tl.load(
                         gate_bias_ptr + block * 3 * D + gate * D + d_off,
                         mask=d_off < D,
                         other=0.0,
                     )
-                    gate_slice = gate_pre[:, gate * D_PAD + d_off] + bias[None, :]
                     if gate == 0:
-                        reset_gate = tl.sigmoid(gate_slice)
+                        reset_gate = tl.sigmoid(reset_pre + bias[None, :])
                     elif gate == 1:
-                        candidate_pre = gate_slice
+                        candidate_pre += bias[None, :]
                     else:
-                        update = tl.sigmoid(gate_slice + UPDATE_BIAS)
+                        update = tl.sigmoid(update_pre + bias[None, :] + UPDATE_BIAS)
                 candidate = tl.extra.cuda.libdevice.tanh(reset_gate * candidate_pre)
                 h_index = block * D + d_off
-                previous_block = previous[:, h_index]
+                if t == 0:
+                    previous_block = tl.load(
+                        initial_ptr + b64[:, None] * H + h_index[None, :],
+                        mask=mask_b[:, None] & (d_off[None, :] < D),
+                        other=0.0,
+                    )
+                else:
+                    previous_block = tl.load(
+                        output_ptr + (b64[:, None] * T + t - 1) * H + h_index[None, :],
+                        mask=mask_b[:, None] & (d_off[None, :] < D),
+                        other=0.0,
+                    )
+                previous_block = tl.where(reset[:, None], 0.0, previous_block)
                 next_block = update * candidate + (1.0 - update) * previous_block
                 output_base = (b64[:, None] * T + t) * H + h_index[None, :]
                 tl.store(
@@ -499,38 +539,15 @@ if _has_triton:
             mask=mask_b[:, None] & (h_off[None, :] < H),
             other=0.0,
         )
+        tl.store(
+            grad_initial_ptr + b64[:, None] * H + h_off[None, :],
+            dh_next,
+            mask=mask_b[:, None] & (h_off[None, :] < H),
+        )
 
         for t_inv in range(T):
             t = T - 1 - t_inv
-            base_h = (b64[:, None] * T + t) * H + h_off[None, :]
-            dh = dh_next + tl.load(
-                grad_output_ptr + base_h,
-                mask=mask_b[:, None] & (h_off[None, :] < H),
-                other=0.0,
-            )
             reset_t = tl.load(is_init_ptr + b64 * T + t, mask=mask_b, other=False) != 0
-            if t == 0:
-                previous = tl.load(
-                    initial_ptr + b64[:, None] * H + h_off[None, :],
-                    mask=mask_b[:, None] & (h_off[None, :] < H),
-                    other=0.0,
-                )
-            else:
-                previous = tl.load(
-                    output_ptr + (b64[:, None] * T + t - 1) * H + h_off[None, :],
-                    mask=mask_b[:, None] & (h_off[None, :] < H),
-                    other=0.0,
-                )
-            previous = tl.where(reset_t[:, None], 0.0, previous)
-            update_full = tl.load(
-                gate_state_ptr
-                + (b64[:, None] * T + t) * (4 * H)
-                + 3 * H
-                + h_off[None, :],
-                mask=mask_b[:, None] & (h_off[None, :] < H),
-                other=0.0,
-            )
-            dh_previous = dh * (1.0 - update_full)
 
             for block in tl.static_range(NUM_BLOCKS):
                 index = block * D + d_off
@@ -555,8 +572,29 @@ if _has_triton:
                     mask=mask_b[:, None] & (d_off[None, :] < D),
                     other=0.0,
                 )
-                dh_block = dh[:, index]
-                previous_block = previous[:, index]
+                dh_block = tl.load(
+                    grad_initial_ptr + b64[:, None] * H + index[None, :],
+                    mask=mask_b[:, None] & (d_off[None, :] < D),
+                    other=0.0,
+                )
+                dh_block += tl.load(
+                    grad_output_ptr + (b64[:, None] * T + t) * H + index[None, :],
+                    mask=mask_b[:, None] & (d_off[None, :] < D),
+                    other=0.0,
+                )
+                if t == 0:
+                    previous_block = tl.load(
+                        initial_ptr + b64[:, None] * H + index[None, :],
+                        mask=mask_b[:, None] & (d_off[None, :] < D),
+                        other=0.0,
+                    )
+                else:
+                    previous_block = tl.load(
+                        output_ptr + (b64[:, None] * T + t - 1) * H + index[None, :],
+                        mask=mask_b[:, None] & (d_off[None, :] < D),
+                        other=0.0,
+                    )
+                previous_block = tl.where(reset_t[:, None], 0.0, previous_block)
                 grad_update_pre = (
                     dh_block * (candidate - previous_block) * update * (1.0 - update)
                 )
@@ -568,6 +606,11 @@ if _has_triton:
                     * (1.0 - reset_gate)
                 )
                 grad_candidate_pre = grad_candidate_inner * reset_gate
+                tl.store(
+                    grad_initial_ptr + b64[:, None] * H + index[None, :],
+                    dh_block * (1.0 - update),
+                    mask=mask_b[:, None] & (d_off[None, :] < D),
+                )
                 for gate in tl.static_range(3):
                     if gate == 0:
                         grad_gate_slice = grad_reset_pre
@@ -592,22 +635,19 @@ if _has_triton:
                         grad_gate_slice = grad_candidate_pre
                     else:
                         grad_gate_slice = grad_update_pre
-                    for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
-                        kk = k_iter * BLOCK_K + k_off
-                        gate_chunk = grad_gate_slice[:, kk]
-                        weight_t = tl.load(
-                            gate_weight_t_ptr
-                            + block * G_PAD * D_PAD
-                            + (gate * D_PAD + kk)[:, None] * D_PAD
-                            + d_off[None, :],
-                            mask=(kk[:, None] < D_PAD) & (d_off[None, :] < D_PAD),
-                            other=0.0,
-                        )
-                        if COMPUTE_BF16:
-                            gate_chunk = gate_chunk.to(tl.bfloat16)
-                        grad_value += tl.dot(
-                            gate_chunk, weight_t, input_precision="ieee"
-                        )
+                    weight_t = tl.load(
+                        gate_weight_t_ptr
+                        + block * G_PAD * D_PAD
+                        + (gate * D_PAD + d_off)[:, None] * D_PAD
+                        + d_off[None, :],
+                        mask=(d_off[:, None] < D_PAD) & (d_off[None, :] < D_PAD),
+                        other=0.0,
+                    )
+                    if COMPUTE_BF16:
+                        grad_gate_slice = grad_gate_slice.to(tl.bfloat16)
+                    grad_value += tl.dot(
+                        grad_gate_slice, weight_t, input_precision="ieee"
+                    )
                 tl.store(
                     grad_layer_ptr + b64[:, None] * H + index[None, :],
                     grad_value,
@@ -637,7 +677,7 @@ if _has_triton:
                         other=0.0,
                     )
                     scale = tl.load(
-                        dynamic_norm_ptr + layer * H + index,
+                        dynamic_norm_ptr + layer * H_PAD + index,
                         mask=d_off < D,
                         other=0.0,
                     )
@@ -680,7 +720,14 @@ if _has_triton:
                         grad_previous = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                         for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
                             kk = k_iter * BLOCK_K + k_off
-                            grad_chunk = grad_pre[:, kk]
+                            grad_chunk = tl.load(
+                                grad_dynamic_pre_ptr
+                                + ((layer * B + b64[:, None]) * T + t) * H
+                                + block * D
+                                + kk[None, :],
+                                mask=mask_b[:, None] & (kk[None, :] < D),
+                                other=0.0,
+                            )
                             weight_t = tl.load(
                                 later_weight_t_ptr
                                 + ((layer - 1) * NUM_BLOCKS + block) * D_PAD * D_PAD
@@ -700,26 +747,44 @@ if _has_triton:
                             mask=mask_b[:, None] & (d_off[None, :] < D),
                         )
                     else:
-                        grad_recurrent = tl.zeros([BLOCK_B, K_REC_PAD], tl.float32)
-                        rec_off = tl.arange(0, K_REC_PAD)
+                        carry_grad = tl.zeros([BLOCK_B, D_PAD], tl.float32)
+                        block_hidden_grad = tl.zeros([BLOCK_B, P_PAD], tl.float32)
                         for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
                             kk = k_iter * BLOCK_K + k_off
-                            grad_chunk = grad_pre[:, kk]
-                            weight_t = tl.load(
+                            grad_chunk = tl.load(
+                                grad_dynamic_pre_ptr
+                                + ((layer * B + b64[:, None]) * T + t) * H
+                                + block * D
+                                + kk[None, :],
+                                mask=mask_b[:, None] & (kk[None, :] < D),
+                                other=0.0,
+                            )
+                            carry_weight_t = tl.load(
                                 first_recurrent_weight_t_ptr
                                 + block * D_PAD * K_REC_PAD
                                 + kk[:, None] * K_REC_PAD
-                                + rec_off[None, :],
+                                + d_off[None, :],
+                                mask=(kk[:, None] < D_PAD) & (d_off[None, :] < D_PAD),
+                                other=0.0,
+                            )
+                            hidden_weight_t = tl.load(
+                                first_recurrent_weight_t_ptr
+                                + block * D_PAD * K_REC_PAD
+                                + kk[:, None] * K_REC_PAD
+                                + D
+                                + p_off[None, :],
                                 mask=(kk[:, None] < D_PAD)
-                                & (rec_off[None, :] < K_REC_PAD),
+                                & ((D + p_off[None, :]) < K_REC_PAD),
                                 other=0.0,
                             )
                             if COMPUTE_BF16:
                                 grad_chunk = grad_chunk.to(tl.bfloat16)
-                            grad_recurrent += tl.dot(
-                                grad_chunk, weight_t, input_precision="ieee"
+                            carry_grad += tl.dot(
+                                grad_chunk, carry_weight_t, input_precision="ieee"
                             )
-                        carry_grad = grad_recurrent[:, d_off]
+                            block_hidden_grad += tl.dot(
+                                grad_chunk, hidden_weight_t, input_precision="ieee"
+                            )
                         tl.store(
                             grad_layer_ptr
                             + b64[:, None] * H
@@ -728,14 +793,15 @@ if _has_triton:
                             carry_grad,
                             mask=mask_b[:, None] & (d_off[None, :] < D),
                         )
-                        hidden_feature_grad += tl.where(
-                            p_off[None, :] < P,
-                            grad_recurrent[:, D + p_off],
-                            0.0,
-                        )
+                        hidden_feature_grad += block_hidden_grad
 
             carry_grad = tl.load(
                 grad_layer_ptr + b64[:, None] * H + h_off[None, :],
+                mask=mask_b[:, None] & (h_off[None, :] < H),
+                other=0.0,
+            )
+            dh_previous = tl.load(
+                grad_initial_ptr + b64[:, None] * H + h_off[None, :],
                 mask=mask_b[:, None] & (h_off[None, :] < H),
                 other=0.0,
             )
@@ -772,7 +838,11 @@ if _has_triton:
             hidden_carry_grad = tl.zeros([BLOCK_B, H_PAD], tl.float32)
             for k_iter in tl.static_range(tl.cdiv(P_PAD, BLOCK_K)):
                 kk = k_iter * BLOCK_K + k_off
-                grad_chunk = hidden_grad_pre[:, kk]
+                grad_chunk = tl.load(
+                    grad_hidden_pre_ptr + (b64[:, None] * T + t) * P + kk[None, :],
+                    mask=mask_b[:, None] & (kk[None, :] < P),
+                    other=0.0,
+                )
                 weight_t = tl.load(
                     hidden_weight_t_ptr + kk[:, None] * H_PAD + h_off[None, :],
                     mask=(kk[:, None] < P_PAD) & (h_off[None, :] < H_PAD),
@@ -784,13 +854,12 @@ if _has_triton:
                     grad_chunk, weight_t, input_precision="ieee"
                 )
             dh_previous += hidden_carry_grad
-            dh_next = tl.where(reset_t[:, None], 0.0, dh_previous)
-
-        tl.store(
-            grad_initial_ptr + b64[:, None] * H + h_off[None, :],
-            dh_next,
-            mask=mask_b[:, None] & (h_off[None, :] < H),
-        )
+            dh_previous = tl.where(reset_t[:, None], 0.0, dh_previous)
+            tl.store(
+                grad_initial_ptr + b64[:, None] * H + h_off[None, :],
+                dh_previous,
+                mask=mask_b[:, None] & (h_off[None, :] < H),
+            )
 
 
 def _pad_matrix(value: torch.Tensor, rows: int, cols: int) -> torch.Tensor:
@@ -922,6 +991,9 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
         hidden_inv_rms = torch.empty(
             batch, time, device=projected_input.device, dtype=torch.float32
         )
+        hidden_value = torch.empty(
+            batch, projected_size, device=projected_input.device, dtype=compute_dtype
+        )
         dynamic_normalized = torch.empty(
             num_layers,
             batch,
@@ -951,6 +1023,7 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             hidden_weight_p,
             hidden_bias_p,
             hidden_norm_p,
+            hidden_value,
             first_recurrent_p,
             later_weight_p,
             dynamic_bias_p,
