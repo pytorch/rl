@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Backward-pass benchmark comparing the cuDNN, scan and Triton RNN backends.
+"""Forward/backward benchmark for standard RNNs and the DreamerV3 block GRU.
 
 Sweeps a grid of batch sizes, horizons (sequence lengths) and cell counts
 (hidden sizes) and reports forward time, backward time and peak allocated
@@ -23,7 +23,9 @@ Example::
     python benchmarks/bench_rnn_backward.py --rnn gru \
         --batches 256,1024,4096 --seq-lens 16,32,64 --hiddens 128,256,512
 
-The script is a no-op on CPU/MPS (timings and memory require CUDA).
+The block-GRU grid compares its reference and specialized scan backends across
+batch size, horizon, hidden width, and block count. Timings are CUDA-synchronized
+means with 95% confidence intervals. The script is a no-op on CPU/MPS.
 """
 from __future__ import annotations
 
@@ -35,11 +37,16 @@ import torch
 from tensordict import TensorDict
 
 from torchrl import cuda_memory_stats, reset_cuda_peak_stats
-from torchrl.modules import GRUModule, LSTMModule
+from torchrl.modules import DreamerV3BlockGRU, GRUModule, LSTMModule
 
-RNNType = Literal["lstm", "gru"]
+RNNType = Literal["lstm", "gru", "block_gru"]
 # User-facing backend name -> recurrent_backend value.
-_BACKENDS: dict[str, str] = {"cudnn": "pad", "scan": "scan", "triton": "triton"}
+_BACKENDS: dict[str, str] = {
+    "cudnn": "pad",
+    "reference": "reference",
+    "scan": "scan",
+    "triton": "triton",
+}
 
 
 def _build_module(
@@ -50,8 +57,21 @@ def _build_module(
     input_size: int,
     hidden_size: int,
     num_layers: int,
+    projection_size: int,
+    num_blocks: int,
     device: torch.device,
-) -> LSTMModule | GRUModule:
+    dtype: torch.dtype,
+) -> LSTMModule | GRUModule | DreamerV3BlockGRU:
+    if rnn_type == "block_gru":
+        return DreamerV3BlockGRU(
+            input_size,
+            hidden_size,
+            projection_size=projection_size,
+            num_blocks=num_blocks,
+            num_layers=num_layers,
+            recurrent_backend=recurrent_backend,
+            device=device,
+        )
     kwargs: dict = {
         "input_size": input_size,
         "hidden_size": hidden_size,
@@ -59,6 +79,7 @@ def _build_module(
         "recurrent_backend": recurrent_backend,
         "default_recurrent_mode": True,
         "device": device,
+        "dtype": dtype,
     }
     # The cuDNN ("pad") backend rejects a non-"none" recompute value.
     if recurrent_backend != "pad":
@@ -85,25 +106,56 @@ def _build_inputs(
     hidden_size: int,
     num_layers: int,
     device: torch.device,
-) -> TensorDict:
-    obs = torch.randn(batch, seq_len, input_size, device=device, requires_grad=True)
+    dtype: torch.dtype,
+) -> TensorDict | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    obs = torch.randn(
+        batch,
+        seq_len,
+        input_size,
+        device=device,
+        dtype=dtype,
+        requires_grad=True,
+    )
     is_init = torch.zeros(batch, seq_len, 1, dtype=torch.bool, device=device)
     is_init[:, 0] = True
+    if rnn_type == "block_gru":
+        hidden = torch.zeros(
+            batch,
+            hidden_size,
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
+        return obs, hidden, is_init
     if rnn_type == "lstm":
-        hidden0 = torch.zeros(batch, seq_len, num_layers, hidden_size, device=device)
+        hidden0 = torch.zeros(
+            batch,
+            seq_len,
+            num_layers,
+            hidden_size,
+            device=device,
+            dtype=dtype,
+        )
         hidden1 = torch.zeros_like(hidden0)
         return TensorDict(
             {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
             [batch, seq_len],
         )
-    hidden = torch.zeros(batch, seq_len, num_layers, hidden_size, device=device)
+    hidden = torch.zeros(
+        batch,
+        seq_len,
+        num_layers,
+        hidden_size,
+        device=device,
+        dtype=dtype,
+    )
     return TensorDict(
         {"obs": obs, "hidden": hidden, "is_init": is_init}, [batch, seq_len]
     )
 
 
-def _time_ms(fn, *, iters: int, device: torch.device) -> float:
-    """Median wall time (ms) of ``fn`` over ``iters`` CUDA-synchronized runs."""
+def _time_ms(fn, *, iters: int, device: torch.device) -> tuple[float, float]:
+    """Return mean wall time and its 95% confidence half-width in milliseconds."""
     samples: list[float] = []
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
@@ -114,7 +166,11 @@ def _time_ms(fn, *, iters: int, device: torch.device) -> float:
         end.record()
         torch.cuda.synchronize(device)
         samples.append(start.elapsed_time(end))
-    return statistics.median(samples)
+    mean = statistics.mean(samples)
+    if len(samples) < 2:
+        return mean, 0.0
+    confidence = 1.96 * statistics.stdev(samples) / len(samples) ** 0.5
+    return mean, confidence
 
 
 def _bench_one(
@@ -127,7 +183,10 @@ def _bench_one(
     input_size: int,
     hidden_size: int,
     num_layers: int,
+    projection_size: int,
+    num_blocks: int,
     device: torch.device,
+    dtype: torch.dtype,
     warmup: int,
     iters: int,
 ) -> dict[str, float]:
@@ -138,7 +197,10 @@ def _bench_one(
         input_size=input_size,
         hidden_size=hidden_size,
         num_layers=num_layers,
+        projection_size=projection_size,
+        num_blocks=num_blocks,
         device=device,
+        dtype=dtype,
     )
     data = _build_inputs(
         rnn_type,
@@ -148,39 +210,56 @@ def _bench_one(
         hidden_size=hidden_size,
         num_layers=num_layers,
         device=device,
+        dtype=dtype,
     )
 
     def forward():
+        if rnn_type == "block_gru":
+            value, hidden, is_init = data
+            return module(value, hidden, is_init)
         return module(data.clone())
+
+    def loss(output):
+        if rnn_type == "block_gru":
+            return output[0].float().square().mean()
+        return output["feat"].float().square().mean()
+
+    def clear_grads():
+        for parameter in module.parameters():
+            parameter.grad = None
+        if rnn_type == "block_gru":
+            data[0].grad = None
+            data[1].grad = None
 
     # Warmup (also triggers any lazy autotune / compile workspaces).
     for _ in range(max(warmup, 1)):
         out = forward()
-        out["feat"].pow(2).sum().backward()
-        for p in module.parameters():
-            p.grad = None
+        loss(out).backward()
+        clear_grads()
     torch.cuda.synchronize(device)
 
-    fwd_ms = _time_ms(lambda: forward()["feat"], iters=iters, device=device)
+    fwd_ms, fwd_ci_ms = _time_ms(forward, iters=iters, device=device)
 
     def fwd_bwd():
         out = forward()
-        out["feat"].pow(2).sum().backward()
-        for p in module.parameters():
-            p.grad = None
+        loss(out).backward()
+        clear_grads()
 
-    total_ms = _time_ms(fwd_bwd, iters=iters, device=device)
+    total_ms, total_ci_ms = _time_ms(fwd_bwd, iters=iters, device=device)
 
     reset_cuda_peak_stats(device)
     out = forward()
-    out["feat"].pow(2).sum().backward()
+    loss(out).backward()
     torch.cuda.synchronize(device)
     mem = cuda_memory_stats(device)
 
     return {
         "fwd_ms": fwd_ms,
+        "fwd_ci_ms": fwd_ci_ms,
         "bwd_ms": max(total_ms - fwd_ms, 0.0),
+        "bwd_ci_ms": fwd_ci_ms + total_ci_ms,
         "total_ms": total_ms,
+        "total_ci_ms": total_ci_ms,
         "peak_gb": mem["max_allocated_gb"],
     }
 
@@ -191,17 +270,20 @@ def _parse_int_list(s: str) -> list[int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rnn", choices=["lstm", "gru"], default="gru")
+    parser.add_argument("--rnn", choices=["lstm", "gru", "block_gru"], default="gru")
     parser.add_argument(
         "--backends",
-        default="cudnn,scan,triton",
-        help="Comma list among cudnn,scan,triton.",
+        default=None,
+        help="Comma list among cudnn,reference,scan,triton.",
     )
     parser.add_argument("--batches", default="256,1024,4096", type=_parse_int_list)
     parser.add_argument("--seq-lens", default="16,32,64", type=_parse_int_list)
     parser.add_argument("--hiddens", default="128,256,512", type=_parse_int_list)
     parser.add_argument("--input-size", type=int, default=32)
     parser.add_argument("--num-layers", type=int, default=1)
+    parser.add_argument("--projection-size", type=int, default=128)
+    parser.add_argument("--blocks", default="1,8", type=_parse_int_list)
+    parser.add_argument("--dtype", choices=["float32", "bfloat16"], default="float32")
     parser.add_argument("--recompute", choices=["none", "full"], default="none")
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--iters", type=int, default=10)
@@ -215,54 +297,71 @@ def main() -> None:
         print("[bench_rnn_backward] CUDA required for timing/memory. Skipping.")
         return
 
-    backends = [b.strip() for b in args.backends.split(",") if b.strip()]
+    backend_arg = args.backends
+    if backend_arg is None:
+        backend_arg = (
+            "reference,scan" if args.rnn == "block_gru" else "cudnn,scan,triton"
+        )
+    backends = [b.strip() for b in backend_arg.split(",") if b.strip()]
+    dtype = torch.float32 if args.dtype == "float32" else torch.bfloat16
     if args.recompute == "full":
         backends = [b for b in backends if b != "cudnn"]
         print("[bench_rnn_backward] recompute=full -> skipping cuDNN (no recompute).")
 
     print(
         f"rnn={args.rnn} layers={args.num_layers} input_size={args.input_size} "
+        f"projection_size={args.projection_size} dtype={args.dtype} "
         f"recompute={args.recompute} warmup={args.warmup} iters={args.iters}\n"
         f"device={torch.cuda.get_device_name(device)}\n"
     )
     header = (
-        f"{'batch':>6} {'T':>4} {'H':>5} {'backend':>8} "
-        f"{'fwd_ms':>9} {'bwd_ms':>9} {'total_ms':>9} {'peak_gb':>8}"
+        f"{'batch':>6} {'T':>4} {'H':>5} {'blocks':>6} {'backend':>9} "
+        f"{'fwd_ms (95% CI)':>21} {'bwd_ms (95% CI)':>21} "
+        f"{'total_ms (95% CI)':>23} {'peak_gb':>8}"
     )
     print(header)
     print("-" * len(header))
     for batch in args.batches:
         for seq_len in args.seq_lens:
             for hidden in args.hiddens:
-                for name in backends:
-                    recurrent_backend = _BACKENDS[name]
-                    try:
-                        r = _bench_one(
-                            args.rnn,
-                            recurrent_backend,
-                            args.recompute,
-                            batch=batch,
-                            seq_len=seq_len,
-                            input_size=args.input_size,
-                            hidden_size=hidden,
-                            num_layers=args.num_layers,
-                            device=device,
-                            warmup=args.warmup,
-                            iters=args.iters,
-                        )
-                        print(
-                            f"{batch:>6} {seq_len:>4} {hidden:>5} {name:>8} "
-                            f"{r['fwd_ms']:>9.3f} {r['bwd_ms']:>9.3f} "
-                            f"{r['total_ms']:>9.3f} {r['peak_gb']:>8.3f}"
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        print(
-                            f"{batch:>6} {seq_len:>4} {hidden:>5} {name:>8} "
-                            f"  ERROR: {type(exc).__name__}: {str(exc)[:80]}"
-                        )
-                    finally:
-                        if device.type == "cuda":
-                            torch.cuda.empty_cache()
+                blocks = args.blocks if args.rnn == "block_gru" else [1]
+                for num_blocks in blocks:
+                    for name in backends:
+                        recurrent_backend = _BACKENDS[name]
+                        try:
+                            r = _bench_one(
+                                args.rnn,
+                                recurrent_backend,
+                                args.recompute,
+                                batch=batch,
+                                seq_len=seq_len,
+                                input_size=args.input_size,
+                                hidden_size=hidden,
+                                num_layers=args.num_layers,
+                                projection_size=args.projection_size,
+                                num_blocks=num_blocks,
+                                device=device,
+                                dtype=dtype,
+                                warmup=args.warmup,
+                                iters=args.iters,
+                            )
+                            print(
+                                f"{batch:>6} {seq_len:>4} {hidden:>5} "
+                                f"{num_blocks:>6} {name:>9} "
+                                f"{r['fwd_ms']:>9.3f} +/- {r['fwd_ci_ms']:<7.3f} "
+                                f"{r['bwd_ms']:>9.3f} +/- {r['bwd_ci_ms']:<7.3f} "
+                                f"{r['total_ms']:>9.3f} +/- {r['total_ci_ms']:<7.3f} "
+                                f"{r['peak_gb']:>8.3f}"
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            print(
+                                f"{batch:>6} {seq_len:>4} {hidden:>5} "
+                                f"{num_blocks:>6} {name:>9} ERROR: "
+                                f"{type(exc).__name__}: {str(exc)[:80]}"
+                            )
+                        finally:
+                            if device.type == "cuda":
+                                torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
