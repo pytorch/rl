@@ -854,9 +854,9 @@ class TestLosses:
             sample_log_prob=[0.0],
             advantage=[1.0],
         )
-        loss = CISPOLoss(
-            _FixedLogProbPolicy(), clip_epsilon=0.2, entropy_bonus=False
-        )(data)
+        loss = CISPOLoss(_FixedLogProbPolicy(), clip_epsilon=0.2, entropy_bonus=False)(
+            data
+        )
 
         torch.testing.assert_close(loss.loss_objective, torch.tensor(-0.8))
 
