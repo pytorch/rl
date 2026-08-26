@@ -220,6 +220,8 @@ class RewardModelLoss(LossModule):
         super().__init__()
         self.score_network = score_network
         self.reduction = reduction
+        if center_coeff is not None and center_coeff < 0:
+            raise ValueError("center_coeff must be non-negative.")
         self.center_coeff = center_coeff
         self._set_in_keys()
 
