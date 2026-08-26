@@ -122,6 +122,13 @@ jobs:
             python -c "import torchrl._torchrl as ext; assert hasattr(ext, 'CudaSumSegmentTreeFp32')"
           fi
 
+          if [ "${{ github.ref }}" = "refs/heads/codex/dreamerv3-block-gru-triton" ]; then
+            python -m pytest -vv --timeout=240 \
+              test/modules/test_dreamer_components.py \
+              -k public_block_gru_triton
+            exit 0
+          fi
+
           cd benchmarks/
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
