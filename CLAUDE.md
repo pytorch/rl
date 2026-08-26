@@ -79,7 +79,32 @@ Strongly encouraged (not mandatory):
   `pytest.main(...)`, so the file can be executed directly.
 - New algorithms: also tested in the sota-implementations CI.
 
-### 7a. The `gpu` marker (load-bearing!)
+### 7a. Behavioral regression tests
+
+- Regression tests must assert an externally observable contract, not merely
+  restate the implementation. For each new test, identify a plausible broken
+  implementation and confirm that the test would fail against it; when
+  practical, temporarily revert or bypass the fix to verify that failure.
+- Derive expected results independently from the code under test. Prefer small,
+  deterministic inputs with hand-computed values or an independent reference
+  implementation. Do not build the expected value from the same helpers or
+  outputs whose correctness the test is meant to establish.
+- Shape, dtype, key presence, finiteness, nonzero values, lack of exceptions,
+  and repeated calls returning the same value are smoke checks. They are not a
+  sufficient regression oracle unless that property is the exact contract
+  being fixed.
+- Every parametrized case must reach distinct behavior and make an assertion
+  that distinguishes that case. Do not add parameters that are ignored, are
+  replaced by a constant, or lead every branch to the same assertion.
+- Use mocks and monkeypatching only at genuine external boundaries such as
+  network, filesystem, clock, or optional-service access. Assert the resulting
+  public behavior; do not mock the unit's own helpers or assert only mock call
+  counts and internal call choreography unless that interaction is itself the
+  public contract.
+- Prefer one compact, high-signal regression test over broad matrices or
+  duplicate tests. Do not add low-value tests solely to claim coverage.
+
+### 7b. The `gpu` marker (load-bearing!)
 
 The unified Linux CI (`.github/workflows/test-linux.yml`) collects tests with
 **two mutually-exclusive marker filters**:
@@ -121,7 +146,7 @@ CPU and GPU paths via parametrization (e.g.
 `device = "cpu" if torch.cuda.device_count() == 0 else "cuda"`); those
 must continue to run on the CPU side.
 
-### 7b. PR-gated CI suites: `ci/olddeps` and `ci/optdeps` labels
+### 7c. PR-gated CI suites: `ci/olddeps` and `ci/optdeps` labels
 
 Two expensive suites in `.github/workflows/test-linux.yml` do NOT run on
 pull requests by default. They run fully on every push to main and on the
