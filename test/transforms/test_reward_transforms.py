@@ -47,6 +47,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.utils import check_env_specs
+from torchrl.objectives.value.functional import reward2go
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
@@ -842,7 +843,10 @@ class TestReward2Go(TransformBase):
         rb.extend(td)
         sample = rb.sample(13)
         assert sample[out_key].shape == (13, t, 1)
-        assert (sample[out_key] != 0).all()
+        expected = reward2go(
+            sample["next", "reward"], sample["next", "done"], gamma
+        )
+        torch.testing.assert_close(sample[out_key], expected)
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
@@ -870,7 +874,10 @@ class TestReward2Go(TransformBase):
         rb.extend(td)
         sample = rb.sample(13)
         assert sample[out_key].shape == (13, t, 1)
-        assert (sample[out_key] != 0).all()
+        expected = reward2go(
+            sample["next", "reward"], sample["next", "done"], gamma
+        )
+        torch.testing.assert_close(sample[out_key], expected)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
@@ -914,9 +921,10 @@ class TestReward2Go(TransformBase):
             batch_size,
             device=device,
         )
+        expected = reward2go(reward, done, gamma)
         td = r2g.inv(td)
         assert td[out_key].shape == (batch, t, 1)
-        assert (td[out_key] != 0).all()
+        torch.testing.assert_close(td[out_key], expected)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
