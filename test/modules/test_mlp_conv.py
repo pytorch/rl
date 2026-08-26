@@ -107,7 +107,9 @@ class TestMLP:
             bias_last_layer=False,
             single_bias_last_layer=True,
         )
-        assert all(parameter.numel() != 1 for parameter in mlp_without_bias.parameters())
+        assert all(
+            parameter.numel() != 1 for parameter in mlp_without_bias.parameters()
+        )
 
     def test_kwargs(self):
         def make_activation(shift):
