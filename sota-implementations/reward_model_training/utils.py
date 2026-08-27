@@ -161,12 +161,17 @@ def _pairwise_td(
     )
 
 
-def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
+def make_dataset(
+    cfg, tokenizer, split: str, vocab_size: int, *, seed: int
+) -> TensorDict:
     """Build a pairwise preference dataset as a single batched ``TensorDict``.
 
     The returned tensordict has ``"chosen"`` and ``"rejected"`` sub-tensordicts, each
     carrying ``input_ids`` / ``attention_mask`` -- exactly the keys
     :class:`~torchrl.objectives.llm.RewardModelLoss` expects by default.
+
+    ``seed`` drives the synthetic-data generator; callers must pass distinct seeds
+    for the train and validation splits so the synthetic datasets stay disjoint.
 
     Real datasets are tokenized in bounded chunks so the transient peak (raw text
     plus tokenizer buffers) stays independent of dataset size; only the final
@@ -178,7 +183,7 @@ def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
     if not dataset_name:
         # Hermetic synthetic dataset (no download, no ``datasets`` dependency).
         n = int(cfg.data.synthetic_size)
-        gen = torch.Generator().manual_seed(int(cfg.seed) + (split == "train"))
+        gen = torch.Generator().manual_seed(seed)
         chosen_ids = torch.randint(0, vocab_size, (n, max_length), generator=gen)
         rejected_ids = torch.randint(0, vocab_size, (n, max_length), generator=gen)
         return _pairwise_td(chosen_ids, rejected_ids)

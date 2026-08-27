@@ -109,8 +109,14 @@ def main(cfg: DictConfig) -> None:
     vocab_size = get_vocab_size(tokenizer, score_network)
 
     with timeit("setup/data"):
-        train_data = make_dataset(cfg, tokenizer, cfg.data.split_train, vocab_size)
-        val_data = make_dataset(cfg, tokenizer, cfg.data.split_val, vocab_size)
+        # Distinct seeds keep the synthetic train/val datasets disjoint
+        # regardless of how the splits are named.
+        train_data = make_dataset(
+            cfg, tokenizer, cfg.data.split_train, vocab_size, seed=int(cfg.seed)
+        )
+        val_data = make_dataset(
+            cfg, tokenizer, cfg.data.split_val, vocab_size, seed=int(cfg.seed) + 1
+        )
         train_rb = make_replay_buffer(train_data, cfg.data.batch_size)
         val_rb = make_replay_buffer(val_data, cfg.data.batch_size)
 
