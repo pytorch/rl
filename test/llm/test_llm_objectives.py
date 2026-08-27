@@ -1075,6 +1075,28 @@ class TestSFT:
 
         torch.testing.assert_close(loss.loss_sft, torch.tensor([0.3132617, 1.3132617]))
 
+    def test_sft_kl_to_reference(self):
+        policy = _FixedSFTPolicy(torch.tensor([[-2.0, -100.0], [-1.0, -3.0]]))
+        data = lazy_stack(
+            list(
+                _sft_loss_data(
+                    ref_log_probs=torch.tensor([[-4.0, 0.0], [-1.0, -1.0]])
+                ).unbind(0)
+            )
+        )
+        kl_to_ref_coeff = 0.25
+        loss = SFTLoss(
+            policy,
+            tokenizer=object(),
+            kl_to_ref_coeff=kl_to_ref_coeff,
+        )(data)
+
+        expected_kl = (
+            torch.exp(torch.tensor(-2.0)) + torch.exp(torch.tensor(2.0)) - 2
+        ) / 4
+        torch.testing.assert_close(loss.kl_to_ref, expected_kl)
+        torch.testing.assert_close(loss.loss_kl_to_ref, kl_to_ref_coeff * expected_kl)
+
     def test_sft_assistant_only(self, data):
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
 
