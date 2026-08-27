@@ -2,13 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""
-Defines validation helper functions for replay buffers, collectors, and
-loss outputs so external training loops (TRL, NeMo-RL, custom) can consume
-individual TorchRL components with confidence.
+"""Defines validation helper functions for TorchRL LLM components.
+
+Provides helpers for replay buffers, collectors, and loss outputs so external
+training loops (TRL, NeMo-RL, custom) can consume individual TorchRL components
+with confidence.
 """
 from __future__ import annotations
 
+import collections.abc
 from typing import Any
 
 __all__ = [
@@ -31,13 +33,15 @@ def assert_buffer_contract(buffer: Any) -> None:
         buffer: The buffer object to validate.
 
     Raises:
-        TypeError: If the buffer is missing ``extend``, ``sample``, or ``write_count``.
+        TypeError: If the buffer is missing a callable ``extend``, a callable ``sample``, or ``write_count``.
     """
-    missing = [
-        attr
-        for attr in ("extend", "sample", "write_count")
-        if not hasattr(buffer, attr)
-    ]
+    missing = []
+    if not callable(getattr(buffer, "extend", None)):
+        missing.append("extend (callable)")
+    if not callable(getattr(buffer, "sample", None)):
+        missing.append("sample (callable)")
+    if not hasattr(buffer, "write_count"):
+        missing.append("write_count")
     if missing:
         raise TypeError(
             f"Object of type '{type(buffer).__name__}' does not satisfy the "
@@ -60,13 +64,13 @@ def assert_collector_contract(collector: Any) -> None:
         collector: The collector object to validate.
 
     Raises:
-        TypeError: If the collector is missing ``update_policy_weights_``, ``__iter__``, or ``__next__``.
+        TypeError: If the collector is missing a callable ``update_policy_weights_``, or ``__iter__``.
     """
-    missing = [
-        attr
-        for attr in ("update_policy_weights_", "__iter__", "__next__")
-        if not hasattr(collector, attr)
-    ]
+    missing = []
+    if not callable(getattr(collector, "update_policy_weights_", None)):
+        missing.append("update_policy_weights_ (callable)")
+    if not isinstance(collector, collections.abc.Iterable):
+        missing.append("__iter__")
     if missing:
         raise TypeError(
             f"Object of type '{type(collector).__name__}' does not satisfy the "

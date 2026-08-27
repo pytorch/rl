@@ -72,7 +72,7 @@ except TypeError:
 # %%
 # Collector contract
 # ------------------
-# Collectors must expose ``update_policy_weights_``, ``__iter__``, and ``__next__``.
+# Collectors must expose ``update_policy_weights_`` and ``__iter__``.
 
 
 class MyCollector:
@@ -81,9 +81,6 @@ class MyCollector:
 
     def __iter__(self):
         return iter([TensorDict({}, [])])
-
-    def __next__(self):
-        return next(iter(self))
 
 
 col = MyCollector()
