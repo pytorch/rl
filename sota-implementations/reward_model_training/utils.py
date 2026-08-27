@@ -274,13 +274,20 @@ def _maybe_freeze_backbone(score_network: TensorDictModule, freeze_frac: float) 
     base = score_network.module.model
     # The base transformer is exposed via ``base_model`` on HF models.
     transformer = getattr(base, "base_model", base)
+    # Locate the transformer block list: the longest ModuleList in the backbone.
+    # A recursive search covers nested layouts such as OPT (decoder.layers) and
+    # BERT-style encoders (encoder.layer) that a top-level attribute probe misses.
     layers = None
-    for attr in ("h", "layers", "layer", "block"):
-        candidate = getattr(transformer, attr, None)
-        if candidate is not None and len(candidate) > 0:
-            layers = candidate
-            break
-    if layers is None:
+    for module in transformer.modules():
+        if isinstance(module, nn.ModuleList) and (
+            layers is None or len(module) > len(layers)
+        ):
+            layers = module
+    if layers is None or len(layers) == 0:
+        torchrl_logger.warning(
+            "optim.freeze_frac is set but no transformer block list could be "
+            "located on the backbone; no layer was frozen."
+        )
         return
     num_freeze = int(freeze_frac * len(layers))
     for layer in layers[:num_freeze]:
