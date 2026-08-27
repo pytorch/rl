@@ -146,7 +146,10 @@ def main(cfg: DictConfig) -> None:
             torch.stack(accuracies).mean().item(),
         )
 
+    # optim.clip_grad null or 0 disables clipping; the norm is still computed
+    # for logging.
     clip_grad = cfg.optim.clip_grad
+    max_grad_norm = float(clip_grad) if clip_grad else float("inf")
     max_iters = int(cfg.optim.max_iters)
     pbar = tqdm.tqdm(range(1, max_iters + 1))
     for it in pbar:
@@ -165,7 +168,7 @@ def main(cfg: DictConfig) -> None:
         with timeit("train/backward"):
             loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(
-            score_network.parameters(), clip_grad
+            score_network.parameters(), max_grad_norm
         )
         with timeit("train/optim_step"):
             optimizer.step()
