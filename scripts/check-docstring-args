@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""Check that Google-style docstrings document signature arguments."""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import configparser
+import fnmatch
+import inspect
+import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+ARGUMENT_SECTION_NAMES = {
+    "args",
+    "arguments",
+    "parameters",
+    "keyword args",
+    "keyword arguments",
+    "keyword parameters",
+}
+IGNORED_ARGUMENT_NAMES = {"self", "cls"}
+SECTION_RE = re.compile(r"^(?P<indent>\s*)(?P<name>[A-Za-z][A-Za-z ]+):\s*$")
+ARGUMENT_RE = re.compile(
+    r"^(?P<indent>\s{2,})(?P<names>(?:\*\*|\*)?`?[A-Za-z_]\w*`?"
+    r"(?:\s*,\s*(?:\*\*|\*)?`?[A-Za-z_]\w*`?)*)"
+    r"(?:\s*\([^)]*\))?\s*:"
+)
+
+
+@dataclass(frozen=True)
+class MissingArgument:
+    """A missing argument description found in a docstring."""
+
+    path: Path
+    line: int
+    qualified_name: str
+    names: tuple[str, ...]
+
+
+def _iter_python_files(paths: list[Path]) -> list[Path]:
+    if not paths:
+        paths = [Path("torchrl")]
+
+    files: list[Path] = []
+    for path in paths:
+        if path.is_dir():
+            files.extend(sorted(path.rglob("*.py")))
+        elif path.suffix == ".py":
+            files.append(path)
+    return files
+
+
+def _load_ignore_decorator_patterns(config_path: Path) -> tuple[str, ...]:
+    if not config_path.exists():
+        return ()
+
+    config = configparser.ConfigParser()
+    config.read(config_path)
+    if not config.has_option("pydocstyle", "ignore-decorators"):
+        return ()
+
+    raw_patterns = config.get("pydocstyle", "ignore-decorators")
+    return tuple(
+        pattern.strip()
+        for pattern in raw_patterns.splitlines()
+        if pattern.strip() and not pattern.lstrip().startswith(";")
+    )
+
+
+def _decorator_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Call):
+        return _decorator_name(node.func)
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _decorator_name(node.value)
+        if parent is None:
+            return node.attr
+        return f"{parent}.{node.attr}"
+    return None
+
+
+def _is_public_name(name: str) -> bool:
+    return not name.startswith("_") or (name.startswith("__") and name.endswith("__"))
+
+
+def _has_ignored_decorator(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ignore_decorators: tuple[str, ...],
+) -> bool:
+    if not ignore_decorators:
+        return False
+
+    for decorator in node.decorator_list:
+        name = _decorator_name(decorator)
+        if name is None:
+            continue
+        short_name = name.rsplit(".", 1)[-1]
+        if any(
+            fnmatch.fnmatchcase(name, pattern)
+            or fnmatch.fnmatchcase(short_name, pattern)
+            for pattern in ignore_decorators
+        ):
+            return True
+    return False
+
+
+def _signature_argument_names(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[str]:
+    names = [
+        arg.arg
+        for arg in (
+            *node.args.posonlyargs,
+            *node.args.args,
+        )
+    ]
+    names.extend(arg.arg for arg in node.args.kwonlyargs)
+    return [name for name in names if name not in IGNORED_ARGUMENT_NAMES]
+
+
+def _iter_documented_arguments(docstring: str) -> set[str] | None:
+    """Return documented args, or ``None`` if no argument section is present."""
+    documented: set[str] = set()
+    in_argument_section = False
+    found_argument_section = False
+
+    for line in inspect.cleandoc(docstring).splitlines():
+        section_match = SECTION_RE.match(line)
+        if section_match and not section_match.group("indent"):
+            section_name = section_match.group("name").strip().lower()
+            in_argument_section = section_name in ARGUMENT_SECTION_NAMES
+            found_argument_section = found_argument_section or in_argument_section
+            continue
+
+        if not in_argument_section:
+            continue
+
+        argument_match = ARGUMENT_RE.match(line)
+        if argument_match is None:
+            continue
+
+        for name in argument_match.group("names").split(","):
+            documented.add(name.strip().strip("`").lstrip("*"))
+
+    if not found_argument_section:
+        return None
+    return documented
+
+
+class DocstringArgumentVisitor(ast.NodeVisitor):
+    """AST visitor that records missing argument documentation."""
+
+    def __init__(
+        self,
+        path: Path,
+        ignore_decorators: tuple[str, ...],
+    ) -> None:
+        self.path = path
+        self.ignore_decorators = ignore_decorators
+        self.qualified_name: list[str] = []
+        self.missing_arguments: list[MissingArgument] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.qualified_name.append(node.name)
+        self.generic_visit(node)
+        self.qualified_name.pop()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function(node)
+
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        if not _is_public_name(node.name):
+            return
+
+        if _has_ignored_decorator(node, self.ignore_decorators):
+            return
+
+        docstring = ast.get_docstring(node, clean=False)
+        if docstring is not None:
+            documented_arguments = _iter_documented_arguments(docstring)
+            if documented_arguments is not None:
+                signature_arguments = _signature_argument_names(node)
+                missing = tuple(
+                    name
+                    for name in signature_arguments
+                    if name not in documented_arguments
+                )
+                if missing:
+                    qualified_name = ".".join((*self.qualified_name, node.name))
+                    self.missing_arguments.append(
+                        MissingArgument(
+                            path=self.path,
+                            line=node.lineno,
+                            qualified_name=qualified_name,
+                            names=missing,
+                        )
+                    )
+
+        self.qualified_name.append(node.name)
+        self.generic_visit(node)
+        self.qualified_name.pop()
+
+
+def _check_file(
+    path: Path,
+    ignore_decorators: tuple[str, ...],
+) -> list[MissingArgument]:
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as err:
+        print(f"{path}: failed to read as UTF-8: {err}", file=sys.stderr)
+        return [MissingArgument(path=path, line=1, qualified_name="<file>", names=())]
+
+    try:
+        module = ast.parse(source, filename=str(path))
+    except SyntaxError as err:
+        print(
+            f"{path}:{err.lineno}: failed to parse Python: {err.msg}", file=sys.stderr
+        )
+        return [
+            MissingArgument(
+                path=path,
+                line=err.lineno or 1,
+                qualified_name="<file>",
+                names=(),
+            )
+        ]
+
+    visitor = DocstringArgumentVisitor(
+        path=path,
+        ignore_decorators=ignore_decorators,
+    )
+    visitor.visit(module)
+    return visitor.missing_arguments
+
+
+def _format_missing_argument(missing: MissingArgument) -> str:
+    names = ", ".join(missing.names)
+    plural = "s" if len(missing.names) > 1 else ""
+    return (
+        f"{missing.path}:{missing.line}: {missing.qualified_name}: "
+        f"missing docstring description{plural} for argument{plural}: {names}"
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        type=Path,
+        help="Python files or directories to check. Defaults to torchrl/.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("setup.cfg"),
+        help="Config file to read pydocstyle ignore-decorators from.",
+    )
+    args = parser.parse_args()
+
+    ignore_decorators = _load_ignore_decorator_patterns(args.config)
+    missing_arguments: list[MissingArgument] = []
+    for path in _iter_python_files(args.paths):
+        missing_arguments.extend(_check_file(path, ignore_decorators))
+
+    for missing_argument in missing_arguments:
+        print(_format_missing_argument(missing_argument))
+
+    return 1 if missing_arguments else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

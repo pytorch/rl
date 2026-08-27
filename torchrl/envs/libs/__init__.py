@@ -20,7 +20,15 @@ from .habitat import HabitatEnv
 from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
+from .libero import LiberoEnv, LiberoWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
+from .mjlab import MJLabEnv, MJLabWrapper
+from .mujoco_playground import (
+    MujocoPlaygroundAgentMapping,
+    MujocoPlaygroundAgentSpec,
+    MujocoPlaygroundEnv,
+    MujocoPlaygroundWrapper,
+)
 from .openml import OpenMLEnv
 from .openspiel import OpenSpielEnv, OpenSpielWrapper
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
@@ -46,10 +54,18 @@ __all__ = [
     "IsaacLabWrapper",
     "JumanjiEnv",
     "JumanjiWrapper",
+    "LiberoEnv",
+    "LiberoWrapper",
     "MOGymEnv",
     "MOGymWrapper",
     "MeltingpotEnv",
     "MeltingpotWrapper",
+    "MJLabEnv",
+    "MJLabWrapper",
+    "MujocoPlaygroundAgentMapping",
+    "MujocoPlaygroundAgentSpec",
+    "MujocoPlaygroundEnv",
+    "MujocoPlaygroundWrapper",
     "MultiThreadedEnv",
     "MultiThreadedEnvWrapper",
     "OpenMLEnv",

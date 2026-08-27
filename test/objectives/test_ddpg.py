@@ -248,7 +248,11 @@ class TestDDPG(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_value=delay_value,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1024,7 +1028,11 @@ class TestTD3(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1136,7 +1144,11 @@ class TestTD3(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -1166,7 +1178,11 @@ class TestTD3(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -1937,7 +1953,11 @@ class TestTD3BC(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return

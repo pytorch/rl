@@ -373,6 +373,15 @@ class TestSAC(LossModuleTestBase):
             loss = loss_fn(td)
         assert "loss_qvalue" in loss.keys()
 
+        updater = SoftUpdate(loss_fn, eps=0.5)
+        targets_before = updater._targets.clone()
+        with torch.no_grad():
+            for source in updater._sources.values(True, True):
+                source.add_(1)
+        updater.step()
+        for key, target in updater._targets.items(True, True):
+            torch.testing.assert_close(target, targets_before.get(key) + 0.5)
+
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -436,7 +445,11 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -611,7 +624,11 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -636,7 +653,11 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -1269,6 +1290,28 @@ class TestSAC(LossModuleTestBase):
         )
         loss.load_state_dict(state)
 
+    def test_sac_uses_joint_sample_log_prob(self, version, monkeypatch):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_sac()
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value() if version == 1 else None
+        loss = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("SAC inverse-scored a freshly sampled TanhNormal")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        with pytest.warns(
+            UserWarning, match="No target network updater"
+        ) if rl_warnings() else contextlib.nullcontext():
+            result = loss(td)
+        assert result.isfinite().all()
+
     @pytest.mark.parametrize("action_dim", [1, 2, 4, 8])
     def test_sac_target_entropy_auto(self, version, action_dim):
         """Regression test for issue #3291: target_entropy='auto' should be -dim(A)."""
@@ -1671,7 +1714,11 @@ class TestDiscreteSAC(LossModuleTestBase):
             action_space="one-hot",
             **kwargs,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1790,7 +1837,11 @@ class TestDiscreteSAC(LossModuleTestBase):
             deactivate_vmap=False,
             **kwargs,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -1818,7 +1869,11 @@ class TestDiscreteSAC(LossModuleTestBase):
             deactivate_vmap=True,
             **kwargs,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -1887,8 +1942,6 @@ class TestDiscreteSAC(LossModuleTestBase):
     @pytest.mark.parametrize("target_entropy_weight", [0.5, 0.98])
     def test_discrete_sac_target_entropy_auto(self, action_dim, target_entropy_weight):
         """Regression test for target_entropy='auto' in DiscreteSACLoss."""
-        import numpy as np
-
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(action_dim=action_dim)
         qvalue = self._create_mock_qvalue(action_dim=action_dim)
@@ -2468,7 +2521,11 @@ class TestCrossQ(LossModuleTestBase):
             loss_function="l2",
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -2569,7 +2626,11 @@ class TestCrossQ(LossModuleTestBase):
             deactivate_vmap=False,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -2592,7 +2653,11 @@ class TestCrossQ(LossModuleTestBase):
             deactivate_vmap=True,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -3302,7 +3367,11 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -3689,7 +3758,11 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -3706,7 +3779,11 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_deprec.make_value_estimator(td_est)
             return

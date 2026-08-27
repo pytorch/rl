@@ -10,6 +10,7 @@ from torch import multiprocessing as mp, nn
 from torchrl._utils import logger as torchrl_logger, WEIGHT_SYNC_TIMEOUT
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
     TransportBackend,
     WeightStrategy,
     WeightSyncScheme,
@@ -20,6 +21,39 @@ def _close_mp_queue(queue: mp.Queue) -> None:
     """Close a multiprocessing Queue and wait for its feeder thread to exit."""
     queue.close()
     queue.join_thread()
+
+
+def _tensor_summary(weights: TensorDictBase) -> tuple[set[str], int, int]:
+    devices = set()
+    numel = 0
+    nbytes = 0
+    for value in weights.values(True, True):
+        if not torch.is_tensor(value):
+            continue
+        devices.add(str(value.device))
+        numel += value.numel()
+        nbytes += value.numel() * value.element_size()
+    return devices, numel, nbytes
+
+
+def _log_weight_sync(
+    *,
+    model_id: str | None,
+    worker_idx: int | None,
+    source: TensorDictBase,
+    destination: TensorDictBase,
+) -> None:
+    source_devices, numel, nbytes = _tensor_summary(source)
+    destination_devices, _, _ = _tensor_summary(destination)
+    torchrl_logger.debug(
+        "Synced weights model_id=%s worker=%s params=%s bytes=%s devices=%s -> %s",
+        model_id,
+        worker_idx,
+        numel,
+        nbytes,
+        sorted(source_devices),
+        sorted(destination_devices),
+    )
 
 
 class SharedMemTransport:
@@ -210,6 +244,12 @@ class SharedMemTransport:
                         raise RuntimeError(
                             "Gradients should not be required for weights."
                         )
+                    _log_weight_sync(
+                        model_id=None,
+                        worker_idx=None,
+                        source=weights_to_update,
+                        destination=buffer,
+                    )
                     buffer.update_(weights_to_update, non_blocking=True)
 
         if torch.cuda.is_available():
@@ -242,6 +282,12 @@ class SharedMemTransport:
         if weights_to_update.requires_grad:
             raise RuntimeError("Gradients should not be required for weights.")
 
+        _log_weight_sync(
+            model_id=None,
+            worker_idx=worker_idx,
+            source=weights_to_update,
+            destination=buffer,
+        )
         buffer.update_(weights_to_update, non_blocking=True)
 
     def receive_weights(
@@ -277,6 +323,7 @@ class SharedMemTransport:
         """No-op for shared memory - no acknowledgment needed."""
 
 
+@register_weight_sync_backend("shared")
 class SharedMemWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization using shared memory.
 
@@ -819,6 +866,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # buffers (one per device). We must update ALL of them, not just the first.
         if self._shared_transport is not None and self.shared_transport.unique_weights:
             for shared_weights in self.shared_transport.unique_weights:
+                _log_weight_sync(
+                    model_id=model_id,
+                    worker_idx=None,
+                    source=fresh_weights,
+                    destination=shared_weights,
+                )
                 shared_weights.data.update_(fresh_weights.data)
             return self.shared_transport.unique_weights[0]
 
@@ -984,7 +1037,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                             self.model, self._receiver_shared_weights, inplace=True
                         )
 
-                    # Cascade weight update to sub-collectors if context supports it
+                    # Cascade weight update to sub-collectors if context supports it.
+                    # When the context is a leaf Collector, its
+                    # update_policy_weights_ also bumps the local
+                    # PolicyVersion transform — so we don't need a separate
+                    # increment_version() call here.
                     model_id = self._model_id or "policy"
                     if self.context is not None and hasattr(
                         self.context, "update_policy_weights_"

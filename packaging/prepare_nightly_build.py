@@ -24,11 +24,11 @@ def prepare_nightly_build():
     with open(pyproject_path) as f:
         content = f.read()
 
-    # Replace tensordict dependency with tensordict-nightly using regex
-    # This pattern matches "tensordict" followed by any version constraints
-    tensordict_pattern = r"tensordict[^,\]]*"
+    # Replace only the quoted project dependency, not tool sections such as
+    # ``[tool.uv.sources]``.
+    tensordict_pattern = r'"tensordict[^"]*"'
     if re.search(tensordict_pattern, content):
-        content = re.sub(tensordict_pattern, "tensordict-nightly", content)
+        content = re.sub(tensordict_pattern, '"tensordict-nightly"', content)
         logger.info("Replaced tensordict with tensordict-nightly in pyproject.toml")
     else:
         logger.info("tensordict dependency not found in pyproject.toml")

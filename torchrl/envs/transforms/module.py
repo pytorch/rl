@@ -276,7 +276,7 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
                 return self.module(td)
 
     def _update_weights_tensordict(self, params: TensorDictBase) -> None:
-        params.to_module(self.module)
+        params.to_module(self.module, preserve_module_state=False)
 
     def _update_weights_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
         self.module.load_state_dict(state_dict)

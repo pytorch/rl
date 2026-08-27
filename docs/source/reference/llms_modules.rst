@@ -47,3 +47,16 @@ Utilities
     stateless_init_process_group_async
     make_vllm_worker
     stateless_init_process_group
+
+TRL Interoperability Adapters
+-----------------------------
+
+Thin adapters enabling seamless interoperability between TorchRL and
+Hugging Face ``trl``.  See also :ref:`trl_interop_tutorial`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    TorchRLBufferDataset
+    HFRewardModelWrapper

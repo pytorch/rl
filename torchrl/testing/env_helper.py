@@ -30,6 +30,8 @@ def make_isaac_env(
     *,
     device=None,
     init_app: bool = True,
+    native_autoreset: bool = False,
+    num_envs: int | None = None,
 ):
     """Helper function to create an IsaacLab env.
 
@@ -42,24 +44,38 @@ def make_isaac_env(
             started in headless mode before the env is created.  Set to
             ``False`` when the caller has already initialised ``AppLauncher``
             (e.g. via an ``init_fn`` in a child process).
+        native_autoreset: if ``True``, keep Isaac Lab's native autoreset
+            observations in TorchRL's step-and-reset path.
+        num_envs: optional override for the number of sub-environments. When
+            ``None`` (the default), Isaac Lab's per-task default is kept.
     """
     if init_app:
         _isaac_app_launcher_init()
+
+    import importlib
 
     import torch
 
     torch.manual_seed(0)
 
-    import gymnasium as gym
+    import gymnasium
     import isaaclab_tasks  # noqa: F401
-    from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
     from torchrl import logger as torchrl_logger
     from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-    torchrl_logger.info("Making IsaacLab env...")
-    env = gym.make(env_name, cfg=AntEnvCfg())
+    torchrl_logger.info("Making IsaacLab env %s...", env_name)
+    spec = gymnasium.spec(env_name)
+    entry = spec.kwargs["env_cfg_entry_point"]
+    if isinstance(entry, str):
+        module_path, class_name = entry.rsplit(":", 1)
+        env_cfg = getattr(importlib.import_module(module_path), class_name)()
+    else:
+        env_cfg = entry()
+    if num_envs is not None:
+        env_cfg.scene.num_envs = num_envs
+    env = gymnasium.make(env_name, cfg=env_cfg)
     torchrl_logger.info("Wrapping IsaacLab env...")
-    env = IsaacLabWrapper(env, device=device)
+    env = IsaacLabWrapper(env, device=device, native_autoreset=native_autoreset)
     return env
 
 

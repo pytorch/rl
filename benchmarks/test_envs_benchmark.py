@@ -10,6 +10,8 @@ import torch
 from tensordict import TensorDict
 from torchrl.envs import ParallelEnv, SerialEnv, step_mdp, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.libero import _has_libero, LiberoEnv
+from torchrl.envs.transforms.functional import cat_frames
 
 
 def make_simple_env():
@@ -36,6 +38,19 @@ def make_serial_env():
 def make_parallel_env():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = ParallelEnv(3, lambda: DMControlEnv("cheetah", "run", device=device))
+    env.rollout(3)
+    return ((env,), {})
+
+
+def make_libero_env():
+    env = LiberoEnv(
+        "libero_spatial",
+        task_id=0,
+        camera_height=256,
+        camera_width=256,
+        settle_steps=0,
+        max_episode_steps=None,
+    )
     env.rollout(3)
     return ((env,), {})
 
@@ -96,6 +111,13 @@ def test_parallel(benchmark):
     benchmark(execute_env, c)
 
 
+@pytest.mark.skipif(not _has_libero, reason="libero not found")
+def test_libero(benchmark):
+    # raw simulation + render throughput of the LIBERO adapter (steps/s)
+    (c,), _ = make_libero_env()
+    benchmark(lambda: c.rollout(100, break_when_any_done=False))
+
+
 @pytest.mark.parametrize("nested", [True, False])
 @pytest.mark.parametrize("keep_other", [True, False])
 @pytest.mark.parametrize("exclude_reward", [True, False])
@@ -125,6 +147,22 @@ def test_step_mdp_speed(
         exclude_reward=exclude_reward,
         exclude_done=exclude_done,
         exclude_action=exclude_action,
+    )
+
+
+@pytest.mark.parametrize("padding", ["same", "constant"])
+@pytest.mark.parametrize("N", [4, 16])
+def test_cat_frames_functional(benchmark, padding, N):
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    # batch of trajectories: (batch, time, channels)
+    tensor = torch.randn(32, 200, 8, device=device)
+    benchmark(
+        cat_frames,
+        tensor,
+        N,
+        dim=-1,
+        padding=padding,
+        time_dim=-2,
     )
 
 

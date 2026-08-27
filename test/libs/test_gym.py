@@ -55,6 +55,9 @@ from torchrl.testing import (
     rollout_consistency_assertion,
 )
 
+_has_gym_super_mario_bros = importlib.util.find_spec("gym_super_mario_bros") is not None
+_has_mo_gymnasium = importlib.util.find_spec("mo_gymnasium") is not None
+
 _has_ale = importlib.util.find_spec("ale_py") is not None
 _has_atari_py = False
 if importlib.util.find_spec("atari_py") is not None:
@@ -73,9 +76,6 @@ _has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 _has_gym_regular = importlib.util.find_spec("gym") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
-
-if _has_gymnasium:
-    import gymnasium
 
 try:
     from torch.utils._pytree import tree_flatten
@@ -407,8 +407,6 @@ class TestGym:
     @pytest.mark.parametrize("backend", _BACKENDS)
     @pytest.mark.parametrize("numpy", [True, False])
     def test_torchrl_to_gym(self, backend, numpy):
-        from torchrl.envs.libs.gym import gym_backend, set_gym_backend
-
         gb = gym_backend()
         try:
             EnvBase.register_gym(
@@ -1663,7 +1661,6 @@ class TestGym:
 
     def test_is_from_pixels_simple_env(self):
         """Test that _is_from_pixels correctly identifies non-pixel environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
 
         # Test with a simple environment that doesn't have pixels
         class SimpleEnv:
@@ -1682,7 +1679,6 @@ class TestGym:
 
     def test_is_from_pixels_box_env(self):
         """Test that _is_from_pixels correctly identifies pixel Box environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
 
         # Test with a pixel-like environment
         class PixelEnv:
@@ -1703,7 +1699,6 @@ class TestGym:
 
     def test_is_from_pixels_dict_env(self):
         """Test that _is_from_pixels correctly identifies Dict environments with pixels."""
-        from torchrl.envs.libs.gym import _is_from_pixels
 
         # Test with a Dict environment that has pixels
         class DictPixelEnv:
@@ -1729,7 +1724,6 @@ class TestGym:
 
     def test_is_from_pixels_dict_env_no_pixels(self):
         """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
-        from torchrl.envs.libs.gym import _is_from_pixels
 
         # Test with a Dict environment that doesn't have pixels
         class DictNoPixelEnv:
@@ -1754,7 +1748,7 @@ class TestGym:
         ), f"Expected False for Dict environment without pixels, got {result}"
 
     def test_num_workers_returns_parallel_env(self):
-        """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
+        """Ensure explicit TorchRL `num_workers` returns a ParallelEnv, while gym's
         native `num_envs` remains a gym-native vectorization."""
 
         # TorchRL-managed parallelism: should return ParallelEnv
@@ -1766,7 +1760,12 @@ class TestGym:
             if nworkers is None:
                 nworkers = getattr(env, "num_envs", None)
             assert nworkers == 3
-            # start workers on first use
+            assert env._metadata_from_workers
+            assert env._use_buffers is False
+            assert not any(
+                isinstance(factory, EnvCreator) for factory in env.create_env_fn
+            )
+            assert not env.is_closed
             env.reset()
             assert env.batch_size == torch.Size([3])
         finally:
@@ -1779,19 +1778,15 @@ class TestGym:
         finally:
             env_gymvec.close()
 
-    def test_num_workers_kwargs_modifiable(self):
-        """Ensure the kwargs preserved by the GymEnv factory can be modified via
-        `configure_parallel` before workers start."""
+    def test_num_workers_parallel_env_is_started(self):
+        """Worker metadata starts the generated ParallelEnv during construction."""
 
         env = GymEnv("CartPole-v1", num_workers=3)
         try:
-            # should return a lazy ParallelEnv
             assert isinstance(env, ParallelEnv)
-
-            # configure_parallel should accept kwargs and be callable before start
-            env.configure_parallel(use_buffers=True, num_threads=1)
-
-            # starting the environment should work after configuring
+            assert not env.is_closed
+            with pytest.raises(RuntimeError, match="after the environment has started"):
+                env.configure_parallel(num_threads=1)
             td = env.reset()
             assert isinstance(td, TensorDict)
         finally:
@@ -1834,7 +1829,9 @@ class TestGym:
 
     def test_is_from_pixels_wrapper_env(self):
         """Test that _is_from_pixels correctly identifies wrapped environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
+        import builtins
+
+        import torchrl.envs.libs.utils
 
         # Test with a mock environment that simulates being wrapped with a pixel wrapper
         class MockWrappedEnv:
@@ -1848,8 +1845,6 @@ class TestGym:
                 )
 
         # Mock the isinstance check to simulate the wrapper detection
-        import torchrl.envs.libs.utils
-
         original_isinstance = isinstance
 
         def mock_isinstance(obj, cls):
@@ -1858,8 +1853,6 @@ class TestGym:
             return original_isinstance(obj, cls)
 
         # Temporarily patch isinstance
-        import builtins
-
         builtins.isinstance = mock_isinstance
 
         try:
@@ -1878,6 +1871,7 @@ class TestGym:
     def test_gymnasium_num_envs(self, num_envs, request):
         if not _has_gymnasium:
             pytest.skip("gymnasium not found")
+        import gymnasium
 
         gym_version = version.parse(gymnasium.__version__)
         if version.parse("1.0.0") <= gym_version < version.parse("1.1.0"):
@@ -1913,6 +1907,8 @@ class TestMiniGrid:
         ],
     )
     def test_minigrid(self, id):
+        import gymnasium
+
         env_base = gymnasium.make(id)
         env = GymWrapper(env_base)
         check_env_specs(env)

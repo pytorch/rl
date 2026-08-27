@@ -1,0 +1,62 @@
+name: Squash gh-pages history
+
+# The gh-pages branch is fully auto-generated: docs.yml commits a fresh
+# "auto-generating sphinx docs" snapshot on every push to main/tags, and the
+# benchmark workflow auto-pushes benchmark results. Each run adds a commit, so
+# the branch accumulates thousands of commits whose only lasting value is the
+# *latest* snapshot. That history dominates the repository's clone size.
+#
+# This workflow periodically collapses gh-pages to a single, content-identical
+# orphan commit, dropping the accumulated history while leaving the published
+# site byte-for-byte unchanged. It is safe to re-run at any time and is a no-op
+# when gh-pages already has a single commit.
+
+on:
+  schedule:
+    # 04:00 UTC on the 1st of every month.
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-squash
+  cancel-in-progress: false
+
+jobs:
+  squash:
+    name: Collapse gh-pages to a single commit
+    # Never run on forks: this force-pushes the public gh-pages branch.
+    if: github.repository == 'pytorch/rl'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+      - name: Squash history (content-preserving)
+        run: |
+          set -euo pipefail
+          git config user.name 'pytorchbot'
+          git config user.email 'soumith+bot@pytorch.org'
+
+          before=$(git rev-parse HEAD)
+          count=$(git rev-list --count HEAD)
+          echo "gh-pages currently has ${count} commit(s)."
+          if [ "${count}" -le 1 ]; then
+            echo "Already a single commit; nothing to do."
+            exit 0
+          fi
+
+          # Parentless commit capturing the exact current tree, so the published
+          # content is unchanged and the old history becomes unreachable.
+          new=$(git commit-tree "HEAD^{tree}" \
+            -m "Squash gh-pages history (automated)" \
+            -m "Collapses ${count} accumulated doc/benchmark deploy commits into a single snapshot to keep clone size small. Published content is unchanged.")
+
+          # --force-with-lease aborts safely if a docs/benchmark deploy raced in
+          # since checkout; the next scheduled run will pick it up.
+          git push --force-with-lease=gh-pages:"${before}" origin "${new}:gh-pages"
+          echo "Squashed ${count} commits into 1 (content identical)."

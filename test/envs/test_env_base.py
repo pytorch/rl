@@ -4,9 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 import functools
 import gc
 import pickle
+import subprocess
+import sys
+import warnings
 from functools import partial
 from typing import Any
 
@@ -20,10 +24,10 @@ from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.tensorclass import TensorClass
 from torch import nn
 
-from torchrl.data.tensor_specs import Composite, NonTensor, Unbounded
+from torchrl.data.tensor_specs import Binary, Composite, NonTensor, Unbounded
 from torchrl.envs import EnvBase, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import gym_backend, GymEnv
-from torchrl.envs.transforms import StepCounter, TransformedEnv
+from torchrl.envs.transforms import StepCounter, Transform, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
 from torchrl.modules import Actor
 from torchrl.testing import (
@@ -892,3 +896,238 @@ class TestRollout:
         else:
             assert r_outplace.shape[-1:] == (40,)
         assert_allclose_td(r_inplace, r_outplace)
+
+
+class TestRolloutActions:
+    def test_actions_drive_rollout(self):
+        env = CountingEnv(max_steps=100)
+        actions = [torch.ones(1) for _ in range(5)]
+        r = env.rollout(max_steps=50, actions=actions, break_when_any_done=False)
+        # A sized actions iterable caps max_steps to its length.
+        assert r.shape[-1] == 5
+        assert (r["action"] == 1).all()
+
+    def test_actions_generator(self):
+        env = CountingEnv(max_steps=100)
+
+        def gen():
+            for _ in range(4):
+                yield torch.ones(1)
+
+        r = env.rollout(max_steps=4, actions=gen(), break_when_any_done=False)
+        assert r.shape[-1] == 4
+        assert (r["action"] == 1).all()
+
+    def test_actions_and_policy_mutually_exclusive(self):
+        env = CountingEnv(max_steps=10)
+        with pytest.raises(ValueError, match="both"):
+            env.rollout(3, policy=lambda td: td, actions=[torch.ones(1)])
+
+
+class _NestedStatelessEnv(EnvBase):
+    """A tiny stateless env whose state lives under a nested key.
+
+    Used to exercise the ``reset(td, set_state=True)`` path with a
+    :class:`~tensordict.NestedKey` state entry.
+    """
+
+    _supports_set_state = True
+
+    def __init__(self, **kwargs):
+        super().__init__(batch_size=(), **kwargs)
+        self.observation_spec = Composite(nested=Composite(x=Unbounded(shape=(1,))))
+        self.state_spec = self.observation_spec.clone()
+        self.action_spec = Unbounded(shape=(1,))
+        self.reward_spec = Unbounded(shape=(1,))
+        self.done_spec = Binary(n=1, shape=(1,), dtype=torch.bool)
+
+    def _reset(self, tensordict, **kwargs):
+        set_state = bool(kwargs.get("set_state"))
+        if (
+            set_state
+            and tensordict is not None
+            and ("nested", "x") in tensordict.keys(True)
+        ):
+            x = tensordict["nested", "x"].clone()
+        else:
+            x = torch.zeros(1)
+        return TensorDict(
+            {("nested", "x"): x, "done": torch.zeros(1, dtype=torch.bool)},
+            batch_size=(),
+        )
+
+    def _step(self, tensordict):
+        x = tensordict["nested", "x"] + tensordict["action"]
+        return TensorDict(
+            {
+                ("nested", "x"): x,
+                "reward": torch.zeros(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=(),
+        )
+
+    def _set_seed(self, *args, **kwargs):
+        ...
+
+
+class _KwargOnlySetStateEnv(EnvBase):
+    _supports_set_state = True
+
+    def __init__(self, **kwargs):
+        super().__init__(batch_size=(), **kwargs)
+        self.observation_spec = Composite(observation=Unbounded(shape=(1,)))
+        self.action_spec = Unbounded(shape=(1,))
+        self.reward_spec = Unbounded(shape=(1,))
+        self.done_spec = Binary(n=1, shape=(1,), dtype=torch.bool)
+
+    def _input_td_has_state(self, tensordict):
+        return False
+
+    def _reset(self, tensordict, **kwargs):
+        if kwargs.get("set_state"):
+            raise RuntimeError("unexpected implicit set_state")
+        return TensorDict(
+            {
+                "observation": torch.zeros(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=(),
+        )
+
+    def _step(self, tensordict):
+        return TensorDict(
+            {
+                "observation": tensordict["observation"] + tensordict["action"],
+                "reward": torch.zeros(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=(),
+        )
+
+    def _set_seed(self, *args, **kwargs):
+        ...
+
+
+class _OuterStateTransform(Transform):
+    def transform_state_spec(self, state_spec):
+        state_spec = state_spec.clone()
+        state_spec["outer_state"] = Unbounded(shape=(1,))
+        return state_spec
+
+
+class TestResetSetState:
+    """Tests for the explicit ``reset(td, set_state=True)`` deterministic-reset kwarg."""
+
+    def test_set_state_nested_key(self):
+        env = _NestedStatelessEnv()
+        td = TensorDict({("nested", "x"): torch.full((1,), 7.0)}, batch_size=())
+        # honored when set_state=True
+        out = env.reset(td.clone(), set_state=True)
+        assert out["nested", "x"].item() == 7.0
+        # ignored when set_state=False
+        out_false = env.reset(td.clone(), set_state=False)
+        assert out_false["nested", "x"].item() == 0.0
+
+    def test_set_state_nested_key_transition_warning(self):
+        env = _NestedStatelessEnv()
+        td = TensorDict({("nested", "x"): torch.full((1,), 3.0)}, batch_size=())
+        # unspecified set_state with a populated nested state key -> FutureWarning,
+        # honored for backwards compatibility.
+        with pytest.warns(FutureWarning, match="set_state"):
+            out = env.reset(td.clone())
+        assert out["nested", "x"].item() == 3.0
+        # an empty tensordict must not warn.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            env.reset(TensorDict(batch_size=()))
+
+    def test_set_state_unsupported_raises(self):
+        # ContinuousActionVecMockEnv does not opt into deterministic resets.
+        env = ContinuousActionVecMockEnv()
+        assert env._supports_set_state is False
+        td = env.reset()
+        with pytest.raises(NotImplementedError, match="set_state"):
+            env.reset(td.clone(), set_state=True)
+        # an unsupported env with state in the td must not emit the warning.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            env.reset(td.clone())
+
+    def test_set_state_batched_serial(self):
+        env = SerialEnv(2, _NestedStatelessEnv)
+        try:
+            assert env._supports_set_state is True
+            td = env.reset()
+            td["nested", "x"] = torch.full((2, 1), 5.0)
+            out = env.reset(td.clone(), set_state=True)
+            assert (out["nested", "x"] == 5.0).all()
+        finally:
+            env.close()
+
+    def test_set_state_batched_parallel(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, _NestedStatelessEnv)
+        try:
+            assert env._supports_set_state is True
+            td = env.reset()
+            td["nested", "x"] = torch.full((2, 1), 5.0)
+            out = env.reset(td.clone(), set_state=True)
+            assert (out["nested", "x"] == 5.0).all()
+        finally:
+            env.close()
+
+    def test_transformed_env_delegates_implicit_state_detection(self):
+        env = TransformedEnv(_KwargOnlySetStateEnv(), _OuterStateTransform())
+        td = TensorDict({"outer_state": torch.ones(1)}, batch_size=())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            out = env.reset(td)
+        assert (out["observation"] == 0).all()
+
+
+_MOCK_ENV_KEY_CASES = [
+    # (class name, out_key, pixel shape or None for vector obs)
+    ("DiscreteActionVecMockEnv", "observation", None),
+    ("ContinuousActionVecMockEnv", "observation", None),
+    ("DiscreteActionConvMockEnv", "pixels", (1, 7, 7)),
+    ("DiscreteActionConvMockEnvNumpy", "pixels", (7, 7, 3)),
+    ("ContinuousActionConvMockEnv", "pixels", (1, 7, 7)),
+    ("ContinuousActionConvMockEnvNumpy", "pixels", (7, 7, 3)),
+]
+
+
+@pytest.mark.parametrize("cls_name,out_key,pixel_shape", _MOCK_ENV_KEY_CASES)
+def test_mock_env_keys_first_instance_explicit_specs(cls_name, out_key, pixel_shape):
+    # Regression test: the mock envs used to set cls.out_key/_out_key inside
+    # their __new__, guarded behind `observation_spec is None`. Constructing
+    # a mock with an explicit observation_spec as the FIRST instance in the
+    # process then failed with AttributeError (exposed by pytest-xdist
+    # ordering), and unconditional assignment in a parent stomped the keys
+    # of Conv subclasses delegating to it. The keys are now class-level
+    # attributes; a subprocess guarantees true first-instance conditions.
+    shape = list(pixel_shape) if pixel_shape is not None else [7]
+    orig_key = "pixels_orig" if out_key == "pixels" else "observation_orig"
+    script = f"""
+import torch
+from torchrl.data.tensor_specs import Composite, Unbounded
+from torchrl.testing.mocking_classes import {cls_name}
+
+spec = Composite(
+    {out_key}=Unbounded(shape=torch.Size({shape})),
+    {orig_key}=Unbounded(shape=torch.Size({shape})),
+)
+env = {cls_name}(observation_spec=spec)
+assert env.out_key == {out_key!r}, env.out_key
+assert env._out_key == {orig_key!r}, env._out_key
+td = env.reset()
+assert {out_key!r} in td.keys(), list(td.keys())
+td = env.rand_step(td)
+assert ("next", {out_key!r}) in td.keys(True), list(td.keys(True))
+env.rollout(3)
+"""
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=300)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

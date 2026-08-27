@@ -14,6 +14,7 @@ from packaging import version
 from torch import distributions as D, nn
 from torch.distributions import constraints
 from torch.distributions.transforms import _InverseTransform
+from torch.distributions.utils import _sum_rightmost
 
 from torchrl._utils import safe_is_current_stream_capturing
 from torchrl.modules.distributions.truncated_normal import (
@@ -241,8 +242,14 @@ class TruncatedNormal(D.Independent):
         self.device = loc.device
         self.upscale = torch.as_tensor(upscale, device=self.device)
 
-        high = torch.as_tensor(high, device=self.device)
-        low = torch.as_tensor(low, device=self.device)
+        if not isinstance(high, torch.Tensor):
+            high = torch.as_tensor(high, device=self.device, dtype=loc.dtype)
+        elif high.device != self.device:
+            high = high.to(self.device)
+        if not isinstance(low, torch.Tensor):
+            low = torch.as_tensor(low, device=self.device, dtype=loc.dtype)
+        elif low.device != self.device:
+            low = low.to(self.device)
         self.low = low
         self.high = high
         self.update(loc, scale)
@@ -474,6 +481,73 @@ class TanhNormal(FasterTransformedDistribution):
 
         self.update(loc, scale)
 
+    def rsample_and_log_prob(
+        self, sample_shape: torch.Size | tuple[int, ...] = ()
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Sample and score the same pre-tanh value with pathwise gradients.
+
+        Calling rsample() and log_prob() separately reconstructs the pre-tanh
+        value from the rounded action. Once tanh saturates, that inverse can return
+        a different Normal value and produce the wrong score and gradients. This
+        method scores the exact Normal value used to create the action.
+
+        Args:
+            sample_shape: Leading sample dimensions.
+
+        Returns:
+            The action and its log probability. Their shapes are
+            sample_shape + batch_shape + event_shape and
+            sample_shape + batch_shape, respectively.
+
+        Use log_prob() for actions not drawn by this call.
+
+        Examples:
+            >>> loc = torch.tensor([20.0, -20.0])
+            >>> scale = torch.full_like(loc, 0.1)
+            >>> dist = TanhNormal(loc, scale, event_dims=1)
+            >>> action, log_prob = dist.rsample_and_log_prob()
+            >>> action.shape, log_prob.shape
+            (torch.Size([2]), torch.Size([]))
+        """
+        sample_shape = torch.Size(sample_shape)
+        preimage = self.base_dist.rsample(sample_shape)
+        transform = self.transforms[0]
+        sample = transform(preimage)
+
+        log_prob = self.base_dist.log_prob(preimage) - _sum_rightmost(
+            transform.log_abs_det_jacobian(preimage, sample),
+            len(self.event_shape),
+        )
+        return sample, log_prob
+
+    def sample_and_log_prob(
+        self, sample_shape: torch.Size | tuple[int, ...] = ()
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Sample and score the same pre-tanh value without pathwise gradients.
+
+        The action is detached. Its log probability keeps score-function gradients
+        with respect to the distribution parameters.
+
+        Args:
+            sample_shape: Leading sample dimensions.
+
+        Returns:
+            The detached action and its differentiable log probability. Their
+            shapes are sample_shape + batch_shape + event_shape and
+            sample_shape + batch_shape, respectively.
+        """
+        sample_shape = torch.Size(sample_shape)
+        preimage = self.base_dist.sample(sample_shape)
+        transform = self.transforms[0]
+        with torch.no_grad():
+            sample = transform(preimage)
+
+        log_prob = self.base_dist.log_prob(preimage) - _sum_rightmost(
+            transform.log_abs_det_jacobian(preimage, sample),
+            len(self.event_shape),
+        )
+        return sample, log_prob
+
     @property
     def min(self):
         self._warn_minmax()
@@ -638,6 +712,8 @@ class Delta(D.Distribution):
                 self.param.expand((*batch_shape, *self.event_shape)),
                 atol=self.atol,
                 rtol=self.rtol,
+                batch_shape=batch_shape,
+                event_shape=self.event_shape,
             )
         return self
 
@@ -647,8 +723,8 @@ class Delta(D.Distribution):
     def _is_equal(self, value: torch.Tensor) -> torch.Tensor:
         param = self.param.expand_as(value)
         is_equal = abs(value - param) < self.atol + self.rtol * abs(param)
-        for i in range(-1, -len(self.event_shape) - 1, -1):
-            is_equal = is_equal.all(i)
+        for _ in self.event_shape:
+            is_equal = is_equal.all(-1)
         return is_equal
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:

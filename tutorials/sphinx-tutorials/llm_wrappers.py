@@ -5,8 +5,8 @@ LLM Wrappers in TorchRL
 This tutorial demonstrates how to use TorchRL's LLM wrappers for integrating Large Language Models
 into reinforcement learning workflows. TorchRL provides two main wrappers:
 
-- :class:`~torchrl.modules.llm.policies.vLLMWrapper` for vLLM models
-- :class:`~torchrl.modules.llm.policies.TransformersWrapper` for Hugging Face Transformers models
+- :class:`~torchrl.modules.llm.vLLMWrapper` for vLLM models
+- :class:`~torchrl.modules.llm.TransformersWrapper` for Hugging Face Transformers models
 
 Both wrappers provide a unified API with consistent input/output interfaces using TensorClass objects,
 making them interchangeable in RL environments.

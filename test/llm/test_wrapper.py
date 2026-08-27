@@ -5,22 +5,33 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import gc
 import importlib.util
+import sys
 import threading
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
+from itertools import islice
 from typing import Any, TYPE_CHECKING
 
 import pytest
 import torch
+
+import torchrl.modules.llm as llm_mod
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
+from torch.nn.utils.rnn import pad_sequence
+from torchrl import logger as torchrl_logger
+from torchrl.data import ListStorage, ReplayBuffer
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
+from torchrl.modules.llm.backends.vllm import vllm_async
+from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
@@ -35,8 +46,11 @@ from torchrl.modules.llm.policies.vllm_wrapper import (
     _RequestOutput_tc,
     vLLMWrapper,
 )
+from torchrl.modules.llm.trl_interop import HFRewardModelWrapper, TorchRLBufferDataset
 
+_has_datasets = importlib.util.find_spec("datasets") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
+_has_trl = importlib.util.find_spec("trl") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
 # _has_datasets = importlib.util.find_spec("datasets") is not None
@@ -139,6 +153,7 @@ def transformers_instance() -> (
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+    model.eval()
     tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
     tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
@@ -191,6 +206,227 @@ def sample_history_assistant():
         ],
     ]
     return History.from_chats(chats)
+
+
+def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
+    """AsyncVLLM should not reuse prompt KV caches across online weight updates."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_vllm = types.SimpleNamespace(
+        AsyncEngineArgs=FakeAsyncEngineArgs, __version__="0.10.0"
+    )
+    captured = {}
+
+    def fake_launch(engine_args, num_replicas):
+        captured["engine_args"] = engine_args
+        captured["num_replicas"] = num_replicas
+        return object()
+
+    monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(vllm_async.AsyncVLLM, "launch", staticmethod(fake_launch))
+
+    vllm_async.make_async_vllm_engine(model_name="Qwen/Qwen2.5-0.5B", verbose=False)
+    assert captured["engine_args"].enable_prefix_caching is False
+
+    vllm_async.make_async_vllm_engine(
+        model_name="Qwen/Qwen2.5-0.5B",
+        enable_prefix_caching=True,
+        verbose=False,
+    )
+    assert captured["engine_args"].enable_prefix_caching is True
+
+
+def test_async_vllm_constructor_respects_engine_args_prefix_caching(monkeypatch):
+    """AsyncVLLM.__init__ must not clobber an explicit enable_prefix_caching value."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    actor_class = object()
+
+    # Opt-in carried by engine_args survives construction.
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
+    service = vllm_async.AsyncVLLM(engine_args, actor_class=actor_class)
+    assert service.engine_args.enable_prefix_caching is True
+
+    # Unset engine args fall back to the conservative default.
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=None)
+    vllm_async.AsyncVLLM(engine_args, actor_class=actor_class)
+    assert engine_args.enable_prefix_caching is False
+
+    # An explicit constructor argument wins over engine_args.
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
+    vllm_async.AsyncVLLM(
+        engine_args, actor_class=actor_class, enable_prefix_caching=False
+    )
+    assert engine_args.enable_prefix_caching is False
+
+
+def test_async_vllm_launch_preserves_prefix_caching(monkeypatch):
+    """AsyncVLLM.launch must forward the engine_args prefix-caching opt-in."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(
+        vllm_async,
+        "_get_ray",
+        lambda: types.SimpleNamespace(remote=lambda **kwargs: (lambda cls: cls)),
+    )
+    monkeypatch.setattr(vllm_async.AsyncVLLM, "_launch", lambda self: None)
+    monkeypatch.setattr(
+        vllm_async.AsyncVLLM, "create_load_balancer", lambda self, *a, **kw: None
+    )
+
+    engine_args = FakeAsyncEngineArgs(enable_prefix_caching=True)
+    service = vllm_async.AsyncVLLM.launch(engine_args, num_replicas=2)
+    assert service.engine_args.enable_prefix_caching is True
+
+
+class _FakeActorMethod:
+    """Records invocations of a remote actor method and returns a canned result."""
+
+    def __init__(self, name: str, events: list[str], result=None):
+        self._name = name
+        self._events = events
+        self._result = result
+
+    def remote(self, *args, **kwargs):
+        self._events.append(self._name)
+        return self._result
+
+
+class _FakeVLLMActor:
+    def __init__(self, events: list[str], reset_result=True):
+        self.sleep = _FakeActorMethod("sleep", events)
+        self.update_weights_native = _FakeActorMethod("update_weights_native", events)
+        self.reset_prefix_cache = _FakeActorMethod(
+            "reset_prefix_cache", events, reset_result
+        )
+        self.wake_up = _FakeActorMethod("wake_up", events)
+
+
+def _make_offline_async_vllm(monkeypatch, *, enable_prefix_caching, events):
+    """Build an AsyncVLLM wired to fake actors, ray and vllm modules."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    @dataclasses.dataclass
+    class FakeUpdateInfo:
+        names: list
+        dtype_names: list
+        shapes: list
+        packed: bool
+
+    @dataclasses.dataclass
+    class FakeSendArgs:
+        group: Any
+        packed: bool
+
+    fake_transfer_base = types.SimpleNamespace(
+        WeightTransferUpdateRequest=lambda **kwargs: kwargs
+    )
+    fake_transfer_nccl = types.SimpleNamespace(
+        NCCLTrainerSendWeightsArgs=FakeSendArgs,
+        NCCLWeightTransferEngine=types.SimpleNamespace(
+            trainer_send_weights=lambda **kwargs: None
+        ),
+        NCCLWeightTransferUpdateInfo=FakeUpdateInfo,
+    )
+    monkeypatch.setitem(
+        sys.modules, "vllm.distributed.weight_transfer.base", fake_transfer_base
+    )
+    monkeypatch.setitem(
+        sys.modules, "vllm.distributed.weight_transfer.nccl_engine", fake_transfer_nccl
+    )
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(
+        vllm_async,
+        "_get_ray",
+        lambda: types.SimpleNamespace(get=lambda refs, **kwargs: refs),
+    )
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda *args, **kwargs: None)
+
+    service = vllm_async.AsyncVLLM(
+        FakeAsyncEngineArgs(enable_prefix_caching=enable_prefix_caching),
+        actor_class=object(),
+    )
+    service._launched = True
+    service._trainer_nccl_group = object()
+    service.actors = [_FakeVLLMActor(events)]
+    return service
+
+
+def test_async_vllm_update_weights_resets_prefix_cache(monkeypatch):
+    """Weight updates must invalidate the prefix cache before scheduling resumes."""
+    events = []
+    service = _make_offline_async_vllm(
+        monkeypatch, enable_prefix_caching=True, events=events
+    )
+    service.update_weights(iter([("weight", torch.zeros(2))]))
+    assert events == ["sleep", "update_weights_native", "reset_prefix_cache", "wake_up"]
+
+
+def test_async_vllm_update_weights_skips_reset_when_caching_disabled(monkeypatch):
+    events = []
+    service = _make_offline_async_vllm(
+        monkeypatch, enable_prefix_caching=False, events=events
+    )
+    service.update_weights(iter([("weight", torch.zeros(2))]))
+    assert events == ["sleep", "update_weights_native", "wake_up"]
+
+
+def test_async_vllm_reset_prefix_cache_fanout(monkeypatch):
+    """reset_prefix_cache hits every replica and warns when a reset is refused."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(
+        vllm_async,
+        "_get_ray",
+        lambda: types.SimpleNamespace(get=lambda refs, **kwargs: refs),
+    )
+    warnings_seen = []
+    monkeypatch.setattr(
+        vllm_async.torchrl_logger,
+        "warning",
+        lambda msg, *a, **kw: warnings_seen.append(msg),
+    )
+
+    service = vllm_async.AsyncVLLM(
+        FakeAsyncEngineArgs(enable_prefix_caching=True), actor_class=object()
+    )
+    events = []
+    service.actors = [
+        _FakeVLLMActor(events),
+        _FakeVLLMActor(events, reset_result=False),
+        _FakeVLLMActor(events),
+    ]
+    service.reset_prefix_cache()
+    assert events == ["reset_prefix_cache"] * 3
+    assert len(warnings_seen) == 1
+
+    # A replica refusing the reset is only a warning, never an error; with all
+    # replicas succeeding no warning is emitted.
+    warnings_seen.clear()
+    events.clear()
+    service.actors = [_FakeVLLMActor(events), _FakeVLLMActor(events)]
+    service.reset_prefix_cache()
+    assert events == ["reset_prefix_cache"] * 2
+    assert not warnings_seen
 
 
 @pytest.fixture
@@ -369,9 +605,6 @@ def create_batching_test_wrapper(
 @pytest.fixture
 def monkey_patch_forward_for_timing():
     """Fixture to monkey patch the forward method to add timing and batch size tracking."""
-    import threading
-    import time
-
     # Track processing times and batch sizes
     processing_times = []
     batch_sizes = []
@@ -1957,8 +2190,143 @@ class TestKLTransforms:
         assert reward is not None
 
 
+@pytest.mark.gpu
 class TestLogProbsComparison:
     """Test log-probability consistency between vLLM and Transformers wrappers."""
+
+    @staticmethod
+    def _get_padded(result, key, padding_value):
+        value = result.get(
+            key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=padding_value,
+        )
+        if value is not None:
+            return value
+        value = result.get(key, as_list=True)
+        if value is None:
+            return None
+        return pad_sequence(
+            [
+                item if isinstance(item, torch.Tensor) else torch.tensor(item)
+                for item in value
+            ],
+            batch_first=True,
+            padding_value=padding_value,
+            padding_side="left",
+        )
+
+    @classmethod
+    def _padded_tokens_log_probs_and_masks(cls, result, pad_token_id):
+        tokens = cls._get_padded(result, ("tokens", "full"), pad_token_id)
+        log_probs = cls._get_padded(result, ("log_probs", "full"), 0.0)
+        attention_mask = cls._get_padded(result, ("masks", "all_attention_mask"), 0)
+        assistant_mask = cls._get_padded(result, ("masks", "all_assistant_mask"), 0)
+        assert tokens is not None
+        assert log_probs is not None
+        assert attention_mask is not None
+        attention_mask = attention_mask.bool()
+        if assistant_mask is not None:
+            assistant_mask = assistant_mask.bool()
+        assert tokens.shape == log_probs.shape == attention_mask.shape
+        if assistant_mask is not None:
+            assert assistant_mask.shape == tokens.shape
+        return tokens, log_probs, attention_mask, assistant_mask
+
+    @staticmethod
+    def _response_token_list(result, pad_token_id):
+        response = result.get(
+            ("tokens", "response"),
+            as_padded_tensor=True,
+            padding_side="right",
+            padding_value=pad_token_id,
+        )
+        if response is not None:
+            return [row[row != pad_token_id].long() for row in response]
+        response = result.get(("tokens", "response"), as_list=True)
+        assert response is not None
+        return [tokens.long() for tokens in response]
+
+    @staticmethod
+    def _suffix_token_mask(tokens, attention_mask, response_tokens):
+        mask = torch.zeros_like(attention_mask, dtype=torch.bool)
+        for i, response in enumerate(response_tokens):
+            assert response.numel()
+            attended = attention_mask[i].nonzero(as_tuple=False).squeeze(-1)
+            full_tokens = tokens[i, attended].long()
+            assert response.numel() <= full_tokens.numel()
+            torch.testing.assert_close(full_tokens[-response.numel() :], response)
+            mask[i, attended[-response.numel() :]] = True
+        return mask
+
+    @classmethod
+    def _assert_backend_log_probs_match(
+        cls,
+        backend_result,
+        transformers_result,
+        response_tokens,
+        pad_token_id,
+        *,
+        use_assistant_mask,
+    ):
+        (
+            backend_tokens,
+            backend_log_probs,
+            backend_attention_mask,
+            backend_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_masks(backend_result, pad_token_id)
+        (
+            transformers_tokens,
+            transformers_log_probs,
+            transformers_attention_mask,
+            transformers_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_masks(transformers_result, pad_token_id)
+
+        torch.testing.assert_close(backend_attention_mask, transformers_attention_mask)
+        torch.testing.assert_close(
+            backend_tokens[backend_attention_mask].long(),
+            transformers_tokens[transformers_attention_mask].long(),
+        )
+
+        if use_assistant_mask:
+            assert backend_assistant_mask is not None
+            assert transformers_assistant_mask is not None
+            torch.testing.assert_close(
+                backend_assistant_mask, transformers_assistant_mask
+            )
+            for i, response in enumerate(response_tokens):
+                selected = backend_tokens[i, backend_assistant_mask[i]].long()
+                torch.testing.assert_close(selected, response)
+            comparison_mask = backend_assistant_mask
+        else:
+            response_mask = cls._suffix_token_mask(
+                backend_tokens, backend_attention_mask, response_tokens
+            )
+            comparison_mask = response_mask
+
+        assert comparison_mask.any()
+        backend_selected = backend_log_probs[comparison_mask].float()
+        transformers_selected = transformers_log_probs[comparison_mask].float()
+        assert torch.isfinite(backend_selected).all()
+        assert torch.isfinite(transformers_selected).all()
+        torch.testing.assert_close(
+            backend_selected, transformers_selected, atol=3e-1, rtol=1e-1
+        )
+        delta = backend_selected - transformers_selected
+        abs_delta = delta.abs()
+        mse = delta.square().mean().item()
+        max_abs = abs_delta.max().item()
+        mean_abs = abs_delta.mean().item()
+        importance_weights = torch.exp(delta.double())
+        ess = importance_weights.sum().square() / (
+            importance_weights.square().sum() * importance_weights.numel()
+        )
+        ess = ess.item()
+        assert ess > 0.99, (
+            "Backend and Transformers log-probs diverged: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -2010,27 +2378,19 @@ class TestLogProbsComparison:
             input_key=input_key,
             generate=True,
             pad_output=pad_output,
-            generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
-        )
-
-        # Create Transformers wrapper for generation
-        tf_gen_wrapper = TransformersWrapper(
-            tf_model,
-            tokenizer=tf_tokenizer,
-            input_mode=input_mode,
-            input_key=input_key,
-            generate=True,
-            pad_output=pad_output,
+            return_log_probs=False,
             generate_kwargs={
-                "max_new_tokens": 5,
-                "do_sample": False,
+                "max_tokens": 5,
                 "temperature": 0.0,
-            },  # Deterministic
+                "ignore_eos": True,
+            },  # Deterministic fixed-length response
         )
 
-        # Step 1: Generate tokens with both wrappers
+        # Step 1: Generate the canonical response tokens with vLLM.
         vllm_gen_result = vllm_gen_wrapper(data.copy())
-        tf_gen_wrapper(data.copy())
+        response_tokens = self._response_token_list(
+            vllm_gen_result, vllm_tokenizer.pad_token_id
+        )
 
         # Step 2: Extract generated tokens and create new input for log-probs computation
         if input_mode == "history":
@@ -2096,10 +2456,17 @@ class TestLogProbsComparison:
 
         # Step 4: Compute log-probs for the full sequence (original + generated)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
-        tf_lp_result = tf_lp_wrapper(new_data.copy())
+        with torch.inference_mode():
+            tf_lp_result = tf_lp_wrapper(new_data.copy())
+        check_output_shapes(vllm_lp_result, pad_output, requested_log_probs=True)
+        check_output_shapes(tf_lp_result, pad_output, requested_log_probs=True)
 
-        assert_close(
-            vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
+        self._assert_backend_log_probs_match(
+            vllm_lp_result,
+            tf_lp_result,
+            response_tokens,
+            vllm_tokenizer.pad_token_id,
+            use_assistant_mask=input_mode == "history",
         )
 
     @pytest.mark.gpu
@@ -2111,10 +2478,6 @@ class TestLogProbsComparison:
         """Test strict equivalence between sync vLLM.LLM and async engine in real-world setting."""
         sync_model, sync_tokenizer = vllm_instance
         async_model, async_tokenizer = async_vllm_instance
-
-        from tensordict import TensorDict
-        from torchrl.modules.llm.policies.common import Text
-        from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
 
         # Test prompts
         test_prompts = [
@@ -2517,8 +2880,6 @@ class TestBatching:
         async_vllm_instance,
         vllm_backend,
     ):
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         # Handle the case where vLLM is not available
         if wrapper_class == vLLMWrapper:
             try:
@@ -2573,8 +2934,6 @@ class TestBatching:
         async_vllm_instance,
         vllm_backend,
     ):
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         if wrapper_class == vLLMWrapper:
             if vllm_backend == "async":
                 model, tokenizer = async_vllm_instance
@@ -2669,8 +3028,6 @@ class TestBatching:
         input2 = TensorDict(text=Text(prompt=["Test 2"]), batch_size=(1,))
 
         # Submit inputs (they won't be processed immediately due to batch size)
-        from concurrent.futures import ThreadPoolExecutor
-
         pool = ThreadPoolExecutor(max_workers=1)
         try:
             # Submit work
@@ -3025,8 +3382,6 @@ class TestBatching:
 
         # Test 4: Verify that the _batching decorator correctly handles the squeeze logic
         # This tests the specific fix in the _batching decorator
-        from torchrl.modules.llm.policies.common import _batching
-
         # Create a simple mock function to test the decorator
         def mock_forward(self, td_input, **kwargs):
             # Return the input as-is for testing
@@ -3068,12 +3423,6 @@ class TestRayWrapper:
     @pytest.mark.parametrize("backend", ["transformers"])
     @pytest.mark.skip(reason="Ray wrapper tests hang in CI - needs investigation")
     def test_ray_wrapper(self, sample_text, backend):
-        import gc
-        from concurrent.futures import ThreadPoolExecutor
-
-        from torchrl import logger as torchrl_logger
-        from torchrl.modules.llm.policies import RemoteTransformersWrapper
-
         # check that the wrapper is remote
         if backend == "vllm":
             raise ValueError("vllm backend is not supported")
@@ -3121,7 +3470,6 @@ class TestActorSharing:
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
-        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # Initialize Ray if not already done
         if not ray.is_initialized():
@@ -3543,6 +3891,577 @@ class TestRequestOutputConversion:
         torch.testing.assert_close(result.prompt_token_ids[0], torch.tensor([1, 2, 3]))
         # prompt_logprobs=None should become empty tensor
         assert result.prompt_logprobs[0].numel() == 0
+
+
+class TestTRLInterop:
+    """Tests for TorchRLBufferDataset and HFRewardModelWrapper (Issue #4058)."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_rb(n: int = 10, seq_len: int = 8):
+        """Create a small in-memory ReplayBuffer filled with token TensorDicts."""
+        rb = ReplayBuffer(storage=ListStorage(max_size=100))
+        for i in range(n):
+            rb.add(
+                TensorDict(
+                    {
+                        "prompt": f"Question {i}",
+                        "input_ids": torch.randint(0, 100, (seq_len,)),
+                        "attention_mask": torch.ones(seq_len, dtype=torch.long),
+                        "reward": torch.tensor(float(torch.randn(1).item())),
+                    },
+                    batch_size=[],
+                )
+            )
+        return rb
+
+    @staticmethod
+    def _make_nested_rb(n: int = 10, seq_len: int = 8):
+        """Create a buffer where tokens live under a nested key (tokens, full)."""
+        rb = ReplayBuffer(storage=ListStorage(max_size=100))
+        for _ in range(n):
+            rb.add(
+                TensorDict(
+                    {
+                        "tokens": TensorDict(
+                            {"full": torch.randint(0, 100, (seq_len,))},
+                            batch_size=[],
+                        ),
+                        "masks": TensorDict(
+                            {
+                                "all_attention_mask": torch.ones(
+                                    seq_len, dtype=torch.long
+                                )
+                            },
+                            batch_size=[],
+                        ),
+                    },
+                    batch_size=[],
+                )
+            )
+        return rb
+
+    @staticmethod
+    def _make_dummy_reward_model(batch_logits_shape: tuple = (1,)):
+        """Return a stand-in HF reward model with a .logits attribute."""
+
+        class _DummyRewardModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                B = input_ids.shape[0]
+
+                class _Out:
+                    pass
+
+                out = _Out()
+                out.logits = torch.randn(B, *batch_logits_shape)
+                return out
+
+        return _DummyRewardModel()
+
+    # ------------------------------------------------------------------
+    # TorchRLBufferDataset
+    # ------------------------------------------------------------------
+
+    def test_torchrl_buffer_dataset_yields_dicts(self):
+        """Each item yielded by the dataset must be a dict with the expected keys."""
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4)
+        samples = list(dataset)
+        assert len(samples) == 4, "Expected 4 samples (one per batch element)"
+        for sample in samples:
+            assert isinstance(sample, dict)
+            assert "input_ids" in sample
+            assert "attention_mask" in sample
+            assert isinstance(sample["input_ids"], torch.Tensor)
+            assert sample["input_ids"].shape == (8,)
+
+    def test_torchrl_buffer_dataset_key_filter(self):
+        """The ``keys`` argument should restrict which keys appear in each dict."""
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4, keys=["input_ids"])
+        for sample in dataset:
+            assert set(sample.keys()) == {"input_ids"}
+
+    def test_torchrl_buffer_dataset_device(self):
+        """The ``device`` argument should move tensors to the requested device."""
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4, device="cpu")
+        for sample in dataset:
+            for v in sample.values():
+                if isinstance(v, torch.Tensor):
+                    assert v.device == torch.device("cpu")
+
+    def test_torchrl_buffer_dataset_nested_key(self):
+        """Nested NestedKey inputs should be yielded under a 'key0.key1' string key."""
+        rb = self._make_nested_rb(n=10)
+        # Pass a nested key tuple to the keys filter
+        dataset = TorchRLBufferDataset(
+            rb,
+            batch_size=4,
+            keys=[("tokens", "full"), ("masks", "all_attention_mask")],
+        )
+        for sample in dataset:
+            assert "tokens.full" in sample
+            assert "masks.all_attention_mask" in sample
+            assert isinstance(sample["tokens.full"], torch.Tensor)
+
+    def test_torchrl_buffer_dataset_flattens_default_nested_keys(self):
+        """Default key discovery yields leaf values under flat string keys."""
+        sample = next(iter(TorchRLBufferDataset(self._make_nested_rb(), batch_size=4)))
+
+        assert set(sample) == {"tokens.full", "masks.all_attention_mask"}
+        assert all(not isinstance(value, TensorDict) for value in sample.values())
+
+    def test_torchrl_buffer_dataset_num_batches(self):
+        """Finite and unbounded streams sample the configured number of batches."""
+        rb = self._make_rb(n=10)
+        finite = TorchRLBufferDataset(rb, batch_size=3, num_batches=2)
+        assert len(list(finite)) == 6
+
+        unbounded = TorchRLBufferDataset(rb, batch_size=3, num_batches=None)
+        assert len(list(islice(unbounded, 7))) == 7
+
+    def test_torchrl_buffer_dataset_unwraps_non_tensor_data(self):
+        """String prompts are emitted as Python strings for trainer collators."""
+        sample = next(
+            iter(TorchRLBufferDataset(self._make_rb(), batch_size=2, keys=["prompt"]))
+        )
+
+        assert isinstance(sample["prompt"], str)
+
+    @pytest.mark.skipif(not _has_datasets, reason="datasets not available")
+    def test_torchrl_buffer_dataset_hf_bridge(self):
+        """The optional bridge provides the dataset type required by TRL."""
+        from datasets import IterableDataset
+
+        dataset = TorchRLBufferDataset(
+            self._make_rb(),
+            batch_size=2,
+            keys=["prompt"],
+            num_batches=1,
+        ).as_hf_dataset()
+
+        assert isinstance(dataset, IterableDataset)
+        sample = next(iter(dataset))
+        assert isinstance(sample["prompt"], str)
+
+    @pytest.mark.skipif(
+        not (_has_datasets and _has_transformers and _has_trl),
+        reason="trl integration dependencies not available",
+    )
+    def test_torchrl_buffer_dataset_grpo_trainer(self, tmp_path):
+        """A real GRPOTrainer can read prompts from the replay-buffer stream."""
+        from tokenizers import models, pre_tokenizers, Tokenizer
+        from transformers import GPT2Config, GPT2LMHeadModel, PreTrainedTokenizerFast
+        from trl import GRPOConfig, GRPOTrainer
+
+        raw_tokenizer = Tokenizer(
+            models.WordLevel(
+                {"[PAD]": 0, "[UNK]": 1, "[EOS]": 2, "Question": 3},
+                unk_token="[UNK]",
+            )
+        )
+        raw_tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=raw_tokenizer,
+            pad_token="[PAD]",
+            eos_token="[EOS]",
+            unk_token="[UNK]",
+        )
+        model = GPT2LMHeadModel(
+            GPT2Config(
+                vocab_size=4,
+                n_embd=16,
+                n_layer=1,
+                n_head=2,
+                bos_token_id=2,
+                eos_token_id=2,
+                pad_token_id=0,
+            )
+        )
+        dataset = TorchRLBufferDataset(
+            self._make_rb(),
+            batch_size=4,
+            keys=["prompt"],
+            num_batches=None,
+        ).as_hf_dataset()
+        args = GRPOConfig(
+            output_dir=str(tmp_path),
+            max_steps=1,
+            per_device_train_batch_size=2,
+            num_generations=2,
+            max_completion_length=2,
+            use_cpu=True,
+            report_to="none",
+        )
+        trainer = GRPOTrainer(
+            model=model,
+            reward_funcs=lambda completions, **kwargs: [0.0] * len(completions),
+            args=args,
+            train_dataset=dataset,
+            processing_class=tokenizer,
+        )
+
+        batch = next(iter(trainer.get_train_dataloader()))
+        assert len(batch) == 2
+        assert all(isinstance(sample["prompt"], str) for sample in batch)
+
+    def test_torchrl_buffer_dataset_repr(self):
+        """Repr should be a non-empty string without raising."""
+        rb = self._make_rb(n=10)
+        dataset = TorchRLBufferDataset(rb, batch_size=4)
+        r = repr(dataset)
+        assert "TorchRLBufferDataset" in r
+
+    def test_torchrl_buffer_dataset_type_error(self):
+        """Passing a non-ReplayBuffer should raise TypeError."""
+        with pytest.raises(TypeError, match="ReplayBuffer"):
+            TorchRLBufferDataset("not_a_buffer", batch_size=4)
+
+    def test_torchrl_buffer_dataset_bad_batch_size(self):
+        """A non-positive batch_size should raise ValueError."""
+        rb = self._make_rb()
+        with pytest.raises(ValueError, match="positive integer"):
+            TorchRLBufferDataset(rb, batch_size=0)
+
+    def test_torchrl_buffer_dataset_bad_num_batches(self):
+        """A finite stream must request at least one replay batch."""
+        with pytest.raises(ValueError, match="num_batches"):
+            TorchRLBufferDataset(self._make_rb(), batch_size=4, num_batches=0)
+
+    # ------------------------------------------------------------------
+    # HFRewardModelWrapper
+    # ------------------------------------------------------------------
+
+    def test_hf_reward_model_wrapper_forward(self):
+        """HFRewardModelWrapper should write a [B] reward tensor to the output TD."""
+        model = self._make_dummy_reward_model(batch_logits_shape=(1,))
+        wrapper = HFRewardModelWrapper(model)
+
+        td = TensorDict(
+            {
+                "tokens": TensorDict(
+                    {"full": torch.randint(0, 1000, (2, 16))}, batch_size=[2]
+                ),
+                "masks": TensorDict(
+                    {"all_attention_mask": torch.ones(2, 16, dtype=torch.long)},
+                    batch_size=[2],
+                ),
+            },
+            batch_size=[2],
+        )
+        result = wrapper(td)
+
+        assert "reward" in result
+        assert result["reward"].shape == torch.Size([2])
+        assert result["reward"].dtype == torch.float32
+
+    def test_hf_reward_model_wrapper_logits_shape_scalar(self):
+        """Model returning logits of shape [B] (already scalar) should work."""
+        model = self._make_dummy_reward_model(batch_logits_shape=())
+        wrapper = HFRewardModelWrapper(model, attention_mask_key=None)
+
+        td = TensorDict(
+            {
+                "tokens": TensorDict(
+                    {"full": torch.randint(0, 1000, (3, 12))}, batch_size=[3]
+                ),
+            },
+            batch_size=[3],
+        )
+        result = wrapper(td)
+        assert result["reward"].shape == torch.Size([3])
+
+    def test_hf_reward_model_wrapper_rejects_vector_rewards(self):
+        """A multi-label output is not silently accepted as a scalar reward."""
+        model = self._make_dummy_reward_model(batch_logits_shape=(2,))
+        wrapper = HFRewardModelWrapper(
+            model, token_key="input_ids", attention_mask_key=None
+        )
+        td = TensorDict({"input_ids": torch.randint(0, 1000, (3, 12))}, batch_size=[3])
+
+        with pytest.raises(RuntimeError, match="one scalar reward per input"):
+            wrapper(td)
+
+    def test_hf_reward_model_wrapper_in_keys(self):
+        """Custom token_key and attention_mask_key should be read correctly."""
+        model = self._make_dummy_reward_model()
+        wrapper = HFRewardModelWrapper(
+            model,
+            token_key="input_ids",
+            attention_mask_key="attention_mask",
+            reward_key="score",
+        )
+
+        assert "input_ids" in wrapper.in_keys
+        assert "attention_mask" in wrapper.in_keys
+        assert "score" in wrapper.out_keys
+
+        td = TensorDict(
+            {
+                "input_ids": torch.randint(0, 1000, (2, 10)),
+                "attention_mask": torch.ones(2, 10, dtype=torch.long),
+            },
+            batch_size=[2],
+        )
+        result = wrapper(td)
+        assert "score" in result
+        assert result["score"].shape == torch.Size([2])
+
+    def test_hf_reward_model_wrapper_nested_reward_key(self):
+        """Nested reward_key (a NestedKey tuple) must be written correctly."""
+        model = self._make_dummy_reward_model()
+        wrapper = HFRewardModelWrapper(
+            model,
+            token_key="input_ids",
+            attention_mask_key=None,  # omit mask
+            reward_key=("reward", "value"),
+        )
+
+        assert ("reward", "value") in wrapper.out_keys
+
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 1000, (2, 10))},
+            batch_size=[2],
+        )
+        result = wrapper(td)
+        # Nested access: result["reward"]["value"] should be shape [2]
+        assert result.get(("reward", "value")).shape == torch.Size([2])
+
+    def test_hf_reward_model_wrapper_no_attention_mask(self):
+        """attention_mask_key=None should call model without mask argument."""
+        call_log = []
+
+        class _NomaskModel(torch.nn.Module):
+            def forward(self, input_ids):
+                call_log.append(True)
+
+                class _Out:
+                    logits = torch.randn(input_ids.shape[0], 1)
+
+                return _Out()
+
+        wrapper = HFRewardModelWrapper(
+            _NomaskModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+        wrapper(td)
+        assert call_log == [True]
+
+    def test_hf_reward_model_wrapper_missing_attention_mask_key(self):
+        """A configured attention-mask key is required in the TensorDict."""
+        wrapper = HFRewardModelWrapper(
+            self._make_dummy_reward_model(),
+            token_key="input_ids",
+            attention_mask_key="attention_mask",
+        )
+        td = TensorDict({"input_ids": torch.randint(0, 100, (2, 8))}, batch_size=[2])
+
+        with pytest.raises(KeyError, match="attention_mask"):
+            wrapper(td)
+
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+    def test_hf_reward_model_wrapper_transformers_model(self):
+        """A real sequence-classification model produces scalar rewards."""
+        from transformers import BertConfig, BertForSequenceClassification
+
+        model = BertForSequenceClassification(
+            BertConfig(
+                vocab_size=32,
+                hidden_size=16,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                intermediate_size=32,
+                num_labels=1,
+            )
+        )
+        wrapper = HFRewardModelWrapper(
+            model,
+            token_key="input_ids",
+            attention_mask_key="attention_mask",
+            inference_mode=True,
+        )
+        td = TensorDict(
+            {
+                "input_ids": torch.randint(0, 32, (2, 8)),
+                "attention_mask": torch.ones(2, 8, dtype=torch.long),
+            },
+            batch_size=[2],
+        )
+
+        assert wrapper(td)["reward"].shape == torch.Size([2])
+
+    def test_hf_reward_model_wrapper_inference_mode(self):
+        """inference_mode=True should disable grad for model forward."""
+        grad_states = []
+
+        class _GradCheckModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                grad_states.append(torch.is_grad_enabled())
+
+                class _Out:
+                    logits = torch.randn(input_ids.shape[0], 1)
+
+                return _Out()
+
+        wrapper = HFRewardModelWrapper(
+            _GradCheckModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+            inference_mode=True,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+        wrapper(td)
+        assert not grad_states[-1], "Grad should be disabled with inference_mode=True"
+
+    def test_hf_reward_model_wrapper_backward_pass(self):
+        """inference_mode=True should still allow downstream backward passes (regression test)."""
+
+        class _GradCheckModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                class _Out:
+                    logits = torch.randn(input_ids.shape[0], 1)
+
+                return _Out()
+
+        wrapper = HFRewardModelWrapper(
+            _GradCheckModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+            inference_mode=True,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+
+        # Run wrapper (operates in no_grad mode now, returns a normal tensor)
+        reward = wrapper(td)["reward"]
+
+        # The backward pass shouldn't fail with "Inference tensors cannot be saved for backward"
+        param = torch.nn.Parameter(torch.ones(2))
+        loss = (param * reward).sum()
+        loss.backward()
+
+        assert param.grad is not None
+
+    def test_hf_reward_model_wrapper_missing_token_key(self):
+        """Missing token_key in TensorDict should raise KeyError."""
+        wrapper = HFRewardModelWrapper(
+            self._make_dummy_reward_model(),
+            token_key="input_ids",
+            attention_mask_key=None,
+        )
+        # Do NOT include 'input_ids'
+        td = TensorDict({"something_else": torch.zeros(2, 8)}, batch_size=[2])
+        with pytest.raises(KeyError, match="input_ids"):
+            wrapper(td)
+
+    def test_hf_reward_model_wrapper_bad_output(self):
+        """Model returning an unrecognised output type should raise RuntimeError."""
+
+        class _BadModel(torch.nn.Module):
+            def forward(self, input_ids, attention_mask=None):
+                return "this is not a valid reward output"
+
+        wrapper = HFRewardModelWrapper(
+            _BadModel(),
+            token_key="input_ids",
+            attention_mask_key=None,
+        )
+        td = TensorDict(
+            {"input_ids": torch.randint(0, 100, (2, 8))},
+            batch_size=[2],
+        )
+        with pytest.raises(RuntimeError, match="could not extract reward"):
+            wrapper(td)
+
+    # ------------------------------------------------------------------
+    # Round-trip integration test
+    # ------------------------------------------------------------------
+
+    def test_round_trip_buffer_to_reward_wrapper(self):
+        """Integration: sample from buffer via dataset, run through HFRewardModelWrapper."""
+        # 1. Populate a buffer that mimics rollout data
+        rb = ReplayBuffer(storage=ListStorage(max_size=100), batch_size=8)
+        seq_len = 16
+        for _ in range(20):
+            rb.add(
+                TensorDict(
+                    {
+                        "tokens": TensorDict(
+                            {"full": torch.randint(0, 1000, (seq_len,))},
+                            batch_size=[],
+                        ),
+                        "masks": TensorDict(
+                            {
+                                "all_attention_mask": torch.ones(
+                                    seq_len, dtype=torch.long
+                                )
+                            },
+                            batch_size=[],
+                        ),
+                    },
+                    batch_size=[],
+                )
+            )
+
+        # 2. Wrap as IterableDataset and collect one batch worth of samples
+        dataset = TorchRLBufferDataset(
+            rb,
+            batch_size=8,
+            keys=[("tokens", "full"), ("masks", "all_attention_mask")],
+        )
+        samples = list(dataset)
+        assert len(samples) == 8
+
+        # 3. Re-batch samples into a TensorDict for the reward wrapper
+        batch_ids = torch.stack([s["tokens.full"] for s in samples])  # [8, 16]
+        batch_mask = torch.stack(
+            [s["masks.all_attention_mask"] for s in samples]
+        )  # [8, 16]
+
+        td_batch = TensorDict(
+            {
+                "tokens": TensorDict({"full": batch_ids}, batch_size=[8]),
+                "masks": TensorDict({"all_attention_mask": batch_mask}, batch_size=[8]),
+            },
+            batch_size=[8],
+        )
+
+        # 4. Forward through the reward wrapper
+        reward_model = self._make_dummy_reward_model(batch_logits_shape=(1,))
+        wrapper = HFRewardModelWrapper(reward_model, inference_mode=True)
+        result = wrapper(td_batch)
+
+        assert "reward" in result
+        assert result["reward"].shape == torch.Size([8])
+        assert result["reward"].dtype == torch.float32
+
+    def test_lazy_import_from_llm_module(self):
+        """TorchRLBufferDataset and HFRewardModelWrapper should be importable
+        from ``torchrl.modules.llm`` without loading trl / transformers."""
+        # Access via __getattr__ lazy dispatch
+        TorchRLBufferDataset = llm_mod.TorchRLBufferDataset
+        HFRewardModelWrapper = llm_mod.HFRewardModelWrapper
+
+        assert TorchRLBufferDataset is not None
+        assert HFRewardModelWrapper is not None
+
+        # They should be the same objects as direct imports.
+        assert TorchRLBufferDataset is llm_mod.TorchRLBufferDataset
+        assert HFRewardModelWrapper is llm_mod.HFRewardModelWrapper
 
 
 if __name__ == "__main__":

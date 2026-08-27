@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -18,10 +18,14 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
-from torchrl.collectors.utils import _map_weight, _traj_emit, _traj_ingest
-
+from torchrl.collectors.utils import (
+    _map_weight,
+    _maybe_normalize_replay_buffer_tensordict_device,
+    _traj_emit,
+    _traj_ingest,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
-from torchrl.weight_update.utils import _resolve_attr
+from torchrl.weight_update.utils import _resolve_attr, _weight_tensor_signature
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
 
 
@@ -137,19 +141,101 @@ class ProfileConfig:
         return worker_idx in self.workers
 
 
+class _ProfilerHook:
+    """A ``post_collect_hook`` callable that drives a ``torch.profiler.profile``.
+
+    The hook owns a profiler in the process where it lives — the main process
+    for a single :class:`Collector`, each worker process for a multi-collector,
+    each remote actor for a Ray collector. It starts the profiler lazily on the
+    first call, steps once per rollout, and auto-stops + exports after
+    ``config.num_rollouts`` rollouts.
+
+    Pickling — the hook is a plain Python object and travels through
+    :class:`~torchrl.data.utils.CloudpickleWrapper` when pushed to mp workers.
+    The :class:`torch.profiler.profile` instance is built lazily inside the
+    target process so it never needs to cross a pickle boundary itself.
+    """
+
+    def __init__(self, config: ProfileConfig, worker_idx: int = 0):
+        self.config = config
+        self.worker_idx = worker_idx
+        self._profiler = None
+        self._rollout_count = 0
+        self._stopped = False
+
+    def _build_profiler(self) -> Any | None:
+        active = self.config.num_rollouts - self.config.warmup_rollouts
+        schedule = torch.profiler.schedule(
+            skip_first=self.config.warmup_rollouts,
+            wait=0,
+            warmup=0,
+            active=active,
+            repeat=1,
+        )
+        activities = self.config.get_activities()
+        if not activities:
+            return None
+        if self.config.on_trace_ready is not None:
+            on_trace_ready = self.config.on_trace_ready
+        else:
+            save_path = self.config.get_save_path(self.worker_idx)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            from torchrl import logger as torchrl_logger
+
+            def on_trace_ready(prof, _path=save_path, _idx=self.worker_idx):
+                prof.export_chrome_trace(str(_path))
+                torchrl_logger.info(f"Profiler [worker {_idx}]: trace saved to {_path}")
+
+        return torch.profiler.profile(
+            activities=activities,
+            schedule=schedule,
+            on_trace_ready=on_trace_ready,
+            record_shapes=self.config.record_shapes,
+            profile_memory=self.config.profile_memory,
+            with_stack=self.config.with_stack,
+            with_flops=self.config.with_flops,
+        )
+
+    def __call__(self, batch: TensorDictBase | None = None) -> None:
+        if self._stopped:
+            return
+        if self._profiler is None:
+            self._profiler = self._build_profiler()
+            if self._profiler is None:
+                self._stopped = True
+                return
+            self._profiler.start()
+        self._profiler.step()
+        self._rollout_count += 1
+        if self._rollout_count >= self.config.num_rollouts:
+            self.stop()
+
+    def stop(self) -> None:
+        """Stop the underlying profiler (idempotent)."""
+        if self._profiler is not None and not self._stopped:
+            self._profiler.stop()
+            self._stopped = True
+
+
 class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors.
 
     Keyword Args:
         trajs_per_batch (int, optional): When set, the collector yields batches
-            of exactly this many complete, zero-padded trajectories instead of
-            fixed-frame batches. Each yielded :class:`~tensordict.TensorDict`
-            has shape ``(trajs_per_batch, max_traj_len)`` and includes a
-            ``("collector", "mask")`` boolean field marking valid time steps.
-            Trajectories that span multiple internal collection steps are
-            reassembled automatically. ``frames_per_batch`` still controls
-            how often the environment is polled internally, but the output
-            batch size is determined by ``trajs_per_batch``.
+            of exactly this many complete trajectories instead of fixed-frame
+            batches. By default each yielded :class:`~tensordict.TensorDict`
+            has shape ``(trajs_per_batch, max_traj_len)``, zero-padded along
+            time, and includes a ``("collector", "mask")`` boolean field
+            marking valid time steps; with ``traj_format="cat"`` the
+            trajectories are instead concatenated along time into a flat,
+            unpadded batch. Trajectories that span multiple internal
+            collection steps are reassembled automatically.
+            ``frames_per_batch`` still controls how often the environment is
+            polled internally, but the output batch size is determined by
+            ``trajs_per_batch``.
+            (:class:`~torchrl.collectors.AsyncBatchedCollector` exposes the
+            same capability through its ``yield_completed_trajectories``
+            flag.)
 
             **Replay buffer integration**
 
@@ -188,7 +274,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             :class:`~torchrl.collectors.MultiSyncCollector`,
             :class:`~torchrl.collectors.MultiAsyncCollector`,
             :class:`~torchrl.collectors.distributed.RayCollector`, and
-            :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+            :class:`~torchrl.collectors.distributed.RPCCollector`.
             Trajectory assembly is delegated to each worker's inner collector,
             which calls :meth:`_iter_by_trajectories` independently and writes
             complete trajectories to the shared replay buffer.  Both the
@@ -212,6 +298,31 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 collector.start()  # workers fill rb with complete trajectories
 
             Defaults to ``None`` (fixed-frame batches).
+        trajs_per_write (int, optional): When ``trajs_per_batch`` is used with
+            a replay buffer, write this many completed trajectories to the
+            buffer per ``extend`` call. Larger values reduce Python overhead
+            for highly batched environments. For example, if 10 complete
+            trajectories are queued for replay-buffer insertion,
+            ``trajs_per_write=2`` makes 5 writes, while
+            ``trajs_per_write=10`` or larger makes 1 write. Defaults to
+            ``None`` (write all currently queued completed trajectories).
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set. ``"padded"`` stacks the
+            trajectories into a ``(trajs_per_batch, max_traj_len)`` batch,
+            zero-padded along time, with a ``("collector", "mask")`` entry
+            marking the valid steps. ``"cat"`` concatenates them along time
+            into a flat, unpadded ``[sum_i T_i]`` batch — no mask, no wasted
+            memory on padding; trajectories are contiguous, delimited by
+            ``("next", "done")`` (``True`` at the last step of each, by the
+            completeness guarantee) and ``("collector", "traj_ids")``.
+            ``"cat"`` matches the layout the replay-buffer write path uses
+            and the one :class:`~torchrl.data.SliceSampler` expects. Has no
+            effect on replay-buffer writes (always flat); raises if set
+            without ``trajs_per_batch``. Defaults to ``None``, which
+            currently resolves to ``"padded"`` and emits a
+            :class:`FutureWarning` when ``trajs_per_batch`` batches are
+            yielded without an explicit choice: the default will change to
+            ``"cat"`` in torchrl v0.16.
     """
 
     _task = None
@@ -228,6 +339,8 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
+    traj_format: Literal["padded", "cat"] = "padded"
     _pre_collect_hook: Callable[[], None] | None = None
     _post_collect_hook: Callable[[TensorDictBase], None] | None = None
 
@@ -277,6 +390,80 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 collected TensorDict as argument.
         """
         self._post_collect_hook = hook
+
+    def set_post_collect_hook(
+        self, hook: Callable[[TensorDictBase], None] | None
+    ) -> None:
+        """Method form of the ``post_collect_hook`` setter.
+
+        Exposed because Ray actor handles can call methods (`actor.method.remote(...)`)
+        but cannot directly invoke property setters. Keeping the actual setter
+        for in-process use and this method for remote-actor use.
+        """
+        self.post_collect_hook = hook
+
+    def stats(self) -> dict[str, int | float | bool]:
+        """Returns a cheap, serializable snapshot of the collector's progress.
+
+        The snapshot only contains scalar counters and gauges: it never
+        includes policy, environment or batch data, does not modify the
+        collector state and is safe to call while the collector is running.
+        Cumulative counters such as ``frames`` are meant to be converted into
+        rates by an external monitor such as
+        :class:`~torchrl.record.loggers.monitoring.LoggerMonitor`.
+
+        Entries are only present when the corresponding state exists on the
+        collector:
+
+        - ``"frames"``: total number of frames collected so far;
+        - ``"batches"``: number of batches delivered so far;
+        - ``"total_frames"``: requested total frames (absent for endless collectors);
+        - ``"completed"``: whether the frame budget has been reached;
+        - ``"requested_frames_per_batch"``: the per-batch frame budget;
+        - ``"policy_version"``: current policy version, when the collector
+          tracks it with an integer version.
+
+        Multi-worker collectors extend this signature with a ``workers``
+        argument controlling aggregate versus per-worker views.
+
+        Examples:
+            >>> from torchrl.collectors import Collector
+            >>> from torchrl.envs import GymEnv
+            >>> from torchrl.envs.utils import RandomPolicy
+            >>> env = GymEnv("Pendulum-v1")
+            >>> collector = Collector(
+            ...     env,
+            ...     RandomPolicy(env.action_spec),
+            ...     frames_per_batch=10,
+            ...     total_frames=20,
+            ... )
+            >>> for batch in collector:
+            ...     print(collector.stats()["frames"])
+            10
+            20
+        """
+        stats: dict[str, int | float | bool] = {}
+        frames = getattr(self, "_frames", None)
+        if frames is not None:
+            stats["frames"] = int(frames)
+        iters = getattr(self, "_iter", None)
+        if iters is not None:
+            stats["batches"] = int(iters) + 1
+        total_frames = getattr(self, "total_frames", None)
+        if isinstance(total_frames, int) and total_frames >= 0:
+            stats["total_frames"] = total_frames
+            if frames is not None:
+                stats["completed"] = bool(frames >= total_frames)
+        requested = getattr(self, "requested_frames_per_batch", None)
+        if isinstance(requested, int):
+            stats["requested_frames_per_batch"] = requested
+        try:
+            version = self.policy_version
+        except (AttributeError, RuntimeError):
+            version = None
+        if isinstance(version, int):
+            stats["policy_version"] = version
+        return stats
 
     def enable_profile(
         self,
@@ -361,7 +548,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if activities is None:
             activities = ["cpu", "cuda"]
 
-        self._profile_config = ProfileConfig(
+        config = ProfileConfig(
             workers=workers,
             num_rollouts=num_rollouts,
             warmup_rollouts=warmup_rollouts,
@@ -373,6 +560,41 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             with_flops=with_flops,
             on_trace_ready=on_trace_ready,
         )
+        self._profile_config = config
+        self._install_profile_hooks(config)
+
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install the per-process profiler hook.
+
+        Default implementation handles the single-process :class:`Collector`
+        by saving the current ``post_collect_hook`` and replacing it with a
+        :class:`_ProfilerHook`. Multi-process / Ray collectors override this
+        to fan out per-worker hooks (each worker gets its own ``worker_idx``).
+        """
+        self._saved_post_collect_hook = self._post_collect_hook
+        self.post_collect_hook = _ProfilerHook(config, worker_idx=0)
+
+    def disable_profile(self) -> None:
+        """Stop any in-flight profiler and restore the prior ``post_collect_hook``.
+
+        Safe to call when profiling was never enabled (becomes a no-op). When
+        the profiler was already self-stopped after ``num_rollouts``, this just
+        clears the hook and restores any user-set ``post_collect_hook``.
+        """
+        if self._profile_config is None:
+            return
+        try:
+            self._uninstall_profile_hooks(self._profile_config)
+        finally:
+            self._profile_config = None
+
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Single-process default uninstall: stop hook locally and restore."""
+        hook = self._post_collect_hook
+        if isinstance(hook, _ProfilerHook):
+            hook.stop()
+        self._post_collect_hook = getattr(self, "_saved_post_collect_hook", None)
+        self._saved_post_collect_hook = None
 
     @property
     def profile_config(self) -> ProfileConfig | None:
@@ -476,6 +698,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         return _resolve_attr(self, attr)
 
+    def _dump_env_transform(self, step: int | None = None) -> None:
+        """Dump the environment transform when it supports ``dump``."""
+        env = getattr(self, "env", None)
+        transform = getattr(env, "transform", None)
+        dump = getattr(transform, "dump", None)
+        if callable(dump):
+            dump(step=step)
+
     def map_fn(
         self,
         method_name: str,
@@ -578,14 +808,18 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             return td.data
 
         # We need to use ".data" otherwise buffers may disappear from the `get_original_weights` function
-        with param_and_buf.data.to("meta").to_module(policy):
+        with param_and_buf.data.to("meta").to_module(
+            policy, preserve_module_state=False
+        ):
             policy_new_device = deepcopy(policy)
 
         param_and_buf_new_device = param_and_buf.apply(
             functools.partial(_map_weight, policy_device=policy_device),
             filter_empty=False,
         )
-        param_and_buf_new_device.to_module(policy_new_device)
+        param_and_buf_new_device.to_module(
+            policy_new_device, preserve_module_state=False
+        )
         # Sanity check
         if set(TensorDict.from_module(policy_new_device).keys(True, True)) != set(
             get_original_weights().keys(True, True)
@@ -937,14 +1171,20 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """Fallback weight update when no scheme is configured.
 
         Override in subclasses to provide custom fallback behavior.
-        By default, this is a no-op.
+        The base implementation fails rather than silently accepting an update
+        that cannot reach a policy.
         """
+        del policy_or_weights, model_id
+        raise RuntimeError(
+            "No weight updater, WeightSyncScheme, or concrete local policy "
+            "update path is configured for this collector."
+        )
 
     def _send_weights_scheme(self, *, model_id, scheme, processed_weights, worker_ids):
         # method to override if the scheme requires an RPC call to receive the weights
         scheme.send(weights=processed_weights, worker_ids=worker_ids)
 
-    def _receive_weights_scheme(self):
+    def _receive_weights_scheme(self, model_version: int | None = None):
         """Receive weights for all registered receiver schemes.
 
         scheme.receive() handles both applying weights locally and cascading
@@ -955,6 +1195,36 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         for scheme in self._receiver_schemes.values():
             scheme.receive()
+        self._set_received_policy_version(model_version)
+
+    def _connect_weights_scheme(self, model_version: int | None = None) -> None:
+        """Connect all registered receiver schemes for initial publication."""
+        if not hasattr(self, "_receiver_schemes"):
+            raise RuntimeError("No receiver schemes registered.")
+        for scheme in self._receiver_schemes.values():
+            if not scheme.synchronized_on_receiver:
+                scheme.connect(worker_idx=self.worker_idx)
+        self._set_received_policy_version(model_version)
+
+    def _set_received_policy_version(self, model_version: int | None) -> None:
+        """Apply the sender's semantic policy version after a weight receive."""
+        if model_version is None:
+            return
+        tracker = getattr(self, "policy_version_tracker", None)
+        if tracker is not None:
+            tracker.version = int(model_version)
+
+    def _weight_sync_signature(
+        self, model_id: str
+    ) -> tuple[tuple[tuple[str, ...], tuple[int, ...], str], ...]:
+        """Return the ordered tensor schema expected by a weight receiver."""
+        get_model = getattr(self, "get_model", None)
+        if not callable(get_model):
+            raise RuntimeError(
+                f"{type(self).__name__} cannot resolve weight model {model_id!r}."
+            )
+        weights = TensorDict.from_module(get_model(model_id))
+        return _weight_tensor_signature(weights)
 
     # Overloads for receive_weights to support multiple calling conventions
     @overload
@@ -1111,6 +1381,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
         # Initialize each scheme on the receiver side
         for model_id, scheme in weight_recv_schemes.items():
+            previous_scheme = self._receiver_schemes.get(model_id)
+            if previous_scheme is not None and previous_scheme is not scheme:
+                previous_scheme.shutdown()
             if not scheme.initialized_on_receiver:
                 if scheme.initialized_on_sender:
                     raise RuntimeError(
@@ -1121,6 +1394,13 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     context=self,
                     worker_idx=self.worker_idx,
                 )
+            elif scheme.context is None:
+                # The scheme was already initialized on the receiver (e.g. early,
+                # by _make_policy_factory which has no access to the inner
+                # collector yet). Now that we *do* have the collector, set it as
+                # the context so receiver-side bookkeeping (policy version,
+                # cascading sub-collector updates) can reach it.
+                scheme.context = self
 
             # Store the scheme for later use in receive_weights()
             self._receiver_schemes[model_id] = scheme
@@ -1150,6 +1430,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         accumulates complete trajectories and yields zero-padded batches of
         shape ``(trajs_per_batch, max_traj_len)`` with a
         ``("collector", "mask")`` boolean field marking valid timesteps.
+        With ``traj_format="cat"``, the trajectories are instead concatenated
+        along time into flat, unpadded batches (trajectories delimited by
+        ``("next", "done")``).
 
         **With a replay buffer**: each complete trajectory is written to the
         buffer immediately as a **flat 1-D sequence** of valid timesteps — no
@@ -1179,6 +1462,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         partial_trajs: dict[int, list] = {}
         complete_trajs: list = []
+        # register the assembly containers on the instance so that reset()
+        # can flush them (the generator keeps references to the same objects)
+        self._traj_assembly = (partial_trajs, complete_trajs)
         rb = getattr(self, "replay_buffer", None)
         # _ignore_rb is a single-collector concept; multi-collectors don't have it.
         # Default True so that missing attr → has_rb=False (safe for multi-collectors).
@@ -1200,13 +1486,30 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     # pad-then-unpad round-trip and works with any storage
                     # ndim (variable-length trajectories cannot fill a
                     # fixed second dimension reliably).
+                    trajs_per_write = getattr(self, "trajs_per_write", None)
+                    if trajs_per_write is None:
+                        trajs_per_write = len(complete_trajs)
+                    else:
+                        trajs_per_write = max(int(trajs_per_write), 1)
                     while complete_trajs:
-                        traj = complete_trajs.pop(0)
-                        rb.extend(traj)
+                        trajs = complete_trajs[:trajs_per_write]
+                        del complete_trajs[:trajs_per_write]
+                        if len(trajs) == 1:
+                            trajs = trajs[0]
+                        else:
+                            trajs = torch.cat(trajs, dim=0)
+                        trajs = _maybe_normalize_replay_buffer_tensordict_device(
+                            trajs, rb
+                        )
+                        rb.extend(trajs)
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:
-                        traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
+                        traj_batch = _traj_emit(
+                            complete_trajs,
+                            self.trajs_per_batch,
+                            traj_format=getattr(self, "traj_format", "padded"),
+                        )
                         yield traj_batch
         finally:
             if has_rb:
@@ -1223,6 +1526,19 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             return out
         except StopIteration:
             return None
+
+    def _flush_trajectory_assembly(self) -> None:
+        """Drop partially-assembled and queued-but-not-yet-yielded trajectories.
+
+        Called by ``reset()`` when ``trajs_per_batch`` is in use: after an
+        environment reset, steps queued under the pre-reset policy must not
+        leak into post-reset batches, and stale partial chunks must not be
+        merged with later episodes that reuse a rebased trajectory id.
+        """
+        assembly = getattr(self, "_traj_assembly", None)
+        if assembly is not None:
+            assembly[0].clear()
+            assembly[1].clear()
 
     @abc.abstractmethod
     def shutdown(
@@ -1283,44 +1599,3 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         if self.weight_updater is not None:
             self.weight_updater.init(*args, **kwargs)
-
-
-def _make_legacy_metaclass(parent_metaclass):
-    """Create a legacy metaclass for deprecated collector names.
-
-    This factory creates a metaclass that inherits from the given parent metaclass
-    to avoid metaclass conflicts.
-    """
-
-    class _LegacyMeta(parent_metaclass):
-        """Metaclass for deprecated collector class names.
-
-        Raises a deprecation warning when the old class name is instantiated,
-        and ensures isinstance() checks work for both old and new names.
-        """
-
-        def __call__(cls, *args, **kwargs):
-            warnings.warn(
-                f"{cls.__name__} has been deprecated and will be removed in v0.13. "
-                f"Please use {cls.__bases__[0].__name__} instead.",
-                category=DeprecationWarning,
-            )
-            return super().__call__(*args, **kwargs)
-
-        def __instancecheck__(cls, instance):
-            if super().__instancecheck__(instance):
-                return True
-            parent_cls = cls.__bases__[0]
-            return isinstance(instance, parent_cls)
-
-    return _LegacyMeta
-
-
-# Default legacy metaclass for classes with abc.ABCMeta
-_LegacyCollectorMeta = _make_legacy_metaclass(abc.ABCMeta)
-
-
-class DataCollectorBase(BaseCollector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.BaseCollector`."""
-
-    ...

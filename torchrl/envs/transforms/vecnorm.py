@@ -17,6 +17,12 @@ import torch
 from tensordict import NestedKey, TensorDict, TensorDictBase, unravel_key
 from tensordict.utils import _zip_strict
 from torch import multiprocessing as mp
+
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 
 from torchrl.envs.common import EnvBase
@@ -411,8 +417,9 @@ class VecNormV2(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        if self.lock is not None:
-            self.lock.acquire()
+        lock = None if is_compiling() else self.lock
+        if lock is not None:
+            lock.acquire()
         try:
             if self.stateful:
                 self._maybe_stateful_init(next_tensordict)
@@ -447,8 +454,8 @@ class VecNormV2(Transform):
 
             next_tensordict.update(next_tensordict_norm)
         finally:
-            if self.lock is not None:
-                self.lock.release()
+            if lock is not None:
+                lock.release()
 
         return next_tensordict
 
@@ -521,6 +528,10 @@ class VecNormV2(Transform):
         return x.to(torch.get_default_dtype())
 
     def _maybe_stateful_init(self, data):
+        if is_compiling():
+            if self._loc is None:
+                raise RuntimeError("VecNormV2 must be initialized before compile.")
+            return
         if not self.initialized:
             self.initialized.copy_(True)
             #  Some keys (specifically rewards) may be missing, but we can use the

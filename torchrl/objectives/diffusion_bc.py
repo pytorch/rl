@@ -140,21 +140,23 @@ class DiffusionBCLoss(LossModule):
         clean_action = tensordict[self.tensor_keys.action]
         observation = tensordict[self.tensor_keys.observation]
 
-        batch_size = clean_action.shape[0]
+        batch_shape = clean_action.shape[:-1]
         device = clean_action.device
 
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             # Access the underlying _DDPMModule
             ddpm = self.actor_network.module
 
             # Sample a random timestep per batch element
-            t = torch.randint(0, ddpm.num_steps, (batch_size,), device=device)
+            t = torch.randint(0, ddpm.num_steps, tuple(batch_shape), device=device)
 
             # Forward diffusion: corrupt the clean action
             noisy_action, noise = ddpm.add_noise(clean_action, t)
 
             # Build the score network input: (noisy_action || observation || t)
-            t_float = t.float().unsqueeze(-1)  # (B, 1)
+            t_float = t.to(dtype=noisy_action.dtype).unsqueeze(-1)
             model_input = torch.cat([noisy_action, observation, t_float], dim=-1)
 
             # Predict the noise

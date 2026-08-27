@@ -8,8 +8,14 @@ import os
 import pathlib
 import uuid
 from datetime import datetime
+from typing import Any, Literal
 
 from torchrl.record.loggers.common import Logger
+from torchrl.record.loggers.csv import CSVLogger
+from torchrl.record.loggers.mlflow import MLFlowLogger
+from torchrl.record.loggers.tensorboard import TensorboardLogger
+from torchrl.record.loggers.trackio import TrackioLogger
+from torchrl.record.loggers.wandb import WandbLogger
 
 
 def generate_exp_name(model_name: str, experiment_name: str) -> str:
@@ -26,8 +32,16 @@ def generate_exp_name(model_name: str, experiment_name: str) -> str:
 
 
 def get_logger(
-    logger_type: str, logger_name: str, experiment_name: str, **kwargs
-) -> Logger:
+    logger_type: Literal["tensorboard", "csv", "wandb", "mlflow", "trackio", ""] | None,
+    logger_name: str,
+    experiment_name: str,
+    *,
+    service_backend: Literal["direct", "process", "ray"] = "direct",
+    service_backend_options: dict[str, Any] | None = None,
+    use_ray_service: bool = False,
+    ray_actor_options: dict[str, Any] | None = None,
+    **kwargs,
+) -> Logger | None:
     """Get a logger instance of the provided `logger_type`.
 
     Args:
@@ -35,63 +49,69 @@ def get_logger(
             If empty, ``None`` is returned.
         logger_name (str): Name to be used as a log_dir
         experiment_name (str): Name of the experiment
-        kwargs (dict[str]): might contain either `wandb_kwargs`, `mlflow_kwargs` or `trackio_kwargs`.
-            Additionally supports ``use_ray_service`` (bool) and ``ray_actor_options`` (dict)
-            to run the logger as a Ray actor.
+        service_backend: One of ``"direct"``, ``"process"``, or ``"ray"``.
+        service_backend_options: Process or Ray initialization options.
+        use_ray_service: Deprecated compatibility flag for the Ray backend.
+        ray_actor_options: Deprecated spelling for Ray actor options.
+        **kwargs: May contain ``wandb_kwargs``, ``mlflow_kwargs``, or
+            ``trackio_kwargs``.
     """
-    use_ray_service = kwargs.pop("use_ray_service", False)
-    ray_actor_options = kwargs.pop("ray_actor_options", None)
-    ray_kwargs = {}
+    service_kwargs = {
+        "service_backend_options": dict(service_backend_options or {}),
+    }
     if use_ray_service:
-        ray_kwargs["use_ray_service"] = True
+        service_kwargs["use_ray_service"] = True
+    else:
+        service_kwargs["service_backend"] = service_backend
     if ray_actor_options is not None:
-        ray_kwargs["ray_actor_options"] = ray_actor_options
+        if service_kwargs["service_backend_options"]:
+            raise ValueError(
+                "ray_actor_options and service_backend_options are mutually exclusive."
+            )
+        # Keep the legacy argument on the metaclass path so it retains its
+        # exact behavior while use_ray_service emits the single warning.
+        if use_ray_service:
+            service_kwargs["ray_actor_options"] = ray_actor_options
+        else:
+            service_kwargs["service_backend_options"] = {
+                "actor_options": ray_actor_options
+            }
 
     if logger_type == "tensorboard":
-        from torchrl.record.loggers.tensorboard import TensorboardLogger
-
         logger = TensorboardLogger(
-            log_dir=logger_name, exp_name=experiment_name, **ray_kwargs
+            log_dir=logger_name, exp_name=experiment_name, **service_kwargs
         )
     elif logger_type == "csv":
-        from torchrl.record.loggers.csv import CSVLogger
-
         logger = CSVLogger(
             log_dir=logger_name,
             exp_name=experiment_name,
             video_format="mp4",
-            **ray_kwargs,
+            **service_kwargs,
         )
     elif logger_type == "wandb":
-        from torchrl.record.loggers.wandb import WandbLogger
-
         wandb_kwargs = kwargs.get("wandb_kwargs", {})
         logger = WandbLogger(
             log_dir=logger_name,
             exp_name=experiment_name,
             **wandb_kwargs,
-            **ray_kwargs,
+            **service_kwargs,
         )
     elif logger_type == "mlflow":
-        from torchrl.record.loggers.mlflow import MLFlowLogger
-
         mlflow_kwargs = kwargs.get("mlflow_kwargs", {})
         logger = MLFlowLogger(
             tracking_uri=pathlib.Path(os.path.abspath(logger_name)).as_uri(),
             exp_name=experiment_name,
             **mlflow_kwargs,
-            **ray_kwargs,
+            **service_kwargs,
         )
     elif logger_type == "trackio":
-        from torchrl.record.loggers.trackio import TrackioLogger
-
         trackio_kwargs = kwargs.get("trackio_kwargs", {})
         project = trackio_kwargs.pop("project", "torchrl")
         logger = TrackioLogger(
             project=project,
             exp_name=experiment_name,
             **trackio_kwargs,
-            **ray_kwargs,
+            **service_kwargs,
         )
     elif logger_type in ("", None):
         return None

@@ -46,18 +46,19 @@ git submodule sync && git submodule update --init --recursive
 #fi
 
 # install tensordict
+pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
   pip install "pybind11[global]" ninja
-  pip install git+https://github.com/pytorch/tensordict.git
+  pip install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  pip install tensordict
+  pip install --no-deps tensordict
 fi
 
 # smoke test
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"
@@ -78,7 +79,18 @@ deno --version || echo "Warning: Deno not installed"
 
 # Pre-download models for LLM tests to avoid timeout during test execution
 printf "* Pre-downloading models for LLM tests\n"
-python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-0.5B'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B')"
+python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2.5-0.5B')"
+
+printf "* Installed LLM backend versions:\n"
+python - <<'PY'
+from importlib.metadata import PackageNotFoundError, version
+
+for package in ("vllm", "transformers", "torch", "triton"):
+    try:
+        print(f"{package}: {version(package)}")
+    except PackageNotFoundError:
+        print(f"{package}: not installed")
+PY
 
 # Note: SGLang tests are run in a separate workflow (test-linux-llm-sglang.yml)
 # due to Triton version conflicts between vLLM and SGLang.

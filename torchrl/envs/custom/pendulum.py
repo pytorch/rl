@@ -218,6 +218,9 @@ class PendulumEnv(EnvBase):
         "render_fps": 30,
     }
     batch_locked = False
+    # This env is stateless: its ``_reset`` can honor a state passed through the
+    # reset tensordict, so it supports ``reset(td, set_state=True)``.
+    _supports_set_state = True
     rng = None
 
     def __init__(self, td_params=None, seed=None, device=None):
@@ -252,7 +255,11 @@ class PendulumEnv(EnvBase):
         new_thdot = new_thdot.clamp(
             -tensordict["params", "max_speed"], tensordict["params", "max_speed"]
         )
-        new_th = th + new_thdot * dt
+        # wrap the angle so that the state stays within the bounds promised by
+        # the ``th`` spec, ``Bounded(-pi, pi)``. The dynamics only depend on
+        # ``th`` through ``sin`` and ``angle_normalize``, both 2*pi-periodic,
+        # so this does not change the trajectory.
+        new_th = cls.angle_normalize(th + new_thdot * dt)
         reward = -costs.view(*tensordict.shape, 1)
         done = torch.zeros_like(reward, dtype=torch.bool)
         out = TensorDict(
@@ -267,7 +274,11 @@ class PendulumEnv(EnvBase):
         )
         return out
 
-    def _reset(self, tensordict):
+    def _reset(self, tensordict, **kwargs):
+        # ``set_state`` is resolved by ``EnvBase.reset``: when truthy, honor the
+        # ``th``/``thdot`` state found in the input tensordict (deterministic
+        # reset); otherwise generate a fresh random state.
+        set_state = bool(kwargs.get("set_state"))
         batch_size = (
             tensordict.batch_size if tensordict is not None else self.batch_size
         )
@@ -276,9 +287,11 @@ class PendulumEnv(EnvBase):
             # Otherwise, we assume that the input ``tensordict`` contains all the relevant
             # parameters to get started.
             tensordict = self.gen_params(batch_size=batch_size, device=self.device)
-        elif "th" in tensordict and "thdot" in tensordict:
-            # we can hard-reset the env too
-            return tensordict
+        elif set_state and "th" in tensordict and "thdot" in tensordict:
+            # deterministic reset: honor the provided state. A shallow copy is
+            # required because ``_reset`` must return an object distinct from
+            # its input (see ``EnvBase.reset``).
+            return tensordict.copy()
         out = self._reset_random_data(
             tensordict.shape, batch_size, tensordict["params"]
         )

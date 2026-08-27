@@ -117,16 +117,12 @@ def _robust_to_tensor(array: float | np.ndarray) -> torch.Tensor:
 
 
 class _DMControlMeta(_EnvPostInit):
-    """Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_workers > 1.
+    """Metaclass for DMControlEnv that returns a ParallelEnv when num_workers > 1.
 
     When ``DMControlEnv(..., num_workers=4)`` is called, this metaclass intercepts the
     call and returns a :class:`~torchrl.envs.ParallelEnv` instead. The returned
-    ParallelEnv is lazy — workers are not started until the environment is actually used
-    (e.g., via :meth:`torchrl.envs.batched_envs.BatchedEnvBase.reset` / :meth:`torchrl.envs.batched_envs.BatchedEnvBase.step`
-    or when accessing specs).
-
-    Users can call :meth:`torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`
-    to set ParallelEnv parameters before the environment starts.
+    Workers start during construction and provide their metadata directly, avoiding a
+    temporary ``DMControlEnv`` construction in the parent process.
     """
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
@@ -154,8 +150,7 @@ class _DMControlMeta(_EnvPostInit):
             def make_env(_env_name=env_name, _task_name=task_name, _kwargs=env_kwargs):
                 return cls(_env_name, _task_name, num_workers=1, **_kwargs)
 
-            # Return lazy ParallelEnv (workers not started yet)
-            return ParallelEnv(num_workers, make_env)
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
 
         return super().__call__(*args, **kwargs)
 
@@ -398,11 +393,10 @@ class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
         env_name (str): name of the environment.
         task_name (str): name of the task.
         num_workers (int, optional): number of parallel environments. Defaults to 1.
-            When ``num_workers > 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is
-            returned instead of a single environment. The parallel environment
-            is not started until it is actually used (e.g., via reset/step or
-            accessing specs). Use :meth:`~torchrl.envs.BatchedEnvBase.configure_parallel`
-            to set parallel execution parameters before the environment starts.
+            When ``num_workers > 1``, a :class:`~torchrl.envs.ParallelEnv` is
+            returned instead of a single environment. Its workers provide their
+            metadata directly, avoiding a temporary environment construction in
+            the parent process.
 
     Keyword Args:
         from_pixels (bool, optional): if ``True``, an attempt to return the pixel
@@ -458,11 +452,8 @@ class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta):
             is_shared=False)
         >>> print(env.available_envs)
         [('acrobot', ['swingup', 'swingup_sparse']), ...]
-        >>> # For running multiple envs in parallel (returns a lazy ParallelEnv)
+        >>> # Run multiple envs in parallel without parent-side construction
         >>> env = DMControlEnv("cheetah", "run", num_workers=4)
-        >>> # Configure parallel parameters before the env starts
-        >>> env.configure_parallel(use_buffers=True, num_threads=2)
-        >>> # Environment starts when first used
         >>> env.reset()
     """
 

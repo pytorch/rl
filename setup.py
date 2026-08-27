@@ -3,12 +3,15 @@ from __future__ import annotations
 import contextlib
 import glob
 import importlib.util
+import inspect
 import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 import torch
@@ -98,6 +101,47 @@ def _get_build_cuda_version() -> str | None:
     return _get_nvcc_cuda_version() or getattr(torch.version, "cuda", None)
 
 
+def _get_cxx20_compatibility_flag() -> str | None:
+    """Return the provisional C++20 spelling for older Unix compilers."""
+    if sys.platform == "win32" or not _torch_extension_requires_cxx20():
+        return None
+
+    compiler = os.getenv("CXX") or sysconfig.get_config_var("CXX") or "c++"
+    compiler_command = shlex.split(compiler)
+    source = "int main() { return 0; }\n"
+
+    def accepts(flag: str) -> bool:
+        try:
+            result = subprocess.run(
+                [*compiler_command, flag, "-x", "c++", "-fsyntax-only", "-"],
+                input=source,
+                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            return False
+        return result.returncode == 0
+
+    if accepts("-std=c++20"):
+        return None
+    if accepts("-std=c++2a"):
+        return "-std=c++2a"
+    return None
+
+
+def _torch_extension_requires_cxx20() -> bool:
+    """Detect the language standard selected by the installed BuildExtension."""
+    try:
+        source = inspect.getsource(BuildExtension.build_extensions)
+    except (OSError, TypeError):
+        source = ""
+    if re.search(r"cpp_flag\s*=.*['\"]c\+\+20['\"]", source):
+        return True
+    return "-std=c++20" in torch.__config__.show()
+
+
 def _check_and_clean_stale_builds():
     """Check if existing build was made with a different PyTorch version and clean if so.
 
@@ -184,9 +228,9 @@ def get_extensions():
     """Build C++ extensions with platform-specific compiler flags.
 
     This function configures the C++ extension build process with appropriate
-    compiler flags for different platforms:
-    - Windows (MSVC): Uses /O2, /std:c++17, /EHsc flags
-    - Unix-like (GCC/Clang): Uses -O3, -std=c++17, -fdiagnostics-color=always flags
+    compiler flags for different platforms. The C++ language standard is left
+    to PyTorch's BuildExtension, which selects the standard required by the
+    installed PyTorch release for both the host compiler and nvcc.
 
     Returns:
         list: List of CppExtension objects to be built
@@ -201,7 +245,6 @@ def get_extensions():
         extra_compile_args = {
             "cxx": [
                 "/O2",  # Optimization level 2 (equivalent to -O3)
-                "/std:c++20",  # C++20 standard
                 "/EHsc",  # Exception handling model
             ]
         }
@@ -218,7 +261,6 @@ def get_extensions():
                 "cxx": [
                     "/Od",  # No optimization (equivalent to -O0)
                     "/Zi",  # Generate debug info
-                    "/std:c++20",  # C++20 standard
                     "/EHsc",  # Exception handling model
                 ]
             }
@@ -232,10 +274,14 @@ def get_extensions():
             extra_link_args = ["/DEBUG"]
     else:
         # GCC/Clang flags for Unix-like systems
+        cxx20_compatibility_flag = _get_cxx20_compatibility_flag()
+        cxx_standard_args = (
+            [cxx20_compatibility_flag] if cxx20_compatibility_flag is not None else []
+        )
         extra_compile_args = {
             "cxx": [
                 "-O3",
-                "-std=c++17",
+                *cxx_standard_args,
                 "-fdiagnostics-color=always",
             ]
         }
@@ -243,7 +289,6 @@ def get_extensions():
             extra_compile_args["cxx"].append("-DWITH_CUDA")
             extra_compile_args["nvcc"] = [
                 "-O3",
-                "-std=c++17",
                 "-DWITH_CUDA",
             ]
         debug_mode = os.getenv("DEBUG", "0") == "1"
@@ -254,7 +299,7 @@ def get_extensions():
                     "-O0",
                     "-fno-inline",
                     "-g",
-                    "-std=c++17",
+                    *cxx_standard_args,
                     "-fdiagnostics-color=always",
                 ]
             }
@@ -263,10 +308,15 @@ def get_extensions():
                 extra_compile_args["nvcc"] = [
                     "-O0",
                     "-G",
-                    "-std=c++17",
                     "-DWITH_CUDA",
                 ]
             extra_link_args = ["-O0", "-g"]
+        else:
+            # setuptools appends Python's sysconfig CFLAGS (which include -g)
+            # to the compile command, leaving ~20 MB of debug info in the
+            # extension. Strip symbols at link time in release builds; the
+            # dynamic symbol table (needed by dlopen) is unaffected.
+            extra_link_args = ["-Wl,-x"] if sys.platform == "darwin" else ["-Wl,-s"]
 
     extensions_dir = "torchrl/csrc"
 
@@ -341,7 +391,9 @@ def _version_with_local_sha(base_version: str) -> str:
 def set_version():
     # Prefer explicit build version if provided by build tooling.
     if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
-        override = os.environ.get("TORCHRL_BUILD_VERSION")
+        override = os.environ.get("TORCHRL_BUILD_VERSION") or os.environ.get(
+            "BUILD_VERSION"
+        )
         if override:
             os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = override.strip()
         else:

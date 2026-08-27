@@ -25,6 +25,7 @@ gh label create "Environments" --repo "$REPO" --description "Triggers all enviro
 
 # New granular labels
 gh label create "Environments/brax" --repo "$REPO" --description "Triggers brax environment tests only" --color "$ENV_COLOR" --force
+gh label create "Environments/mujoco_playground" --repo "$REPO" --description "Triggers mujoco_playground environment tests only" --color "$ENV_COLOR" --force
 gh label create "Environments/chess" --repo "$REPO" --description "Triggers chess environment tests only" --color "$ENV_COLOR" --force
 gh label create "Environments/envpool" --repo "$REPO" --description "Triggers envpool environment tests only" --color "$ENV_COLOR" --force
 gh label create "Environments/isaaclab" --repo "$REPO" --description "Triggers Isaac Lab environment tests only" --color "$ENV_COLOR" --force

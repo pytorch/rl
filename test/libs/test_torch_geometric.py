@@ -14,6 +14,7 @@ from tensordict.nn import TensorDictModule
 from torch import nn
 
 from torchrl.collectors import Collector
+from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 
 _has_torch_geometric = importlib.util.find_spec("torch_geometric") is not None
 
@@ -67,8 +68,6 @@ class TestTorchGeometric:
         reason="CUDA required for collector device-mapping test",
     )
     def test_collector_with_pyg_policy(self):
-        from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
-
         in_features = 7
         act_features = 7
         module = self._make_pyg_module(
@@ -90,8 +89,6 @@ class TestTorchGeometric:
         collector.shutdown()
 
     def test_collector_with_pyg_policy_same_device(self):
-        from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
-
         in_features = 7
         act_features = 7
         module = self._make_pyg_module(

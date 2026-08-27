@@ -41,7 +41,7 @@ def create_loss_estimator(eval_iters, ctx):
     return estimate_loss
 
 
-@hydra.main(version_base="1.1", config_path="config", config_name="train")
+@hydra.main(version_base="1.3", config_path="config", config_name="train")
 def main(cfg):
     loss_logger = get_file_logger("loss_logger", "transformer_loss_logger.log")
 
@@ -93,7 +93,7 @@ def main(cfg):
     if train_cfg.decay_lr:
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
 
-    scaler = torch.cuda.amp.GradScaler(enabled=(dtype == "float16"))
+    scaler = torch.amp.GradScaler("cuda", enabled=(dtype == "float16"))
     estimate_loss = create_loss_estimator(eval_iters, ctx)
 
     best_val_loss = float("inf")

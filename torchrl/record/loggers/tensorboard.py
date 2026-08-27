@@ -20,6 +20,8 @@ _has_omgaconf = importlib.util.find_spec("omegaconf") is not None
 class TensorboardLogger(Logger):
     """Wrapper for the Tensoarboard logger.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.TensorboardLoggerConfig`.
+
     Args:
         exp_name (str): The name of the experiment.
         log_dir (str): the tensorboard log_dir. Defaults to ``td_logs``.

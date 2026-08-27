@@ -1,0 +1,40 @@
+defaults:
+  - config
+  - _self_
+
+env:
+  backend: dm_control
+  name: walker
+  task: walk
+  max_episode_steps: 1000
+
+collector:
+  frames_per_batch: 1000
+  total_frames: 1100000
+
+replay_buffer:
+  buffer_size: 5000000
+  batch_size: 16
+  seq_len: 64
+  warmup_factor: 1
+
+networks:
+  rnn_hidden_dim: 512
+  num_categoricals: 32
+  num_classes: 4
+  obs_embed_dim: 64
+  hidden_dim: 64
+
+optimization:
+  updates_per_batch: 1
+  train_ratio: 1024
+
+logger:
+  eval_every: 10000
+  eval_episodes: 5
+  output_plot: dreamer_v3_dmc_walker.png
+  metrics_json: dreamer_v3_dmc_walker.json
+
+benchmark:
+  seeds: [0, 1, 2]
+  minimum_final_median_return: 700.0

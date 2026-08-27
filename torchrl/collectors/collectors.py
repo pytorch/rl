@@ -5,7 +5,7 @@
 """Re-exports of collector classes for backward compatibility."""
 from __future__ import annotations
 
-from torchrl.collectors._base import BaseCollector, DataCollectorBase
+from torchrl.collectors._base import BaseCollector
 
 # Re-export constants for backward compatibility
 from torchrl.collectors._constants import (
@@ -21,15 +21,12 @@ from torchrl.collectors._constants import (
     WEIGHT_SYNC_TIMEOUT,
 )
 
-from torchrl.collectors._multi_async import MultiAsyncCollector, MultiaSyncDataCollector
-from torchrl.collectors._multi_base import (
-    MultiCollector,
-    MultiCollector as _MultiDataCollector,
-)
-from torchrl.collectors._multi_sync import MultiSyncCollector, MultiSyncDataCollector
+from torchrl.collectors._multi_async import MultiAsyncCollector
+from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors._multi_sync import MultiSyncCollector
 from torchrl.collectors._runner import _main_async_collector
-from torchrl.collectors._single import Collector, SyncDataCollector
-from torchrl.collectors._single_async import AsyncCollector, aSyncDataCollector
+from torchrl.collectors._single import Collector
+from torchrl.collectors._single_async import AsyncCollector
 
 __all__ = [
     # New canonical names (preferred)
@@ -39,13 +36,6 @@ __all__ = [
     "MultiCollector",
     "MultiSyncCollector",
     "MultiAsyncCollector",
-    # Legacy names (backward-compatible aliases)
-    "DataCollectorBase",
-    "SyncDataCollector",
-    "aSyncDataCollector",
-    "_MultiDataCollector",
-    "MultiSyncDataCollector",
-    "MultiaSyncDataCollector",
     # Other exports
     "_main_async_collector",
     # Constants

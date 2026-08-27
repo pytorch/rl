@@ -289,12 +289,13 @@ def _split_and_pad_sequence(
         if tensor.size(time_dim) < torch.iinfo(torch.int16).max
         else torch.int32
     )
-    arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(0)
-    mask = arange < splits.unsqueeze(1)
-
     tensor = _flatten_batch(tensor, time_dim=time_dim)
 
     def _fill_tensor(tensor):
+        arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(
+            0
+        )
+        mask = arange < splits.to(tensor.device).unsqueeze(1)
         empty_tensor = torch.zeros(
             *shape,
             *tensor.shape[1:],
@@ -312,6 +313,10 @@ def _split_and_pad_sequence(
     else:
         tensor = _fill_tensor(tensor)
     if return_mask:
+        arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(
+            0
+        )
+        mask = arange < splits.to(tensor.device).unsqueeze(1)
         return tensor, mask
     return tensor
 
@@ -339,16 +344,17 @@ def _inv_pad_sequence(
         return tensor
 
     if mask is None:
+        device = tensor.device
+        if device is None and isinstance(tensor, TensorDictBase):
+            device = next(value.device for value in tensor.values(True, True))
         # int16 supports length up to 32767
         dtype = (
             torch.int16
             if tensor.shape[-1] < torch.iinfo(torch.int16).max
             else torch.int32
         )
-        arange = torch.arange(
-            tensor.shape[-1], device=tensor.device, dtype=dtype
-        ).unsqueeze(0)
-        mask = arange < splits.unsqueeze(1)
+        arange = torch.arange(tensor.shape[-1], device=device, dtype=dtype).unsqueeze(0)
+        mask = arange < splits.to(device).unsqueeze(1)
 
     return tensor[mask]
 

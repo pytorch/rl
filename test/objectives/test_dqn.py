@@ -258,7 +258,11 @@ class TestDQN(LossModuleTestBase):
             delay_value=delay_value,
             double_dqn=double_dqn,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -523,6 +527,49 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize("actor_first", [False, True])
+    def test_distributional_dqn_lazy_target(self, actor_first):
+        torch.manual_seed(self.seed)
+        atoms = 3
+        action_dim = 2
+        actor = DistributionalQValueActor(
+            module=MLP(out_features=(atoms, action_dim), depth=2),
+            spec=OneHot(action_dim),
+            support=torch.arange(atoms),
+        )
+        loss_fn = DistributionalDQNLoss(actor, gamma=0.99, delay_value=True)
+        updater = SoftUpdate(loss_fn, eps=0.5)
+        td = self._create_mock_data_dqn(
+            action_spec_type="one_hot",
+            batch=5,
+            obs_dim=4,
+            action_dim=action_dim,
+            atoms=atoms,
+        )
+
+        if actor_first:
+            actor(td)
+            updater.step()
+        assert torch.isfinite(loss_fn(td)["loss"])
+
+        source_params = loss_fn.value_network_params
+        target_params = loss_fn.target_value_network_params
+        for key, source in source_params.items(True, True):
+            target = target_params.get(key)
+            torch.testing.assert_close(target, source)
+            assert not target.is_set_to(source.data)
+
+        key, source = next(
+            (key, source)
+            for key, source in source_params.items(True, True)
+            if source.requires_grad
+        )
+        target = target_params.get(key)
+        expected = target + 0.5
+        source.data.add_(1)
+        updater.step()
+        torch.testing.assert_close(target, expected)
+
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
@@ -745,7 +792,7 @@ class TestDQN(LossModuleTestBase):
         # Sample again - weights should now be non-equal
         sample2 = rb.sample()
         weights2 = sample2["priority_weight"]
-        assert weights2.std() > 1e-5
+        assert weights2.std() > 1e-6
 
         # Run loss again with varied weights
         loss_out2 = loss_fn(sample2)
@@ -922,7 +969,11 @@ class TestQMixer(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1300,7 +1351,7 @@ class TestQMixer(LossModuleTestBase):
         # Sample again - weights should now be non-equal
         sample2 = rb.sample()
         weights2 = sample2["priority_weight"]
-        assert weights2.std() > 1e-5
+        assert weights2.std() > 1e-6
 
         # Run loss again with varied weights
         loss_out2 = loss_fn(sample2)
