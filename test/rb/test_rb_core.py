@@ -655,6 +655,9 @@ def test_add_warning():
 @pytest.mark.parametrize("stack", [False, True])
 @pytest.mark.parametrize("reduction", ["min", "max", "mean", "median"])
 def test_rb_trajectories(stack, reduction):
+    priorities = torch.tensor(
+        [[1.0, 2.0, 4.0, 8.0], [2.0, 5.0, 6.0, 9.0], [3.0, 7.0, 10.0, 20.0]]
+    )
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -663,25 +666,35 @@ def test_rb_trajectories(stack, reduction):
         traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
 
     rb = TensorDictPrioritizedReplayBuffer(
-        alpha=0.7,
-        beta=0.9,
+        alpha=1.0,
+        beta=1.0,
         priority_key="td_error",
         storage=ListStorage(5),
-        batch_size=3,
+        batch_size=24,
+        reduction=reduction,
+        generator=torch.Generator().manual_seed(0),
     )
     rb.extend(traj_td)
-    sampled_td = rb.sample()
-    sampled_td.set("td_error", torch.rand(3, 4))
-    rb.update_tensordict_priority(sampled_td)
-    sampled_td = rb.sample(include_info=True)
-    assert (sampled_td.get("priority_weight") > 0).all()
-    assert sampled_td.batch_size == torch.Size([3, 4])
+    update = traj_td.clone().set("index", torch.arange(3).view(3, 1).expand(3, 4))
+    update.set("td_error", priorities)
+    rb.update_tensordict_priority(update)
 
-    # set back the trajectory length
-    sampled_td_filtered = sampled_td.to_tensordict().exclude(
-        "priority_weight", "index", "td_error"
+    reduced_priorities = {
+        "min": priorities.min(-1).values,
+        "max": priorities.max(-1).values,
+        "mean": priorities.mean(-1),
+        "median": priorities.median(-1).values,
+    }[reduction]
+    expected_weights = (reduced_priorities / reduced_priorities.min()).pow(-1)
+    sampled_td = rb.sample()
+    indices = sampled_td["index"][:, 0]
+    assert indices.unique().numel() == 3
+    torch.testing.assert_close(
+        sampled_td["priority_weight"],
+        expected_weights[indices]
+        .unsqueeze(-1)
+        .expand_as(sampled_td["priority_weight"]),
     )
-    sampled_td_filtered.batch_size = [3, 4]
 
 
 def test_shared_storage_prioritized_sampler():
