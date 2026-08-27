@@ -57,14 +57,33 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
         pin_memory (bool): Whether pin_memory() should be called on samples.
         prefetch (int, optional): Number of prefetched batches.
         transform (Transform, optional): Transform executed when sample() is called.
-        split_trajs (bool, optional): If ``True``, the dataset is split into
-            trajectories and saved under ``<root>/<dataset_id>_split``.
+        split_trajs (bool, optional): If ``True``, the trajectories will be split
+            along the first dimension and padded to have a matching shape.
+            The split dataset is saved under ``<root>/<dataset_id>_split``.
+            Defaults to ``False``.
+
+    Attributes:
+        available_datasets: a list of accepted entries to be downloaded.
+
+    Examples:
+        >>> import torch
+        >>> torch.manual_seed(0)
+        >>> from torchrl.data.datasets import TDMPC2ExperienceReplay
+        >>> d = TDMPC2ExperienceReplay("mt30", batch_size=32)
+        >>> for batch in d:
+        ...     break
+        >>> print(batch)
 
     """
 
     available_datasets = ["mt30", "mt80"]
     _HF_REPO_ID = "nicklashansen/tdmpc2"
     _EXPECTED_NUM_CHUNKS = {"mt30": 4, "mt80": 20}
+    # use _max_chunks for debugging and testing: it caps the number of chunks
+    # downloaded and converted, avoiding the full dataset (a single mt30 chunk
+    # weighs 12.8GB). The resulting dataset is partial, so a root populated with
+    # _max_chunks set must be rebuilt with ``download="force"`` to be complete.
+    _max_chunks: int | None = None
 
     def __init__(
         self,
@@ -105,6 +124,8 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
                 except FileNotFoundError:
                     pass
             storage = self._download_and_preproc()
+            if self.split_trajs:
+                storage = self._make_split()
         elif self.split_trajs and not os.path.exists(self.data_path):
             storage = self._make_split()
         else:
@@ -137,15 +158,21 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
         return sorted((Path(path) for path in chunk_paths), key=cls._chunk_idx)
 
     @staticmethod
-    def _get_optional_key(td: TensorDictBase, *keys: str):
+    def _get_optional_tensor(td: TensorDictBase, *keys: str) -> torch.Tensor | None:
+        """Reads the first entry of ``keys`` present in ``td`` as a tensor."""
         for key in keys:
             if key in td.keys():
-                return td.get(key)
+                value = td.get(key)
+                if not isinstance(value, torch.Tensor):
+                    raise TypeError(
+                        f"Expected {key} to be a tensor, but got {type(value)} instead."
+                    )
+                return value
         return None
 
     @classmethod
-    def _get_required_key(cls, td: TensorDictBase, *keys: str):
-        out = cls._get_optional_key(td, *keys)
+    def _get_tensor(cls, td: TensorDictBase, *keys: str) -> torch.Tensor:
+        out = cls._get_optional_tensor(td, *keys)
         if out is None:
             raise KeyError(f"Could not find any of {keys} in chunk keys {td.keys()}.")
         return out
@@ -162,67 +189,36 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
         )
 
     @classmethod
-    def _count_chunk_steps(
-        cls,
-        chunk: TensorDictBase,
-    ) -> tuple[int, int]:
-        obs = cls._get_required_key(chunk, "obs", "observation")
-        if not isinstance(obs, torch.Tensor):
-            raise TypeError(
-                f"Expected obs to be a tensor, but got type {type(obs)} instead."
-            )
-        if obs.ndim < 2:
+    def _count_chunk_steps(cls, chunk: TensorDictBase) -> tuple[int, int]:
+        obs = cls._get_tensor(chunk, "obs", "observation")
+        if obs.ndim < 2 or obs.shape[1] < 2:
             raise RuntimeError(
-                f"Expected obs with shape [E, T, ...], but got shape {obs.shape}."
+                "Expected obs with shape [E, T, ...] and T >= 2, but got shape "
+                f"{obs.shape}."
             )
         num_episodes, horizon = obs.shape[:2]
-        if horizon < 2:
-            raise RuntimeError(
-                f"Expected horizon >= 2 for conversion, but got shape {obs.shape}."
-            )
         return num_episodes * (horizon - 1), num_episodes
 
     @classmethod
     def _convert_chunk(
         cls, chunk: TensorDictBase, episode_offset: int
     ) -> tuple[TensorDict, int]:
-        obs = cls._get_required_key(chunk, "obs", "observation")
-        action = cls._get_required_key(chunk, "action", "actions")
-        reward = cls._get_required_key(chunk, "reward", "rewards")
-        terminated = cls._get_optional_key(chunk, "terminated", "terminals")
-
-        if not isinstance(obs, torch.Tensor):
-            raise TypeError(
-                f"Expected obs to be a tensor, but got type {type(obs)} instead."
-            )
-        if not isinstance(action, torch.Tensor):
-            raise TypeError(
-                f"Expected action to be a tensor, but got type {type(action)} instead."
-            )
-        if not isinstance(reward, torch.Tensor):
-            raise TypeError(
-                f"Expected reward to be a tensor, but got type {type(reward)} instead."
-            )
-        if terminated is not None and not isinstance(terminated, torch.Tensor):
-            raise TypeError(
-                "Expected terminated to be a tensor if present, "
-                f"but got type {type(terminated)} instead."
-            )
+        obs = cls._get_tensor(chunk, "obs", "observation")
+        action = cls._get_tensor(chunk, "action", "actions")
+        reward = cls._get_tensor(chunk, "reward", "rewards")
+        terminated = cls._get_optional_tensor(chunk, "terminated", "terminals")
 
         num_episodes, horizon = obs.shape[:2]
-        if action.shape[:2] != (num_episodes, horizon):
-            raise RuntimeError(
-                f"Mismatching action shape {action.shape} for obs shape {obs.shape}."
-            )
-        if reward.shape[:2] != (num_episodes, horizon):
-            raise RuntimeError(
-                f"Mismatching reward shape {reward.shape} for obs shape {obs.shape}."
-            )
-        if terminated is not None and terminated.shape[:2] != (num_episodes, horizon):
-            raise RuntimeError(
-                "Mismatching terminated shape "
-                f"{terminated.shape} for obs shape {obs.shape}."
-            )
+        for name, tensor in (
+            ("action", action),
+            ("reward", reward),
+            ("terminated", terminated),
+        ):
+            if tensor is not None and tensor.shape[:2] != (num_episodes, horizon):
+                raise RuntimeError(
+                    f"Mismatching {name} shape {tensor.shape} for obs shape "
+                    f"{obs.shape}."
+                )
 
         transition_length = horizon - 1
         observation = obs[:, :-1]
@@ -276,14 +272,16 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
             batch_size=(num_episodes, transition_length),
         )
 
-        task = cls._get_optional_key(chunk, "task")
-        if isinstance(task, torch.Tensor):
+        task = cls._get_optional_tensor(chunk, "task")
+        if task is not None:
             if task.shape[:2] == (num_episodes, horizon):
                 td.set("task", task[:, 1:])
             elif task.shape[0] == num_episodes:
                 td.set(
                     "task",
-                    task.unsqueeze(1).expand(num_episodes, transition_length, *task.shape[1:]),
+                    task.unsqueeze(1).expand(
+                        num_episodes, transition_length, *task.shape[1:]
+                    ),
                 )
             else:
                 warnings.warn(
@@ -321,6 +319,9 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
                 f"Expected {expected} chunk files for {self.dataset_id} but found "
                 f"{len(chunk_files)} files."
             )
+        # truncate after the check above, so the warning reflects the repository
+        if self._max_chunks is not None:
+            chunk_files = chunk_files[: self._max_chunks]
 
         data_cache_dir = Path(tempdir) / "data"
         out = []
@@ -345,23 +346,28 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
 
         total_steps = 0
         total_episodes = 0
+        template = None
         for chunk_path in chunk_paths:
             chunk = cls._load_chunk(chunk_path)
             steps, episodes = cls._count_chunk_steps(chunk)
             total_steps += steps
             total_episodes += episodes
+            if template is None:
+                # a single converted transition is enough to lay the memmap out.
+                # It is cloned so that the (multi-GB) chunk can be freed as soon
+                # as this loop moves on to the next one.
+                template = cls._convert_chunk(chunk[:1, :2], episode_offset=0)[0][
+                    0
+                ].clone()
 
         torchrl_logger.info(
             f"Found {len(chunk_paths)} chunks with {total_episodes} episodes and "
             f"{total_steps} transitions."
         )
 
-        first_chunk = cls._load_chunk(chunk_paths[0])
-        first_td, first_num_episodes = cls._convert_chunk(first_chunk, episode_offset=0)
-
         data_path = Path(data_path)
         data_path.parent.mkdir(parents=True, exist_ok=True)
-        td_data = first_td[0].expand(total_steps).memmap_like(data_path, num_threads=32)
+        td_data = template.expand(total_steps).memmap_like(data_path, num_threads=32)
 
         if _has_tqdm:
             from tqdm import tqdm
@@ -373,15 +379,10 @@ class TDMPC2ExperienceReplay(BaseDatasetExperienceReplay):
         idx = 0
         episode_offset = 0
         with pbar if pbar is not None else nullcontext():
-            for i, chunk_path in enumerate(chunk_paths):
-                if i == 0:
-                    td_chunk = first_td
-                    num_episodes = first_num_episodes
-                else:
-                    chunk = cls._load_chunk(chunk_path)
-                    td_chunk, num_episodes = cls._convert_chunk(
-                        chunk, episode_offset=episode_offset
-                    )
+            for chunk_path in chunk_paths:
+                td_chunk, num_episodes = cls._convert_chunk(
+                    cls._load_chunk(chunk_path), episode_offset=episode_offset
+                )
 
                 next_idx = idx + td_chunk.shape[0]
                 td_data[idx:next_idx] = td_chunk

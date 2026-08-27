@@ -38,12 +38,12 @@ except ImportError:
     pass
 
 try:
-    from .tdmpc2 import TDMPC2ExperienceReplay
+    from .roboset import RobosetExperienceReplay
 except ImportError:
     pass
 
 try:
-    from .roboset import RobosetExperienceReplay
+    from .tdmpc2 import TDMPC2ExperienceReplay
 except ImportError:
     pass
 
@@ -64,7 +64,7 @@ __all__ = [
     "lerobot_columns_to_tensordict",
     "OpenMLExperienceReplay",
     "OpenXExperienceReplay",
-    "TDMPC2ExperienceReplay",
     "RobosetExperienceReplay",
+    "TDMPC2ExperienceReplay",
     "VD4RLExperienceReplay",
 ]

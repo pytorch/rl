@@ -35,6 +35,7 @@ from torchrl.data.datasets.minari_data import MinariExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
+from torchrl.data.datasets.tdmpc2 import TDMPC2ExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.data.video import _has_torchcodec
@@ -60,6 +61,7 @@ _has_d4rl = importlib.util.find_spec("d4rl") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_hf_hub = importlib.util.find_spec("huggingface_hub") is not None
 
 
 @pytest.mark.slow
@@ -849,6 +851,259 @@ class TestRoboset:
         assert "obs_norm" in sample.keys()
 
 
+class TestTDMPC2:
+    """Tests for the TD-MPC2 chunk -> TED conversion.
+
+    These run on locally generated chunks: they exercise the conversion,
+    ordering and split logic without hitting the (multi-GB) HF dataset.
+    """
+
+    @staticmethod
+    def _make_chunk(path, start, terminated_last):
+        num_episodes, horizon = 2, 4
+        td = TensorDict(
+            {
+                "obs": torch.arange(
+                    start, start + num_episodes * horizon * 3, dtype=torch.float32
+                ).view(num_episodes, horizon, 3),
+                "action": torch.arange(
+                    start, start + num_episodes * horizon * 2, dtype=torch.float32
+                ).view(num_episodes, horizon, 2),
+                "reward": torch.arange(
+                    start, start + num_episodes * horizon, dtype=torch.float32
+                ).view(num_episodes, horizon),
+                "terminated": torch.zeros(num_episodes, horizon, dtype=torch.bool),
+                "task": torch.arange(num_episodes, dtype=torch.int64)
+                .unsqueeze(-1)
+                .expand(num_episodes, horizon),
+            },
+            batch_size=(num_episodes, horizon),
+        )
+        td["terminated"][:, -1] = torch.tensor(terminated_last)
+        torch.save(td, path)
+        return td
+
+    def test_chunk_numeric_sort(self):
+        # chunk_10 must come last, despite sorting before chunk_2 lexically
+        paths = [
+            Path("mt30/chunk_10.pt"),
+            Path("mt30/chunk_2.pt"),
+            Path("mt30/chunk_1.pt"),
+        ]
+        sorted_paths = TDMPC2ExperienceReplay._sort_chunk_paths(paths)
+        assert [path.name for path in sorted_paths] == [
+            "chunk_1.pt",
+            "chunk_2.pt",
+            "chunk_10.pt",
+        ]
+
+    def test_chunk_conversion_and_ordering(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        chunks_dir = tmpdir / "chunks"
+        chunks_dir.mkdir(parents=True)
+
+        chunk_2 = self._make_chunk(
+            chunks_dir / "chunk_2.pt", start=0, terminated_last=[True, False]
+        )
+        self._make_chunk(
+            chunks_dir / "chunk_10.pt", start=10_000, terminated_last=[False, False]
+        )
+
+        td_data = TDMPC2ExperienceReplay._preproc_chunks(
+            [chunks_dir / "chunk_10.pt", chunks_dir / "chunk_2.pt"],
+            data_path=tmpdir / "mt30",
+        )
+
+        # 4 episodes x (horizon - 1) transitions
+        assert td_data.shape == torch.Size([12])
+        assert td_data["observation"].shape == torch.Size([12, 3])
+        assert td_data["action"].shape == torch.Size([12, 2])
+        assert td_data["next", "reward"].shape == torch.Size([12, 1])
+        assert td_data["task"].shape == torch.Size([12])
+        # episodes are renumbered across chunks
+        assert td_data["episode"].min() == 0
+        assert td_data["episode"].max() == 3
+        # root done entries are always empty in TED format
+        assert not td_data["done"].any()
+        assert not td_data["terminated"].any()
+        assert not td_data["truncated"].any()
+
+        # chunk_2 must be processed before chunk_10 despite lexical order
+        assert torch.equal(td_data["observation"][0], chunk_2["obs"][0, 0])
+        # obs/next_obs are shifted by one step
+        assert torch.equal(td_data["next", "observation"][0], chunk_2["obs"][0, 1])
+
+        done = td_data["next", "done"].view(4, 3, 1)
+        terminated = td_data["next", "terminated"].view(4, 3, 1)
+        truncated = td_data["next", "truncated"].view(4, 3, 1)
+        assert not done[:, :2].any()
+        assert done[:, -1].all()
+        # the first episode ends on terminated, the others on truncated
+        assert terminated[0, -1].item()
+        assert not truncated[0, -1].item()
+        assert not terminated[1:, -1].any()
+        assert truncated[1:, -1].all()
+
+    @pytest.mark.parametrize("split_trajs", [False, True])
+    def test_load_and_split(self, tmpdir, split_trajs):
+        tmpdir = Path(tmpdir)
+        chunks_dir = tmpdir / "chunks"
+        chunks_dir.mkdir(parents=True)
+        self._make_chunk(
+            chunks_dir / "chunk_0.pt", start=0, terminated_last=[False, False]
+        )
+        TDMPC2ExperienceReplay._preproc_chunks(
+            [chunks_dir / "chunk_0.pt"], data_path=tmpdir / "mt30"
+        )
+
+        data = TDMPC2ExperienceReplay(
+            "mt30",
+            batch_size=4,
+            root=tmpdir,
+            download=False,
+            split_trajs=split_trajs,
+        )
+        sample = data.sample()
+        assert ("next", "done") in sample.keys(True)
+        if split_trajs:
+            assert data.data_path.name == "mt30_split"
+            assert os.path.exists(data.data_path)
+            # 2 episodes of 3 transitions each, stacked in a [2, 3] layout
+            assert data[:].shape == torch.Size([2, 3])
+            assert sample.shape == torch.Size([4, 3])
+        else:
+            assert data.data_path.name == "mt30"
+            assert data[:].shape == torch.Size([6])
+            assert sample.shape == torch.Size([4])
+
+    def test_download_with_split_trajs(self, tmpdir, monkeypatch):
+        # a fresh download with split_trajs=True must return the split data,
+        # not the flat memmap, on the *first* construction
+        tmpdir = Path(tmpdir)
+        chunks_dir = tmpdir / "chunks"
+        chunks_dir.mkdir(parents=True)
+        self._make_chunk(
+            chunks_dir / "chunk_0.pt", start=0, terminated_last=[False, False]
+        )
+        monkeypatch.setattr(
+            TDMPC2ExperienceReplay,
+            "_download_from_huggingface",
+            lambda self, tempdir: [chunks_dir / "chunk_0.pt"],
+        )
+
+        data = TDMPC2ExperienceReplay(
+            "mt30",
+            batch_size=1,
+            root=tmpdir / "root",
+            download=True,
+            split_trajs=True,
+        )
+        assert data.data_path.name == "mt30_split"
+        assert os.path.exists(data.data_path)
+        # 2 episodes of 3 transitions each, not the flat [6] storage
+        assert data[:].shape == torch.Size([2, 3])
+
+    def test_max_chunks_limits_download(self, tmpdir, monkeypatch):
+        # _max_chunks must cap the dataset at the first N chunks in numeric
+        # order. Everything but the HTTP transfer is exercised here: chunk
+        # discovery, ordering, conversion and the memmap write.
+        import huggingface_hub
+
+        tmpdir = Path(tmpdir)
+        chunks_dir = tmpdir / "chunks"
+        chunks_dir.mkdir(parents=True)
+        for i in (0, 1, 2, 10):
+            self._make_chunk(
+                chunks_dir / f"chunk_{i}.pt",
+                start=i * 100,
+                terminated_last=[False, False],
+            )
+
+        class _FakeSibling:
+            def __init__(self, rfilename):
+                self.rfilename = rfilename
+
+        class _FakeInfo:
+            # listed out of order, as the HF API does
+            siblings = [_FakeSibling(f"mt30/chunk_{i}.pt") for i in (10, 2, 0, 1)]
+
+        class _FakeApi:
+            def dataset_info(self, repo_id):
+                return _FakeInfo()
+
+        def _fake_download(repo_id, subfolder, filename, repo_type, cache_dir):
+            return str(chunks_dir / filename)
+
+        monkeypatch.setattr(huggingface_hub, "HfApi", _FakeApi)
+        monkeypatch.setattr(huggingface_hub, "hf_hub_download", _fake_download)
+        monkeypatch.setattr(TDMPC2ExperienceReplay, "_max_chunks", 2)
+
+        data = TDMPC2ExperienceReplay(
+            "mt30", batch_size=4, root=tmpdir / "root", download="force"
+        )
+        # 2 chunks x 2 episodes x 3 transitions -- chunk_10 and chunk_2 excluded
+        assert len(data) == 12
+        assert data[:]["episode"].max() == 3
+        # chunk_0 sorts first, so its first observation heads the dataset
+        chunk_0 = torch.load(chunks_dir / "chunk_0.pt", weights_only=False)
+        assert torch.equal(data[0]["observation"], chunk_0["obs"][0, 0])
+
+    @pytest.fixture
+    def limit_max_chunks(self):
+        prev_val = TDMPC2ExperienceReplay._max_chunks
+        TDMPC2ExperienceReplay._max_chunks = 1
+        yield
+        TDMPC2ExperienceReplay._max_chunks = prev_val
+
+    @pytest.mark.slow
+    @pytest.mark.skipif(not _has_hf_hub, reason="huggingface_hub not found")
+    def test_hf_chunk_listing(self):
+        # the repository layout that _download_from_huggingface relies on.
+        # Cheap (a metadata call), so it catches an upstream reorganisation
+        # without paying for the multi-GB download.
+        from huggingface_hub import HfApi
+
+        siblings = HfApi().dataset_info(TDMPC2ExperienceReplay._HF_REPO_ID).siblings
+        for (
+            dataset_id,
+            expected,
+        ) in TDMPC2ExperienceReplay._EXPECTED_NUM_CHUNKS.items():
+            chunks = [
+                sibling.rfilename
+                for sibling in siblings
+                if sibling.rfilename.startswith(f"{dataset_id}/chunk_")
+                and sibling.rfilename.endswith(".pt")
+            ]
+            assert len(chunks) == expected, (dataset_id, chunks)
+            indices = [TDMPC2ExperienceReplay._chunk_idx(chunk) for chunk in chunks]
+            assert sorted(indices) == list(range(expected)), (dataset_id, chunks)
+        # mt80 numbers past chunk_9, so lexical ordering would put chunk_10
+        # before chunk_2: the numeric sort in _sort_chunk_paths is load-bearing
+        assert TDMPC2ExperienceReplay._EXPECTED_NUM_CHUNKS["mt80"] > 10
+
+    @pytest.mark.slow
+    @pytest.mark.skipif(not _has_hf_hub, reason="huggingface_hub not found")
+    def test_download_e2e(self, tmpdir, limit_max_chunks):
+        # downloads, converts and samples one real mt80 chunk (~3.8GB)
+        data = TDMPC2ExperienceReplay(
+            "mt80", batch_size=32, root=tmpdir, download="force"
+        )
+        assert os.path.exists(data.data_path)
+        assert len(data) > 0
+
+        sample = data.sample()
+        assert sample.shape == torch.Size([32])
+        assert sample["observation"].shape == sample["next", "observation"].shape
+        assert sample["next", "reward"].shape == torch.Size([32, 1])
+        assert sample["next", "done"].shape == torch.Size([32, 1])
+        # the real chunks carry a task label, which conversion must preserve
+        assert "task" in sample.keys()
+        assert sample["episode"].dtype == torch.int64
+        # TD-MPC2 episodes are fixed-length and the chunks carry no terminated
+        # key, so every episode boundary must be a truncation
+        assert not sample["next", "terminated"].any()
+
+
 @pytest.mark.slow
 class TestVD4RL:
     @pytest.mark.parametrize("image_size", [None, (37, 33)])
@@ -1021,12 +1276,14 @@ class TestOpenX:
         cm = (
             pytest.raises(RuntimeError, match="shuffle=False")
             if not streaming and not shuffle and replacement
-            else pytest.raises(
-                RuntimeError,
-                match="replacement=True is not available with streamed datasets",
+            else (
+                pytest.raises(
+                    RuntimeError,
+                    match="replacement=True is not available with streamed datasets",
+                )
+                if streaming and replacement
+                else nullcontext()
             )
-            if streaming and replacement
-            else nullcontext()
         )
         dataset = None
         with cm:
@@ -1090,9 +1347,11 @@ class TestOpenX:
             if padding is None and (batch_size > 1000):
                 with pytest.raises(
                     RuntimeError,
-                    match="Did not find a single trajectory with sufficient length"
-                    if not streaming
-                    else "The trajectory length (.*) is shorter than the slice length",
+                    match=(
+                        "Did not find a single trajectory with sufficient length"
+                        if not streaming
+                        else "The trajectory length (.*) is shorter than the slice length"
+                    ),
                 ):
                     sample = dataset.sample()
                 return
