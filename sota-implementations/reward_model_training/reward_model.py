@@ -131,12 +131,18 @@ def main(cfg: DictConfig) -> None:
     n_trainable = sum(p.numel() for p in score_network.parameters() if p.requires_grad)
     torchrl_logger.info(f"Reward model with {n_trainable} trainable parameters.")
 
+    # Periodic-action intervals: null or 0 disables the action.
+    eval_iter = int(cfg.logger.eval_iter or 0)
+    eval_iters = int(cfg.logger.eval_iters or 0)
+    save_iter = int(cfg.export.save_iter or 0)
+    log_interval = int(cfg.logger.log_interval or 0)
+
     # The score network stays in eval mode for the whole run (dropout deliberately
     # disabled, see make_reward_model), so evaluation does not flip modes.
     @torch.no_grad()
     def evaluate() -> tuple[float, float]:
         losses, accuracies = [], []
-        for _ in range(int(cfg.logger.eval_iters)):
+        for _ in range(eval_iters):
             batch = val_rb.sample().to(device)
             out = loss_module(batch)
             losses.append(out.loss_reward_model)
@@ -182,18 +188,19 @@ def main(cfg: DictConfig) -> None:
             loss=f"{loss.item():.4f}", acc=f"{loss_out.accuracy.item():.3f}"
         )
 
-        if it % int(cfg.logger.eval_iter) == 0:
+        if eval_iter > 0 and eval_iters > 0 and it % eval_iter == 0:
             val_loss, val_acc = evaluate()
-            metrics_to_log["eval/loss"] = val_loss
-            metrics_to_log["eval/accuracy"] = val_acc
             torchrl_logger.info(
                 f"iter {it}: val_loss={val_loss:.4f}, val_acc={val_acc:.4f}"
             )
+            # Logged at eval cadence so eval metrics are never dropped when
+            # eval_iter is not a multiple of log_interval.
+            log_metrics(logger, {"eval/loss": val_loss, "eval/accuracy": val_acc}, it)
 
-        if it % int(cfg.export.save_iter) == 0:
+        if save_iter > 0 and it % save_iter == 0:
             _save_export(score_network, tokenizer, cfg.export.save_dir, step=it)
 
-        if logger is not None and it % int(cfg.logger.log_interval) == 0:
+        if logger is not None and log_interval > 0 and it % log_interval == 0:
             metrics_to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, metrics_to_log, it)
 
