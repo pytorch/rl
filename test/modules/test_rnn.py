@@ -1561,6 +1561,145 @@ class TestLSTMModule:
             assert pad_name == scan_name
             torch.testing.assert_close(pad_grad, scan_grad, atol=5e-3, rtol=5e-3)
 
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_gru_scan_backward_routes_recurrent_state_gradients(self, num_layers, bias):
+        torch.manual_seed(0)
+        B, T, F, H = 3, 6, 4, 8
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "bias": bias,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+        }
+        pad_module = GRUModule(**kwargs)
+        scan_module = GRUModule(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(B, T, F)
+        hidden_source = torch.randn(B, T, num_layers, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        # Row 0 continues an existing trajectory, while the other rows start
+        # fresh trajectories. This exercises both initial-state and reset-state
+        # gradient routing.
+        is_init[1:, 0] = True
+        is_init[1, 3] = True
+        is_init[2, 2] = True
+        output_cotangent = torch.randn(B, T, H)
+        hidden_cotangent = torch.randn(B, T, num_layers, H)
+
+        def loss_and_grads(module):
+            obs = obs_source.detach().clone().requires_grad_()
+            hidden = hidden_source.detach().clone().requires_grad_()
+            data = TensorDict(
+                {
+                    "obs": obs,
+                    "hidden": hidden,
+                    "is_init": is_init.clone(),
+                },
+                [B, T],
+            )
+            with set_recurrent_mode(True):
+                out = module(data)
+            loss = (out["feat"] * output_cotangent).sum() + (
+                out["next", "hidden"] * hidden_cotangent
+            ).sum()
+            loss.backward()
+            return {
+                "feat": out["feat"].detach(),
+                "hidden": out["next", "hidden"].detach(),
+                "obs_grad": obs.grad,
+                "hidden_grad": hidden.grad,
+                "param_grads": {
+                    name: param.grad for name, param in module.named_parameters()
+                },
+            }
+
+        pad = loss_and_grads(pad_module)
+        scan = loss_and_grads(scan_module)
+        for key in ("feat", "hidden", "obs_grad", "hidden_grad"):
+            torch.testing.assert_close(pad[key], scan[key], atol=1e-5, rtol=1e-5)
+        for name in pad["param_grads"]:
+            torch.testing.assert_close(
+                pad["param_grads"][name],
+                scan["param_grads"][name],
+                atol=1e-5,
+                rtol=1e-5,
+            )
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_gru_scan_backward_autocast_bfloat16(self):
+        torch.manual_seed(0)
+        module = GRUModule(
+            input_size=4,
+            hidden_size=8,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+        )
+        obs = torch.randn(2, 5, 4, dtype=torch.bfloat16, requires_grad=True)
+        data = TensorDict(
+            {
+                "obs": obs,
+                "hidden": torch.zeros(2, 5, 1, 8, dtype=torch.bfloat16),
+                "is_init": torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            [2, 5],
+        )
+        with set_recurrent_mode(True), torch.autocast("cpu", torch.bfloat16):
+            out = module(data)
+        out["feat"].float().sum().backward()
+        assert obs.grad is not None
+        assert torch.isfinite(obs.grad).all()
+        for parameter in module.parameters():
+            assert parameter.grad is not None
+            assert torch.isfinite(parameter.grad).all()
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_gru_scan_double_backward_raises(self):
+        torch.manual_seed(0)
+        module = GRUModule(
+            input_size=4,
+            hidden_size=8,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+        )
+        obs = torch.randn(2, 5, 4, requires_grad=True)
+        data = TensorDict(
+            {
+                "obs": obs,
+                "hidden": torch.zeros(2, 5, 1, 8),
+                "is_init": torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            [2, 5],
+        )
+        with set_recurrent_mode(True):
+            out = module(data)
+        cotangent = torch.randn_like(out["feat"]).requires_grad_()
+        (grad,) = torch.autograd.grad(
+            out["feat"], obs, grad_outputs=cotangent, create_graph=True
+        )
+        with pytest.raises(
+            RuntimeError, match="differentiate twice|does not require grad"
+        ):
+            grad.sum().backward()
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
@@ -1745,11 +1884,12 @@ class TestLSTMModule:
                 with set_recurrent_mode(True):
                     return scan_module(td)
 
-            with torch.no_grad():
-                out = call(data.clone())
+            out = call(data.clone())
+            out["feat"].square().mean().backward()
         finally:
             torch._dynamo.config.capture_scalar_outputs = prev
         assert "feat" in out.keys(True, True)
+        assert all(param.grad is not None for param in scan_module.parameters())
 
     @pytest.mark.parametrize("rnn_type", ["gru", "lstm"])
     @pytest.mark.skipif(
