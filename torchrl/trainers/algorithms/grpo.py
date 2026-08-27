@@ -103,6 +103,13 @@ class GRPOOptimizationStepper(OptimizationStepper):
     # ------------------------------------------------------------------
 
     def state_dict(self) -> dict[str, Any]:
+        if self._micro_step % self.gradient_accumulation_steps != 0:
+            raise RuntimeError(
+                f"Cannot save stepper state mid-accumulation. (micro_step={self._micro_step}, "
+                f"accumulation_steps={self.gradient_accumulation_steps}). "
+                "Adjust your save_interval to align with the gradient accumulation window."
+            )
+
         sd: dict[str, Any] = {
             "optimizer": self.optimizer.state_dict(),
             "micro_step": self._micro_step,
@@ -174,12 +181,15 @@ class GRPOOptimizationStepper(OptimizationStepper):
                 grad_norm = float(nn.utils.clip_grad_norm_(params, self.clip_norm))
 
             if self._use_scaler:
+                scale_before = self.scaler.get_scale()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
+                # If scale dropped, an overflow occurred and optimizer.step() was skipped.
+                if self.scaler.get_scale() >= scale_before:
+                    self._optimizer_step_count += 1
             else:
                 self.optimizer.step()
-
-            self._optimizer_step_count += 1
+                self._optimizer_step_count += 1
             self.optimizer.zero_grad(set_to_none=True)
             losses_td["grad_norm"] = torch.tensor(grad_norm)
 
