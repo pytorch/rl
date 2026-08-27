@@ -621,7 +621,6 @@ class TestDreamerV3Components:
         torch.testing.assert_close(output, expected_output, atol=2e-5, rtol=2e-5)
         torch.testing.assert_close(final_hidden, expected_hidden, atol=2e-5, rtol=2e-5)
 
-
     @pytest.mark.parametrize("device", get_default_devices())
     def test_block_gru_action_normalization_and_gradients(self, device):
         prior = RSSMPriorV3(
