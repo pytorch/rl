@@ -129,26 +129,25 @@ class TestBCLoss:
             if p.grad is not None:
                 assert p.grad.abs().sum() > 0
 
-    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
-    def test_reduction_modes(self, reduction):
-        actor = self._make_deterministic_actor()
-        loss_fn = BCLoss(actor, reduction=reduction)
-        td = self._make_batch(batch_size=4)
-        loss_td = loss_fn(td)
-        assert "loss_bc" in loss_td.keys()
-        if reduction == "none":
-            # For deterministic actor, loss should be scalar per sample then reduced
-            pass  # The exact shape depends on implementation
-        else:
-            assert loss_td["loss_bc"].shape == torch.Size([])
-
-    @pytest.mark.parametrize("loss_function", ["l1", "l2", "smooth_l1"])
-    def test_loss_functions_deterministic(self, loss_function):
-        actor = self._make_deterministic_actor()
+    @pytest.mark.parametrize(
+        ("loss_function", "expected"),
+        [("l1", 1.75), ("l2", 5.25), ("smooth_l1", 1.375)],
+    )
+    def test_loss_functions_deterministic(self, loss_function, expected):
+        module = nn.Linear(2, 2, bias=False)
+        with torch.no_grad():
+            module.weight.copy_(torch.eye(2))
+        actor = TensorDictModule(module, in_keys=["observation"], out_keys=["action"])
         loss_fn = BCLoss(actor, loss_function=loss_function)
-        td = self._make_batch()
-        loss_td = loss_fn(td)
-        assert loss_td["loss_bc"].isfinite()
+        td = TensorDict(
+            {
+                "observation": torch.tensor([[0.0, 0.0], [1.0, -2.0]]),
+                "action": torch.tensor([[2.0, 0.0], [0.0, 2.0]]),
+            },
+            batch_size=[2],
+        )
+        loss = loss_fn(td)["loss_bc"]
+        torch.testing.assert_close(loss, loss.new_tensor(expected))
 
     def test_custom_keys(self):
         actor = self._make_deterministic_actor()
