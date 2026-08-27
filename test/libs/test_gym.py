@@ -1075,7 +1075,18 @@ class TestGym:
                 ),
             ),
         ]
-        + (["FetchReach-v2"] if _has_gym_robotics else []),
+        + (
+            [
+                pytest.param(
+                    "FetchReach-v2",
+                    marks=pytest.mark.skip(
+                        reason="gymnasium_robotics environments are not registered in spawned workers"
+                    ),
+                )
+            ]
+            if _has_gym_robotics
+            else []
+        ),
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):
@@ -1101,7 +1112,18 @@ class TestGym:
                 ),
             ),
         ]
-        + (["FetchReach-v2"] if _has_gym_robotics else []),
+        + (
+            [
+                pytest.param(
+                    "FetchReach-v2",
+                    marks=pytest.mark.skip(
+                        reason="gymnasium_robotics environments are not registered in spawned workers"
+                    ),
+                )
+            ]
+            if _has_gym_robotics
+            else []
+        ),
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa
@@ -1892,10 +1914,16 @@ class TestGym:
             # Restore original isinstance
             builtins.isinstance = original_isinstance
 
+    @implement_for("gym", compilable=True)
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_gymnasium_num_envs(self, num_envs, request):
+        # This test only applies to the gymnasium backend.
+        ...
+
     @implement_for("gymnasium", None, "1.0.0", compilable=True)
     @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium not found")
     @pytest.mark.parametrize("num_envs", [0, 1, 2])
-    def test_gymnasium_num_envs(self, num_envs, request):
+    def test_gymnasium_num_envs(self, num_envs, request):  # noqa: F811
         self._test_gymnasium_num_envs(num_envs, request)
 
     @implement_for("gymnasium", "1.0.0", "1.1.0", compilable=True)
