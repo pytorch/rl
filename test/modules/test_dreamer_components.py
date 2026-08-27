@@ -12,6 +12,7 @@ from unittest import mock
 import pytest
 import torch
 from packaging import version
+from pyvers import implement_for
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.data.tensor_specs import Bounded
@@ -622,12 +623,17 @@ class TestDreamerV3Components:
                 scan_gradient, loop_gradient, atol=2e-4, rtol=5e-5
             )
 
-    @pytest.mark.parametrize("scope", ["step", "scan"])
+    @implement_for("torch", None, "2.6.0", compilable=True)
+    @pytest.mark.parametrize("scope", ["step"])
     def test_rssm_rollout_compile(self, scope):
-        if scope == "scan" and version.parse(torch.__version__) < version.parse(
-            "2.6.0"
-        ):
-            pytest.skip("the scan compile path requires Torch >= 2.6.0")
+        self._test_rssm_rollout_compile(scope)
+
+    @implement_for("torch", "2.6.0", compilable=True)
+    @pytest.mark.parametrize("scope", ["step", "scan"])
+    def test_rssm_rollout_compile(self, scope):  # noqa: F811
+        self._test_rssm_rollout_compile(scope)
+
+    def _test_rssm_rollout_compile(self, scope):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
         rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)

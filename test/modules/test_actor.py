@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import torch
 from _modules_common import _has_transformers
-from packaging import version
+from pyvers import implement_for
 from tensordict import NonTensorData, NonTensorStack, TensorDict
 from tensordict.nn import CompositeDistribution, InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
@@ -502,12 +502,17 @@ class TestDiffusionActor:
         for p in actor.parameters():
             assert p.grad is not None
 
-    @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+    @implement_for("torch", None, "2.2.0", compilable=True)
+    @pytest.mark.parametrize("dtype", [torch.bfloat16])
     def test_reduced_precision_schedule(self, dtype):
-        if dtype is torch.float16 and version.parse(torch.__version__) < version.parse(
-            "2.2.0"
-        ):
-            pytest.skip("CPU float16 linear layers require Torch >= 2.2.0")
+        self._test_reduced_precision_schedule(dtype)
+
+    @implement_for("torch", "2.2.0", compilable=True)
+    @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+    def test_reduced_precision_schedule(self, dtype):  # noqa: F811
+        self._test_reduced_precision_schedule(dtype)
+
+    def _test_reduced_precision_schedule(self, dtype):
         actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3).to(dtype)
         assert actor.module.alphas_cumprod.dtype is torch.float32
         td = TensorDict({"observation": torch.randn(4, 3, dtype=dtype)}, batch_size=[4])

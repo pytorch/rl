@@ -12,7 +12,7 @@ from _objectives_common import (
     _has_functorch as has_functorch,
     FUNCTORCH_ERR,
 )
-from packaging import version
+from pyvers import implement_for
 from tensordict import TensorDict
 from tensordict.nn import NormalParamExtractor, TensorDictModule
 from torch import nn
@@ -171,12 +171,17 @@ class TestTQC:
             torch.manual_seed(0)
             torch.testing.assert_close(loss.compute_target(truncated), expected)
 
-    @pytest.mark.parametrize("deactivate_vmap", [False, True])
+    @implement_for("torch", None, "2.7.0", compilable=True)
+    @pytest.mark.parametrize("deactivate_vmap", [False])
     def test_tqc_numerical_contract(self, monkeypatch, deactivate_vmap):
-        if deactivate_vmap and version.parse(torch.__version__) < version.parse(
-            "2.7.0"
-        ):
-            pytest.skip("pseudo-vmap requires Torch >= 2.7.0")
+        self._test_tqc_numerical_contract(monkeypatch, deactivate_vmap)
+
+    @implement_for("torch", "2.7.0", compilable=True)
+    @pytest.mark.parametrize("deactivate_vmap", [False, True])
+    def test_tqc_numerical_contract(self, monkeypatch, deactivate_vmap):  # noqa: F811
+        self._test_tqc_numerical_contract(monkeypatch, deactivate_vmap)
+
+    def _test_tqc_numerical_contract(self, monkeypatch, deactivate_vmap):
         actor = self.make_actor()
         critic = [
             ValueOperator(
