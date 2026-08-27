@@ -927,8 +927,13 @@ class TestGym:
         finally:
             env.close()
 
-    @implement_for("gym", None, "0.26", compilable=True)
+    @implement_for("gymnasium", compilable=True)
     def test_info_reader_mario(self):
+        # gym_super_mario_bros requires the legacy gym backend.
+        ...
+
+    @implement_for("gym", None, "0.26", compilable=True)
+    def test_info_reader_mario(self):  # noqa: F811
         try:
             import gym_super_mario_bros as mario_gym
         except ImportError:
