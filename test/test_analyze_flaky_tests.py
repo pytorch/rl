@@ -37,6 +37,26 @@ def test_download_artifact_recovers_from_transient_failure(failure):
         )
 
 
+def test_download_artifact_honors_retry_after_header():
+    rate_limited = SimpleNamespace(
+        status_code=429,
+        headers={"Retry-After": "120"},
+        content=b"",
+    )
+    success = SimpleNamespace(status_code=200, content=b"artifact")
+    sleeps: list[float] = []
+    with (
+        patch.object(analyze.requests, "get", side_effect=[rate_limited, success]),
+        patch.object(analyze.time, "sleep", side_effect=sleeps.append),
+    ):
+        assert (
+            analyze.download_artifact("https://example.test/artifact", "token")
+            == b"artifact"
+        )
+
+    assert sleeps == [120]
+
+
 def test_download_artifact_preserves_persistent_failure():
     with (
         patch.object(

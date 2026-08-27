@@ -24,6 +24,7 @@ import time
 import zipfile
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
@@ -115,6 +116,29 @@ def github_api_request(endpoint: str, token: str) -> dict | list | None:
     return response.json()
 
 
+def _retry_delay(response: requests.Response, fallback: float) -> float:
+    """Use the server cooldown for rate-limited responses when it is longer."""
+    if response.status_code != 429:
+        return fallback
+
+    retry_after = getattr(response, "headers", {}).get("Retry-After")
+    if not retry_after:
+        return fallback
+
+    try:
+        return max(fallback, float(retry_after))
+    except (TypeError, ValueError):
+        try:
+            retry_at = parsedate_to_datetime(retry_after)
+        except (TypeError, ValueError, IndexError, OverflowError):
+            log(f"Warning: Ignoring invalid Retry-After header: {retry_after!r}")
+            return fallback
+
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(fallback, retry_at.timestamp() - time.time())
+
+
 def download_artifact(artifact_url: str, token: str) -> bytes | None:
     """Download an artifact zip file."""
     headers = {
@@ -145,9 +169,10 @@ def download_artifact(artifact_url: str, token: str) -> bytes | None:
             and attempt < ARTIFACT_DOWNLOAD_ATTEMPTS - 1
         ):
             delay = ARTIFACT_DOWNLOAD_BACKOFF_SECONDS * 2**attempt
+            delay = _retry_delay(response, delay)
             log(
                 "Warning: Artifact download returned "
-                f"{response.status_code}; retrying in {delay}s"
+                f"{response.status_code}; retrying in {delay:g}s"
             )
             time.sleep(delay)
             continue
