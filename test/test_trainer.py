@@ -41,7 +41,7 @@ from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
-from torchrl.trainers.algorithms.grpo import GRPOOptimizationStepper, GRPOTrainer
+from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
@@ -60,6 +60,7 @@ from torchrl.trainers.trainers import (
     LogScalar,
     LRSchedulerHook,
     mask_batch,
+    MixedPrecisionOptimizationStepper,
     OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
@@ -2283,7 +2284,7 @@ class TestGRPOTrainer:
         # post_optim stage every `update_weights_interval` optimizer steps,
         # discounting gradient-accumulation micro-steps.
         model = nn.Linear(1, 1, bias=False)
-        stepper = GRPOOptimizationStepper(
+        stepper = MixedPrecisionOptimizationStepper(
             torch.optim.SGD(model.parameters(), lr=0.05),
             gradient_accumulation_steps=2,
         )
@@ -2359,7 +2360,7 @@ class TestGRPOTrainer:
         nn.init.zeros_(accumulated_model.weight)
         full_batch_model.load_state_dict(accumulated_model.state_dict())
 
-        accumulated_stepper = GRPOOptimizationStepper(
+        accumulated_stepper = MixedPrecisionOptimizationStepper(
             torch.optim.SGD(accumulated_model.parameters(), lr=0.1),
             gradient_accumulation_steps=2,
         )
@@ -2372,7 +2373,7 @@ class TestGRPOTrainer:
             optimization_stepper=accumulated_stepper,
             progress_bar=False,
         )
-        full_batch_stepper = GRPOOptimizationStepper(
+        full_batch_stepper = MixedPrecisionOptimizationStepper(
             torch.optim.SGD(full_batch_model.parameters(), lr=0.1)
         )
         full_batch_trainer = Trainer(
@@ -2405,14 +2406,14 @@ class TestGRPOTrainer:
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
         with pytest.raises(ValueError, match="must be >= 1"):
-            GRPOOptimizationStepper(
+            MixedPrecisionOptimizationStepper(
                 optimizer,
                 gradient_accumulation_steps=gradient_accumulation_steps,
             )
 
     def test_rejects_loss_outputs_without_an_optimization_objective(self):
         model = nn.Linear(1, 1)
-        stepper = GRPOOptimizationStepper(torch.optim.SGD(model.parameters(), lr=0.1))
+        stepper = MixedPrecisionOptimizationStepper(torch.optim.SGD(model.parameters(), lr=0.1))
         trainer = Trainer(
             collector=MockingCollector(),
             total_frames=1,

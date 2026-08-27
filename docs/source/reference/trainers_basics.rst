@@ -14,6 +14,7 @@ Trainer and hooks
 
     Trainer
     TrainerHookBase
+    MixedPrecisionOptimizationStepper
 
 Algorithm-specific trainers
 ---------------------------

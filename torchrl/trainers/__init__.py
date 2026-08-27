@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .algorithms.grpo import GRPOOptimizationStepper, GRPOTrainer
+from .algorithms.grpo import GRPOTrainer
 from .trainers import (
     BatchSubSampler,
     ClearCudaCache,
@@ -15,6 +15,7 @@ from .trainers import (
     LogValidationReward,
     LRSchedulerHook,
     mask_batch,
+    MixedPrecisionOptimizationStepper,
     OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
@@ -34,13 +35,13 @@ __all__ = [
     "CountFramesLog",
     "DefaultOptimizationStepper",
     "EarlyStopping",
-    "GRPOOptimizationStepper",
     "GRPOTrainer",
     "LogScalar",
     "LogTiming",
     "LogValidationReward",
     "LRSchedulerHook",
     "mask_batch",
+    "MixedPrecisionOptimizationStepper",
     "OptimizationStepper",
     "OptimizerHook",
     "ReplayBufferTrainer",

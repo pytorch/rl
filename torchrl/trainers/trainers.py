@@ -27,6 +27,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
+from torch.amp import GradScaler
 from torchrl._utils import (
     _CKPT_BACKEND,
     implement_for,
@@ -315,6 +316,182 @@ class DefaultOptimizationStepper(OptimizationStepper):
         trainer.optimizer.zero_grad()
 
         return losses_td
+
+
+class MixedPrecisionOptimizationStepper(OptimizationStepper):
+    """Optimization step with mixed precision and gradient accumulation.
+
+    This stepper wraps each forward/backward pass in ``torch.amp.autocast``
+    and optionally scales gradients with ``torch.amp.GradScaler`` (for fp16).
+    It also implements *gradient accumulation*: gradients are accumulated for
+    ``gradient_accumulation_steps`` micro-batches before the optimizer is
+    stepped and zeroed.
+
+    It can be used with any :class:`~torchrl.trainers.Trainer`; LLM trainers
+    such as :class:`~torchrl.trainers.algorithms.GRPOTrainer` construct it by
+    default.
+
+    Args:
+        optimizer (optim.Optimizer): The optimizer to use.
+
+    Keyword Args:
+        mixed_precision (bool, optional): Whether to enable mixed-precision
+            training. Default: ``False``.
+        autocast_dtype (torch.dtype, optional): The dtype to use inside
+            ``autocast``. Default: ``torch.bfloat16``.
+        gradient_accumulation_steps (int, optional): Number of micro-batches
+            over which gradients are accumulated before a step. Default: ``1``.
+        clip_norm (float, optional): Maximum gradient norm for clipping.
+            Default: ``1.0``.
+        device_type (str, optional): Device type passed to ``autocast`` and
+            ``GradScaler`` (e.g. ``"cuda"`` or ``"cpu"``). Defaults to the
+            device type of the optimizer's first parameter.
+
+    .. note::
+        ``GradScaler`` is only enabled when ``mixed_precision=True`` *and*
+        ``autocast_dtype=torch.float16``.  With bfloat16 (the recommended
+        dtype for modern GPUs) the scaler is a no-op and is not created.
+    """
+
+    def __init__(
+        self,
+        optimizer: optim.Optimizer,
+        *,
+        mixed_precision: bool = False,
+        autocast_dtype: torch.dtype = torch.bfloat16,
+        gradient_accumulation_steps: int = 1,
+        clip_norm: float | None = 1.0,
+        device_type: str | None = None,
+    ) -> None:
+        if gradient_accumulation_steps < 1:
+            raise ValueError("gradient_accumulation_steps must be >= 1")
+        self.optimizer = optimizer
+        self.mixed_precision = mixed_precision
+        self.autocast_dtype = autocast_dtype
+        self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.clip_norm = clip_norm
+        if device_type is None:
+            params = [
+                p for group in optimizer.param_groups for p in group["params"]
+            ]
+            device_type = params[0].device.type if params else "cpu"
+        self.device_type = device_type
+
+        # GradScaler is only useful for fp16; bf16 doesn't need it.
+        self._use_scaler = mixed_precision and (autocast_dtype == torch.float16)
+        self.scaler = GradScaler(self.device_type, enabled=self._use_scaler)
+
+        # Internal micro-batch counter (reset after every optimizer step).
+        self._micro_step: int = 0
+        self._optimizer_step_count: int = 0
+
+    @property
+    def optimizer_step_count(self) -> int:
+        """Number of completed optimizer steps.
+
+        Discounts gradient-accumulation micro-steps and steps skipped by the
+        GradScaler on overflow. Read by hooks that act on an optimizer-step
+        cadence (e.g. :class:`~torchrl.trainers.UpdateWeights` with
+        ``interval_unit="optim_steps"``).
+        """
+        return self._optimizer_step_count
+
+    # ------------------------------------------------------------------
+    # Checkpointing (optimizer + scaler state)
+    # ------------------------------------------------------------------
+
+    def state_dict(self) -> dict[str, Any]:
+        if self._micro_step % self.gradient_accumulation_steps != 0:
+            raise RuntimeError(
+                f"Cannot save stepper state mid-accumulation. (micro_step={self._micro_step}, "
+                f"accumulation_steps={self.gradient_accumulation_steps}). "
+                "Adjust your save_interval to align with the gradient accumulation window."
+            )
+
+        sd: dict[str, Any] = {
+            "optimizer": self.optimizer.state_dict(),
+            "micro_step": self._micro_step,
+            "optimizer_step_count": self._optimizer_step_count,
+        }
+        if self._use_scaler:
+            sd["scaler"] = self.scaler.state_dict()
+        return sd
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        self._micro_step = state_dict.get("micro_step", 0)
+        self._optimizer_step_count = state_dict.get("optimizer_step_count", 0)
+        if self._use_scaler and "scaler" in state_dict:
+            self.scaler.load_state_dict(state_dict["scaler"])
+
+    # ------------------------------------------------------------------
+    # Core step
+    # ------------------------------------------------------------------
+
+    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Perform one forward pass and scaled backward pass.
+
+        The optimizer is only stepped and zeroed every
+        ``gradient_accumulation_steps`` calls.
+
+        Args:
+            trainer (Trainer): The owning :class:`~torchrl.trainers.Trainer`.
+            sub_batch (TensorDictBase): Mini-batch used for this step.
+
+        Returns:
+            A :class:`~tensordict.TensorDict` with scalar metrics (losses,
+            grad_norm) suitable for logging.
+        """
+        # ---- forward pass (optionally under autocast) ----
+        with torch.amp.autocast(
+            self.device_type,
+            enabled=self.mixed_precision,
+            dtype=self.autocast_dtype,
+        ):
+            losses_td = trainer.compute_loss(sub_batch)
+            # Sum all loss_* keys and normalise by accumulation steps.
+            loss_items = [v for k, v in losses_td.items() if k.startswith("loss")]
+            if not loss_items:
+                raise RuntimeError(
+                    "The loss module returned no 'loss_*' keys. "
+                    "Make sure your loss module prefixes scalar outputs with 'loss'."
+                )
+            loss = sum(loss_items) / self.gradient_accumulation_steps
+
+        # ---- backward pass ----
+        if self._use_scaler:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+        self._micro_step += 1
+
+        # ---- optimizer step every `gradient_accumulation_steps` micro-batches ----
+        if self._micro_step % self.gradient_accumulation_steps == 0:
+            if self._use_scaler:
+                self.scaler.unscale_(self.optimizer)
+
+            grad_norm = 0.0
+            if self.clip_norm is not None:
+                params = [
+                    p for group in self.optimizer.param_groups for p in group["params"]
+                ]
+                grad_norm = float(nn.utils.clip_grad_norm_(params, self.clip_norm))
+
+            if self._use_scaler:
+                scale_before = self.scaler.get_scale()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                # If scale dropped, an overflow occurred and optimizer.step() was skipped.
+                if self.scaler.get_scale() >= scale_before:
+                    self._optimizer_step_count += 1
+            else:
+                self.optimizer.step()
+                self._optimizer_step_count += 1
+            self.optimizer.zero_grad(set_to_none=True)
+            losses_td["grad_norm"] = torch.tensor(grad_norm)
+
+        return losses_td.detach()
 
 
 class Trainer:
