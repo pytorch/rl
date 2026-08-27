@@ -290,6 +290,7 @@ def _parse_int_list(s: str) -> list[int]:
 
 
 def main() -> None:
+    """Run the recurrent-backend benchmark CLI (``torchrl-benchmark-rnn``)."""
     parser = argparse.ArgumentParser(
         prog="torchrl-benchmark-rnn",
         description=__doc__,

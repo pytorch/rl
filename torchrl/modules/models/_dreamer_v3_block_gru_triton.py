@@ -167,6 +167,14 @@ if _has_triton:
         d_off = tl.arange(0, D_PAD)
         k_off = tl.arange(0, BLOCK_K)
         for t in range(T):
+            # Without SAVE_STATE the dynamic scratch only holds the current
+            # timestep, so its time dimension collapses to one slot.
+            if SAVE_STATE:
+                scratch_t = t
+                scratch_time = T
+            else:
+                scratch_t = 0
+                scratch_time = 1
             reset = tl.load(is_init_ptr + b64 * T + t, mask=mask_b, other=False) != 0
             hidden_pre = tl.zeros([BLOCK_B, P_PAD], tl.float32)
             for k_iter in tl.static_range(tl.cdiv(H_PAD, BLOCK_K)):
@@ -281,7 +289,7 @@ if _has_triton:
                         )
                     else:
                         previous_xhat_base = (
-                            ((layer - 1) * B + b64[:, None]) * T + t
+                            ((layer - 1) * B + b64[:, None]) * scratch_time + scratch_t
                         ) * H + block * D
                         for k_iter in tl.static_range(tl.cdiv(D_PAD, BLOCK_K)):
                             kk = k_iter * BLOCK_K + k_off
@@ -320,7 +328,7 @@ if _has_triton:
                     pre = tl.where(d_off[None, :] < D, pre, 0.0)
                     sumsq += tl.sum(pre * pre, axis=1)
                     scratch_base = (
-                        ((layer * B + b64[:, None]) * T + t) * H
+                        ((layer * B + b64[:, None]) * scratch_time + scratch_t) * H
                         + block * D
                         + d_off[None, :]
                     )
@@ -339,7 +347,7 @@ if _has_triton:
                     )
                 for block in tl.static_range(NUM_BLOCKS):
                     base = (
-                        ((layer * B + b64[:, None]) * T + t) * H
+                        ((layer * B + b64[:, None]) * scratch_time + scratch_t) * H
                         + block * D
                         + d_off[None, :]
                     )
@@ -357,7 +365,7 @@ if _has_triton:
 
             for block in tl.static_range(NUM_BLOCKS):
                 last_base = (
-                    ((NUM_LAYERS - 1) * B + b64[:, None]) * T + t
+                    ((NUM_LAYERS - 1) * B + b64[:, None]) * scratch_time + scratch_t
                 ) * H + block * D
                 reset_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
                 candidate_pre = tl.zeros([BLOCK_B, D_PAD], tl.float32)
@@ -984,7 +992,7 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
         dynamic_normalized = torch.empty(
             num_layers,
             batch,
-            time,
+            time if save_state else 1,
             hidden_size,
             device=projected_input.device,
             dtype=compute_dtype,

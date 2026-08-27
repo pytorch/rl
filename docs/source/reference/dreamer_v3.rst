@@ -122,7 +122,7 @@ like the reference backend; other dtypes raise an error), requires Triton 3.3
 or newer, and never silently falls back to another backend.
 
 Selecting and benchmarking the sequence backend
-------------------------------------------------
+-----------------------------------------------
 
 The sequence backend is selected directly on the high-level module:
 
