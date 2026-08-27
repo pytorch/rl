@@ -110,6 +110,13 @@ latent state. The actor and prediction heads consume both ``state`` and
 blocks used by the example's encoder, decoder, actor, critic, and prediction
 heads.
 
+For recurrent features outside an RSSM, :class:`~torchrl.modules.DreamerV3BlockGRUCell`
+exposes the same block-diagonal update as a single-step module, while
+:class:`~torchrl.modules.DreamerV3BlockGRU` executes batch-major sequences with
+mixed episode resets. The sequence module uses an ordinary-autograd reference
+loop by default and offers an opt-in compiled scan backend for long training
+sequences.
+
 The three objectives
 --------------------
 

@@ -25,6 +25,8 @@ from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
+    DreamerV3BlockGRU,
+    DreamerV3BlockGRUCell,
     DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
@@ -83,6 +85,8 @@ __all__ = [
     "DecisionTransformer",
     "DistributionalDQNnet",
     "DreamerActor",
+    "DreamerV3BlockGRU",
+    "DreamerV3BlockGRUCell",
     "DreamerV3MLP",
     "DTActor",
     "DuelingCnnDQNet",

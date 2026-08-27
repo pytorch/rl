@@ -11,6 +11,7 @@ from __future__ import annotations
 import functools as ft
 import warnings
 
+from collections.abc import Callable
 from typing import Literal
 
 import torch
@@ -23,7 +24,9 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
-from torch.nn import GRUCell
+from torch.autograd.function import once_differentiable
+from torch.nn import functional as F, GRUCell
+from torchrl._utils import implement_for
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.rnn import (
@@ -55,11 +58,7 @@ class _DreamerV3RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(features, device=device))
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
-        value_float = value.float()
-        normalized = value_float * torch.rsqrt(
-            value_float.square().mean(dim=-1, keepdim=True) + self.eps
-        )
-        return (normalized * self.weight.float()).to(value.dtype)
+        return _dreamer_v3_rms_norm(value, self.weight, self.eps)
 
 
 class _DreamerV3BlockLinear(nn.Module):
@@ -97,11 +96,90 @@ class _DreamerV3BlockLinear(nn.Module):
         value = value.reshape(
             -1, self.num_blocks, self.in_features // self.num_blocks
         ).transpose(0, 1)
-        value = torch.bmm(value, self.weight).transpose(0, 1)
+        value = torch.bmm(value, self.weight.to(value.dtype)).transpose(0, 1)
         # An FP32 bias would promote a BF16 recurrence back to FP32.
         return value.reshape(*batch_shape, self.out_features) + self.bias.to(
             value.dtype
         )
+
+
+def _dreamer_v3_linear(
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None,
+) -> torch.Tensor:
+    """Run a linear projection in the activation dtype with FP32 parameters."""
+    dtype = value.dtype
+    return F.linear(
+        value,
+        weight.to(dtype),
+        bias.to(dtype) if bias is not None else None,
+    )
+
+
+@implement_for("torch", None, "2.4", compilable=True)
+def _dreamer_v3_rms_norm(
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    dtype = value.dtype
+    value = value.float()
+    value = value * torch.rsqrt(value.square().mean(-1, keepdim=True) + eps)
+    return (value * weight.float()).to(dtype)
+
+
+@implement_for("torch", "2.4", compilable=True)
+def _dreamer_v3_rms_norm(  # noqa: F811
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    return F.rms_norm(value.float(), (weight.shape[0],), weight.float(), eps).to(
+        value.dtype
+    )
+
+
+def _dreamer_v3_block_linear(
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor,
+) -> torch.Tensor:
+    num_blocks, _, block_out = weight.shape
+    batch_shape = value.shape[:-1]
+    value = value.reshape(-1, num_blocks, value.shape[-1] // num_blocks)
+    value = value.transpose(0, 1)
+    value = torch.bmm(value, weight.to(value.dtype)).transpose(0, 1)
+    return value.reshape(*batch_shape, num_blocks * block_out) + bias.to(value.dtype)
+
+
+def _dreamer_v3_block_gru_update(
+    features: torch.Tensor,
+    belief: torch.Tensor,
+    hidden_layers: Callable[[torch.Tensor], torch.Tensor],
+    gates: _DreamerV3BlockLinear,
+    *,
+    num_blocks: int,
+    update_bias: float,
+) -> torch.Tensor:
+    """Apply the shared DreamerV3 block dynamics and gated update."""
+    belief_dim = belief.shape[-1]
+    grouped_belief = belief.reshape(
+        *belief.shape[:-1], num_blocks, belief_dim // num_blocks
+    )
+    repeated_features = features.unsqueeze(-2).expand(
+        *features.shape[:-1], num_blocks, features.shape[-1]
+    )
+    hidden = torch.cat([grouped_belief, repeated_features], -1).flatten(-2)
+    hidden = hidden_layers(hidden)
+    gate_values = gates(hidden).reshape(
+        *hidden.shape[:-1], num_blocks, 3, belief_dim // num_blocks
+    )
+    reset, candidate, update = gate_values.unbind(-2)
+    reset = reset.flatten(-2).sigmoid()
+    candidate = (reset * candidate.flatten(-2)).tanh()
+    update = (update.flatten(-2) + update_bias).sigmoid()
+    return update * candidate + (1 - update) * belief
 
 
 class _DreamerV3BlockGRU(nn.Module):
@@ -176,25 +254,700 @@ class _DreamerV3BlockGRU(nn.Module):
             ],
             -1,
         )
-        grouped_belief = belief.reshape(
-            *belief.shape[:-1], self.num_blocks, self.belief_dim // self.num_blocks
+        return _dreamer_v3_block_gru_update(
+            features,
+            belief,
+            self.hidden_layers,
+            self.gates,
+            num_blocks=self.num_blocks,
+            update_bias=-1.0,
         )
-        repeated_features = features.unsqueeze(-2).expand(
-            *features.shape[:-1], self.num_blocks, features.shape[-1]
+
+
+def _activation_with_derivative(
+    activation: Callable[[torch.Tensor], torch.Tensor],
+    value: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if isinstance(activation, nn.SiLU):
+        sigmoid = value.sigmoid()
+        output = F.silu(value)
+        return output, sigmoid * (1 + value * (1 - sigmoid))
+    if isinstance(activation, nn.Tanh):
+        output = value.tanh()
+        return output, 1 - output.square()
+    if isinstance(activation, nn.ReLU):
+        return value.relu(), (value > 0).to(value.dtype)
+    output, derivative = torch.func.jvp(activation, (value,), (torch.ones_like(value),))
+    return output, derivative
+
+
+def _rms_norm_with_backward_state(
+    value: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    value_float = value.float()
+    inv_rms = torch.rsqrt(value_float.square().mean(-1, keepdim=True) + eps)
+    normalized = value_float * inv_rms
+    output = _dreamer_v3_rms_norm(value, weight, eps)
+    return output, normalized.to(value.dtype), inv_rms
+
+
+def _rms_norm_backward(
+    grad_output: torch.Tensor,
+    normalized: torch.Tensor,
+    inv_rms: torch.Tensor,
+    weight: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    grad_float = grad_output.float()
+    normalized_float = normalized.float()
+    grad_normalized = grad_float * weight.float()
+    correction = (grad_normalized * normalized_float).mean(-1, keepdim=True)
+    grad_input = inv_rms * (grad_normalized - normalized_float * correction)
+    grad_weight_contribution = grad_float * normalized_float
+    return grad_input.to(grad_output.dtype), grad_weight_contribution
+
+
+def _block_linear_backward_input(
+    grad_output: torch.Tensor,
+    weight: torch.Tensor,
+) -> torch.Tensor:
+    num_blocks, block_in, block_out = weight.shape
+    batch_shape = grad_output.shape[:-1]
+    grad_blocks = grad_output.reshape(-1, num_blocks, block_out)
+    grad_blocks = grad_blocks.transpose(0, 1)
+    grad_input = torch.bmm(grad_blocks, weight.to(grad_output.dtype).transpose(1, 2))
+    return grad_input.transpose(0, 1).reshape(*batch_shape, num_blocks * block_in)
+
+
+def _block_weight_grad(
+    value: torch.Tensor,
+    grad_output: torch.Tensor,
+    weight: torch.Tensor,
+) -> torch.Tensor:
+    num_blocks, block_in, block_out = weight.shape
+    value = value.reshape(-1, num_blocks, block_in).float()
+    grad_output = grad_output.reshape(-1, num_blocks, block_out).float()
+    return torch.einsum("nbi,nbo->bio", value, grad_output)
+
+
+class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
+    """Block-GRU scan whose reverse scan carries only the hidden cotangent."""
+
+    @staticmethod
+    def forward(
+        ctx,
+        projected_input,
+        initial_hidden,
+        is_init,
+        hidden_weight,
+        hidden_bias,
+        hidden_norm_weight,
+        *args,
+    ):
+        activation, norm_eps, update_bias, num_blocks, num_layers = args[-5:]
+        tensors = args[:-5]
+        dynamic = [tensors[index : index + 3] for index in range(0, 3 * num_layers, 3)]
+        gate_weight, gate_bias = tensors[3 * num_layers :]
+        hidden_size = initial_hidden.shape[-1]
+        block_size = hidden_size // num_blocks
+
+        def step(hidden, inputs):
+            projected_t, init_t = inputs
+            previous = torch.where(init_t.unsqueeze(-1), 0, hidden)
+
+            hidden_pre = _dreamer_v3_linear(previous, hidden_weight, hidden_bias)
+            (
+                hidden_norm,
+                hidden_normalized,
+                hidden_inv_rms,
+            ) = _rms_norm_with_backward_state(hidden_pre, hidden_norm_weight, norm_eps)
+            hidden_features, hidden_activation_derivative = _activation_with_derivative(
+                activation, hidden_norm
+            )
+            features = torch.cat((projected_t, hidden_features), -1)
+            grouped_hidden = previous.reshape(previous.shape[0], num_blocks, block_size)
+            repeated_features = features.unsqueeze(-2).expand(
+                features.shape[0], num_blocks, features.shape[-1]
+            )
+            layer_value = torch.cat((grouped_hidden, repeated_features), -1).flatten(-2)
+
+            layer_inputs = []
+            layer_normalized = []
+            layer_inv_rms = []
+            layer_derivatives = []
+            for weight, bias, norm_weight in dynamic:
+                layer_inputs.append(layer_value)
+                layer_pre = _dreamer_v3_block_linear(layer_value, weight, bias)
+                layer_norm, normalized, inv_rms = _rms_norm_with_backward_state(
+                    layer_pre, norm_weight, norm_eps
+                )
+                layer_value, derivative = _activation_with_derivative(
+                    activation, layer_norm
+                )
+                layer_normalized.append(normalized)
+                layer_inv_rms.append(inv_rms)
+                layer_derivatives.append(derivative)
+
+            gate_values = _dreamer_v3_block_linear(
+                layer_value, gate_weight, gate_bias
+            ).reshape(previous.shape[0], num_blocks, 3, block_size)
+            reset_pre, candidate_pre, update_pre = gate_values.unbind(-2)
+            reset = reset_pre.flatten(-2).sigmoid()
+            candidate_pre = candidate_pre.flatten(-2)
+            candidate = (reset * candidate_pre).tanh()
+            update = (update_pre.flatten(-2) + update_bias).sigmoid()
+            next_hidden = update * candidate + (1 - update) * previous
+
+            saved = (
+                previous,
+                hidden_normalized,
+                hidden_inv_rms,
+                hidden_activation_derivative,
+                *layer_inputs,
+                *layer_normalized,
+                *layer_inv_rms,
+                *layer_derivatives,
+                layer_value,
+                reset,
+                candidate_pre,
+                candidate,
+                update,
+            )
+            return next_hidden, (next_hidden.clone(), *saved)
+
+        final_hidden, scan_output = _higher_order_scan(
+            step,
+            initial_hidden,
+            (projected_input, is_init),
+            dim=0,
         )
-        hidden = torch.cat([grouped_belief, repeated_features], -1).flatten(-2)
-        hidden = self.hidden_layers(hidden)
-        gates = self.gates(hidden).reshape(
-            *hidden.shape[:-1],
-            self.num_blocks,
-            3,
-            self.belief_dim // self.num_blocks,
+        outputs, saved = scan_output[0], scan_output[1:]
+        ctx.activation = activation
+        ctx.norm_eps = norm_eps
+        ctx.update_bias = update_bias
+        ctx.num_blocks = num_blocks
+        ctx.num_layers = num_layers
+        ctx.save_for_backward(
+            projected_input,
+            initial_hidden,
+            is_init,
+            hidden_weight,
+            hidden_norm_weight,
+            *tensors,
+            outputs,
+            *saved,
         )
-        reset, candidate, update = gates.unbind(-2)
-        reset = reset.flatten(-2).sigmoid()
-        candidate = (reset * candidate.flatten(-2)).tanh()
-        update = (update.flatten(-2) - 1).sigmoid()
-        return update * candidate + (1 - update) * belief
+        return outputs, final_hidden
+
+    # The saved gate states carry no autograd history, so double backward
+    # would silently return wrong second-order gradients without this.
+    @staticmethod
+    @once_differentiable
+    def backward(ctx, grad_outputs, grad_final_hidden):
+        saved_tensors = ctx.saved_tensors
+        num_layers = ctx.num_layers
+        parameter_count = 3 * num_layers + 2
+        (
+            projected_input,
+            initial_hidden,
+            is_init,
+            hidden_weight,
+            hidden_norm_weight,
+        ) = saved_tensors[:5]
+        parameter_tensors = saved_tensors[5 : 5 + parameter_count]
+        dynamic = [
+            parameter_tensors[index : index + 3]
+            for index in range(0, 3 * num_layers, 3)
+        ]
+        gate_weight, _ = parameter_tensors[3 * num_layers :]
+        outputs = saved_tensors[5 + parameter_count]
+        saved = saved_tensors[6 + parameter_count :]
+
+        offset = 0
+        previous = saved[offset]
+        offset += 1
+        hidden_normalized = saved[offset]
+        hidden_inv_rms = saved[offset + 1]
+        hidden_derivative = saved[offset + 2]
+        offset += 3
+        layer_inputs = saved[offset : offset + num_layers]
+        offset += num_layers
+        layer_normalized = saved[offset : offset + num_layers]
+        offset += num_layers
+        layer_inv_rms = saved[offset : offset + num_layers]
+        offset += num_layers
+        layer_derivatives = saved[offset : offset + num_layers]
+        offset += num_layers
+        gate_input, reset, candidate_pre, candidate, update = saved[offset : offset + 5]
+
+        if grad_outputs is None:
+            grad_outputs = torch.zeros_like(outputs)
+        if grad_final_hidden is None:
+            grad_final_hidden = torch.zeros_like(initial_hidden)
+        grad_outputs = torch.cat(
+            (grad_outputs[:-1], (grad_outputs[-1] + grad_final_hidden).unsqueeze(0)),
+            0,
+        )
+        num_blocks = ctx.num_blocks
+        hidden_size = initial_hidden.shape[-1]
+        block_size = hidden_size // num_blocks
+        projected_size = projected_input.shape[-1]
+
+        reversed_inputs = tuple(
+            value.flip(0)
+            for value in (
+                grad_outputs,
+                is_init,
+                previous,
+                hidden_normalized,
+                hidden_inv_rms,
+                hidden_derivative,
+                *layer_normalized,
+                *layer_inv_rms,
+                *layer_derivatives,
+                gate_input,
+                reset,
+                candidate_pre,
+                candidate,
+                update,
+            )
+        )
+
+        def reverse_step(hidden_cotangent, inputs):
+            index = 0
+            output_cotangent = inputs[index]
+            init_t = inputs[index + 1]
+            previous_t = inputs[index + 2]
+            hidden_normalized_t = inputs[index + 3]
+            hidden_inv_rms_t = inputs[index + 4]
+            hidden_derivative_t = inputs[index + 5]
+            index += 6
+            layer_normalized_t = inputs[index : index + num_layers]
+            index += num_layers
+            layer_inv_rms_t = inputs[index : index + num_layers]
+            index += num_layers
+            layer_derivatives_t = inputs[index : index + num_layers]
+            index += num_layers
+            gate_input_t, reset_t, candidate_pre_t, candidate_t, update_t = inputs[
+                index : index + 5
+            ]
+
+            grad_hidden = output_cotangent + hidden_cotangent
+            grad_update = grad_hidden * (candidate_t - previous_t)
+            grad_candidate = grad_hidden * update_t
+            grad_previous = grad_hidden * (1 - update_t)
+            grad_update_pre = grad_update * update_t * (1 - update_t)
+            grad_candidate_inner = grad_candidate * (1 - candidate_t.square())
+            grad_reset = grad_candidate_inner * candidate_pre_t
+            grad_candidate_pre = grad_candidate_inner * reset_t
+            grad_reset_pre = grad_reset * reset_t * (1 - reset_t)
+            grad_gates = torch.stack(
+                (
+                    grad_reset_pre.unflatten(-1, (num_blocks, block_size)),
+                    grad_candidate_pre.unflatten(-1, (num_blocks, block_size)),
+                    grad_update_pre.unflatten(-1, (num_blocks, block_size)),
+                ),
+                -2,
+            ).flatten(-3)
+
+            grad_layer = _block_linear_backward_input(grad_gates, gate_weight)
+            dynamic_pre_grads = []
+            dynamic_norm_grads = []
+            for layer_index in range(num_layers - 1, -1, -1):
+                weight, _, norm_weight = dynamic[layer_index]
+                grad_norm = grad_layer * layer_derivatives_t[layer_index]
+                grad_pre, grad_norm_weight = _rms_norm_backward(
+                    grad_norm,
+                    layer_normalized_t[layer_index],
+                    layer_inv_rms_t[layer_index],
+                    norm_weight,
+                )
+                dynamic_pre_grads.append(grad_pre)
+                dynamic_norm_grads.append(grad_norm_weight)
+                grad_layer = _block_linear_backward_input(grad_pre, weight)
+            dynamic_pre_grads.reverse()
+            dynamic_norm_grads.reverse()
+
+            grad_first = grad_layer.reshape(grad_layer.shape[0], num_blocks, -1)
+            grad_previous = grad_previous + grad_first[..., :block_size].flatten(-2)
+            grad_features = grad_first[..., block_size:].sum(-2)
+            grad_projected = grad_features[..., :projected_size]
+            grad_hidden_features = grad_features[..., projected_size:]
+
+            grad_hidden_norm = grad_hidden_features * hidden_derivative_t
+            grad_hidden_pre, grad_hidden_norm_weight = _rms_norm_backward(
+                grad_hidden_norm,
+                hidden_normalized_t,
+                hidden_inv_rms_t,
+                hidden_norm_weight,
+            )
+            grad_previous = grad_previous + _dreamer_v3_linear(
+                grad_hidden_pre, hidden_weight.t(), None
+            )
+            next_cotangent = torch.where(init_t.unsqueeze(-1), 0, grad_previous)
+            local = (
+                grad_projected,
+                grad_hidden_pre,
+                grad_hidden_norm_weight,
+                *dynamic_pre_grads,
+                *dynamic_norm_grads,
+                grad_gates,
+            )
+            return next_cotangent, local
+
+        grad_initial, local = _higher_order_scan(
+            reverse_step,
+            torch.zeros_like(initial_hidden),
+            reversed_inputs,
+            dim=0,
+        )
+        local = tuple(value.flip(0) for value in local)
+        index = 0
+        grad_projected = local[index]
+        grad_hidden_pre = local[index + 1]
+        grad_hidden_norm_contrib = local[index + 2]
+        index += 3
+        dynamic_pre_grads = local[index : index + num_layers]
+        index += num_layers
+        dynamic_norm_contribs = local[index : index + num_layers]
+        index += num_layers
+        grad_gates = local[index]
+
+        flat_hidden_pre = grad_hidden_pre.flatten(0, 1).float()
+        flat_previous = previous.flatten(0, 1).float()
+        grad_hidden_weight = flat_hidden_pre.t() @ flat_previous
+        grad_hidden_bias = flat_hidden_pre.sum(0)
+        grad_hidden_norm_weight = grad_hidden_norm_contrib.sum(
+            tuple(range(grad_hidden_norm_contrib.ndim - 1))
+        )
+
+        dynamic_parameter_grads = []
+        for layer_input, grad_pre, norm_contrib, (weight, _, _) in zip(
+            layer_inputs,
+            dynamic_pre_grads,
+            dynamic_norm_contribs,
+            dynamic,
+        ):
+            dynamic_parameter_grads.extend(
+                (
+                    _block_weight_grad(layer_input, grad_pre, weight),
+                    grad_pre.float().sum(tuple(range(grad_pre.ndim - 1))),
+                    norm_contrib.sum(tuple(range(norm_contrib.ndim - 1))),
+                )
+            )
+        grad_gate_weight = _block_weight_grad(gate_input, grad_gates, gate_weight)
+        grad_gate_bias = grad_gates.float().sum(tuple(range(grad_gates.ndim - 1)))
+
+        tensor_grads = (
+            grad_projected,
+            grad_initial,
+            None,
+            grad_hidden_weight,
+            grad_hidden_bias,
+            grad_hidden_norm_weight,
+            *dynamic_parameter_grads,
+            grad_gate_weight,
+            grad_gate_bias,
+        )
+        return (*tensor_grads, None, None, None, None, None)
+
+
+class DreamerV3BlockGRUCell(nn.Module):
+    """Single-step DreamerV3 block-diagonal GRU cell.
+
+    Args:
+        input_size (int): Input feature count.
+        hidden_size (int): Recurrent hidden-state width.
+        projection_size (int, optional): Input and hidden projection width.
+            Defaults to 512.
+        num_blocks (int, optional): Number of independent recurrent blocks.
+            Defaults to 8.
+        num_layers (int, optional): Number of block-linear dynamics layers.
+            Defaults to 1.
+        activation_class (type[nn.Module] or callable, optional): Parameter-free,
+            elementwise, shape-preserving activation. Defaults to :class:`nn.SiLU`.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to ``1e-4``.
+        update_bias (float, optional): Fixed update-gate logit offset. Defaults
+            to ``-1.0``.
+        device (torch.device, optional): Parameter device. Defaults to None.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import DreamerV3BlockGRUCell
+        >>> cell = DreamerV3BlockGRUCell(6, 8, projection_size=4, num_blocks=2)
+        >>> cell(torch.randn(3, 6), torch.zeros(3, 8)).shape
+        torch.Size([3, 8])
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        projection_size: int = 512,
+        num_blocks: int = 8,
+        num_layers: int = 1,
+        activation_class: type[nn.Module] | Callable = nn.SiLU,
+        norm_eps: float = 1e-4,
+        update_bias: float = -1.0,
+        device: torch.device | str | int | None = None,
+    ):
+        super().__init__()
+        if num_blocks <= 0:
+            raise ValueError(f"num_blocks must be positive, got {num_blocks}.")
+        if hidden_size % num_blocks:
+            raise ValueError(
+                "hidden_size must be divisible by num_blocks, got "
+                f"{hidden_size} and {num_blocks}."
+            )
+        if num_layers < 1:
+            raise ValueError(f"num_layers must be positive, got {num_layers}.")
+        activation = (
+            activation_class()
+            if isinstance(activation_class, type)
+            else activation_class
+        )
+        if not callable(activation):
+            raise TypeError("activation_class must construct a callable activation.")
+        if (
+            isinstance(activation, nn.Module)
+            and next(activation.parameters(), None) is not None
+        ):
+            raise ValueError("activation_class must not have learnable parameters.")
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.projection_size = projection_size
+        self.num_blocks = num_blocks
+        self.num_layers = num_layers
+        self.norm_eps = norm_eps
+        self.update_bias = update_bias
+        self.activation = activation
+        self.input_linear = nn.Linear(input_size, projection_size, device=device)
+        self.input_norm = _DreamerV3RMSNorm(projection_size, norm_eps, device=device)
+        self.hidden_linear = nn.Linear(hidden_size, projection_size, device=device)
+        self.hidden_norm = _DreamerV3RMSNorm(projection_size, norm_eps, device=device)
+
+        first_layer_size = hidden_size + 2 * projection_size * num_blocks
+        self.dynamic_linears = nn.ModuleList()
+        self.dynamic_norms = nn.ModuleList()
+        for layer_index in range(num_layers):
+            self.dynamic_linears.append(
+                _DreamerV3BlockLinear(
+                    first_layer_size if layer_index == 0 else hidden_size,
+                    hidden_size,
+                    num_blocks,
+                    device=device,
+                )
+            )
+            self.dynamic_norms.append(
+                _DreamerV3RMSNorm(hidden_size, norm_eps, device=device)
+            )
+        self.gates = _DreamerV3BlockLinear(
+            hidden_size, 3 * hidden_size, num_blocks, device=device
+        )
+        self.apply(_dreamer_v3_init)
+
+    def _run_dynamics(self, value: torch.Tensor) -> torch.Tensor:
+        for linear, norm in zip(self.dynamic_linears, self.dynamic_norms):
+            value = linear(value)
+            value = norm(value)
+            value = self.activation(value)
+        return value
+
+    def _project_input(self, value: torch.Tensor) -> torch.Tensor:
+        value = _dreamer_v3_linear(
+            value, self.input_linear.weight, self.input_linear.bias
+        )
+        value = _dreamer_v3_rms_norm(value, self.input_norm.weight, self.norm_eps)
+        return self.activation(value)
+
+    def _step_projected(
+        self, projected_input: torch.Tensor, hidden: torch.Tensor
+    ) -> torch.Tensor:
+        hidden_features = _dreamer_v3_linear(
+            hidden, self.hidden_linear.weight, self.hidden_linear.bias
+        )
+        hidden_features = _dreamer_v3_rms_norm(
+            hidden_features, self.hidden_norm.weight, self.norm_eps
+        )
+        hidden_features = self.activation(hidden_features)
+        features = torch.cat((projected_input, hidden_features), -1)
+        return _dreamer_v3_block_gru_update(
+            features,
+            hidden,
+            self._run_dynamics,
+            self.gates,
+            num_blocks=self.num_blocks,
+            update_bias=self.update_bias,
+        )
+
+    def forward(
+        self,
+        input: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if input.shape[-1] != self.input_size:
+            raise ValueError(
+                f"Expected input.size(-1) == {self.input_size}, got {input.shape[-1]}."
+            )
+        if hidden is None:
+            hidden = input.new_zeros(*input.shape[:-1], self.hidden_size)
+        if hidden.shape != (*input.shape[:-1], self.hidden_size):
+            raise ValueError(
+                "hidden must match the input batch shape and hidden_size, got "
+                f"{hidden.shape}."
+            )
+        return self._step_projected(self._project_input(input), hidden)
+
+
+class DreamerV3BlockGRU(nn.Module):
+    """Batch-major DreamerV3 block-diagonal GRU sequence module.
+
+    ``is_init`` marks entries whose carry is zeroed before that timestep.
+    The ``"reference"`` backend uses ordinary autograd and supports every
+    TorchRL-compatible PyTorch version. The opt-in ``"scan"`` backend uses a
+    specialized compiled reverse scan.
+
+    Args:
+        input_size (int): Input feature count.
+        hidden_size (int): Recurrent hidden-state width.
+        projection_size (int, optional): Input and hidden projection width.
+            Defaults to 512.
+        num_blocks (int, optional): Number of independent recurrent blocks.
+            Defaults to 8.
+        num_layers (int, optional): Number of block-linear dynamics layers.
+            Defaults to 1.
+        activation_class (type[nn.Module] or callable, optional): Parameter-free,
+            elementwise, shape-preserving activation. Defaults to :class:`nn.SiLU`.
+        norm_eps (float, optional): RMS normalization epsilon. Defaults to ``1e-4``.
+        update_bias (float, optional): Fixed update-gate logit offset. Defaults
+            to ``-1.0``.
+        recurrent_backend ("reference" or "scan", optional): Sequence backend.
+            Defaults to ``"reference"``.
+        device (torch.device, optional): Parameter device. Defaults to None.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import DreamerV3BlockGRU
+        >>> gru = DreamerV3BlockGRU(6, 8, projection_size=4, num_blocks=2)
+        >>> output, hidden = gru(torch.randn(3, 5, 6))
+        >>> output.shape, hidden.shape
+        (torch.Size([3, 5, 8]), torch.Size([3, 8]))
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        projection_size: int = 512,
+        num_blocks: int = 8,
+        num_layers: int = 1,
+        activation_class: type[nn.Module] | Callable = nn.SiLU,
+        norm_eps: float = 1e-4,
+        update_bias: float = -1.0,
+        recurrent_backend: Literal["reference", "scan"] = "reference",
+        device: torch.device | str | int | None = None,
+    ):
+        super().__init__()
+        if recurrent_backend not in ("reference", "scan"):
+            raise ValueError(
+                "recurrent_backend must be 'reference' or 'scan', got "
+                f"{recurrent_backend!r}."
+            )
+        self.cell = DreamerV3BlockGRUCell(
+            input_size,
+            hidden_size,
+            projection_size=projection_size,
+            num_blocks=num_blocks,
+            num_layers=num_layers,
+            activation_class=activation_class,
+            norm_eps=norm_eps,
+            update_bias=update_bias,
+            device=device,
+        )
+        self.recurrent_backend = recurrent_backend
+        if recurrent_backend == "scan":
+            _maybe_warm_scan_backward(device)
+
+    def _reference(
+        self,
+        projected_input: torch.Tensor,
+        hidden: torch.Tensor,
+        is_init: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        outputs = []
+        for projected_t, init_t in zip(projected_input.unbind(1), is_init.unbind(1)):
+            hidden = torch.where(init_t.unsqueeze(-1), 0, hidden)
+            hidden = self.cell._step_projected(projected_t, hidden)
+            outputs.append(hidden)
+        return torch.stack(outputs, 1), hidden
+
+    def _scan(
+        self,
+        projected_input: torch.Tensor,
+        hidden: torch.Tensor,
+        is_init: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        parameters = []
+        for linear, norm in zip(self.cell.dynamic_linears, self.cell.dynamic_norms):
+            parameters.extend((linear.weight, linear.bias, norm.weight))
+        parameters.extend((self.cell.gates.weight, self.cell.gates.bias))
+        outputs, final_hidden = _DreamerV3BlockGRUScanFunction.apply(
+            projected_input.transpose(0, 1).contiguous(),
+            hidden,
+            is_init.transpose(0, 1).contiguous(),
+            self.cell.hidden_linear.weight,
+            self.cell.hidden_linear.bias,
+            self.cell.hidden_norm.weight,
+            *parameters,
+            self.cell.activation,
+            self.cell.norm_eps,
+            self.cell.update_bias,
+            self.cell.num_blocks,
+            self.cell.num_layers,
+        )
+        return outputs.transpose(0, 1), final_hidden
+
+    def forward(
+        self,
+        input: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+        is_init: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if input.ndim != 3 or input.shape[-1] != self.cell.input_size:
+            raise ValueError(
+                "input must have shape [batch, time, input_size], got "
+                f"{input.shape}."
+            )
+        batch, time, _ = input.shape
+        if time == 0:
+            raise ValueError("input must contain at least one timestep.")
+        if hidden is None:
+            hidden = input.new_zeros(batch, self.cell.hidden_size)
+        if hidden.shape != (batch, self.cell.hidden_size):
+            raise ValueError(
+                f"hidden must have shape {(batch, self.cell.hidden_size)}, got "
+                f"{hidden.shape}."
+            )
+        if is_init is None:
+            is_init = torch.zeros(batch, time, dtype=torch.bool, device=input.device)
+        elif is_init.ndim == 3 and is_init.shape[-1] == 1:
+            is_init = is_init.squeeze(-1)
+        if is_init.shape != (batch, time) or is_init.dtype is not torch.bool:
+            raise ValueError(
+                f"is_init must be boolean with shape {(batch, time)} or "
+                f"{(batch, time, 1)}, got {is_init.shape} and {is_init.dtype}."
+            )
+
+        projected_input = self.cell._project_input(input.flatten(0, 1)).unflatten(
+            0, (batch, time)
+        )
+        if self.recurrent_backend == "scan":
+            return self._scan(projected_input, hidden, is_init)
+        return self._reference(projected_input, hidden, is_init)
 
 
 class DreamerV3MLP(nn.Module):
