@@ -15,6 +15,7 @@ from torch import nn
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.decision_transformer import DecisionTransformer
+from torchrl.modules.models.exploration import NoisyLinear
 from torchrl.modules.models.utils import (
     _find_depth,
     create_on_device,
@@ -30,6 +31,9 @@ class _SharedBias(nn.Module):
     def __init__(self, device: DEVICE_TYPING | None = None, dtype=None):
         super().__init__()
         self.bias = nn.Parameter(torch.zeros(1, device=device, dtype=dtype))
+
+    def reset_parameters(self) -> None:
+        nn.init.zeros_(self.bias)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return input + self.bias
@@ -80,7 +84,8 @@ class MLP(nn.Sequential):
         bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
         single_bias_last_layer (bool): if ``True``, the bias of the last layer is
-            shared across its output features. Defaults to ``False``.
+            shared across its output features. This option is incompatible with
+            :class:`~torchrl.modules.NoisyLinear`. Defaults to ``False``.
         layer_class (Type[nn.Module] or callable, optional): class to be used
             for the linear layers;
         layer_kwargs (dict or list of dicts, optional): kwargs for the linear
@@ -281,6 +286,14 @@ class MLP(nn.Sequential):
                     _out,
                     bias=_bias and not single_bias,
                     **layer_kwargs,
+                )
+            if (
+                i == self.depth
+                and self.single_bias_last_layer
+                and isinstance(layer, NoisyLinear)
+            ):
+                raise ValueError(
+                    "single_bias_last_layer=True is incompatible with NoisyLinear."
                 )
             layers.append(layer)
             if single_bias:

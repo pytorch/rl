@@ -12,7 +12,7 @@ import torch
 from torch import nn
 from torchrl.modules.models import BatchRenorm1d, Conv3dNet, ConvNet, MLP, NoisyLinear
 from torchrl.modules.models.recipes.impala import _ConvNetBlock
-from torchrl.modules.models.utils import SquashDims
+from torchrl.modules.models.utils import _reset_parameters_recursive, SquashDims
 
 from torchrl.testing import get_default_devices
 
@@ -35,8 +35,10 @@ class TestMLP:
     )
     @pytest.mark.parametrize("dropout", [0.0, 0.5])
     @pytest.mark.parametrize("bias_last_layer", [True, False])
-    @pytest.mark.parametrize("single_bias_last_layer", [True, False])
-    @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
+    @pytest.mark.parametrize(
+        "single_bias_last_layer,layer_class",
+        [(False, nn.Linear), (True, nn.Linear), (False, NoisyLinear)],
+    )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_mlp(
         self,
@@ -100,6 +102,9 @@ class TestMLP:
         output = mlp(torch.zeros(4, 2))
         torch.testing.assert_close(output, torch.full((4, 2, 3), 2.0))
 
+        _reset_parameters_recursive(mlp)
+        torch.testing.assert_close(shared_bias[0], torch.zeros_like(shared_bias[0]))
+
         mlp_without_bias = MLP(
             in_features=2,
             out_features=3,
@@ -110,6 +115,16 @@ class TestMLP:
         assert all(
             parameter.numel() != 1 for parameter in mlp_without_bias.parameters()
         )
+
+    def test_single_bias_last_layer_rejects_noisy_linear(self):
+        with pytest.raises(ValueError, match="incompatible with NoisyLinear"):
+            MLP(
+                in_features=2,
+                out_features=3,
+                depth=0,
+                single_bias_last_layer=True,
+                layer_class=NoisyLinear,
+            )
 
     def test_kwargs(self):
         def make_activation(shift):
