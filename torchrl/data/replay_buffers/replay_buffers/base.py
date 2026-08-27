@@ -1529,6 +1529,8 @@ class ReplayBuffer(metaclass=_RayServiceMetaClass):
                 cloned = value.detach().clone()
                 if value.requires_grad:
                     cloned.requires_grad_()
+            elif is_tensor_collection(value):
+                cloned = value.apply(_clone_leaf)
             else:
                 cloned = deepcopy(value, memo)
             memo[value_id] = cloned

@@ -13,6 +13,7 @@ from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDic
 from tensordict.utils import NestedKey
 from torch import Tensor
 
+from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.objectives.common import LossModule
@@ -25,6 +26,18 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import ValueEstimatorBase
+
+
+@implement_for("torch", None, "2.2")
+def _register_load_state_dict_pre_hook(module: torch.nn.Module, hook) -> None:
+    module._register_load_state_dict_pre_hook(hook, with_module=True)
+
+
+@implement_for("torch", "2.2")
+def _register_load_state_dict_pre_hook(  # noqa: F811
+    module: torch.nn.Module, hook
+) -> None:
+    module.register_load_state_dict_pre_hook(hook)
 
 
 class IQLLoss(LossModule):
@@ -340,7 +353,9 @@ class IQLLoss(LossModule):
                     ):
                         state_dict[full_key] = state_dict[full_key].squeeze(0)
 
-            self.register_load_state_dict_pre_hook(load_legacy_single_qvalue_state_dict)
+            _register_load_state_dict_pre_hook(
+                self, load_legacy_single_qvalue_state_dict
+            )
 
         self.loss_function = loss_function
         if gamma is not None:

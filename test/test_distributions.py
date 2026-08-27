@@ -187,8 +187,8 @@ class TestTanhNormal:
     ):
         if compiled and sys.version_info >= (3, 14):
             pytest.skip("torch.compile requires Python < 3.14")
-        if compiled and safe_tanh and TORCH_VERSION_PRE_2_6:
-            pytest.skip("safe_tanh compilation requires torch 2.6+")
+        if compiled and TORCH_VERSION_PRE_2_6:
+            pytest.skip("TanhNormal compilation requires torch 2.6+")
 
         magnitude = 20.0 if dtype is torch.float32 else 40.0
         loc = torch.tensor(

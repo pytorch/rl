@@ -23,7 +23,7 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
-from torch.nn import functional as F, GRUCell
+from torch.nn import GRUCell
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.rnn import (
@@ -55,9 +55,11 @@ class _DreamerV3RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(features, device=device))
 
     def forward(self, value: torch.Tensor) -> torch.Tensor:
-        return F.rms_norm(
-            value.float(), (self.weight.shape[0],), self.weight.float(), self.eps
-        ).to(value.dtype)
+        value_float = value.float()
+        normalized = value_float * torch.rsqrt(
+            value_float.square().mean(dim=-1, keepdim=True) + self.eps
+        )
+        return (normalized * self.weight.float()).to(value.dtype)
 
 
 class _DreamerV3BlockLinear(nn.Module):

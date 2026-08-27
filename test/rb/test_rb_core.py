@@ -1428,7 +1428,10 @@ def test_replay_buffer_prefetch_autograd_roundtrip(checkpoint, tensordict):
     assert queued_data.is_leaf
     assert queued_data.requires_grad
 
-    for _ in range(4):
+    # Only the queued batches are part of the checkpoint. Once they are
+    # consumed, independent worker pools may assign later RNG draws to futures
+    # in a different order.
+    for _ in range(source._prefetch_cap):
         expected_data, expected_info = source.sample(return_info=True)
         actual_data, actual_info = restored.sample(return_info=True)
         if tensordict:
