@@ -1417,7 +1417,7 @@ class Trainer:
         self._setup_hook()
 
         for batch in iterator:
-            if not self.async_collection:
+            if not self.async_collection and batch is not None:
                 batch = self._process_batch_hook(batch)
                 current_frames = (
                     batch.get(("collector", "mask"), torch.tensor(batch.numel()))
@@ -1427,10 +1427,16 @@ class Trainer:
                 )
                 self.collected_frames += current_frames
             else:
-                # In async mode, batch is None and we track frames via write_count
+                # Batch is None: either async collection, or a synchronous
+                # collector that writes directly to the replay buffer (e.g.
+                # LLM collectors created with a replay_buffer). Frames are
+                # tracked via the buffer write count in both cases.
                 batch = None
                 cf = self.collected_frames
-                self.collected_frames = self.collector.getattr_rb("write_count")
+                if self.replay_buffer is not None:
+                    self.collected_frames = self._replay_write_count()
+                else:
+                    self.collected_frames = self.collector.getattr_rb("write_count")
                 current_frames = self.collected_frames - cf
 
             # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)

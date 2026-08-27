@@ -152,12 +152,8 @@ def train(
         for collector in collectors:
             sender.register_collector(collector)
 
-    # Wait until the replay buffer has at least one write before starting training
-    import time
-
-    while not replay_buffer.write_count:
-        torchrl_logger.info("Waiting for replay buffer...")
-        time.sleep(1)
+    # The trainer waits for the replay buffer to receive its first write
+    # before starting optimization, so no manual wait is needed here.
 
     # Make optimizer
     optimizer = torch.optim.Adam(
@@ -186,28 +182,30 @@ def train(
         config=OmegaConf.to_container(cfg, resolve=True),
     )
 
-    # In async mode the collector runs in the background and writes to the
-    # replay buffer directly.  GRPOTrainer with async_collection=True skips
+    # In async mode the collectors run in the background and write to the
+    # replay buffer directly. GRPOTrainer with async_collection=True skips
     # the pre_epoch buffer-extend hook and only samples from it.
     # We pass the first collector as the reference collector for the trainer's
-    # progress tracking; the others have already been started above.
+    # progress tracking; the others have already been started above
+    # (start() is a no-op on an already-running collector).
     torchrl_logger.info("Building GRPOTrainer...")
     autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
-    total_steps = (
-        -(cfg.train.total_dialog_turns // -cfg.train.optim_batch_size)
-        * cfg.train.epochs
-    )
     trainer = GRPOTrainer(
         collector=collectors[0],
         total_frames=cfg.train.total_dialog_turns,
         frame_skip=1,
-        optim_steps_per_batch=total_steps,
+        # One optimizer step (gradient_accumulation_steps micro-batches) per
+        # trainer iteration, so that weight updates every
+        # `weight_update_frequency` optimizer steps interleave with collection
+        # as in the reference loop.
+        optim_steps_per_batch=cfg.train.gradient_accumulation_steps,
         loss_module=loss_fn,
         optimizer=optimizer,
         weight_sync_sender=sender,
         weight_update_frequency=cfg.train.weight_update_frequency,
         empty_replay_buffer_on_weight_update=False,  # async mode: never flush
         replay_buffer=replay_buffer,
+        device=train_device,
         mixed_precision=cfg.train.mixed_precision,
         autocast_dtype=autocast_dtype,
         gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,

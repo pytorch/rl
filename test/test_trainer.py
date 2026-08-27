@@ -28,6 +28,7 @@ from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    SamplerWithoutReplacement,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -2216,6 +2217,25 @@ def _make_grpo_batch(reward_offset=0.0):
     )
 
 
+class _BufferWritingCollector:
+    """Mimics an LLM collector created with a replay_buffer: it writes each
+    collected batch to the buffer directly and yields None."""
+
+    def __init__(self, batches, replay_buffer):
+        self._batches = batches
+        self.replay_buffer = replay_buffer
+        self.init_random_frames = 0
+        self.shutdown_calls = 0
+
+    def __iter__(self):
+        for batch in self._batches:
+            self.replay_buffer.extend(batch)
+            yield None
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+
+
 class TestGRPOTrainer:
     def test_train_updates_policy_syncs_weights_and_logs_metrics(self):
         model = nn.Linear(1, 1, bias=False)
@@ -2257,6 +2277,47 @@ class TestGRPOTrainer:
         ]
         assert logger.records["kl_to_ref"][-1] == (8, pytest.approx(0.25))
         assert logger.records["kl_to_inference"][-1] == (8, pytest.approx(0.5))
+
+    def test_buffer_writing_collector_trains_from_replay_buffer(self):
+        # LLM collectors created with a replay_buffer write to it directly and
+        # yield None; the trainer must sample from the buffer and track frames
+        # via its write count.
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(100),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=2,
+        )
+        collector = _BufferWritingCollector(
+            [_make_grpo_batch(reward_offset=float(i)) for i in range(4)],
+            replay_buffer,
+        )
+        logger = _RecordingLogger()
+
+        with pytest.warns(UserWarning, match="experimental"):
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=8,
+                frame_skip=1,
+                optim_steps_per_batch=None,
+                loss_module=_GRPORegressionLoss(model),
+                optimizer=torch.optim.SGD(model.parameters(), lr=0.05),
+                replay_buffer=replay_buffer,
+                logger=logger,
+                log_interval=0,
+                progress_bar=False,
+            )
+
+        trainer.train()
+
+        assert not torch.equal(model.weight, initial_weight)
+        assert collector.shutdown_calls == 1
+        assert trainer.collected_frames == 8
+        # Rewards are logged from the optimization sub-batches, at the
+        # write-count steps of each collection iteration.
+        assert [step for step, _ in logger.records["reward_mean"]] == [2, 4, 6, 8]
 
     def test_gradient_accumulation_matches_a_full_batch_update(self):
         accumulated_model = nn.Linear(1, 1, bias=False)

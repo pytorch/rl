@@ -36,6 +36,7 @@ from torch.amp import GradScaler
 from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.objectives.common import LossModule
 from torchrl.record.loggers import Logger
 from torchrl.trainers.trainers import (
@@ -303,8 +304,9 @@ class GRPOTrainer(Trainer):
             :class:`~torchrl.collectors.llm.RayLLMCollector`).
         total_frames (int): Total number of frames / dialog turns.
         frame_skip (int): Frame skip value (set to 1 for LLM tasks).
-        optim_steps_per_batch (int): Number of micro-batches drawn from the
-            replay buffer per collected batch.
+        optim_steps_per_batch (int, optional): Number of micro-batches drawn
+            from the replay buffer per collected batch and epoch. ``None``
+            (default) iterates over the whole replay buffer once per epoch.
         loss_module (LossModule): The GRPO loss module.
         optimizer (optim.Optimizer, optional): Optimizer. Required when
             ``optimization_stepper`` is not provided.
@@ -324,6 +326,9 @@ class GRPOTrainer(Trainer):
         replay_buffer (ReplayBuffer, optional): The replay buffer used for
             sampling.
         batch_size (int, optional): Override the replay buffer's batch size.
+        device (torch.device, optional): Device on which sampled batches are
+            placed before the loss forward pass (typically the training
+            device). ``None`` leaves samples on their storage device.
         mixed_precision (bool, optional): Enable autocast + GradScaler.
             Default: ``False``.
         autocast_dtype (torch.dtype, optional): dtype for ``autocast``.
@@ -382,7 +387,7 @@ class GRPOTrainer(Trainer):
         collector: BaseCollector,
         total_frames: int,
         frame_skip: int = 1,
-        optim_steps_per_batch: int,
+        optim_steps_per_batch: int | None = None,
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: GRPOOptimizationStepper | None = None,
@@ -393,6 +398,7 @@ class GRPOTrainer(Trainer):
         # Replay buffer
         replay_buffer: ReplayBuffer | None = None,
         batch_size: int | None = None,
+        device: DEVICE_TYPING | None = None,
         # Mixed precision / gradient accumulation
         mixed_precision: bool = False,
         autocast_dtype: torch.dtype = torch.bfloat16,
@@ -471,16 +477,22 @@ class GRPOTrainer(Trainer):
         self.async_collection = async_collection
 
         # --- Wire replay buffer hooks ---
+        # LLM collectors created with a replay_buffer write to it directly and
+        # yield None; in that case the trainer must not extend the buffer again.
+        collector_extends_buffer = getattr(collector, "replay_buffer", None) is not None
         if replay_buffer is not None:
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
                 flatten_tensordicts=False,
                 memmap=False,
-                device=getattr(replay_buffer.storage, "device", "cpu"),
-                iterate=True,
+                device=device,
+                # Sync mode iterates over the buffer once per epoch (matching
+                # the reference GRPO loop); async mode draws random samples of
+                # the buffer's own batch size.
+                iterate=not async_collection,
             )
-            if not async_collection:
+            if not async_collection and not collector_extends_buffer:
                 # In sync mode: push collected data into the buffer before each epoch.
                 self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
@@ -514,7 +526,15 @@ class GRPOTrainer(Trainer):
                 include_std=(reduction == "mean"),
                 reduction=reduction,
             )
-            stage = "post_optim_log" if self.async_collection else "pre_steps_log"
+            # The collected batch is only available at pre_steps_log when the
+            # collector yields real batches. With async collection or a
+            # buffer-writing collector the batch is None there, so rewards are
+            # logged from the optimization sub-batches instead.
+            stage = (
+                "post_optim_log"
+                if (self.async_collection or self.replay_buffer is not None)
+                else "pre_steps_log"
+            )
             self.register_op(stage, hook)
 
     def _setup_kl_logging(self) -> None:

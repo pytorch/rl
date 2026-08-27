@@ -1651,7 +1651,7 @@ class GRPOTrainerConfig(TrainerConfig):
     collector: Any
     total_frames: int
     loss_module: Any
-    optim_steps_per_batch: int = 1
+    optim_steps_per_batch: int | None = None
     optimizer: Any | None = None
     optimization_stepper: Any | None = None
     # LLM-specific
@@ -1661,6 +1661,7 @@ class GRPOTrainerConfig(TrainerConfig):
     # Replay buffer
     replay_buffer: Any | None = None
     batch_size: int | None = None
+    device: Any = None
     # Mixed precision / gradient accumulation
     mixed_precision: bool = False
     autocast_dtype: Any = None

@@ -173,13 +173,16 @@ def train(
         collector=collector,
         total_frames=cfg.train.total_dialog_turns,
         frame_skip=1,
-        optim_steps_per_batch=cfg.train.epochs,
+        # None: iterate over the whole replay buffer once per epoch, matching
+        # the reference GRPO loop (`for batch in replay_buffer`).
+        optim_steps_per_batch=None,
         loss_module=loss_fn,
         optimizer=optimizer,
         weight_sync_sender=sender,
         weight_update_frequency=1,  # sync mode: push weights every collected batch
         empty_replay_buffer_on_weight_update=cfg.train.empty_replay_buffer,
         replay_buffer=replay_buffer,
+        device=train_device,
         mixed_precision=cfg.train.mixed_precision,
         autocast_dtype=autocast_dtype,
         gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
