@@ -55,6 +55,13 @@ def _validate_config(cfg: DictConfig) -> None:
             "The reward-model training recipe requires loss.reduction to be "
             f"'mean' or 'sum', got {cfg.loss.reduction!r}."
         )
+    if not cfg.model.name and cfg.data.dataset_name:
+        raise ValueError(
+            "data.dataset_name is set but model.name is empty: the tiny "
+            "from-scratch model has no tokenizer to tokenize a real dataset. "
+            "Set model.name, or leave data.dataset_name empty to use synthetic "
+            "data."
+        )
 
 
 def _save_export(
@@ -123,8 +130,20 @@ def main(cfg: DictConfig) -> None:
         val_data = make_dataset(
             cfg, tokenizer, cfg.data.split_val, vocab_size, seed=int(cfg.seed) + 1
         )
-        train_rb = make_replay_buffer(train_data, cfg.data.batch_size)
-        val_rb = make_replay_buffer(val_data, cfg.data.batch_size)
+        # The sampler uses drop_last=True, so each split must hold at least one
+        # full batch; fail here with a clear message rather than at the first
+        # sample() call.
+        batch_size = int(cfg.data.batch_size)
+        for split_name, split_data in (("train", train_data), ("val", val_data)):
+            n_pairs = split_data.batch_size[0]
+            if n_pairs < batch_size:
+                raise ValueError(
+                    f"The {split_name} split holds {n_pairs} pairs, fewer than "
+                    f"data.batch_size={batch_size}. Decrease data.batch_size or "
+                    "increase data.max_samples / data.synthetic_size."
+                )
+        train_rb = make_replay_buffer(train_data, batch_size)
+        val_rb = make_replay_buffer(val_data, batch_size)
 
     # Loss + optimizer
     loss_module = RewardModelLoss(
