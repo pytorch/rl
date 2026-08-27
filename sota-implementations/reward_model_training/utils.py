@@ -78,6 +78,15 @@ def make_reward_model(
         )
         hf_model = AutoModelForSequenceClassification.from_config(config)
 
+    # Reward-model training deliberately runs with dropout disabled (eval mode):
+    # chosen and rejected would otherwise be scored under independent dropout
+    # masks, adding pure noise to the score difference the Bradley-Terry loss is
+    # built on, and the exported scorer must behave at training time exactly as it
+    # will at inference. Eval mode covers both nn.Dropout modules and the
+    # functional dropout paths that read self.training. from_pretrained already
+    # returns eval mode; this makes the from_config (synthetic) path consistent.
+    hf_model.eval()
+
     # Sequence-classification models locate the final non-pad token by comparing
     # input_ids against config.pad_token_id (the attention mask is not used for
     # pooling), so the config value must match the id the tokenizer actually pads

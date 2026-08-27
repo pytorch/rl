@@ -125,16 +125,16 @@ def main(cfg: DictConfig) -> None:
     n_trainable = sum(p.numel() for p in score_network.parameters() if p.requires_grad)
     torchrl_logger.info(f"Reward model with {n_trainable} trainable parameters.")
 
+    # The score network stays in eval mode for the whole run (dropout deliberately
+    # disabled, see make_reward_model), so evaluation does not flip modes.
     @torch.no_grad()
     def evaluate() -> tuple[float, float]:
-        score_network.eval()
         losses, accuracies = [], []
         for _ in range(int(cfg.logger.eval_iters)):
             batch = val_rb.sample().to(device)
             out = loss_module(batch)
             losses.append(out.loss_reward_model)
             accuracies.append(out.accuracy)
-        score_network.train()
         return (
             torch.stack(losses).mean().item(),
             torch.stack(accuracies).mean().item(),
