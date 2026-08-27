@@ -46,9 +46,11 @@ logger:
   eval_iters: 20
   log_interval: 10
 
-# checkpointing
-checkpoint:
-  # Checkpoints are written beneath this directory as checkpoint-<step> and
-  # checkpoint-final, including tokenizer files when a tokenizer is used.
-  save_dir: ./reward_model_ckpt
+# model exports
+export:
+  # Inference-ready model exports (save_pretrained) are written beneath this
+  # directory as export-<step> and export-final, including tokenizer files
+  # when a tokenizer is used. These are not resumable training checkpoints:
+  # optimizer state, data position and RNG state are not saved.
+  save_dir: ./reward_model_export
   save_iter: 1000

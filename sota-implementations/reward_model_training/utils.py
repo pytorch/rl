@@ -28,6 +28,8 @@ from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTok
 
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
+_TOKENIZE_CHUNK_SIZE = 1024
+
 
 class _RewardModel(nn.Module):
     """Maps ``(input_ids, attention_mask)`` to a single scalar score per sequence."""
@@ -135,6 +137,10 @@ def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
     The returned tensordict has ``"chosen"`` and ``"rejected"`` sub-tensordicts, each
     carrying ``input_ids`` / ``attention_mask`` -- exactly the keys
     :class:`~torchrl.objectives.llm.RewardModelLoss` expects by default.
+
+    Real datasets are tokenized in bounded chunks so the transient peak (raw text
+    plus tokenizer buffers) stays independent of dataset size; only the final
+    token tensors scale with the number of pairs.
     """
     dataset_name = cfg.data.dataset_name
     max_length = int(cfg.data.max_length)
@@ -162,26 +168,32 @@ def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
     if max_samples is not None:
         ds = ds.select(range(min(int(max_samples), len(ds))))
 
-    chosen_texts, rejected_texts = [], []
-    for sample in ds:
-        prompt = sample.get("prompt", "")
-        sep = "\n" if prompt else ""
-        chosen_texts.append(prompt + sep + sample["chosen"])
-        rejected_texts.append(prompt + sep + sample["rejected"])
-
     tok_kwargs = {
         "max_length": max_length,
         "padding": "max_length",
         "truncation": True,
         "return_tensors": "pt",
     }
-    chosen_tok = tokenizer(chosen_texts, **tok_kwargs)
-    rejected_tok = tokenizer(rejected_texts, **tok_kwargs)
+    chosen_ids, chosen_masks, rejected_ids, rejected_masks = [], [], [], []
+    for start in range(0, len(ds), _TOKENIZE_CHUNK_SIZE):
+        chunk = ds.select(range(start, min(start + _TOKENIZE_CHUNK_SIZE, len(ds))))
+        chosen_texts, rejected_texts = [], []
+        for sample in chunk:
+            prompt = sample.get("prompt", "")
+            sep = "\n" if prompt else ""
+            chosen_texts.append(prompt + sep + sample["chosen"])
+            rejected_texts.append(prompt + sep + sample["rejected"])
+        chosen_tok = tokenizer(chosen_texts, **tok_kwargs)
+        rejected_tok = tokenizer(rejected_texts, **tok_kwargs)
+        chosen_ids.append(chosen_tok["input_ids"])
+        chosen_masks.append(chosen_tok["attention_mask"])
+        rejected_ids.append(rejected_tok["input_ids"])
+        rejected_masks.append(rejected_tok["attention_mask"])
     return _pairwise_td(
-        chosen_tok["input_ids"],
-        rejected_tok["input_ids"],
-        chosen_tok["attention_mask"],
-        rejected_tok["attention_mask"],
+        torch.cat(chosen_ids),
+        torch.cat(rejected_ids),
+        torch.cat(chosen_masks),
+        torch.cat(rejected_masks),
     )
 
 

@@ -56,20 +56,24 @@ def _validate_config(cfg: DictConfig) -> None:
         )
 
 
-def _save_checkpoint(
+def _save_export(
     score_network: TensorDictModule,
     tokenizer: PreTrainedTokenizerBase | None,
     save_dir: str | Path,
     step: int | Literal["final"],
 ) -> Path:
-    checkpoint_name = (
-        f"checkpoint-{step:08d}" if isinstance(step, int) else "checkpoint-final"
-    )
-    checkpoint_dir = Path(save_dir) / checkpoint_name
-    score_network.module.model.save_pretrained(checkpoint_dir)
+    """Export the model (and tokenizer) with ``save_pretrained``.
+
+    These are inference-ready exports for downstream scoring, not resumable
+    training checkpoints: optimizer state, data position and RNG state are
+    not saved.
+    """
+    export_name = f"export-{step:08d}" if isinstance(step, int) else "export-final"
+    export_dir = Path(save_dir) / export_name
+    score_network.module.model.save_pretrained(export_dir)
     if tokenizer is not None:
-        tokenizer.save_pretrained(checkpoint_dir)
-    return checkpoint_dir
+        tokenizer.save_pretrained(export_dir)
+    return export_dir
 
 
 @hydra.main(config_path="", config_name="config", version_base="1.3")
@@ -176,14 +180,14 @@ def main(cfg: DictConfig) -> None:
                 f"iter {it}: val_loss={val_loss:.4f}, val_acc={val_acc:.4f}"
             )
 
-        if it % int(cfg.checkpoint.save_iter) == 0:
-            _save_checkpoint(score_network, tokenizer, cfg.checkpoint.save_dir, step=it)
+        if it % int(cfg.export.save_iter) == 0:
+            _save_export(score_network, tokenizer, cfg.export.save_dir, step=it)
 
         if logger is not None and it % int(cfg.logger.log_interval) == 0:
             metrics_to_log.update(timeit.todict(prefix="time"))
             log_metrics(logger, metrics_to_log, it)
 
-    _save_checkpoint(score_network, tokenizer, cfg.checkpoint.save_dir, step="final")
+    _save_export(score_network, tokenizer, cfg.export.save_dir, step="final")
     pbar.close()
 
 

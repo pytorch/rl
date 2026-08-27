@@ -63,10 +63,12 @@ Key fields in [`config.yaml`](config.yaml):
 | `loss` | `reduction`, `center_coeff` | Bradley-Terry loss options (`reduction` must be `mean` or `sum`). |
 | `logger` | `backend`, `eval_iter`, `eval_iters` | Logging / evaluation. |
 
-Periodic checkpoints are stored under `checkpoint.save_dir/checkpoint-<step>` and the
-last model under `checkpoint.save_dir/checkpoint-final`. Each checkpoint includes the
-matching tokenizer when a Hugging Face tokenizer is used, so checkpoints are directly
-loadable with `from_pretrained`.
+Periodic model exports are stored under `export.save_dir/export-<step>` and the last
+model under `export.save_dir/export-final`. Each export includes the matching
+tokenizer when a Hugging Face tokenizer is used, so exports are directly loadable
+with `from_pretrained` (e.g. as a scorer in a downstream GRPO/PPO pipeline). These
+are inference-ready exports, not resumable training checkpoints: optimizer state,
+data position and RNG state are not saved.
 
 ## Hermetic smoke run
 

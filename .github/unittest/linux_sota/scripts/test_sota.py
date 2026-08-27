@@ -36,7 +36,7 @@ commands = {
   logger.eval_iters=1 \
   logger.log_interval=1 \
   logger.backend= \
-  checkpoint.save_iter=2
+  export.save_iter=2
 """,
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
