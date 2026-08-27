@@ -134,15 +134,18 @@ class RewardModelLoss(LossModule):
         using :meth:`~torchrl.objectives.common.LossModule.set_keys`. When a score
         network is provided, its declared output key is used instead.
 
-    .. seealso:: :class:`~torchrl.modules.models.llm.GPT2RewardModel` for a ready-made
-        GPT2-based reward-model backbone. Its forward returns per-token rewards of
-        shape ``[B, T]`` followed by per-sequence ``end_scores`` of shape ``[B, 1]``,
-        so wrap it as ``TensorDictModule(model, in_keys=["input_ids",
-        "attention_mask"], out_keys=["rewards", "end_scores"])`` and point the loss
-        at the per-sequence output with ``loss.set_keys(score="end_scores")``.
-        :class:`~torchrl.data.llm.reward.PairwiseDataset` provides a pairwise
-        preference dataset; its fields are named ``chosen_data`` / ``rejected_data``,
-        so remap the loss inputs with ``loss.set_keys(chosen="chosen_data",
+    .. seealso:: The ``sota-implementations/reward_model_training`` recipe for a
+        complete training loop built around this loss. The legacy
+        :class:`~torchrl.modules.models.llm.GPT2RewardModel` and
+        :class:`~torchrl.data.llm.reward.PairwiseDataset` (both deprecated, removal
+        in v0.16) can still be wired in during the deprecation window:
+        GPT2RewardModel's forward returns per-token rewards of shape ``[B, T]``
+        followed by per-sequence ``end_scores`` of shape ``[B, 1]``, so wrap it as
+        ``TensorDictModule(model, in_keys=["input_ids", "attention_mask"],
+        out_keys=["rewards", "end_scores"])`` and point the loss at the
+        per-sequence output with ``loss.set_keys(score="end_scores")``;
+        PairwiseDataset's fields are named ``chosen_data`` / ``rejected_data``, so
+        remap the loss inputs with ``loss.set_keys(chosen="chosen_data",
         rejected="rejected_data")``.
 
     References:
