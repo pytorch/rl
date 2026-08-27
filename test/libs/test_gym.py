@@ -927,37 +927,15 @@ class TestGym:
         finally:
             env.close()
 
+    @implement_for(gym_backend, None, "0.26", compilable=True)
     def test_info_reader_mario(self):
         try:
             import gym_super_mario_bros as mario_gym
-        except ImportError as err:
-            try:
-                gym = gym_backend()
-
-                # with 0.26 we must have installed gym_super_mario_bros
-                # Since we capture the skips as errors, we raise a skip in this case
-                # Otherwise, we just return
-                gym_version = version.parse(gym.__version__)
-                if version.parse(
-                    "0.26.0"
-                ) <= gym_version and gym_version < version.parse("0.27"):
-                    raise pytest.skip(f"no super mario bros: error=\n{err}")
-            except ImportError:
-                pass
+        except ImportError:
             return
 
         gb = gym_backend()
         try:
-            # Check gym version - gym_super_mario_bros is not compatible with gym 0.26+
-            # because it uses the old reset() API that returns only obs, not (obs, info)
-            gym = gym_backend()
-            gym_version = version.parse(gym.__version__)
-            if gym_version >= version.parse("0.26.0"):
-                pytest.skip(
-                    "gym_super_mario_bros is not compatible with gym >= 0.26 "
-                    "(uses old reset() API that returns only obs, not (obs, info))"
-                )
-
             with set_gym_backend("gym"):
                 env = mario_gym.make("SuperMarioBros-v0")
                 env = GymWrapper(env)
@@ -970,6 +948,13 @@ class TestGym:
                 check_env_specs(env)
         finally:
             set_gym_backend(gb).set()
+
+    @implement_for(gym_backend, "0.26", compilable=True)
+    @pytest.mark.skip(
+        reason="gym_super_mario_bros is incompatible with gym versions 0.26 and later"
+    )
+    def test_info_reader_mario(self):  # noqa: F811
+        ...
 
     @implement_for("gymnasium", "1.1.0")
     def test_one_hot_and_categorical(self):
@@ -1071,7 +1056,7 @@ class TestGym:
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
 
-    @implement_for("gymnasium", "1.1.0")
+    @implement_for("gymnasium", "1.1.0", compilable=True)
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
@@ -1088,7 +1073,7 @@ class TestGym:
             )
         self._test_vecenvs_env(envname)
 
-    @implement_for("gymnasium", None, "1.0.0")
+    @implement_for("gymnasium", None, "1.0.0", compilable=True)
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
@@ -1169,25 +1154,35 @@ class TestGym:
             env.close()
             del env
 
-    @implement_for("gym", "0.18")
+    @implement_for("gym", "0.18", "0.25", compilable=True)
     @pytest.mark.parametrize(
         "envname",
         ["cp", "hc"],
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
+        self._test_gym_vecenvs_env(envname)
+
+    @implement_for("gym", "0.25", "0.26", compilable=True)
+    @pytest.mark.parametrize("envname", ["cp"])
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
+    def test_vecenvs_env(self, envname):  # noqa: F811
+        self._test_gym_vecenvs_env(envname)
+
+    @implement_for("gym", "0.26", compilable=True)
+    @pytest.mark.parametrize(
+        "envname",
+        ["cp", "hc"],
+    )
+    @pytest.mark.flaky(reruns=5, reruns_delay=1)
+    def test_vecenvs_env(self, envname):  # noqa: F811
+        self._test_gym_vecenvs_env(envname)
+
+    def _test_gym_vecenvs_env(self, envname):
         if envname == "hc" and not _has_mujoco:
             pytest.skip(
                 "MuJoCo not available (missing mujoco); skipping MuJoCo gym test."
             )
-        # Skip HalfCheetah with gym 0.25.x due to AsyncVectorEnv subprocess issues
-        if envname == "hc":
-            gym = gym_backend()
-            gym_version = version.parse(gym.__version__)
-            if version.parse("0.25.0") <= gym_version < version.parse("0.26.0"):
-                pytest.skip(
-                    "Skipping HalfCheetah vecenvs test for gym 0.25.x due to AsyncVectorEnv subprocess issues"
-                )
         gb = gym_backend()
         try:
             with set_gym_backend("gym"):
@@ -1230,7 +1225,7 @@ class TestGym:
         # skipping tests for older versions of gym
         ...
 
-    @implement_for("gym", None, "0.18")
+    @implement_for("gym", None, "0.18", compilable=True)
     @pytest.mark.parametrize(
         "envname",
         ["cp", "hc"],
@@ -1874,16 +1869,26 @@ class TestGym:
             # Restore original isinstance
             builtins.isinstance = original_isinstance
 
+    @implement_for("gymnasium", None, "1.0.0", compilable=True)
+    @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium not found")
     @pytest.mark.parametrize("num_envs", [0, 1, 2])
     def test_gymnasium_num_envs(self, num_envs, request):
-        if not _has_gymnasium:
-            pytest.skip("gymnasium not found")
-        import gymnasium
+        self._test_gymnasium_num_envs(num_envs, request)
 
-        gym_version = version.parse(gymnasium.__version__)
-        if version.parse("1.0.0") <= gym_version < version.parse("1.1.0"):
-            pytest.skip("gymnasium 1.0 is not supported")
+    @implement_for("gymnasium", "1.0.0", "1.1.0", compilable=True)
+    @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium not found")
+    @pytest.mark.skip(reason="gymnasium 1.0 is not supported")
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_gymnasium_num_envs(self, num_envs, request):  # noqa: F811
+        ...
 
+    @implement_for("gymnasium", "1.1.0", compilable=True)
+    @pytest.mark.skipif(not _has_gymnasium, reason="gymnasium not found")
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_gymnasium_num_envs(self, num_envs, request):  # noqa: F811
+        self._test_gymnasium_num_envs(num_envs, request)
+
+    def _test_gymnasium_num_envs(self, num_envs, request):
         with set_gym_backend("gymnasium"):
             env = GymEnv("CartPole-v1", num_envs=num_envs)
         request.addfinalizer(env.close)
