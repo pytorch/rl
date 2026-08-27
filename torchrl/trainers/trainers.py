@@ -384,14 +384,16 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
         # Internal micro-batch counter (reset after every optimizer step).
         self._micro_step: int = 0
         self._optimizer_step_count: int = 0
+        self._skipped_nonfinite_steps: int = 0
 
     @property
     def optimizer_step_count(self) -> int:
         """Number of completed optimizer steps.
 
         Discounts gradient-accumulation micro-steps and steps skipped by the
-        GradScaler on overflow. Read by hooks that act on an optimizer-step
-        cadence (e.g. :class:`~torchrl.trainers.UpdateWeights` with
+        GradScaler on overflow or by the non-finite guards. Read by hooks that
+        act on an optimizer-step cadence (e.g.
+        :class:`~torchrl.trainers.UpdateWeights` with
         ``interval_unit="optim_steps"``).
         """
         return self._optimizer_step_count
@@ -412,6 +414,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
             "optimizer": self.optimizer.state_dict(),
             "micro_step": self._micro_step,
             "optimizer_step_count": self._optimizer_step_count,
+            "skipped_nonfinite_steps": self._skipped_nonfinite_steps,
         }
         if self._use_scaler:
             sd["scaler"] = self.scaler.state_dict()
@@ -421,6 +424,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
         self.optimizer.load_state_dict(state_dict["optimizer"])
         self._micro_step = state_dict.get("micro_step", 0)
         self._optimizer_step_count = state_dict.get("optimizer_step_count", 0)
+        self._skipped_nonfinite_steps = state_dict.get("skipped_nonfinite_steps", 0)
         if self._use_scaler and "scaler" in state_dict:
             self.scaler.load_state_dict(state_dict["scaler"])
 
@@ -458,6 +462,20 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
                 )
             loss = sum(loss_items) / self.gradient_accumulation_steps
 
+        # ---- non-finite loss guard ----
+        # A single non-finite loss would poison the gradients accumulated so
+        # far, so the whole accumulation window is dropped and restarted.
+        if not torch.isfinite(loss.detach()).all():
+            self._skipped_nonfinite_steps += 1
+            torchrl_logger.warning(
+                f"Skipping optimization step because the loss is non-finite: "
+                f"{loss.detach()}. Skipped non-finite steps: "
+                f"{self._skipped_nonfinite_steps}."
+            )
+            self.optimizer.zero_grad(set_to_none=True)
+            self._micro_step = 0
+            return self._reduce_metrics(losses_td)
+
         # ---- backward pass ----
         if self._use_scaler:
             self.scaler.scale(loss).backward()
@@ -467,6 +485,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
         self._micro_step += 1
 
         # ---- optimizer step every `gradient_accumulation_steps` micro-batches ----
+        grad_norm = None
         if self._micro_step % self.gradient_accumulation_steps == 0:
             if self._use_scaler:
                 self.scaler.unscale_(self.optimizer)
@@ -485,13 +504,38 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
                 # If scale dropped, an overflow occurred and optimizer.step() was skipped.
                 if self.scaler.get_scale() >= scale_before:
                     self._optimizer_step_count += 1
+            elif self.clip_norm is not None and not math.isfinite(grad_norm):
+                # Without a GradScaler (e.g. bf16 or full precision) nothing
+                # skips overflowing updates, so guard the step explicitly.
+                self._skipped_nonfinite_steps += 1
+                torchrl_logger.warning(
+                    f"Skipping optimizer step because the gradient norm is "
+                    f"non-finite: {grad_norm}. Skipped non-finite steps: "
+                    f"{self._skipped_nonfinite_steps}."
+                )
+                grad_norm = 0.0
             else:
                 self.optimizer.step()
                 self._optimizer_step_count += 1
             self.optimizer.zero_grad(set_to_none=True)
-            losses_td["grad_norm"] = torch.tensor(grad_norm)
 
-        return losses_td.detach()
+        metrics = self._reduce_metrics(losses_td)
+        if grad_norm is not None:
+            metrics["grad_norm"] = torch.tensor(grad_norm)
+        return metrics
+
+    @staticmethod
+    def _reduce_metrics(losses_td: TensorDictBase) -> TensorDictBase:
+        """Detach the loss output and reduce non-scalar entries to their mean.
+
+        Steppers must return scalar metrics suitable for logging; loss modules
+        such as :class:`~torchrl.objectives.llm.GRPOLoss` also emit per-token
+        diagnostics (KL divergences) that are reduced here.
+        """
+        metrics = {}
+        for key, value in losses_td.detach().items():
+            metrics[key] = value.float().mean() if value.numel() > 1 else value
+        return TensorDict(metrics, [])
 
 
 class Trainer:

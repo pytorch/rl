@@ -2400,6 +2400,62 @@ class TestGRPOTrainer:
             full_batch_model.weight,
         )
 
+    def test_nonfinite_loss_skips_the_accumulation_window(self):
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.1),
+            gradient_accumulation_steps=2,
+        )
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(model),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+        batch = _make_grpo_batch()
+
+        stepper.step(trainer, batch)
+        bad_batch = batch.clone()
+        bad_batch["target"] = bad_batch["target"] * float("inf")
+        stepper.step(trainer, bad_batch)
+
+        # The non-finite micro-batch drops the accumulated gradients and
+        # restarts the accumulation window: no optimizer step has happened.
+        assert stepper.optimizer_step_count == 0
+        assert stepper._skipped_nonfinite_steps == 1
+        assert torch.equal(model.weight, initial_weight)
+        assert all(p.grad is None for p in model.parameters())
+
+    def test_nonfinite_grad_norm_skips_the_optimizer_step(self):
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        model.weight.register_hook(lambda grad: grad * float("inf"))
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.1),
+        )
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=1,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(model),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+
+        metrics = stepper.step(trainer, _make_grpo_batch())
+
+        assert stepper.optimizer_step_count == 0
+        assert stepper._skipped_nonfinite_steps == 1
+        assert torch.equal(model.weight, initial_weight)
+        assert metrics["grad_norm"] == 0.0
+
     @pytest.mark.parametrize("gradient_accumulation_steps", [0, -1])
     def test_rejects_invalid_gradient_accumulation(self, gradient_accumulation_steps):
         model = nn.Linear(1, 1)

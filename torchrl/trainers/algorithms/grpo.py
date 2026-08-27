@@ -53,6 +53,9 @@ from torchrl.trainers.trainers import (
 class GRPOTrainer(Trainer):
     """A trainer for LLM alignment using GRPO (or compatible) objectives.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.GRPOTrainerConfig`
+    for the Hydra configuration counterpart.
+
     .. warning::
         This is an experimental/prototype feature. The API may change in future
         versions. Please report any issues or feedback to help improve this
@@ -61,7 +64,10 @@ class GRPOTrainer(Trainer):
     This trainer integrates the full GRPO training loop —
     mixed-precision, gradient accumulation, inference-weight synchronization,
     and LLM-specific logging — into the standard
-    :class:`~torchrl.trainers.Trainer` hook system.
+    :class:`~torchrl.trainers.Trainer` hook system. Scalar diagnostics emitted
+    by the loss (e.g. ``ESS``, ``clip_fraction``, ``kl_approx`` for
+    :class:`~torchrl.objectives.llm.GRPOLoss`) are logged automatically after
+    each optimization loop.
 
     It is designed to work with:
 
@@ -73,25 +79,6 @@ class GRPOTrainer(Trainer):
 
     The weight-sync sender is intentionally decoupled from the trainer so that
     neither ``vllm`` nor ``sglang`` need to be imported by the core library.
-
-    Examples:
-        >>> from torchrl.trainers.algorithms.grpo import GRPOTrainer
-        >>> import torch
-        >>> from unittest.mock import MagicMock
-        >>> collector = MagicMock()
-        >>> loss_module = MagicMock()
-        >>> optimizer = torch.optim.Adam(torch.nn.Linear(2, 2).parameters())
-        >>> trainer = GRPOTrainer(
-        ...     collector=collector,
-        ...     total_frames=100,
-        ...     frame_skip=1,
-        ...     optim_steps_per_batch=2,
-        ...     loss_module=loss_module,
-        ...     optimizer=optimizer,
-        ...     log_rewards=False,
-        ...     log_kl=False,
-        ... )
-        >>> # trainer.train()
 
     Args:
         collector (BaseCollector): The data collector (typically a
@@ -135,9 +122,8 @@ class GRPOTrainer(Trainer):
         gradient_accumulation_steps (int, optional): Gradient accumulation.
             Default: ``1``.
         logger (Logger, optional): Logger (e.g. ``WandbLogger``).
-        clip_grad_norm (bool, optional): Unused — clipping is handled by the
-            stepper. Kept for API compatibility.
-        clip_norm (float, optional): Gradient clip norm. Default: ``1.0``.
+        clip_norm (float, optional): Gradient clip norm, applied by the
+            stepper. Default: ``1.0``.
         progress_bar (bool, optional): Show a ``tqdm`` progress bar.
         seed (int, optional): Random seed.
         save_trainer_interval (int, optional): Frame interval between saves.
@@ -204,7 +190,6 @@ class GRPOTrainer(Trainer):
         gradient_accumulation_steps: int = 1,
         # Standard trainer args
         logger: Logger | None = None,
-        clip_grad_norm: bool = True,
         clip_norm: float | None = 1.0,
         progress_bar: bool = True,
         seed: int | None = None,
@@ -256,8 +241,6 @@ class GRPOTrainer(Trainer):
             replay_buffer=replay_buffer,
             batch_size=batch_size,
             logger=logger,
-            clip_grad_norm=clip_grad_norm,
-            clip_norm=clip_norm,
             progress_bar=progress_bar,
             seed=seed,
             save_trainer_interval=save_trainer_interval,

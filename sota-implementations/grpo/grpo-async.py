@@ -216,6 +216,7 @@ def train(
         async_collection=True,
         log_rewards=True,
         log_kl=cfg.train.use_kl_to_ref,
+        log_timings=True,
     )
 
     torchrl_logger.info("Starting training loop.")
