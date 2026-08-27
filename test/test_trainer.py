@@ -2257,7 +2257,6 @@ class TestGRPOTrainer:
                 loss_module=_GRPORegressionLoss(model),
                 optimizer=torch.optim.SGD(model.parameters(), lr=0.05),
                 weight_sync_sender=sender,
-                weight_update_frequency=2,
                 gradient_accumulation_steps=2,
                 logger=logger,
                 log_interval=0,
@@ -2267,7 +2266,8 @@ class TestGRPOTrainer:
         trainer.train()
 
         assert not torch.equal(model.weight, initial_weight)
-        assert sender.update_calls == 1
+        # Sync mode pushes weights once per collected batch.
+        assert sender.update_calls == 4
         assert collector.shutdown_calls == 1
         assert logger.records["reward_mean"] == [
             (2, 2.0),
@@ -2277,6 +2277,40 @@ class TestGRPOTrainer:
         ]
         assert logger.records["kl_to_ref"][-1] == (8, pytest.approx(0.25))
         assert logger.records["kl_to_inference"][-1] == (8, pytest.approx(0.5))
+
+    def test_update_weights_optim_step_cadence(self):
+        # UpdateWeights with interval_unit="optim_steps" fires at the
+        # post_optim stage every `update_weights_interval` optimizer steps,
+        # discounting gradient-accumulation micro-steps.
+        model = nn.Linear(1, 1, bias=False)
+        stepper = GRPOOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.05),
+            gradient_accumulation_steps=2,
+        )
+        collector = MockingIterableCollector([_make_grpo_batch() for _ in range(4)])
+        collector.init_random_frames = 0
+        sender = _CountingWeightSender()
+        trainer = Trainer(
+            collector=collector,
+            total_frames=8,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(model),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+        UpdateWeights(
+            update_weights_interval=2,
+            trainer=trainer,
+            sender=sender,
+            interval_unit="optim_steps",
+        ).register(trainer)
+
+        trainer.train()
+
+        # 4 micro-steps with accumulation 2 -> 2 optimizer steps -> 1 push.
+        assert stepper.optimizer_step_count == 2
+        assert sender.update_calls == 1
 
     def test_buffer_writing_collector_trains_from_replay_buffer(self):
         # LLM collectors created with a replay_buffer write to it directly and

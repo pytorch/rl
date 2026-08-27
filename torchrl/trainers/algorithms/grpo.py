@@ -13,9 +13,10 @@ The key differences from a standard RL trainer are:
 
 - Mixed-precision training via ``torch.amp.autocast`` and ``torch.amp.GradScaler``.
 - Gradient accumulation across multiple micro-batches.
-- A *weight-sync sender* hook that pushes updated weights back to the
-  inference engine (vLLM / SGLang) after a configurable number of optimizer
-  steps.
+- A *weight-sync sender* (wired through
+  :class:`~torchrl.trainers.UpdateWeights`) that pushes updated weights back
+  to the inference engine (vLLM / SGLang) after a configurable number of
+  optimizer steps.
 - LLM-specific logging (KL divergence, ESS, per-token loss, etc.).
 - Native support for the ``RayReplayBuffer`` and ``RayLLMCollector``
   used in the SOTA GRPO scripts.
@@ -44,7 +45,7 @@ from torchrl.trainers.trainers import (
     OptimizationStepper,
     ReplayBufferTrainer,
     Trainer,
-    TrainerHookBase,
+    UpdateWeights,
 )
 
 
@@ -98,6 +99,17 @@ class GRPOOptimizationStepper(OptimizationStepper):
         # Internal micro-batch counter (reset after every optimizer step).
         self._micro_step: int = 0
         self._optimizer_step_count: int = 0
+
+    @property
+    def optimizer_step_count(self) -> int:
+        """Number of completed optimizer steps.
+
+        Discounts gradient-accumulation micro-steps and steps skipped by the
+        GradScaler on overflow. Read by hooks that act on an optimizer-step
+        cadence (e.g. :class:`~torchrl.trainers.UpdateWeights` with
+        ``interval_unit="optim_steps"``).
+        """
+        return self._optimizer_step_count
 
     # ------------------------------------------------------------------
     # Checkpointing (optimizer + scaler state)
@@ -200,62 +212,6 @@ class GRPOOptimizationStepper(OptimizationStepper):
         return losses_td.detach()
 
 
-class WeightSyncHook(TrainerHookBase):
-    """Post-optimization hook that pushes updated weights to the inference engine.
-
-    This hook calls ``sender.update_weights()`` every
-    ``weight_update_frequency`` optimizer steps, then optionally empties the
-    replay buffer (for on-policy / synchronous GRPO).
-
-    Args:
-        sender: A weight-sync sender object that has an ``update_weights()``
-            method (e.g. the sender returned by
-            ``WeightSyncScheme.create_sender()``).
-        weight_update_frequency (int, optional): How many optimizer steps
-            between weight pushes.  Default: ``1`` (push after every step).
-        empty_replay_buffer (bool, optional): Whether to empty the replay
-            buffer after pushing weights (sync GRPO).  Default: ``False``.
-    """
-
-    def __init__(
-        self,
-        sender: Any,
-        weight_update_frequency: int = 1,
-        empty_replay_buffer: bool = False,
-    ):
-        if weight_update_frequency < 1:
-            raise ValueError("weight_update_frequency must be >= 1")
-        self.sender = sender
-        self.weight_update_frequency = weight_update_frequency
-        self.empty_replay_buffer = empty_replay_buffer
-        self._last_update = 0
-
-    def __call__(self) -> None:
-        trainer = self._trainer
-        optim_count = getattr(
-            trainer.optimization_stepper,
-            "_optimizer_step_count",
-            trainer._optim_count,
-        )
-        if optim_count - self._last_update < self.weight_update_frequency:
-            return
-        self.sender.update_weights()
-        self._last_update = optim_count
-        if self.empty_replay_buffer and trainer.replay_buffer is not None:
-            trainer.replay_buffer.empty(empty_write_count=False)
-
-    def state_dict(self) -> dict[str, Any]:
-        return {"last_update": self._last_update}
-
-    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        self._last_update = state_dict.get("last_update", 0)
-
-    def register(self, trainer: Trainer, name: str = "weight_sync") -> None:
-        self._trainer = trainer
-        trainer.register_module(name, self)
-        trainer.register_op("post_steps", self)
-
-
 class GRPOTrainer(Trainer):
     """A trainer for LLM alignment using GRPO (or compatible) objectives.
 
@@ -319,7 +275,11 @@ class GRPOTrainer(Trainer):
             Pass ``None`` to disable weight synchronization (useful for
             offline testing).
         weight_update_frequency (int, optional): Optimizer steps between
-            weight pushes to the inference engine. Default: ``1``.
+            weight pushes to the inference engine when ``async_collection=True``
+            (registered at the ``post_optim`` stage through
+            :class:`~torchrl.trainers.UpdateWeights`). In sync mode weights
+            are pushed once per collected batch and this value is unused.
+            Default: ``1``.
         empty_replay_buffer_on_weight_update (bool, optional): If ``True``,
             the replay buffer is emptied after each weight push (sync GRPO).
             Default: ``False``.
@@ -499,18 +459,38 @@ class GRPOTrainer(Trainer):
 
         # --- Wire weight-sync sender hook ---
         if weight_sync_sender is not None:
-            ws_hook = WeightSyncHook(
-                sender=weight_sync_sender,
-                weight_update_frequency=weight_update_frequency,
-                empty_replay_buffer=empty_replay_buffer_on_weight_update,
-            )
-            ws_hook.register(self)
+            if async_collection:
+                # Push weights every `weight_update_frequency` optimizer steps,
+                # in the middle of the optimization loop if needed. This keeps
+                # the inference engine close to the training policy, which is
+                # essential for meaningful importance sampling in GRPO.
+                update_weights = UpdateWeights(
+                    update_weights_interval=weight_update_frequency,
+                    trainer=self,
+                    sender=weight_sync_sender,
+                    interval_unit="optim_steps",
+                )
+            else:
+                # Sync mode: push weights once per collected batch, after the
+                # optimization epochs have consumed it.
+                update_weights = UpdateWeights(
+                    trainer=self,
+                    sender=weight_sync_sender,
+                )
+            update_weights.register(self)
+        if empty_replay_buffer_on_weight_update and replay_buffer is not None:
+            # Sync GRPO: flush the on-policy buffer once its batch has been
+            # consumed and the inference weights have been refreshed.
+            self.register_op("post_steps", self._empty_replay_buffer)
 
         # --- Logging hooks ---
         if log_rewards:
             self._setup_reward_logging()
         if log_kl:
             self._setup_kl_logging()
+
+    def _empty_replay_buffer(self) -> None:
+        self.replay_buffer.empty(empty_write_count=False)
 
     # ------------------------------------------------------------------
     # Logging helpers

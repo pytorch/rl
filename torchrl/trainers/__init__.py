@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .algorithms.grpo import GRPOOptimizationStepper, GRPOTrainer, WeightSyncHook
+from .algorithms.grpo import GRPOOptimizationStepper, GRPOTrainer
 from .trainers import (
     BatchSubSampler,
     ClearCudaCache,
@@ -52,5 +52,4 @@ __all__ = [
     "TargetNetUpdaterHook",
     "UTDRHook",
     "ValueEstimatorHook",
-    "WeightSyncHook",
 ]

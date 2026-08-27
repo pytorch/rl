@@ -9,7 +9,7 @@ from .a2c import A2CTrainer
 from .cql import CQLTrainer
 from .ddpg import DDPGTrainer
 from .dqn import DQNTrainer
-from .grpo import GRPOOptimizationStepper, GRPOTrainer, WeightSyncHook
+from .grpo import GRPOOptimizationStepper, GRPOTrainer
 from .iql import IQLTrainer
 from .offline_to_online import OfflineToOnlineTrainer
 from .on_policy import OnPolicyTrainer
@@ -32,5 +32,4 @@ __all__ = [
     "ReinforceTrainer",
     "SACTrainer",
     "TD3Trainer",
-    "WeightSyncHook",
 ]
