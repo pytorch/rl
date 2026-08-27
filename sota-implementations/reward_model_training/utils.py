@@ -19,6 +19,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
+from torchrl._utils import logger as torchrl_logger
 from torchrl.data import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
@@ -197,20 +198,46 @@ def make_dataset(cfg, tokenizer, split: str, vocab_size: int) -> TensorDict:
         "return_tensors": "pt",
     }
     chosen_ids, chosen_masks, rejected_ids, rejected_masks = [], [], [], []
+    num_dropped = 0
     for start in range(0, len(ds), _TOKENIZE_CHUNK_SIZE):
         chunk = ds.select(range(start, min(start + _TOKENIZE_CHUNK_SIZE, len(ds))))
         chosen_texts, rejected_texts = [], []
         for sample in chunk:
             prompt = sample.get("prompt", "")
             sep = "\n" if prompt else ""
-            chosen_texts.append(prompt + sep + sample["chosen"])
-            rejected_texts.append(prompt + sep + sample["rejected"])
+            chosen_text = prompt + sep + sample["chosen"]
+            rejected_text = prompt + sep + sample["rejected"]
+            # Identical pairs carry no preference signal: they contribute a
+            # constant log(2) to the loss with exactly cancelling gradients and
+            # deflate the reported accuracy.
+            if chosen_text == rejected_text:
+                num_dropped += 1
+                continue
+            chosen_texts.append(chosen_text)
+            rejected_texts.append(rejected_text)
+        if not chosen_texts:
+            continue
         chosen_tok = tokenizer(chosen_texts, **tok_kwargs)
         rejected_tok = tokenizer(rejected_texts, **tok_kwargs)
-        chosen_ids.append(chosen_tok["input_ids"])
-        chosen_masks.append(chosen_tok["attention_mask"])
-        rejected_ids.append(rejected_tok["input_ids"])
-        rejected_masks.append(rejected_tok["attention_mask"])
+        # Truncation can collapse pairs whose shared prompt reaches max_length
+        # into identical token sequences; drop those too.
+        keep = (chosen_tok["input_ids"] != rejected_tok["input_ids"]).any(-1)
+        num_dropped += int((~keep).sum())
+        chosen_ids.append(chosen_tok["input_ids"][keep])
+        chosen_masks.append(chosen_tok["attention_mask"][keep])
+        rejected_ids.append(rejected_tok["input_ids"][keep])
+        rejected_masks.append(rejected_tok["attention_mask"][keep])
+    if num_dropped:
+        torchrl_logger.info(
+            f"Dropped {num_dropped} pair(s) with identical chosen/rejected "
+            f"sequences from the {split!r} split."
+        )
+    if not chosen_ids:
+        raise ValueError(
+            f"No usable preference pairs remain in the {split!r} split after "
+            "dropping identical chosen/rejected sequences. Check the dataset "
+            "fields and consider increasing data.max_length."
+        )
     return _pairwise_td(
         torch.cat(chosen_ids),
         torch.cat(rejected_ids),
