@@ -26,7 +26,7 @@ from torch import nn
 
 from torchrl.data.tensor_specs import Binary, Composite, NonTensor, Unbounded
 from torchrl.envs import EnvBase, ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import gym_backend, GymEnv
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import StepCounter, Transform, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
 from torchrl.modules import Actor
@@ -701,16 +701,28 @@ class TestEnvBase:
 
 
 class TestRollout:
-    @implement_for(gym_backend, None, "0.19", compilable=True)
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @implement_for("gym", None, "0.19", compilable=True)
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [1, 4])
     def test_rollout(self, env_name, frame_skip, seed=0):
         self._test_rollout(env_name, frame_skip, seed)
 
-    @implement_for(gym_backend, "0.19", compilable=True)
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
+    @implement_for("gym", "0.19", compilable=True)
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
+    @pytest.mark.parametrize("frame_skip", [1, 4])
+    def test_rollout(self, env_name, frame_skip, seed=0):  # noqa: F811
+        self._test_rollout(env_name, frame_skip, seed)
+
+    @implement_for("gymnasium", compilable=True)
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            pytest.param(
+                env_name, marks=pytest.mark.skipif(not _has_gym, reason="no gym")
+            )
+            for env_name in (PENDULUM_VERSIONED, PONG_VERSIONED)
+        ],
+    )
     @pytest.mark.parametrize("frame_skip", [1, 4])
     def test_rollout(self, env_name, frame_skip, seed=0):  # noqa: F811
         self._test_rollout(env_name, frame_skip, seed)

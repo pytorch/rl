@@ -927,7 +927,7 @@ class TestGym:
         finally:
             env.close()
 
-    @implement_for(gym_backend, None, "0.26", compilable=True)
+    @implement_for("gym", None, "0.26", compilable=True)
     def test_info_reader_mario(self):
         try:
             import gym_super_mario_bros as mario_gym
@@ -949,7 +949,7 @@ class TestGym:
         finally:
             set_gym_backend(gb).set()
 
-    @implement_for(gym_backend, "0.26", compilable=True)
+    @implement_for("gym", "0.26", compilable=True)
     @pytest.mark.skip(
         reason="gym_super_mario_bros is incompatible with gym versions 0.26 and later"
     )
@@ -1060,7 +1060,16 @@ class TestGym:
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
-        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        [
+            "HalfCheetah-v4",
+            "CartPole-v1",
+            pytest.param(
+                "ALE/Pong-v5",
+                marks=pytest.mark.skip(
+                    reason="ALE environments are not registered in spawned workers"
+                ),
+            ),
+        ]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
@@ -1077,7 +1086,16 @@ class TestGym:
     # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
-        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        [
+            "HalfCheetah-v4",
+            "CartPole-v1",
+            pytest.param(
+                "ALE/Pong-v5",
+                marks=pytest.mark.skip(
+                    reason="ALE environments are not registered in spawned workers"
+                ),
+            ),
+        ]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
     @pytest.mark.flaky(reruns=5, reruns_delay=1)
