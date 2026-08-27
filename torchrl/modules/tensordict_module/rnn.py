@@ -21,6 +21,7 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, NestedKey, set_lazy_legacy
 from torch import nn, Tensor
+from torch.autograd.function import once_differentiable
 from torch.nn.modules.rnn import RNNCellBase
 
 from torchrl._utils import (
@@ -159,6 +160,12 @@ class _GRUScanFunction(torch.autograd.Function):
     The input projection and all shared-parameter gradient reductions run over
     the flattened batch-time dimensions. Only the recurrent hidden-state
     derivative remains inside the reverse scan.
+
+    ``torch.func`` transforms (``jacrev``, ``vmap``, ``grad``) are not
+    supported: this Function uses the ctx-style ``forward``, which PyTorch
+    rejects with its standard ``setup_context`` error before the recurrence
+    runs. The backward is marked ``once_differentiable`` because it consumes
+    gate states saved without autograd history.
     """
 
     @staticmethod
@@ -208,6 +215,7 @@ class _GRUScanFunction(torch.autograd.Function):
         return hidden
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, grad_hidden):
         (
             x,
@@ -224,6 +232,11 @@ class _GRUScanFunction(torch.autograd.Function):
         ) = ctx.saved_tensors
         hidden_size = ctx.hidden_size
         time, batch, input_size = x.shape
+
+        # The forward may have run under autocast with fp32 parameters, so the
+        # weights are cast to the gradient dtype before the backward linears.
+        gate_dtype = torch.promote_types(grad_hidden.dtype, resetgate.dtype)
+        w_hh_t = w_hh.t().to(gate_dtype)
 
         previous_hidden = torch.cat((initial.unsqueeze(0), hidden[:-1]), 0)
         previous_hidden = torch.where(
@@ -253,7 +266,7 @@ class _GRUScanFunction(torch.autograd.Function):
                 (d_resetgate_pre, d_updategate_pre, d_newgate_pre), -1
             )
             d_gates_h = torch.cat((d_resetgate_pre, d_updategate_pre, d_h_n), -1)
-            d_previous = d_previous_direct + F.linear(d_gates_h, w_hh.t())
+            d_previous = d_previous_direct + F.linear(d_gates_h, w_hh_t)
             d_hidden_next = torch.where(
                 init_t.unsqueeze(-1), torch.zeros_like(d_previous), d_previous
             )
@@ -285,7 +298,7 @@ class _GRUScanFunction(torch.autograd.Function):
         d_gates_h_flat = d_gates_h.reshape(time * batch, 3 * hidden_size)
         x_flat = x.reshape(time * batch, input_size)
         previous_hidden_flat = previous_hidden.reshape(time * batch, hidden_size)
-        d_x = F.linear(d_gates_x_flat, w_ih.t()).view_as(x)
+        d_x = F.linear(d_gates_x_flat, w_ih.t().to(d_gates_x_flat.dtype)).view_as(x)
         d_w_ih = d_gates_x_flat.t() @ x_flat
         d_w_hh = d_gates_h_flat.t() @ previous_hidden_flat
         d_b_ih = d_gates_x_flat.sum(0)

@@ -1634,6 +1634,72 @@ class TestLSTMModule:
                 rtol=1e-5,
             )
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_gru_scan_backward_autocast_bfloat16(self):
+        torch.manual_seed(0)
+        module = GRUModule(
+            input_size=4,
+            hidden_size=8,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+        )
+        obs = torch.randn(2, 5, 4, dtype=torch.bfloat16, requires_grad=True)
+        data = TensorDict(
+            {
+                "obs": obs,
+                "hidden": torch.zeros(2, 5, 1, 8, dtype=torch.bfloat16),
+                "is_init": torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            [2, 5],
+        )
+        with set_recurrent_mode(True), torch.autocast("cpu", torch.bfloat16):
+            out = module(data)
+        out["feat"].float().sum().backward()
+        assert obs.grad is not None
+        assert torch.isfinite(obs.grad).all()
+        for parameter in module.parameters():
+            assert parameter.grad is not None
+            assert torch.isfinite(parameter.grad).all()
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_gru_scan_double_backward_raises(self):
+        torch.manual_seed(0)
+        module = GRUModule(
+            input_size=4,
+            hidden_size=8,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+        )
+        obs = torch.randn(2, 5, 4, requires_grad=True)
+        data = TensorDict(
+            {
+                "obs": obs,
+                "hidden": torch.zeros(2, 5, 1, 8),
+                "is_init": torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            [2, 5],
+        )
+        with set_recurrent_mode(True):
+            out = module(data)
+        cotangent = torch.randn_like(out["feat"]).requires_grad_()
+        (grad,) = torch.autograd.grad(
+            out["feat"], obs, grad_outputs=cotangent, create_graph=True
+        )
+        with pytest.raises(
+            RuntimeError, match="differentiate twice|does not require grad"
+        ):
+            grad.sum().backward()
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
