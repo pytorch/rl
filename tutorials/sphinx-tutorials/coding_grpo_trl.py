@@ -61,7 +61,6 @@ from tensordict import set_list_to_stack, TensorDict
 from torchrl.data import ListStorage, ReplayBuffer
 from torchrl.modules.llm import HFRewardModelWrapper, TorchRLBufferDataset
 
-warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 try:
@@ -97,10 +96,6 @@ BATCH_SIZE = 8
 MODEL_NAME = "distilbert-base-uncased"
 
 if _has_trl:
-    # Enable TensorDict to store Python lists (strings) transparently.
-    # Scoped here so it only applies when trl is available.
-    set_list_to_stack(True).set()
-
     # Load tokenizer first so we can flatten conversation dicts → strings.
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     # DistilBERT / BERT use [SEP] as the sequence-boundary token.
@@ -125,18 +120,21 @@ if _has_trl:
             m["content"] for m in reversed(messages) if m["role"] == "assistant"
         )
 
-    for row in raw:
-        chosen_str = get_assistant_response(row["chosen"])
-        rejected_str = get_assistant_response(row["rejected"])
+    # Enable TensorDict to store Python lists (strings) transparently.
+    # Scoped here so it only applies during ReplayBuffer construction.
+    with set_list_to_stack(True):
+        for row in raw:
+            chosen_str = get_assistant_response(row["chosen"])
+            rejected_str = get_assistant_response(row["rejected"])
 
-        # Store as a plain string alongside any TorchRL-specific metadata
-        # (log-probs, token tensors, …) without impacting the TRL trainer.
-        rb.add(
-            TensorDict(
-                {"chosen": chosen_str, "rejected": rejected_str},
-                batch_size=[],
+            # Store as a plain string alongside any TorchRL-specific metadata
+            # (log-probs, token tensors, …) without impacting the TRL trainer.
+            rb.add(
+                TensorDict(
+                    {"chosen": chosen_str, "rejected": rejected_str},
+                    batch_size=[],
+                )
             )
-        )
 
     print(f"ReplayBuffer populated: {len(rb)} preference pairs.")
     print(f"  Sample chosen  : {rb[0]['chosen'][:120]}...")
@@ -206,7 +204,9 @@ if _has_trl:
     )
 
     print(f"\nTraining reward model ({MODEL_NAME}) for {MAX_STEPS} steps …")
-    trainer.train()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        trainer.train()
     print("Training complete!")
 
 # %%
