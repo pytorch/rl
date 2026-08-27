@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextvars
-import importlib.metadata
 import importlib.util
 import typing
 from collections.abc import Iterable
@@ -14,7 +13,6 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as _torch_checkpoint
-from packaging import version
 
 from tensordict import TensorDict, TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
@@ -26,6 +24,7 @@ from torch.nn.modules.rnn import RNNCellBase
 from torchrl._utils import (
     _ContextManager,
     _DecoratorContextManager,
+    _triton_version_at_least,
     implement_for,
     is_compiling,
 )
@@ -77,24 +76,11 @@ def _maybe_warm_scan_backward(device: torch.device | str | int | None) -> None:
         ensure_scan_backward(device)
 
 
-def _check_triton_available() -> bool:
-    """True if Triton is installed and exposes the API the kernels need.
-
-    Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
-    The backend requires ``triton.language.extra.libdevice`` which is only
-    available from Triton 2.2 onwards. Older Triton builds fall back to the
-    scan / pad backends. The version is read from package metadata to avoid
-    eagerly importing Triton (or its missing ``triton.language.extra`` parent)
-    at torchrl import time.
-    """
-    try:
-        triton_version = importlib.metadata.version("triton")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    return version.parse(triton_version) >= version.parse("2.2")
-
-
-_has_triton = _check_triton_available()
+# Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
+# The backend requires ``triton.language.extra.libdevice`` which is only
+# available from Triton 2.2 onwards. Older Triton builds fall back to the
+# scan / pad backends.
+_has_triton = _triton_version_at_least("2.2")
 
 
 def _canonical_stride(shape: typing.Sequence[int]) -> tuple[int, ...]:
