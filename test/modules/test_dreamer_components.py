@@ -993,6 +993,66 @@ def test_public_block_gru_triton_gradient_parity(
     not torch.cuda.is_available() or not _has_dreamer_v3_triton,
     reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
 )
+def test_public_block_gru_triton_frozen_parameter_gradients():
+    torch.manual_seed(0)
+    kwargs = {
+        "input_size": 12,
+        "hidden_size": 32,
+        "projection_size": 24,
+        "num_blocks": 8,
+        "num_layers": 2,
+        "activation_class": torch.nn.SiLU,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    triton_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    triton_module.load_state_dict(reference.state_dict())
+    value_source = torch.randn(2, 3, 12, device="cuda")
+    hidden_source = torch.randn(2, 32, device="cuda")
+    is_init = torch.zeros(2, 3, dtype=torch.bool, device="cuda")
+    is_init[0, 1] = True
+    tolerance = {"atol": 3e-4, "rtol": 3e-4}
+
+    def run(module, inputs_require_grad):
+        module.zero_grad(set_to_none=True)
+        value = value_source.detach().clone().requires_grad_(inputs_require_grad)
+        hidden = hidden_source.detach().clone().requires_grad_(inputs_require_grad)
+        output, final_hidden = module(value, hidden, is_init)
+        (output.square().mean() + final_hidden.square().mean()).backward()
+        return value.grad, hidden.grad
+
+    # Frozen world-model rollout: only the inputs receive gradients.
+    for module in (reference, triton_module):
+        module.requires_grad_(False)
+    expected_value_grad, expected_hidden_grad = run(reference, True)
+    value_grad, hidden_grad = run(triton_module, True)
+    torch.testing.assert_close(value_grad, expected_value_grad, **tolerance)
+    torch.testing.assert_close(hidden_grad, expected_hidden_grad, **tolerance)
+    assert all(param.grad is None for param in triton_module.parameters())
+
+    # Partial freeze: a scattered trainable subset checks that the backward
+    # maps needs_input_grad entries onto the right gradient slots.
+    trained = ("cell.dynamic_norms.1.weight", "cell.gates.bias")
+    for module in (reference, triton_module):
+        for name, parameter in module.named_parameters():
+            parameter.requires_grad_(name in trained)
+    run(reference, False)
+    run(triton_module, False)
+    expected_parameters = dict(reference.named_parameters())
+    for name, parameter in triton_module.named_parameters():
+        if name in trained:
+            torch.testing.assert_close(
+                parameter.grad, expected_parameters[name].grad, **tolerance
+            )
+        else:
+            assert parameter.grad is None
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
 def test_public_block_gru_triton_compile_recurrent_loss():
     torch.manual_seed(1)
     kwargs = {

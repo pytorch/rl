@@ -1339,32 +1339,55 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
                 COMPUTE_BF16=outputs.dtype is torch.bfloat16,
             )
 
-        previous = torch.cat((initial_hidden.unsqueeze(1), outputs[:, :-1]), 1)
-        previous = torch.where(is_init.unsqueeze(-1), 0, previous)
-        grad_hidden_weight = (
-            _block_weight_grad(
-                previous,
-                grad_hidden_pre,
-                hidden_weight.t().unsqueeze(0),
-                value_shared_across_blocks=True,
+        # Input order: projected_input, initial_hidden, is_init, hidden_weight,
+        # hidden_bias, hidden_norm_weight, 3 dynamic params per layer,
+        # gate_weight, gate_bias, then the 6 non-tensor arguments.
+        needs_input_grad = ctx.needs_input_grad
+        first_weight_index = 6
+        gate_weight_index = first_weight_index + 3 * num_layers
+        previous = None
+        if needs_input_grad[3] or needs_input_grad[first_weight_index]:
+            previous = torch.cat((initial_hidden.unsqueeze(1), outputs[:, :-1]), 1)
+            previous = torch.where(is_init.unsqueeze(-1), 0, previous)
+        if needs_input_grad[3]:
+            grad_hidden_weight = (
+                _block_weight_grad(
+                    previous,
+                    grad_hidden_pre,
+                    hidden_weight.t().unsqueeze(0),
+                    value_shared_across_blocks=True,
+                )
+                .squeeze(0)
+                .t()
+                .contiguous()
             )
-            .squeeze(0)
-            .t()
-            .contiguous()
+        else:
+            grad_hidden_weight = None
+        grad_hidden_bias = (
+            grad_hidden_pre.sum((0, 1), dtype=torch.float32)
+            if needs_input_grad[4]
+            else None
         )
-        grad_hidden_bias = grad_hidden_pre.sum((0, 1), dtype=torch.float32)
-        grad_hidden_norm_weight = grad_hidden_norm_contrib.sum(
-            (0, 1), dtype=torch.float32
+        grad_hidden_norm_weight = (
+            grad_hidden_norm_contrib.sum((0, 1), dtype=torch.float32)
+            if needs_input_grad[5]
+            else None
         )
 
-        hidden_features = _activation(
-            hidden_normalized * hidden_norm_weight.to(outputs.dtype),
-            ctx.activation_code,
-        )
+        # The forward kernel applies the fp32 norm scales to fp32 normalized
+        # values and activates in fp32 before rounding to the compute dtype,
+        # so the recomputed activations here must do the same.
         dynamic_grads = []
         for layer_index, (weight, _, _) in enumerate(dynamic):
             grad_pre = grad_dynamic_pre[layer_index]
-            if layer_index == 0:
+            weight_index = first_weight_index + 3 * layer_index
+            if not needs_input_grad[weight_index]:
+                grad_weight = None
+            elif layer_index == 0:
+                hidden_features = _activation(
+                    hidden_normalized.float() * hidden_norm_weight.float(),
+                    ctx.activation_code,
+                ).to(outputs.dtype)
                 grad_weight = torch.cat(
                     (
                         _block_weight_grad(
@@ -1392,39 +1415,54 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
                 )
             else:
                 layer_input = _activation(
-                    dynamic_normalized[layer_index - 1]
-                    * dynamic[layer_index - 1][2].to(outputs.dtype),
+                    dynamic_normalized[layer_index - 1].float()
+                    * dynamic[layer_index - 1][2].float(),
                     ctx.activation_code,
-                )
+                ).to(outputs.dtype)
                 grad_weight = _block_weight_grad(layer_input, grad_pre, weight)
             dynamic_grads.extend(
                 (
                     grad_weight,
-                    grad_pre.sum((0, 1), dtype=torch.float32),
+                    grad_pre.sum((0, 1), dtype=torch.float32)
+                    if needs_input_grad[weight_index + 1]
+                    else None,
                     grad_dynamic_norm_contrib[layer_index].sum(
                         (0, 1), dtype=torch.float32
-                    ),
+                    )
+                    if needs_input_grad[weight_index + 2]
+                    else None,
                 )
             )
-        first_grad_blocks = (
-            grad_dynamic_pre[0].reshape(-1, ctx.num_blocks, block_size).transpose(0, 1)
+        if needs_input_grad[0]:
+            first_weight = dynamic[0][0].to(outputs.dtype)
+            input_weight = first_weight[:, block_size : block_size + projected_size]
+            # The flat GEMM's reduction dimension sums over the blocks.
+            grad_projected = (
+                (
+                    grad_dynamic_pre[0].reshape(batch * time, hidden_size)
+                    @ input_weight.transpose(1, 2).reshape(hidden_size, projected_size)
+                )
+                .reshape_as(projected_input)
+                .to(projected_input.dtype)
+            )
+        else:
+            grad_projected = None
+        if needs_input_grad[gate_weight_index]:
+            gate_input = _activation(
+                dynamic_normalized[-1].float() * dynamic[-1][2].float(),
+                ctx.activation_code,
+            ).to(outputs.dtype)
+            grad_gate_weight = _block_weight_grad(gate_input, grad_gate, gate_weight)
+        else:
+            grad_gate_weight = None
+        grad_gate_bias = (
+            grad_gate.sum((0, 1), dtype=torch.float32)
+            if needs_input_grad[gate_weight_index + 1]
+            else None
         )
-        first_weight = dynamic[0][0].to(outputs.dtype)
-        input_weight = first_weight[:, block_size : block_size + projected_size]
-        grad_projected = (
-            torch.bmm(first_grad_blocks, input_weight.transpose(1, 2))
-            .sum(0)
-            .reshape_as(projected_input)
-        )
-        gate_input = _activation(
-            dynamic_normalized[-1] * dynamic[-1][2].to(outputs.dtype),
-            ctx.activation_code,
-        )
-        grad_gate_weight = _block_weight_grad(gate_input, grad_gate, gate_weight)
-        grad_gate_bias = grad_gate.sum((0, 1), dtype=torch.float32)
         tensor_grads = (
-            grad_projected.to(projected_input.dtype),
-            grad_initial.to(initial_hidden.dtype),
+            grad_projected,
+            grad_initial.to(initial_hidden.dtype) if needs_input_grad[1] else None,
             None,
             grad_hidden_weight,
             grad_hidden_bias,
