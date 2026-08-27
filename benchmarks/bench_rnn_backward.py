@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Forward/backward benchmark for standard RNNs and the DreamerV3 block GRU.
+"""Forward/backward benchmark for recurrent backends.
 
 Sweeps a grid of batch sizes, horizons (sequence lengths) and cell counts
 (hidden sizes) and reports forward time, backward time and peak allocated
@@ -23,17 +23,25 @@ Example::
     python benchmarks/bench_rnn_backward.py --rnn gru \
         --batches 256,1024,4096 --seq-lens 16,32,64 --hiddens 128,256,512
 
-The block-GRU grid compares its reference and specialized scan backends across
-batch size, horizon, hidden width, and block count. Timings are CUDA-synchronized
-means with 95% confidence intervals. ``--compile-modes`` optionally compares
-uncompiled execution with the default, reduce-overhead, and max-autotune
-``torch.compile`` modes using full graphs and static shapes. The script is a
-no-op on CPU/MPS.
+Representative DreamerV3 sweep::
+
+    python benchmarks/bench_rnn_backward.py --rnn block_gru \
+        --backends scan,triton --batches 16 --seq-lens 64,512 \
+        --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
+        --dtype bfloat16 --compile-modes default,reduce-overhead,max-autotune
+
+The block-GRU grid compares its reference, specialized scan, and fused Triton
+backends across batch size, horizon, hidden width, and block count. Timings are
+CUDA-synchronized means with 95% confidence intervals. ``--compile-modes``
+optionally compares uncompiled execution with the default, reduce-overhead, and
+max-autotune ``torch.compile`` modes using full graphs and static shapes. The
+script is a no-op on CPU/MPS.
 """
 from __future__ import annotations
 
 import argparse
 import statistics
+import sys
 from typing import Literal
 
 import torch
@@ -83,22 +91,23 @@ def _build_module(
         "recurrent_backend": recurrent_backend,
         "default_recurrent_mode": True,
         "device": device,
-        "dtype": dtype,
     }
     # The cuDNN ("pad") backend rejects a non-"none" recompute value.
     if recurrent_backend != "pad":
         kwargs["recurrent_recompute"] = recompute
     if rnn_type == "lstm":
-        return LSTMModule(
+        module = LSTMModule(
             in_keys=["obs", "hidden0", "hidden1"],
             out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
             **kwargs,
         )
-    return GRUModule(
-        in_keys=["obs", "hidden"],
-        out_keys=["feat", ("next", "hidden")],
-        **kwargs,
-    )
+    else:
+        module = GRUModule(
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            **kwargs,
+        )
+    return module.to(dtype)
 
 
 def _build_inputs(
@@ -281,7 +290,11 @@ def _parse_int_list(s: str) -> list[int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    """Run the recurrent-backend benchmark."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--rnn", choices=["lstm", "gru", "block_gru"], default="gru")
     parser.add_argument(
         "--backends",
@@ -309,17 +322,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    device = torch.device(args.device)
-    if device.type != "cuda":
-        print("[bench_rnn_backward] CUDA required for timing/memory. Skipping.")
-        return
-
     backend_arg = args.backends
     if backend_arg is None:
         backend_arg = (
-            "reference,scan" if args.rnn == "block_gru" else "cudnn,scan,triton"
+            "reference,scan,triton" if args.rnn == "block_gru" else "cudnn,scan,triton"
         )
     backends = [b.strip() for b in backend_arg.split(",") if b.strip()]
+    invalid_backends = set(backends) - set(_BACKENDS)
+    if invalid_backends:
+        parser.error(
+            "--backends contains invalid values: "
+            + ", ".join(sorted(invalid_backends))
+            + ". Valid values: "
+            + ",".join(_BACKENDS)
+        )
     compile_modes = [
         mode.strip() for mode in args.compile_modes.split(",") if mode.strip()
     ]
@@ -330,17 +346,33 @@ def main() -> None:
             "--compile-modes contains invalid values: "
             + ", ".join(sorted(invalid_compile_modes))
         )
+    if args.rnn == "block_gru" and args.recompute == "full":
+        parser.error("--recompute full is not supported for --rnn block_gru.")
+
+    device = torch.device(args.device)
+    if device.type != "cuda":
+        sys.stdout.write(
+            "[bench_rnn_backward] CUDA required for timing/memory. Skipping.\n"
+        )
+        return
+    if device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
+    # Timing events and kernel launches must target the benchmarked device.
+    torch.cuda.set_device(device)
+
     dtype = torch.float32 if args.dtype == "float32" else torch.bfloat16
     if args.recompute == "full":
         backends = [b for b in backends if b != "cudnn"]
-        print("[bench_rnn_backward] recompute=full -> skipping cuDNN (no recompute).")
+        sys.stdout.write(
+            "[bench_rnn_backward] recompute=full -> skipping cuDNN " "(no recompute).\n"
+        )
 
-    print(
+    sys.stdout.write(
         f"rnn={args.rnn} layers={args.num_layers} input_size={args.input_size} "
         f"projection_size={args.projection_size} dtype={args.dtype} "
         f"recompute={args.recompute} warmup={args.warmup} iters={args.iters}\n"
         f"compile_modes={','.join(compile_modes)}\n"
-        f"device={torch.cuda.get_device_name(device)}\n"
+        f"device={torch.cuda.get_device_name(device)}\n\n"
     )
     header = (
         f"{'batch':>6} {'T':>4} {'H':>5} {'blocks':>6} {'backend':>9} "
@@ -348,8 +380,7 @@ def main() -> None:
         f"{'fwd_ms (95% CI)':>21} {'bwd_ms (95% CI)':>21} "
         f"{'total_ms (95% CI)':>23} {'peak_gb':>8}"
     )
-    print(header)
-    print("-" * len(header))
+    sys.stdout.write(f"{header}\n{'-' * len(header)}\n")
     for batch in args.batches:
         for seq_len in args.seq_lens:
             for hidden in args.hiddens:
@@ -376,20 +407,20 @@ def main() -> None:
                                     warmup=args.warmup,
                                     iters=args.iters,
                                 )
-                                print(
+                                sys.stdout.write(
                                     f"{batch:>6} {seq_len:>4} {hidden:>5} "
                                     f"{num_blocks:>6} {name:>9} {compile_mode:>15} "
                                     f"{r['fwd_ms']:>9.3f} +/- {r['fwd_ci_ms']:<7.3f} "
                                     f"{r['bwd_ms']:>9.3f} +/- {r['bwd_ci_ms']:<7.3f} "
                                     f"{r['total_ms']:>9.3f} +/- {r['total_ci_ms']:<7.3f} "
-                                    f"{r['peak_gb']:>8.3f}"
+                                    f"{r['peak_gb']:>8.3f}\n"
                                 )
                             except Exception as exc:  # noqa: BLE001
-                                print(
+                                sys.stdout.write(
                                     f"{batch:>6} {seq_len:>4} {hidden:>5} "
                                     f"{num_blocks:>6} {name:>9} "
                                     f"{compile_mode:>15} ERROR: "
-                                    f"{type(exc).__name__}: {str(exc)[:80]}"
+                                    f"{type(exc).__name__}: {str(exc)[:80]}\n"
                                 )
                             finally:
                                 if device.type == "cuda":

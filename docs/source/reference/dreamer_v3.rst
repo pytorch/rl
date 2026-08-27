@@ -113,9 +113,66 @@ heads.
 For recurrent features outside an RSSM, :class:`~torchrl.modules.DreamerV3BlockGRUCell`
 exposes the same block-diagonal update as a single-step module, while
 :class:`~torchrl.modules.DreamerV3BlockGRU` executes batch-major sequences with
-mixed episode resets. The sequence module uses an ordinary-autograd reference
-loop by default and offers an opt-in compiled scan backend for long training
-sequences.
+mixed episode resets.
+
+Selecting the sequence backend
+------------------------------
+
+The sequence backend is selected directly on the high-level module:
+
+.. code-block:: python
+
+    from torchrl.modules import DreamerV3BlockGRU
+
+    gru = DreamerV3BlockGRU(
+        input_size=512,
+        hidden_size=512,
+        recurrent_backend="triton",
+    ).cuda()
+
+The three backends trade portability for speed:
+
+* ``"reference"`` (default) runs the time loop with ordinary autograd. It
+  works on every supported device, floating dtype, and elementwise activation,
+  and it is the only backend that supports double backward
+  (``create_graph=True``). It is the slowest option on long sequences.
+* ``"scan"`` fuses the time loop through ``torch._higher_order_ops.scan`` and
+  carries only the hidden cotangent in a specialized reverse scan. It runs on
+  CPU and CUDA, requires a recent PyTorch with the ``hoptorch`` package, and
+  supports the same activations as the reference backend. Mixed input/hidden
+  dtypes are promoted like the reference backend. Its backward consumes saved
+  gate states, so double backward raises instead of silently returning wrong
+  second-order gradients.
+* ``"triton"`` fuses the complete forward and reverse-time recurrences into
+  one CUDA kernel each, keeping the carry on-chip across the whole horizon.
+  It requires an NVIDIA GPU and Triton 3.3 or newer, supports ``nn.SiLU``,
+  ``nn.Tanh``, and ``nn.ReLU`` dynamics, and runs in ``float32`` or
+  ``bfloat16`` (mixed input and hidden dtypes are promoted like the reference
+  backend; other dtypes raise an error). Parameters stay in ``float32`` and
+  accumulation is performed in ``float32`` in both directions. Like the scan
+  backend, double backward raises. Kernels are autotuned, so the first calls
+  for a new sequence-length/width configuration pay a tuning warmup. On
+  DreamerV3-sized workloads it is roughly an order of magnitude faster than
+  the scan backend in both directions.
+
+Select ``"scan"`` or ``"triton"`` explicitly so missing dependencies or
+unsupported devices are reported instead of silently changing execution; the
+optimized backends never fall back to another implementation.
+
+To compare the backends on your own shapes and hardware (synchronized forward
+and backward timings, peak memory, and 95% confidence intervals), run the
+developer benchmark from a source checkout:
+
+.. code-block:: bash
+
+    python benchmarks/bench_rnn_backward.py --rnn block_gru \
+        --backends reference,scan,triton --batches 16 --seq-lens 64,512 \
+        --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
+        --dtype bfloat16 --warmup 10 --iters 30
+
+Use the batch size, sequence length, widths, block count, dtype, and compile
+modes from the intended workload: backend performance is hardware- and
+shape-dependent.
 
 The three objectives
 --------------------
