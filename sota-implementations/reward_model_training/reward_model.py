@@ -179,14 +179,20 @@ def main(cfg: DictConfig) -> None:
         with timeit("train/optim_step"):
             optimizer.step()
 
-        metrics_to_log = {
-            "train/loss": loss.item(),
-            "train/accuracy": loss_out.accuracy.item(),
-            "train/grad_norm": grad_norm.item(),
-        }
-        pbar.set_postfix(
-            loss=f"{loss.item():.4f}", acc=f"{loss_out.accuracy.item():.3f}"
-        )
+        # Metrics are materialized only at log cadence: every .item() forces a
+        # blocking host-device sync, so the other iterations pay none.
+        if log_interval > 0 and it % log_interval == 0:
+            loss_val = loss.item()
+            acc_val = loss_out.accuracy.item()
+            pbar.set_postfix(loss=f"{loss_val:.4f}", acc=f"{acc_val:.3f}")
+            if logger is not None:
+                metrics_to_log = {
+                    "train/loss": loss_val,
+                    "train/accuracy": acc_val,
+                    "train/grad_norm": grad_norm.item(),
+                }
+                metrics_to_log.update(timeit.todict(prefix="time"))
+                log_metrics(logger, metrics_to_log, it)
 
         if eval_iter > 0 and eval_iters > 0 and it % eval_iter == 0:
             val_loss, val_acc = evaluate()
@@ -199,10 +205,6 @@ def main(cfg: DictConfig) -> None:
 
         if save_iter > 0 and it % save_iter == 0:
             _save_export(score_network, tokenizer, cfg.export.save_dir, step=it)
-
-        if logger is not None and log_interval > 0 and it % log_interval == 0:
-            metrics_to_log.update(timeit.todict(prefix="time"))
-            log_metrics(logger, metrics_to_log, it)
 
     _save_export(score_network, tokenizer, cfg.export.save_dir, step="final")
     pbar.close()
