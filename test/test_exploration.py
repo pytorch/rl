@@ -1079,17 +1079,27 @@ class TestNoisyLinear:
         assert not torch.allclose(y1, y3, atol=1e-6)
         assert not torch.allclose(y2, y3, atol=1e-6)
 
-    def test_factorized_gaussian_noise(self, device):
-        torch.manual_seed(0)
+    def test_factorized_gaussian_noise(self, device, monkeypatch):
+        input_samples = torch.tensor(
+            [-4.0, -1.0, -0.25, 0.0, 0.25, 1.0, 4.0, 9.0, 16.0, 25.0]
+        )
+        output_samples = torch.tensor([-9.0, -1.0, 0.0, 1.0, 9.0])
+        samples = iter((input_samples, output_samples))
+
+        def controlled_randn(*size, device=None):
+            sample = next(samples)
+            assert sample.shape == torch.Size(size)
+            return sample.to(device)
+
+        monkeypatch.setattr(torch, "randn", controlled_randn)
         layer = NoisyLinear(10, 5, device=device, use_exploration_type=True)
 
-        with set_exploration_type(ExplorationType.RANDOM):
-            weight_noise = (layer.weight - layer.weight_mu) / layer.weight_sigma
-            bias_noise = (layer.bias - layer.bias_mu) / layer.bias_sigma
-
-        reference = bias_noise.abs().argmax()
-        input_noise = weight_noise[reference] / bias_noise[reference]
-        torch.testing.assert_close(weight_noise, torch.outer(bias_noise, input_noise))
+        input_noise = input_samples.sign() * input_samples.abs().sqrt()
+        output_noise = output_samples.sign() * output_samples.abs().sqrt()
+        torch.testing.assert_close(
+            layer.weight_epsilon, torch.outer(output_noise, input_noise).to(device)
+        )
+        torch.testing.assert_close(layer.bias_epsilon, output_noise.to(device))
 
     def test_weight_property_behavior(self, device):
         """Test that weight property returns correct values based on exploration mode."""
