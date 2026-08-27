@@ -24,6 +24,7 @@ from tensordict.nn import (
 )
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
+from torch.autograd.function import once_differentiable
 from torch.nn import functional as F, GRUCell
 from torchrl._utils import implement_for
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
@@ -439,7 +440,10 @@ class _DreamerV3BlockGRUScanFunction(torch.autograd.Function):
         )
         return outputs, final_hidden
 
+    # The saved gate states carry no autograd history, so double backward
+    # would silently return wrong second-order gradients without this.
     @staticmethod
+    @once_differentiable
     def backward(ctx, grad_outputs, grad_final_hidden):
         saved_tensors = ctx.saved_tensors
         num_layers = ctx.num_layers

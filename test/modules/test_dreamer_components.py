@@ -567,6 +567,32 @@ class TestDreamerV3Components:
         assert hidden.grad is not None
         assert all(parameter.grad is not None for parameter in module.parameters())
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_public_block_gru_scan_double_backward_raises(self):
+        torch.manual_seed(0)
+        module = DreamerV3BlockGRU(
+            6,
+            8,
+            projection_size=4,
+            num_blocks=2,
+            recurrent_backend="scan",
+        )
+        value = torch.randn(2, 5, 6, requires_grad=True)
+        is_init = torch.zeros(2, 5, dtype=torch.bool)
+        output, _ = module(value, torch.zeros(2, 8), is_init)
+        cotangent = torch.randn_like(output).requires_grad_()
+        (grad,) = torch.autograd.grad(
+            output, value, grad_outputs=cotangent, create_graph=True
+        )
+        with pytest.raises(
+            RuntimeError, match="differentiate twice|does not require grad"
+        ):
+            grad.sum().backward()
+
     @pytest.mark.parametrize("device", get_default_devices())
     def test_block_gru_action_normalization_and_gradients(self, device):
         prior = RSSMPriorV3(
