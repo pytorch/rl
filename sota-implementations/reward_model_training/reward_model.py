@@ -101,10 +101,11 @@ def main(cfg: DictConfig) -> None:
         torch.device(cfg.model.device) if cfg.model.device else get_available_device()
     )
 
-    # Model + data
-    with timeit("setup/model"):
-        score_network = make_reward_model(cfg, device)
+    # Model + data. The tokenizer is built first so the model's pad_token_id can
+    # be aligned with the id the tokenizer actually pads with.
     tokenizer = make_tokenizer(cfg)
+    with timeit("setup/model"):
+        score_network = make_reward_model(cfg, device, tokenizer)
     vocab_size = get_vocab_size(tokenizer, score_network)
 
     with timeit("setup/data"):

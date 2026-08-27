@@ -24,7 +24,12 @@ from torchrl.data import (
     TensorDictReplayBuffer,
     TensorStorage,
 )
-from transformers import AutoConfig, AutoModelForSequenceClassification, AutoTokenizer
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    PreTrainedTokenizerBase,
+)
 
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
@@ -45,7 +50,9 @@ class _RewardModel(nn.Module):
         return out.logits  # shape [B, num_labels=1]
 
 
-def make_reward_model(cfg, device: torch.device) -> TensorDictModule:
+def make_reward_model(
+    cfg, device: torch.device, tokenizer: PreTrainedTokenizerBase | None = None
+) -> TensorDictModule:
     """Build the score network: an HF sequence-classification model with a 1-d head.
 
     When ``cfg.model.name`` is empty, a tiny GPT2-style model is built from scratch
@@ -71,13 +78,19 @@ def make_reward_model(cfg, device: torch.device) -> TensorDictModule:
         )
         hf_model = AutoModelForSequenceClassification.from_config(config)
 
-    # Sequence-classification models need a pad token to locate the final token.
-    if hf_model.config.pad_token_id is None:
-        hf_model.config.pad_token_id = (
-            hf_model.config.eos_token_id
-            if hf_model.config.eos_token_id is not None
-            else 0
-        )
+    # Sequence-classification models locate the final non-pad token by comparing
+    # input_ids against config.pad_token_id (the attention mask is not used for
+    # pooling), so the config value must match the id the tokenizer actually pads
+    # with -- otherwise scores are silently read from the wrong position.
+    pad_token_id = tokenizer.pad_token_id if tokenizer is not None else None
+    if pad_token_id is None:
+        pad_token_id = hf_model.config.pad_token_id
+    if pad_token_id is None:
+        eos_token_id = hf_model.config.eos_token_id
+        if isinstance(eos_token_id, (list, tuple)):
+            eos_token_id = eos_token_id[0] if eos_token_id else None
+        pad_token_id = eos_token_id if eos_token_id is not None else 0
+    hf_model.config.pad_token_id = pad_token_id
 
     score_network = TensorDictModule(
         _RewardModel(hf_model),
