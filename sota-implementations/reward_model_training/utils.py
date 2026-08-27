@@ -45,8 +45,15 @@ class _RewardModel(nn.Module):
         self.model = hf_model
 
     def forward(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor
     ) -> torch.Tensor:
+        # TensorDictModule (strict=False) passes None for a missing in_key, which
+        # would silently score right-padded sequences without a mask.
+        if attention_mask is None:
+            raise ValueError(
+                "attention_mask is required: scoring padded sequences without a "
+                "mask silently attends over pad tokens."
+            )
         out = self.model(input_ids=input_ids, attention_mask=attention_mask)
         return out.logits  # shape [B, num_labels=1]
 
