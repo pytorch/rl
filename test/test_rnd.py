@@ -261,17 +261,25 @@ class TestRNDLoss:
         for p in loss_fn.target_network.parameters():
             assert not p.requires_grad
 
-    def test_update_fraction_reduces_effective_batch(self):
-        torch.manual_seed(0)
-        target, predictor = _make_networks()
-        loss_full = RNDLoss(predictor, target, update_fraction=1.0)
-        loss_partial = RNDLoss(predictor, target, update_fraction=0.25)
-        batch = TensorDict({"next": {"observation": torch.randn(1000, 4)}}, [1000])
-        # Both should return a scalar without error
-        out_full = loss_full(batch)
-        out_partial = loss_partial(batch)
-        assert out_full["loss_predictor"].shape == torch.Size([])
-        assert out_partial["loss_predictor"].shape == torch.Size([])
+    def test_update_fraction_reduces_effective_batch(self, monkeypatch):
+        target = nn.Linear(1, 1, bias=False)
+        target.weight.data.zero_()
+        predictor = nn.Identity()
+        loss_fn = RNDLoss(predictor, target, update_fraction=0.5, reduction="none")
+        batch = TensorDict(
+            {"next": {"observation": torch.tensor([[1.0], [2.0], [3.0], [4.0]])}},
+            [4],
+        )
+        mask_values = torch.tensor([0.1, 0.9, 0.2, 0.8])
+        monkeypatch.setattr(
+            torch,
+            "rand",
+            lambda shape, device: mask_values.to(device).reshape(shape),
+        )
+
+        loss = loss_fn(batch)["loss_predictor"]
+
+        torch.testing.assert_close(loss, torch.tensor([1.0, 0.0, 9.0, 0.0]))
 
     def test_set_keys(self):
         target, predictor = _make_networks()
