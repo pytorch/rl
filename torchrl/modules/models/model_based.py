@@ -999,6 +999,11 @@ class DreamerV3BlockGRU(nn.Module):
         hidden: torch.Tensor,
         is_init: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # The scan Function runs in the projected input's dtype; promote mixed
+        # input/hidden dtypes like the reference backend instead of failing.
+        compute_dtype = torch.promote_types(projected_input.dtype, hidden.dtype)
+        projected_input = projected_input.to(compute_dtype)
+        hidden = hidden.to(compute_dtype)
         parameters = []
         for linear, norm in zip(self.cell.dynamic_linears, self.cell.dynamic_norms):
             parameters.extend((linear.weight, linear.bias, norm.weight))
