@@ -921,7 +921,12 @@ class DreamerV3BlockGRU(nn.Module):
     TorchRL-compatible PyTorch version. The opt-in ``"scan"`` backend uses a
     specialized compiled reverse scan. The explicit ``"triton"`` backend
     fuses each complete CUDA recurrence into one forward and one reverse-time
-    kernel; it requires Triton and does not fall back to another backend.
+    kernel on NVIDIA GPUs (Triton 3.3 or newer); it keeps parameters and
+    accumulation in ``float32`` and does not fall back to another backend.
+    Only the reference backend supports double backward: the optimized
+    backends raise on ``create_graph=True`` instead of returning wrong
+    second-order gradients. See :doc:`/reference/dreamer_v3` for a full
+    backend comparison.
 
     Args:
         input_size (int): Input feature count.
