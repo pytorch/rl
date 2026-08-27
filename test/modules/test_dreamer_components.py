@@ -587,6 +587,10 @@ class TestDreamerV3Components:
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("unroll", [1, 3, 8])
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.6.0"),
+        reason="the higher-order scan backend requires Torch >= 2.6.0",
+    )
     def test_rssm_rollout_higher_order_scan_matches_loop(self, device, unroll):
         scan_rollout = self._make_rollout(device)
         loop_rollout = copy.deepcopy(scan_rollout)
@@ -620,6 +624,10 @@ class TestDreamerV3Components:
 
     @pytest.mark.parametrize("scope", ["step", "scan"])
     def test_rssm_rollout_compile(self, scope):
+        if scope == "scan" and version.parse(torch.__version__) < version.parse(
+            "2.6.0"
+        ):
+            pytest.skip("the scan compile path requires Torch >= 2.6.0")
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
         rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)

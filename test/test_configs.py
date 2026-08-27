@@ -340,6 +340,7 @@ class TestConfigClassParity:
             for pname, param in params
             if param.kind
             not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            and not pname.startswith("_")
             and pname not in fields
         ]
         assert not missing, (

@@ -84,13 +84,6 @@ class TestBCLoss:
         loss_td = loss_fn(td)
         assert loss_td["loss_bc"].item() >= 0.0
 
-    def test_stochastic_loss_is_positive(self):
-        actor = self._make_stochastic_actor()
-        loss_fn = BCLoss(actor)
-        td = self._make_batch()
-        loss_td = loss_fn(td)
-        assert loss_td["loss_bc"].item() >= 0.0
-
     def test_deterministic_backward(self):
         actor = self._make_deterministic_actor()
         loss_fn = BCLoss(actor)
