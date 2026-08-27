@@ -94,7 +94,7 @@ class TestRBFController:
         assert squashed_cov.shape == (10, 3, 3)
         assert cross_cov.shape == (10, 3, 3)
 
-    def test_deterministic_with_zero_variance(self):
+    def test_zero_input_covariance_collapses_action_covariance(self):
         controller = RBFController(
             input_dim=4, output_dim=1, max_action=1.0, n_basis=5
         ).double()
@@ -102,10 +102,12 @@ class TestRBFController:
         mean = torch.randn(2, 4, dtype=torch.float64)
         zero_cov = torch.zeros(2, 4, 4, dtype=torch.float64)
 
-        action_mean1, _, _ = controller(mean, zero_cov)
-        action_mean2, _, _ = controller(mean, zero_cov)
+        action_mean, action_cov, _ = controller(mean, zero_cov)
 
-        torch.testing.assert_close(action_mean1, action_mean2)
+        assert torch.isfinite(action_mean).all()
+        torch.testing.assert_close(
+            action_cov, torch.zeros_like(action_cov), atol=2e-6, rtol=0
+        )
 
     def test_gradients_flow(self):
         controller = RBFController(

@@ -42,8 +42,9 @@ def main() -> None:
     parser.add_argument("overrides", nargs="*")
     args = parser.parse_args()
 
+    args.output_dir = args.output_dir.resolve()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    script = Path(__file__).with_name("dreamer_v3.py")
+    script = Path(__file__).with_name("train.py")
     metrics_paths = []
     for seed in args.seeds:
         metrics_path = args.output_dir / f"seed_{seed}.json"

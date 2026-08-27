@@ -340,6 +340,7 @@ class TestConfigClassParity:
             for pname, param in params
             if param.kind
             not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            and not pname.startswith("_")
             and pname not in fields
         ]
         assert not missing, (
@@ -417,6 +418,63 @@ class TestEnvConfigs:
             assert isinstance(env, cls)
         finally:
             env.close(raise_if_closed=False)
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_async_env_shared_exchange_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+
+        cfg = BatchedEnvConfig(
+            create_env_fn=GymEnvConfig(env_name="CartPole-v1"),
+            num_workers=2,
+            batched_env_type="async",
+            backend="multiprocessing",
+            exchange="shm",
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="hydra.utils.instantiate", category=UserWarning
+            )
+            env = instantiate(cfg)
+        try:
+            assert isinstance(env, AsyncEnvPool)
+            assert env.exchange == "shm"
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_batched_env_config_omegaconf_schema(self):
+        from omegaconf import OmegaConf
+        from torchrl.trainers.algorithms.configs.envs import BatchedEnvConfig
+
+        config = OmegaConf.structured(BatchedEnvConfig)
+        assert config.batched_env_type == "parallel"
+        assert config.backend == "threading"
+        assert config.stack == "dense"
+        assert config.exchange == "queue"
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("batched_env_type", "invalid"),
+            ("backend", "invalid"),
+            ("stack", "invalid"),
+            ("exchange", "invalid"),
+        ],
+    )
+    def test_batched_env_config_validation(self, field, value):
+        from torchrl.trainers.algorithms.configs.envs import make_batched_env
+
+        kwargs = {
+            "batched_env_type": "parallel",
+            "backend": "threading",
+            "stack": "dense",
+            "exchange": "queue",
+        }
+        kwargs[field] = value
+        with pytest.raises(ValueError, match=field):
+            make_batched_env(lambda: None, 1, **kwargs)
 
 
 @pytest.mark.skipif(

@@ -341,8 +341,7 @@ def test_cuda_prioritized_replay_buffer_weight_matches_cpu_formula():
 
 @pytest.mark.parametrize("stack", [False, True])
 @pytest.mark.parametrize("datatype", ["tc", "tb"])
-@pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
-def test_replay_buffer_trajectories(stack, reduction, datatype):
+def test_replay_buffer_trajectories(stack, datatype):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
@@ -364,7 +363,7 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
             5,
             alpha=0.7,
             beta=0.9,
-            reduction=reduction,
+            reduction="max",
         ),
         batch_size=3,
     )

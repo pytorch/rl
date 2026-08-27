@@ -460,7 +460,7 @@ class TargetNetUpdater:
             self._distinct_and_params[key] = (
                 target.is_leaf
                 and source.requires_grad
-                and target.data_ptr() != source.data.data_ptr()
+                and not target.is_set_to(source.data)
             )
             found_distinct = found_distinct or self._distinct_and_params[key]
             target.data.copy_(source.data)
@@ -499,6 +499,8 @@ class TargetNetUpdater:
                 f"{self.__class__.__name__} must be "
                 f"initialized (`{self.__class__.__name__}.init_()`) before calling step()"
             )
+        for name in self._target_names:
+            getattr(self.loss_module, name)
         for key, param in self._sources.items():
             target = self._targets.get(f"target_{key}")
             if target.requires_grad:

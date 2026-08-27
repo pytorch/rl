@@ -7,6 +7,7 @@ from __future__ import annotations
 import collections
 import contextvars
 import functools
+import importlib.metadata
 import inspect
 import logging
 import math
@@ -25,6 +26,7 @@ from typing import Any, cast, TypeVar
 
 import numpy as np
 import torch
+from packaging import version as _packaging_version
 
 from pyvers import implement_for  # noqa: F401
 from tensordict import unravel_key
@@ -121,6 +123,20 @@ def _mp_sharing_strategy_for_spawn() -> str | None:
 @implement_for("torch", "2.8")
 def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
     return None
+
+
+def _triton_version_at_least(minimum: str) -> bool:
+    """Return whether the installed triton distribution is at least ``minimum``.
+
+    The version is read from package metadata rather than by importing triton:
+    importing triton is expensive and can fail at probe time on older or
+    partial installs, and ``find_spec`` cannot report a version.
+    """
+    try:
+        triton_version = importlib.metadata.version("triton")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    return _packaging_version.parse(triton_version) >= _packaging_version.parse(minimum)
 
 
 def strtobool(val: Any) -> bool:

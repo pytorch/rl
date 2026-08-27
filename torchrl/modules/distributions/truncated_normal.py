@@ -130,9 +130,7 @@ class TruncatedStandardNormal(Distribution):
         if sample_shape is None:
             sample_shape = torch.Size([])
         shape = self._extended_shape(sample_shape)
-        p = torch.empty(shape, device=self.a.device).uniform_(
-            self._dtype_min_gt_0, self._dtype_max_lt_1
-        )
+        p = self.a.new_empty(shape).uniform_(self._dtype_min_gt_0, self._dtype_max_lt_1)
         return self.icdf(p)
 
 

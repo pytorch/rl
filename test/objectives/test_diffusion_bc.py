@@ -4,12 +4,32 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
+
 import pytest
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
+from torch import nn
 
 from torchrl.modules import DiffusionActor
 from torchrl.objectives import DiffusionBCLoss
+
+
+class _FixedDDPM(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.num_steps = 1
+        self.score_network = nn.Linear(5, 2)
+        with torch.no_grad():
+            self.score_network.weight.zero_()
+            self.score_network.bias.copy_(torch.tensor([1.0, -1.0]))
+
+    def forward(self, observation):
+        return observation[..., :2]
+
+    def add_noise(self, clean_action, t):
+        return torch.zeros_like(clean_action), clean_action
 
 
 class TestDiffusionBCLoss:
@@ -67,23 +87,28 @@ class TestDiffusionBCLoss:
             if p.grad is not None:
                 assert p.grad.abs().sum() > 0
 
-    def test_reduction_none(self):
-        """reduction='none' should not aggregate — loss is still scalar (MSE averages internally)."""
-        actor = self._make_actor()
-        loss_fn = DiffusionBCLoss(actor, reduction="none")
-        td = self._make_batch()
-        loss_td = loss_fn(td)
-        # With reduction='none' the raw element-wise tensor is returned from mse_loss
-        assert "loss_diffusion_bc" in loss_td.keys()
-
-    def test_reduction_sum(self):
-        actor = self._make_actor()
-        loss_fn_mean = DiffusionBCLoss(actor, reduction="mean")
-        loss_fn_sum = DiffusionBCLoss(actor, reduction="sum")
-        td = self._make_batch(batch_size=4)
-        # Both should produce a finite scalar
-        assert loss_fn_mean(td)["loss_diffusion_bc"].isfinite()
-        assert loss_fn_sum(td)["loss_diffusion_bc"].isfinite()
+    @pytest.mark.parametrize(
+        ("reduction", "expected"),
+        [
+            ("none", [[1.0, 4.0], [1.0, 25.0]]),
+            ("mean", 7.75),
+            ("sum", 31.0),
+        ],
+    )
+    def test_reduction(self, reduction, expected):
+        actor = TensorDictModule(
+            _FixedDDPM(), in_keys=["observation"], out_keys=["action"]
+        )
+        loss_fn = DiffusionBCLoss(actor, reduction=reduction)
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 2),
+                "action": torch.tensor([[0.0, 1.0], [2.0, 4.0]]),
+            },
+            batch_size=[2],
+        )
+        loss = loss_fn(td)["loss_diffusion_bc"]
+        torch.testing.assert_close(loss, loss.new_tensor(expected))
 
     def test_custom_keys(self):
         actor = self._make_actor()
@@ -98,6 +123,23 @@ class TestDiffusionBCLoss:
         )
         loss_td = loss_fn(td)
         assert "loss_diffusion_bc" in loss_td.keys()
+
+    def test_nested_keys(self):
+        actor = self._make_actor()
+        loss_fn = DiffusionBCLoss(actor)
+        loss_fn.set_keys(
+            action=("data", "demo_action"), observation=("data", "observation")
+        )
+        td = TensorDict(
+            {
+                "data": {
+                    "observation": torch.randn(8, 4),
+                    "demo_action": torch.randn(8, 2),
+                }
+            },
+            batch_size=[8],
+        )
+        assert loss_fn(td)["loss_diffusion_bc"].isfinite()
 
     def test_in_keys(self):
         actor = self._make_actor()
@@ -117,6 +159,29 @@ class TestDiffusionBCLoss:
         td = self._make_batch(batch_size=batch_size)
         loss_td = loss_fn(td)
         assert loss_td["loss_diffusion_bc"].shape == torch.Size([])
+
+    @pytest.mark.parametrize(
+        ("batch_size", "data_shape"),
+        [
+            ([], []),
+            ([8], [8]),
+            ([2, 3], [2, 3]),
+            (None, [8]),
+            ([8], [8, 5]),
+        ],
+    )
+    def test_batch_layouts(self, batch_size, data_shape):
+        actor = self._make_actor()
+        loss_fn = DiffusionBCLoss(actor)
+        data = {
+            "observation": torch.randn(*data_shape, 4),
+            "action": torch.randn(*data_shape, 2),
+        }
+        td = TensorDict(data) if batch_size is None else TensorDict(data, batch_size)
+        loss = loss_fn(td)["loss_diffusion_bc"]
+        loss.backward()
+        assert loss.shape == torch.Size([])
+        assert all(parameter.grad is not None for parameter in actor.parameters())
 
     @pytest.mark.parametrize("action_dim,obs_dim", [(2, 4), (4, 8), (6, 12)])
     def test_various_dims(self, action_dim, obs_dim):
@@ -146,3 +211,8 @@ class TestDiffusionBCLoss:
         assert (
             final_loss < initial_loss
         ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

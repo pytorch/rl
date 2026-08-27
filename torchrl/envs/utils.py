@@ -1398,7 +1398,7 @@ def _aggregate_end_of_traj(
     batch_size = data.batch_size
     n = len(batch_size)
     if done_keys is not None and reset_keys is None:
-        reset_keys = {_replace_last(key, "done") for key in done_keys}
+        reset_keys = done_keys
     if reset_keys is not None:
         reset = False
         has_missing = None

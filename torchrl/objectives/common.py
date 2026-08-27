@@ -585,6 +585,11 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 ),
                 no_convert=True,
             )
+            target_params.uninitialized_keys = {
+                key
+                for key, value in params.items(True, True)
+                if torch.nn.parameter.is_lazy(value)
+            }
             setattr(self, name_params_target + "_params", target_params)
         self._has_update_associated[module_name] = not create_target_params
 
@@ -601,6 +606,15 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def __getattr__(self, item):
         if item.startswith("target_") and item.endswith("_params"):
             params = self._modules.get(item, None)
+            if params is not None:
+                pending_keys = getattr(params, "uninitialized_keys", None)
+                if pending_keys:
+                    source_params = getattr(self, item[7:])
+                    for key in pending_keys.copy():
+                        source = source_params.get(key)
+                        if not torch.nn.parameter.is_lazy(source):
+                            params.get(key).data = source.data.clone()
+                            pending_keys.remove(key)
             if params is None:
                 # no target param, take detached data
                 params = getattr(self, item[7:])

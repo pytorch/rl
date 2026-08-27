@@ -7,6 +7,21 @@ experience, then trains an actor and a critic on trajectories generated inside
 that model. The real environment supplies data for the world model; most policy
 improvement happens in latent-space imagination.
 
+Paper and maintained implementation
+-----------------------------------
+
+This page treats the `DreamerV3 paper <https://arxiv.org/abs/2301.04104>`_ as
+the source of truth for the algorithm. The author-maintained
+`JAX implementation <https://github.com/danijar/dreamerv3>`_ continues to
+evolve and its named experiment presets can differ from the protocol reported
+in the paper. TorchRL documents those presets as separate reproduction targets
+rather than redefining the paper algorithm around the latest JAX configuration.
+
+Some constructor defaults predate full paper parity and remain for backward
+compatibility. The runnable DreamerV3 recipes pass the paper-compatible loss
+settings explicitly; changes to public defaults require the normal deprecation
+cycle.
+
 The high-level data flow is:
 
 .. code-block:: text
@@ -95,6 +110,70 @@ latent state. The actor and prediction heads consume both ``state`` and
 blocks used by the example's encoder, decoder, actor, critic, and prediction
 heads.
 
+For recurrent features outside an RSSM, :class:`~torchrl.modules.DreamerV3BlockGRUCell`
+exposes the same block-diagonal update as a single-step module, while
+:class:`~torchrl.modules.DreamerV3BlockGRU` executes batch-major sequences with
+mixed episode resets.
+
+Selecting the sequence backend
+------------------------------
+
+The sequence backend is selected directly on the high-level module:
+
+.. code-block:: python
+
+    from torchrl.modules import DreamerV3BlockGRU
+
+    gru = DreamerV3BlockGRU(
+        input_size=512,
+        hidden_size=512,
+        recurrent_backend="triton",
+    ).cuda()
+
+The three backends trade portability for speed:
+
+* ``"reference"`` (default) runs the time loop with ordinary autograd. It
+  works on every supported device, floating dtype, and elementwise activation,
+  and it is the only backend that supports double backward
+  (``create_graph=True``). It is the slowest option on long sequences.
+* ``"scan"`` fuses the time loop through ``torch._higher_order_ops.scan`` and
+  carries only the hidden cotangent in a specialized reverse scan. It runs on
+  CPU and CUDA, requires a recent PyTorch with the ``hoptorch`` package, and
+  supports the same activations as the reference backend. Mixed input/hidden
+  dtypes are promoted like the reference backend. Its backward consumes saved
+  gate states, so double backward raises instead of silently returning wrong
+  second-order gradients.
+* ``"triton"`` fuses the complete forward and reverse-time recurrences into
+  one CUDA kernel each, keeping the carry on-chip across the whole horizon.
+  It requires an NVIDIA GPU and Triton 3.3 or newer, supports ``nn.SiLU``,
+  ``nn.Tanh``, and ``nn.ReLU`` dynamics, and runs in ``float32`` or
+  ``bfloat16`` (mixed input and hidden dtypes are promoted like the reference
+  backend; other dtypes raise an error). Parameters stay in ``float32`` and
+  accumulation is performed in ``float32`` in both directions. Like the scan
+  backend, double backward raises. Kernels are autotuned, so the first calls
+  for a new sequence-length/width configuration pay a tuning warmup. On
+  DreamerV3-sized workloads it is roughly an order of magnitude faster than
+  the scan backend in both directions.
+
+Select ``"scan"`` or ``"triton"`` explicitly so missing dependencies or
+unsupported devices are reported instead of silently changing execution; the
+optimized backends never fall back to another implementation.
+
+To compare the backends on your own shapes and hardware (synchronized forward
+and backward timings, peak memory, and 95% confidence intervals), run the
+developer benchmark from a source checkout:
+
+.. code-block:: bash
+
+    python benchmarks/bench_rnn_backward.py --rnn block_gru \
+        --backends reference,scan,triton --batches 16 --seq-lens 64,512 \
+        --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
+        --dtype bfloat16 --warmup 10 --iters 30
+
+Use the batch size, sequence length, widths, block count, dtype, and compile
+modes from the intended workload: backend performance is hardware- and
+shape-dependent.
+
 The three objectives
 --------------------
 
@@ -173,6 +252,29 @@ each critic optimizer step:
 
     # After loss.backward() and optimizer.step():
     slow_critic_updater.step()
+
+Replay critic loss
+~~~~~~~~~~~~~~~~~~
+
+The reference implementation also fits the critic on the real replay sequences,
+not only on imagined trajectories.
+:meth:`~torchrl.objectives.DreamerV3ValueLoss.replay_value_loss` computes that
+term. Its return at each replay state uses the following replay reward and
+bootstraps from the first imagined lambda return of the next state, so the
+critic is fitted on real replay states as well as imagined states. The method
+reads its
+``reward``, ``done``, ``terminated`` and ``bootstrap`` entries through
+:attr:`~torchrl.objectives.DreamerV3ValueLoss.tensor_keys`, so
+:meth:`~torchrl.objectives.LossModule.set_keys` can redirect them:
+
+.. code-block:: python
+
+    value_loss.set_keys(bootstrap="first_imagined_return")
+    replay_td = value_loss.replay_value_loss(replay_features)
+    loss = replay_td["loss_replay_value"]
+
+Because the input features stay attached, this term also trains the RSSM
+representation when the world-model loss returns live features.
 
 Optimization and training loop
 ------------------------------

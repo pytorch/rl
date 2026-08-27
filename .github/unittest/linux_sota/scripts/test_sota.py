@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import torch
+from tensordict import TensorDict
 from tensordict.nn import composite_lp_aggregate
 
 # Check that we're using the new behavior
@@ -340,7 +342,7 @@ commands = {
   replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
 """,
-    "dreamer_v3": """python sota-implementations/dreamer_v3/dreamer_v3.py \
+    "dreamer_v3": """python sota-implementations/dreamer_v3/train.py \
   collector.total_frames=400 \
   collector.frames_per_batch=200 \
   replay_buffer.batch_size=2 \
@@ -364,6 +366,38 @@ commands = {
   networks.obs_embed_dim=8
 """,
 }
+
+_OFFLINE_DATASETS = {
+    "gail": "halfcheetah-expert-v2",
+    "td3_bc": "halfcheetah-medium-v2",
+}
+
+
+def _write_synthetic_d4rl_dataset(root: Path, dataset_id: str) -> None:
+    generator = torch.Generator().manual_seed(0)
+    size = 512
+    done = torch.zeros(size, 1, dtype=torch.bool)
+    truncated = torch.zeros_like(done)
+    dataset = TensorDict(
+        {
+            "observation": torch.randn(size, 17, generator=generator),
+            "action": torch.randn(size, 6, generator=generator).tanh(),
+            "reward": torch.randn(size, 1, generator=generator),
+            "done": done,
+            "terminated": done.clone(),
+            "truncated": truncated,
+            "next": {
+                "observation": torch.randn(size, 17, generator=generator),
+                "reward": torch.randn(size, 1, generator=generator),
+                "done": done.clone(),
+                "terminated": done.clone(),
+                "truncated": truncated.clone(),
+            },
+        },
+        [size],
+    )
+    dataset.memmap_(root / ".cache" / "torchrl" / "d4rl" / dataset_id)
+
 
 # CI sharding: the smoke list runs as SOTA_NUM_SHARDS parallel jobs, each
 # selecting an interleaved slice of the sorted command list via SOTA_SHARD
@@ -412,5 +446,9 @@ def run_command(command):
 
 
 @pytest.mark.parametrize("algo", list(commands))
-def test_commands(algo):
+def test_commands(algo, monkeypatch, tmp_path):
+    dataset_id = _OFFLINE_DATASETS.get(algo)
+    if dataset_id is not None:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
     run_command(commands[algo])

@@ -139,8 +139,8 @@ class ClipTransform(Transform):
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         for key in self.in_keys:
             if key in self.parent.reward_keys:
-                spec = self.parent.output_spec["full_reward_spec"][key]
-                self.parent.output_spec["full_reward_spec"][key] = Bounded(
+                spec = reward_spec[key]
+                reward_spec[key] = Bounded(
                     shape=spec.shape,
                     device=spec.device,
                     dtype=spec.dtype,
@@ -151,7 +151,7 @@ class ClipTransform(Transform):
                     if self.low is not None
                     else self.low_min,
                 )
-        return self.parent.output_spec["full_reward_spec"]
+        return reward_spec
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase

@@ -174,6 +174,93 @@ class TestTransformedEnv:
         def _set_seed(self, seed: int) -> None:
             pass
 
+    def test_spec_lock_deferred_until_specs_materialize(self) -> None:
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        assert env.is_spec_locked
+        assert env.__dict__["_output_spec"] is None
+        assert env.__dict__["_input_spec"] is None
+
+        _ = env.observation_spec, env.action_spec
+
+        assert env.__dict__["_output_spec"].is_locked
+        assert env.__dict__["_input_spec"].is_locked
+        with pytest.raises(RuntimeError, match="Cannot modify a locked Composite"):
+            env.observation_spec["extra"] = Unbounded(shape=(3,))
+
+    def test_spec_lock_caches_derived_values(self) -> None:
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        env.rollout(3)
+        assert env._step_mdp is env._step_mdp
+        assert env.reward_keys is env.reward_keys
+
+    def test_spec_lock_survives_append_transform(self) -> None:
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+        env.rollout(3)
+        step_mdp = env._step_mdp
+
+        env.append_transform(StepCounter(step_count_key="other_count"))
+
+        assert env._step_mdp is not step_mdp
+        assert "other_count" in env.observation_spec.keys()
+        assert env.is_spec_locked
+
+    @pytest.mark.parametrize("set_after_init", [False, True])
+    def test_spec_lock_opt_out(self, set_after_init: bool) -> None:
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), StepCounter(), spec_locked=set_after_init
+        )
+        if set_after_init:
+            env.set_spec_lock_(False)
+        assert not env.is_spec_locked
+        assert not env.observation_spec.is_locked
+        assert env._step_mdp is not env._step_mdp
+
+    def test_spec_lock_without_spec_cache(self) -> None:
+        class DynamicKeyTransform(Transform):
+            enabled = False
+
+            def transform_observation_spec(
+                self, observation_spec: TensorSpec
+            ) -> TensorSpec:
+                if self.enabled:
+                    observation_spec["dynamic"] = Unbounded(shape=(1,))
+                return observation_spec
+
+        transform = DynamicKeyTransform()
+        env = TransformedEnv(ContinuousActionVecMockEnv(), transform, cache_specs=False)
+
+        assert env.is_spec_locked
+        assert env.observation_spec.is_locked
+        assert env.input_spec.is_locked
+        assert "dynamic" not in env.observation_keys
+
+        transform.enabled = True
+
+        assert "dynamic" in env.observation_keys
+        assert env.observation_spec.is_locked
+
+    def test_spec_lock_with_lazy_transform(self) -> None:
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), ObservationNorm(in_keys=["observation"])
+        )
+        assert env.is_spec_locked
+
+        env.transform.init_stats(num_iter=11, reduce_dim=0, cat_dim=0)
+
+        assert not torch.equal(
+            env.observation_spec["observation"].space.low,
+            env.base_env.observation_spec["observation"].space.low,
+        )
+        assert env.__dict__["_output_spec"].is_locked
+        env.rollout(3)
+
+    def test_spec_lock_applies_to_rebuilt_parent(self) -> None:
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(), Compose(StepCounter(), RewardScaling(0, 1))
+        )
+        _ = env.output_spec
+        assert env.transform[-1].parent.is_spec_locked
+
     def test_no_modif_specs(self) -> None:
         base_env = self.DummyCompositeEnv()
         specs = base_env.specs.clone()

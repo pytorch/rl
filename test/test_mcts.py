@@ -1004,13 +1004,10 @@ class TestUCB1TunedScore:
         assert torch.all(torch.isfinite(scores))
 
     def test_forward_variance_clamping(self, default_ucb1_tuned_scorer):
-        # Test that min(0.25, V_i) is applied correctly
-        # High variance case
-        win_count = torch.tensor([5.0])
-        visits = torch.tensor([10.0])
-        total_visits = torch.tensor(100.0)
-        # Very high sum of squared rewards to create high variance
-        sum_squared_rewards = torch.tensor([10.0])
+        visits = torch.tensor([1000.0, 1000.0])
+        total_visits = torch.tensor(2000.0)
+        win_count = torch.tensor([500.0, 500.0])
+        sum_squared_rewards = torch.tensor([250.0, 500.0])
 
         node = create_ucb1_tuned_node(
             win_count=win_count,
@@ -1021,7 +1018,17 @@ class TestUCB1TunedScore:
         default_ucb1_tuned_scorer.forward(node)
 
         scores = node.get(default_ucb1_tuned_scorer.score_key)
-        assert torch.all(torch.isfinite(scores))
+        log_parent_visits = math.log(2000)
+        bias_correction = math.sqrt(2 * log_parent_visits / 1000)
+        assert bias_correction < 0.25
+        assert 0.25 + bias_correction > 0.25
+        expected = torch.tensor(
+            [
+                0.5 + math.sqrt(log_parent_visits / 1000 * bias_correction),
+                0.5 + math.sqrt(log_parent_visits / 1000 * 0.25),
+            ]
+        )
+        torch.testing.assert_close(scores, expected)
 
     def test_custom_keys(self, ucb1_tuned_custom_key_names):
         scorer = UCB1TunedScore(

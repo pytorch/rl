@@ -10,6 +10,7 @@ import pytest
 import torch.cuda
 import tqdm
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.data import (
@@ -30,7 +31,8 @@ from torchrl.envs import (
     TransformedEnv,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.modules import RandomPolicy
+from torchrl.modules import MLP, RandomPolicy
+from torchrl.testing.mocking_classes import MockBatchedLockedEnv
 
 
 class _PayloadEnv(EnvBase):
@@ -408,6 +410,83 @@ def test_parallel_env_compact_obs(benchmark, payload_size):
         )
     finally:
         collector.shutdown()
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
+def test_compiled_policy_large_observation(benchmark):
+    device = torch.device("cuda:0")
+    batch_size = torch.Size([4096])
+    observation_dim = 1024
+    payload_spec = Unbounded((*batch_size, observation_dim), device=device)
+    env = MockBatchedLockedEnv(device=device, batch_size=batch_size)
+    env.observation_spec = Composite(observation=payload_spec, shape=batch_size)
+    env.state_spec = env.observation_spec.clone()
+    env.reward_spec = payload_spec.clone()
+    with torch.random.fork_rng(devices=[device]):
+        torch.manual_seed(0)
+        policy = TensorDictModule(
+            MLP(
+                in_features=observation_dim,
+                out_features=1,
+                num_cells=[64, 64],
+                activation_class=torch.nn.Tanh,
+                activate_last_layer=True,
+                device=device,
+            ),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+    frames_per_batch = batch_size.numel() * 8
+    collector = Collector(
+        env,
+        policy,
+        frames_per_batch=frames_per_batch,
+        total_frames=-1,
+        device=device,
+        max_frames_per_traj=-1,
+        compile_policy={"mode": "reduce-overhead", "warmup": 1},
+    )
+    previous_matmul_precision = torch.get_float32_matmul_precision()
+    batches_per_round = 10
+
+    def collect_batches():
+        for _ in range(batches_per_round):
+            next(collector_iterator)
+        torch.cuda.synchronize(device)
+
+    def reset_collector():
+        collector.reset()
+        torch.cuda.synchronize(device)
+
+    try:
+        torch.set_float32_matmul_precision("high")
+        collector_iterator = iter(collector)
+        for _ in range(20):
+            next(collector_iterator)
+        torch.cuda.synchronize(device)
+        torch.cuda.reset_peak_memory_stats(device)
+        benchmark.extra_info.update(
+            batches_per_round=batches_per_round,
+            frames_per_batch=frames_per_batch,
+            num_envs=batch_size.numel(),
+            observation_dim=observation_dim,
+            transitions_per_round=frames_per_batch * batches_per_round,
+        )
+        benchmark.pedantic(
+            collect_batches,
+            setup=reset_collector,
+            iterations=1,
+            rounds=10,
+        )
+        benchmark.extra_info[
+            "cuda_peak_allocated_bytes"
+        ] = torch.cuda.max_memory_allocated(device)
+    finally:
+        try:
+            collector.shutdown()
+        finally:
+            torch.set_float32_matmul_precision(previous_matmul_precision)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")

@@ -18,6 +18,7 @@ from _transforms_common import _has_transformers, TransformBase
 from tensordict import NonTensorData, NonTensorStack, TensorDict, TensorDictBase
 from torch import nn
 
+from torchrl.collectors import Collector
 from torchrl.data import (
     Categorical,
     Composite,
@@ -633,6 +634,28 @@ class TestRenameTransform(TransformBase):
                 env.close()
             except RuntimeError:
                 pass
+
+    def test_parallel_renamed_done(self, create_copy, maybe_fork_ParallelEnv):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv().add_truncated_keys(),
+                RenameTransform(
+                    ["terminated"],
+                    [("stuff", "terminated")],
+                    create_copy=create_copy,
+                ),
+            )
+
+        env = maybe_fork_ParallelEnv(2, make_env)
+        expected_done_keys = {"done", "truncated", ("stuff", "terminated")}
+        if create_copy:
+            expected_done_keys.add("terminated")
+        assert set(env.done_keys) == expected_done_keys
+        collector = Collector(env, frames_per_batch=4, total_frames=4)
+        try:
+            next(iter(collector))
+        finally:
+            collector.shutdown()
 
     def test_trans_serial_env_check(self, create_copy):
         def make_env():

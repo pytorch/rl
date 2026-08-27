@@ -4,10 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
+
 import pytest
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from torch import nn
 
 from torchrl.data.vla import ACTION_CHUNK_KEY
 from torchrl.envs.transforms import ActionChunkTransform
@@ -21,6 +24,15 @@ from torchrl.objectives import ACTLoss
 OBS_DIM = 14
 ACTION_DIM = 7
 CHUNK_SIZE = 10  # small for fast tests
+
+
+class _FixedACTActor(nn.Module):
+    def forward(self, observation, action_chunk):
+        return (
+            observation[..., :4].unflatten(-1, (2, 2)),
+            observation[..., 4:6],
+            observation[..., 6:8],
+        )
 
 
 def _make_actor(
@@ -223,23 +235,46 @@ class TestACTLoss:
             if p.grad is not None:
                 assert p.grad.abs().sum() > 0
 
-    @pytest.mark.parametrize("kl_weight", [0.0, 1.0, 10.0, 100.0])
-    def test_kl_weight_decomposition(self, kl_weight):
-        """loss_act == loss_reconstruction + kl_weight * loss_kl."""
-        actor = _make_actor()
-        loss_fn = ACTLoss(actor, kl_weight=kl_weight)
-        td = _make_batch()
+    @pytest.mark.parametrize("kl_weight", [0.0, 3.0])
+    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
+    def test_loss_formula_and_reduction(self, reduction, kl_weight):
+        actor = TensorDictModule(
+            _FixedACTActor(),
+            in_keys=["observation", "action_chunk"],
+            out_keys=["action_pred", "mu", "log_var"],
+        )
+        loss_fn = ACTLoss(actor, kl_weight=kl_weight, reduction=reduction)
+        td = TensorDict(
+            {
+                "observation": torch.tensor(
+                    [
+                        [0.0, 2.0, -1.0, 4.0, 0.0, 1.0, 0.0, math.log(4.0)],
+                        [2.0, 0.0, 3.0, -2.0, 2.0, 0.0, 0.0, 0.0],
+                    ]
+                ),
+                ACTION_CHUNK_KEY: torch.tensor(
+                    [[[1.0, 0.0], [1.0, 2.0]], [[0.0, 1.0], [1.0, -1.0]]]
+                ),
+            },
+            batch_size=[2],
+        )
         loss_td = loss_fn(td)
-        expected = loss_td["loss_reconstruction"] + kl_weight * loss_td["loss_kl"]
-        torch.testing.assert_close(loss_td["loss_act"], expected)
 
-    def test_zero_kl_weight(self):
-        """With kl_weight=0, loss_act equals loss_reconstruction exactly."""
-        actor = _make_actor()
-        loss_fn = ACTLoss(actor, kl_weight=0.0)
-        td = _make_batch()
-        loss_td = loss_fn(td)
-        torch.testing.assert_close(loss_td["loss_act"], loss_td["loss_reconstruction"])
+        expected_reconstruction = torch.tensor([1.75, 1.5])
+        expected_kl = torch.tensor([2.0 - math.log(4.0) / 2, 2.0])
+        if reduction == "mean":
+            expected_reconstruction = expected_reconstruction.mean()
+            expected_kl = expected_kl.mean()
+        elif reduction == "sum":
+            expected_reconstruction = expected_reconstruction.sum()
+            expected_kl = expected_kl.sum()
+        expected_loss = expected_reconstruction + kl_weight * expected_kl
+
+        torch.testing.assert_close(
+            loss_td["loss_reconstruction"], expected_reconstruction
+        )
+        torch.testing.assert_close(loss_td["loss_kl"], expected_kl)
+        torch.testing.assert_close(loss_td["loss_act"], expected_loss)
 
     def test_reconstruction_and_kl_detached(self):
         """loss_reconstruction and loss_kl must not retain grad."""
@@ -249,15 +284,6 @@ class TestACTLoss:
         loss_td = loss_fn(td)
         assert not loss_td["loss_reconstruction"].requires_grad
         assert not loss_td["loss_kl"].requires_grad
-
-    @pytest.mark.parametrize("reduction", ["mean", "sum"])
-    def test_reduction(self, reduction):
-        actor = _make_actor()
-        loss_fn = ACTLoss(actor, reduction=reduction)
-        td = _make_batch()
-        loss_td = loss_fn(td)
-        assert loss_td["loss_act"].shape == torch.Size([])
-        assert loss_td["loss_act"].isfinite()
 
     def test_in_keys(self):
         actor = _make_actor()
