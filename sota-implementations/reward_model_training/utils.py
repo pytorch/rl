@@ -34,7 +34,7 @@ _TOKENIZE_CHUNK_SIZE = 1024
 class _RewardModel(nn.Module):
     """Maps ``(input_ids, attention_mask)`` to a single scalar score per sequence."""
 
-    def __init__(self, hf_model: nn.Module) -> None:
+    def __init__(self, hf_model: nn.Module):
         super().__init__()
         self.model = hf_model
 

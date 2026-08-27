@@ -227,7 +227,7 @@ class RewardModelLoss(LossModule):
         *,
         reduction: Literal["mean", "sum", "none"] = "mean",
         center_coeff: float | None = None,
-    ) -> None:
+    ):
         _validate_reduction(reduction)
         super().__init__()
         self.score_network = score_network
