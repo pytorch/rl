@@ -594,6 +594,33 @@ class TestDreamerV3Components:
         ):
             grad.sum().backward()
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_public_block_gru_scan_mixed_dtype_promotes(self):
+        torch.manual_seed(0)
+        kwargs = {
+            "input_size": 6,
+            "hidden_size": 8,
+            "projection_size": 4,
+            "num_blocks": 2,
+        }
+        reference = DreamerV3BlockGRU(**kwargs)
+        scan_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(reference.state_dict())
+        value = torch.randn(2, 5, 6, dtype=torch.bfloat16)
+        hidden = torch.randn(2, 8)
+        is_init = torch.zeros(2, 5, dtype=torch.bool)
+        is_init[1, 2] = True
+        expected_output, expected_hidden = reference(value, hidden, is_init)
+        output, final_hidden = scan_module(value, hidden, is_init)
+        assert output.dtype == expected_output.dtype
+        assert final_hidden.dtype == expected_hidden.dtype
+        torch.testing.assert_close(output, expected_output, atol=2e-5, rtol=2e-5)
+        torch.testing.assert_close(final_hidden, expected_hidden, atol=2e-5, rtol=2e-5)
+
     @pytest.mark.parametrize("device", get_default_devices())
     def test_block_gru_action_normalization_and_gradients(self, device):
         prior = RSSMPriorV3(
