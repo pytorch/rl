@@ -25,6 +25,7 @@ Examples:
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Literal
 
@@ -70,6 +71,11 @@ def _save_export(
     """
     export_name = f"export-{step:08d}" if isinstance(step, int) else "export-final"
     export_dir = Path(save_dir) / export_name
+    # save_pretrained does not clean an existing directory, and hydra 1.3 does not
+    # chdir per run, so a previous run's files (e.g. another backbone's tokenizer)
+    # would otherwise mix with the new export and break from_pretrained loading.
+    if export_dir.exists():
+        shutil.rmtree(export_dir)
     score_network.module.model.save_pretrained(export_dir)
     if tokenizer is not None:
         tokenizer.save_pretrained(export_dir)
