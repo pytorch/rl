@@ -50,6 +50,12 @@ def reward_model_loss(
           Designs: I. The Method of Paired Comparisons".
     """
     _validate_reduction(reduction)
+    if chosen_scores.shape != rejected_scores.shape:
+        raise ValueError(
+            f"chosen_scores and rejected_scores must have the same shape, got "
+            f"{chosen_scores.shape} vs {rejected_scores.shape}. Mismatched shapes "
+            f"(e.g. [B] vs [B, 1]) would broadcast to an all-pairs loss."
+        )
     loss = -torch.nn.functional.logsigmoid(chosen_scores - rejected_scores)
     if reduction == "mean":
         return loss.mean()
@@ -268,11 +274,6 @@ class RewardModelLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> RewardModelLossOutput:
         chosen_score = self._score(tensordict, self.tensor_keys.chosen)
         rejected_score = self._score(tensordict, self.tensor_keys.rejected)
-        if chosen_score.shape != rejected_score.shape:
-            raise ValueError(
-                f"Chosen and rejected scores have different shapes: "
-                f"{chosen_score.shape=} vs {rejected_score.shape=}."
-            )
 
         loss = reward_model_loss(chosen_score, rejected_score, self.reduction)
 
