@@ -899,6 +899,13 @@ def test_public_block_gru_triton_errors():
         )
         with pytest.raises(RuntimeError, match="requires CUDA tensors"):
             module(torch.randn(2, 3, 6))
+        with pytest.raises(
+            ValueError, match="supports torch.float32 and torch.bfloat16"
+        ):
+            module(
+                torch.randn(2, 3, 6, dtype=torch.float64),
+                torch.zeros(2, 8, dtype=torch.float64),
+            )
 
 
 @pytest.mark.gpu
@@ -907,21 +914,31 @@ def test_public_block_gru_triton_errors():
     reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
 )
 @pytest.mark.parametrize(
-    ("activation_class", "num_blocks", "num_layers", "batch", "time", "dtype"),
+    (
+        "activation_class",
+        "num_blocks",
+        "num_layers",
+        "batch",
+        "time",
+        "dtype",
+        "projection_size",
+    ),
     [
-        (torch.nn.SiLU, 1, 1, 1, 1, torch.float32),
-        (torch.nn.Tanh, 8, 2, 2, 3, torch.float32),
-        (torch.nn.ReLU, 8, 1, 3, 2, torch.bfloat16),
+        (torch.nn.SiLU, 1, 1, 1, 1, torch.float32, 32),
+        (torch.nn.Tanh, 8, 2, 2, 3, torch.float32, 24),
+        (torch.nn.ReLU, 8, 1, 3, 2, torch.bfloat16, 32),
+        (torch.nn.SiLU, 8, 2, 2, 3, torch.bfloat16, 24),
+        (torch.nn.SiLU, 4, 1, 2, 3, torch.float32, 48),
     ],
 )
 def test_public_block_gru_triton_gradient_parity(
-    activation_class, num_blocks, num_layers, batch, time, dtype
+    activation_class, num_blocks, num_layers, batch, time, dtype, projection_size
 ):
     torch.manual_seed(0)
     kwargs = {
         "input_size": 12,
         "hidden_size": 32,
-        "projection_size": 32,
+        "projection_size": projection_size,
         "num_blocks": num_blocks,
         "num_layers": num_layers,
         "activation_class": activation_class,
@@ -1023,6 +1040,34 @@ def test_public_block_gru_triton_compile_recurrent_loss():
         torch.testing.assert_close(
             parameter.grad, expected_parameter.grad, atol=3e-4, rtol=3e-4
         )
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+def test_public_block_gru_triton_mixed_dtype_promotes():
+    torch.manual_seed(2)
+    kwargs = {
+        "input_size": 8,
+        "hidden_size": 16,
+        "projection_size": 12,
+        "num_blocks": 2,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    triton_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    triton_module.load_state_dict(reference.state_dict())
+    value = torch.randn(2, 3, 8, device="cuda", dtype=torch.bfloat16)
+    hidden = torch.randn(2, 16, device="cuda")
+    is_init = torch.zeros(2, 3, dtype=torch.bool, device="cuda")
+    expected_output, expected_hidden = reference(value, hidden, is_init)
+    output, final_hidden = triton_module(value, hidden, is_init)
+    assert output.dtype == expected_output.dtype
+    assert final_hidden.dtype == expected_hidden.dtype
+    torch.testing.assert_close(output, expected_output, atol=3e-4, rtol=3e-4)
+    torch.testing.assert_close(final_hidden, expected_hidden, atol=3e-4, rtol=3e-4)
 
 
 if __name__ == "__main__":

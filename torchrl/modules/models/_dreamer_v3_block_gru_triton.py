@@ -11,24 +11,17 @@ PyTorch contractions.
 """
 from __future__ import annotations
 
-import importlib.metadata
-
 import torch
-from packaging import version
 from torch import nn
+from torch.autograd.function import once_differentiable
 from torch.nn import functional as F
 
+from torchrl._utils import _triton_version_at_least
 
-def _check_triton_available() -> bool:
-    try:
-        triton_version = importlib.metadata.version("triton")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    # Batched tl.dot is used for the independent block contractions.
-    return version.parse(triton_version) >= version.parse("3.3")
+# Batched tl.dot is used for the independent block contractions.
+_TRITON_MIN_VERSION = "3.3"
 
-
-_has_triton = _check_triton_available()
+_has_triton = _triton_version_at_least(_TRITON_MIN_VERSION)
 
 
 def _activation_code(activation: nn.Module) -> int:
@@ -108,7 +101,6 @@ if _has_triton:
     @triton.autotune(
         configs=_CONFIGS,
         key=[
-            "B",
             "T",
             "H",
             "P",
@@ -469,7 +461,6 @@ if _has_triton:
     @triton.autotune(
         configs=_CONFIGS,
         key=[
-            "B",
             "T",
             "H",
             "P",
@@ -917,7 +908,7 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
         hidden_weight_p = _pad_matrix(
             hidden_weight.to(compute_dtype).t().contiguous(), h_pad, p_pad
         ).contiguous()
-        hidden_weight_t_p = hidden_weight_p.t().contiguous()
+        hidden_weight_t_p = hidden_weight_p.t().contiguous() if save_state else None
         hidden_bias_p = F.pad(
             hidden_bias.to(compute_dtype), (0, p_pad - projected_size)
         )
@@ -932,7 +923,9 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             first_recurrent,
             (0, d_pad - block_size, 0, k_rec_pad - first_recurrent.shape[1]),
         ).contiguous()
-        first_recurrent_t_p = first_recurrent_p.transpose(1, 2).contiguous()
+        first_recurrent_t_p = (
+            first_recurrent_p.transpose(1, 2).contiguous() if save_state else None
+        )
         projected_contribution = torch.bmm(
             projected_input.flatten(0, 1).unsqueeze(0).expand(num_blocks, -1, -1),
             first_input,
@@ -944,24 +937,20 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             .contiguous()
         )
 
-        later = []
-        later_t = []
-        for weight, _, _ in dynamic[1:]:
-            weight_p = F.pad(
+        later = [
+            F.pad(
                 weight.to(compute_dtype),
                 (0, d_pad - block_size, 0, d_pad - block_size),
             )
-            later.append(weight_p)
-            later_t.append(weight_p.transpose(1, 2))
+            for weight, _, _ in dynamic[1:]
+        ]
         later_weight_p = (
             torch.stack(later).contiguous()
             if later
             else projected_input.new_empty((0, num_blocks, d_pad, d_pad))
         )
         later_weight_t_p = (
-            torch.stack(later_t).contiguous()
-            if later_t
-            else projected_input.new_empty((0, num_blocks, d_pad, d_pad))
+            later_weight_p.transpose(-1, -2).contiguous() if save_state else None
         )
         dynamic_bias_p = torch.stack(
             [
@@ -981,22 +970,14 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             ] = gate_weight.to(compute_dtype)[
                 :, :, gate * block_size : (gate + 1) * block_size
             ]
-        gate_weight_t_p = gate_weight_p.transpose(1, 2).contiguous()
+        gate_weight_t_p = (
+            gate_weight_p.transpose(1, 2).contiguous() if save_state else None
+        )
 
         outputs = torch.empty(
             batch, time, hidden_size, device=projected_input.device, dtype=compute_dtype
         )
         final_hidden = torch.empty_like(initial_hidden)
-        hidden_normalized = torch.empty(
-            batch,
-            time,
-            projected_size,
-            device=projected_input.device,
-            dtype=compute_dtype,
-        )
-        hidden_inv_rms = torch.empty(
-            batch, time, device=projected_input.device, dtype=torch.float32
-        )
         hidden_value = torch.empty(
             batch, projected_size, device=projected_input.device, dtype=compute_dtype
         )
@@ -1008,85 +989,112 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
             device=projected_input.device,
             dtype=compute_dtype,
         )
-        dynamic_inv_rms = torch.empty(
-            num_layers, batch, time, device=projected_input.device, dtype=torch.float32
-        )
-        gate_state = torch.empty(
-            batch,
-            time,
-            4 * hidden_size,
-            device=projected_input.device,
-            dtype=compute_dtype,
-        )
+        if save_state:
+            hidden_normalized = torch.empty(
+                batch,
+                time,
+                projected_size,
+                device=projected_input.device,
+                dtype=compute_dtype,
+            )
+            hidden_inv_rms = torch.empty(
+                batch, time, device=projected_input.device, dtype=torch.float32
+            )
+            dynamic_inv_rms = torch.empty(
+                num_layers,
+                batch,
+                time,
+                device=projected_input.device,
+                dtype=torch.float32,
+            )
+            gate_state = torch.empty(
+                batch,
+                time,
+                4 * hidden_size,
+                device=projected_input.device,
+                dtype=compute_dtype,
+            )
+        else:
+            # SAVE_STATE=False compiles the stores away; the kernel only needs
+            # valid pointers of the right dtype.
+            hidden_normalized = projected_input.new_empty(1)
+            hidden_inv_rms = torch.empty(
+                1, device=projected_input.device, dtype=torch.float32
+            )
+            dynamic_inv_rms = hidden_inv_rms
+            gate_state = hidden_normalized
 
         def grid(meta):
             return (triton.cdiv(batch, meta["BLOCK_B"]),)
 
-        _block_gru_fwd_kernel[grid](
-            projected_contribution,
-            initial_hidden,
-            is_init,
-            hidden_weight_p,
-            hidden_bias_p,
-            hidden_norm_p,
-            hidden_value,
-            first_recurrent_p,
-            later_weight_p,
-            dynamic_bias_p,
-            dynamic_norm_p,
-            gate_weight_p,
-            gate_bias.to(compute_dtype).contiguous(),
-            outputs,
-            final_hidden,
-            hidden_normalized,
-            hidden_inv_rms,
-            dynamic_normalized,
-            dynamic_inv_rms,
-            gate_state,
-            batch,
-            time,
-            H=hidden_size,
-            P=projected_size,
-            H_PAD=h_pad,
-            P_PAD=p_pad,
-            D=block_size,
-            D_PAD=d_pad,
-            G_PAD=g_pad,
-            K_REC_PAD=k_rec_pad,
-            NUM_BLOCKS=num_blocks,
-            NUM_LAYERS=num_layers,
-            NORM_EPS=norm_eps,
-            UPDATE_BIAS=update_bias,
-            ACTIVATION=activation_code,
-            COMPUTE_BF16=compute_dtype is torch.bfloat16,
-            SAVE_STATE=save_state,
-        )
+        with torch.cuda.device(projected_input.device):
+            _block_gru_fwd_kernel[grid](
+                projected_contribution,
+                initial_hidden,
+                is_init,
+                hidden_weight_p,
+                hidden_bias_p,
+                hidden_norm_p,
+                hidden_value,
+                first_recurrent_p,
+                later_weight_p,
+                dynamic_bias_p,
+                dynamic_norm_p,
+                gate_weight_p,
+                gate_bias.to(compute_dtype).contiguous(),
+                outputs,
+                final_hidden,
+                hidden_normalized,
+                hidden_inv_rms,
+                dynamic_normalized,
+                dynamic_inv_rms,
+                gate_state,
+                batch,
+                time,
+                H=hidden_size,
+                P=projected_size,
+                H_PAD=h_pad,
+                P_PAD=p_pad,
+                D=block_size,
+                D_PAD=d_pad,
+                G_PAD=g_pad,
+                K_REC_PAD=k_rec_pad,
+                NUM_BLOCKS=num_blocks,
+                NUM_LAYERS=num_layers,
+                NORM_EPS=norm_eps,
+                UPDATE_BIAS=update_bias,
+                ACTIVATION=activation_code,
+                COMPUTE_BF16=compute_dtype is torch.bfloat16,
+                SAVE_STATE=save_state,
+            )
         ctx.activation_code = activation_code
         ctx.num_blocks = num_blocks
         ctx.num_layers = num_layers
         ctx.padding = (h_pad, p_pad, d_pad, g_pad, k_rec_pad)
-        ctx.save_for_backward(
-            projected_input,
-            initial_hidden,
-            is_init,
-            hidden_weight,
-            hidden_norm_weight,
-            *tensors,
-            outputs,
-            hidden_normalized,
-            hidden_inv_rms,
-            dynamic_normalized,
-            dynamic_inv_rms,
-            gate_state,
-            hidden_weight_t_p,
-            first_recurrent_t_p,
-            later_weight_t_p,
-            dynamic_norm_p,
-            gate_weight_t_p,
-        )
+        if save_state:
+            ctx.save_for_backward(
+                projected_input,
+                initial_hidden,
+                is_init,
+                hidden_weight,
+                hidden_norm_weight,
+                *tensors,
+                outputs,
+                hidden_normalized,
+                hidden_inv_rms,
+                dynamic_normalized,
+                dynamic_inv_rms,
+                gate_state,
+                hidden_weight_t_p,
+                first_recurrent_t_p,
+                later_weight_t_p,
+                dynamic_norm_p,
+                gate_weight_t_p,
+            )
         return outputs, final_hidden
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, grad_outputs, grad_final_hidden):
         saved = ctx.saved_tensors
         num_layers = ctx.num_layers
@@ -1147,45 +1155,46 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
         def grid(meta):
             return (triton.cdiv(batch, meta["BLOCK_B"]),)
 
-        _block_gru_bwd_kernel[grid](
-            initial_hidden,
-            is_init,
-            outputs,
-            hidden_weight_t_p,
-            hidden_norm_p,
-            first_recurrent_t_p,
-            later_weight_t_p,
-            dynamic_norm_p,
-            gate_weight_t_p,
-            hidden_normalized,
-            hidden_inv_rms,
-            dynamic_normalized,
-            dynamic_inv_rms,
-            gate_state,
-            grad_outputs,
-            grad_final_hidden,
-            grad_initial,
-            grad_hidden_pre,
-            grad_hidden_norm_contrib,
-            grad_dynamic_pre,
-            grad_dynamic_norm_contrib,
-            grad_gate,
-            grad_layer,
-            batch,
-            time,
-            H=hidden_size,
-            P=projected_size,
-            H_PAD=h_pad,
-            P_PAD=p_pad,
-            D=block_size,
-            D_PAD=d_pad,
-            G_PAD=g_pad,
-            K_REC_PAD=k_rec_pad,
-            NUM_BLOCKS=ctx.num_blocks,
-            NUM_LAYERS=num_layers,
-            ACTIVATION=ctx.activation_code,
-            COMPUTE_BF16=outputs.dtype is torch.bfloat16,
-        )
+        with torch.cuda.device(outputs.device):
+            _block_gru_bwd_kernel[grid](
+                initial_hidden,
+                is_init,
+                outputs,
+                hidden_weight_t_p,
+                hidden_norm_p,
+                first_recurrent_t_p,
+                later_weight_t_p,
+                dynamic_norm_p,
+                gate_weight_t_p,
+                hidden_normalized,
+                hidden_inv_rms,
+                dynamic_normalized,
+                dynamic_inv_rms,
+                gate_state,
+                grad_outputs,
+                grad_final_hidden,
+                grad_initial,
+                grad_hidden_pre,
+                grad_hidden_norm_contrib,
+                grad_dynamic_pre,
+                grad_dynamic_norm_contrib,
+                grad_gate,
+                grad_layer,
+                batch,
+                time,
+                H=hidden_size,
+                P=projected_size,
+                H_PAD=h_pad,
+                P_PAD=p_pad,
+                D=block_size,
+                D_PAD=d_pad,
+                G_PAD=g_pad,
+                K_REC_PAD=k_rec_pad,
+                NUM_BLOCKS=ctx.num_blocks,
+                NUM_LAYERS=num_layers,
+                ACTIVATION=ctx.activation_code,
+                COMPUTE_BF16=outputs.dtype is torch.bfloat16,
+            )
 
         previous = torch.cat((initial_hidden.unsqueeze(1), outputs[:, :-1]), 1)
         previous = torch.where(is_init.unsqueeze(-1), 0, previous)
@@ -1274,9 +1283,29 @@ def dreamer_v3_block_gru_triton(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Run the CUDA-only fused DreamerV3 block-GRU recurrence."""
     if not _has_triton:
-        raise RuntimeError("recurrent_backend='triton' requires Triton 3.3 or newer.")
+        raise RuntimeError(
+            f"recurrent_backend='triton' requires Triton {_TRITON_MIN_VERSION} "
+            "or newer."
+        )
+    # Mixed input/hidden dtypes are promoted like the reference backend.
+    compute_dtype = torch.promote_types(projected_input.dtype, initial_hidden.dtype)
+    if compute_dtype not in (torch.float32, torch.bfloat16):
+        raise ValueError(
+            "recurrent_backend='triton' supports torch.float32 and torch.bfloat16 "
+            f"inputs, got input dtype {projected_input.dtype} and hidden dtype "
+            f"{initial_hidden.dtype}."
+        )
     if not projected_input.is_cuda:
         raise RuntimeError("recurrent_backend='triton' requires CUDA tensors.")
+    if (
+        initial_hidden.device != projected_input.device
+        or is_init.device != projected_input.device
+    ):
+        raise RuntimeError(
+            "recurrent_backend='triton' requires the input, hidden state, and "
+            f"is_init on the same CUDA device, got {projected_input.device}, "
+            f"{initial_hidden.device}, and {is_init.device}."
+        )
     activation_code = _activation_code(activation)
     save_state = torch.is_grad_enabled() and any(
         tensor.requires_grad
@@ -1292,8 +1321,8 @@ def dreamer_v3_block_gru_triton(
         )
     )
     return _DreamerV3BlockGRUTritonFunction.apply(
-        projected_input.contiguous(),
-        initial_hidden.contiguous(),
+        projected_input.to(compute_dtype).contiguous(),
+        initial_hidden.to(compute_dtype).contiguous(),
         is_init.contiguous(),
         hidden_weight,
         hidden_bias,

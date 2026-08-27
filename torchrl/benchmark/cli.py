@@ -30,12 +30,12 @@ Representative DreamerV3 performance gate::
         --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
         --dtype bfloat16 --compile-modes default,reduce-overhead,max-autotune
 
-The block-GRU grid compares its reference and specialized scan backends across
-batch size, horizon, hidden width, and block count. Timings are CUDA-synchronized
-means with 95% confidence intervals. ``--compile-modes`` optionally compares
-uncompiled execution with the default, reduce-overhead, and max-autotune
-``torch.compile`` modes using full graphs and static shapes. The script is a
-no-op on CPU/MPS.
+The block-GRU grid compares its reference, specialized scan, and fused Triton
+backends across batch size, horizon, hidden width, and block count. Timings are
+CUDA-synchronized means with 95% confidence intervals. ``--compile-modes``
+optionally compares uncompiled execution with the default, reduce-overhead, and
+max-autotune ``torch.compile`` modes using full graphs and static shapes. The
+command is a no-op on CPU/MPS.
 """
 from __future__ import annotations
 
@@ -91,22 +91,23 @@ def _build_module(
         "recurrent_backend": recurrent_backend,
         "default_recurrent_mode": True,
         "device": device,
-        "dtype": dtype,
     }
     # The cuDNN ("pad") backend rejects a non-"none" recompute value.
     if recurrent_backend != "pad":
         kwargs["recurrent_recompute"] = recompute
     if rnn_type == "lstm":
-        return LSTMModule(
+        module = LSTMModule(
             in_keys=["obs", "hidden0", "hidden1"],
             out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
             **kwargs,
         )
-    return GRUModule(
-        in_keys=["obs", "hidden"],
-        out_keys=["feat", ("next", "hidden")],
-        **kwargs,
-    )
+    else:
+        module = GRUModule(
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            **kwargs,
+        )
+    return module.to(dtype)
 
 
 def _build_inputs(
@@ -291,10 +292,8 @@ def _parse_int_list(s: str) -> list[int]:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="torchrl-benchmark-rnn",
-        description=(
-            "Benchmark recurrent backends on the current CUDA device with "
-            "synchronized timings, peak memory, and 95% confidence intervals."
-        ),
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--rnn", choices=["lstm", "gru", "block_gru"], default="gru")
     parser.add_argument(
@@ -323,19 +322,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    device = torch.device(args.device)
-    if device.type != "cuda":
-        sys.stdout.write(
-            "[torchrl-benchmark-rnn] CUDA required for timing/memory. Skipping.\n"
-        )
-        return
-
     backend_arg = args.backends
     if backend_arg is None:
         backend_arg = (
             "reference,scan,triton" if args.rnn == "block_gru" else "cudnn,scan,triton"
         )
     backends = [b.strip() for b in backend_arg.split(",") if b.strip()]
+    invalid_backends = set(backends) - set(_BACKENDS)
+    if invalid_backends:
+        parser.error(
+            "--backends contains invalid values: "
+            + ", ".join(sorted(invalid_backends))
+            + ". Valid values: "
+            + ",".join(_BACKENDS)
+        )
     compile_modes = [
         mode.strip() for mode in args.compile_modes.split(",") if mode.strip()
     ]
@@ -346,6 +346,20 @@ def main() -> None:
             "--compile-modes contains invalid values: "
             + ", ".join(sorted(invalid_compile_modes))
         )
+    if args.rnn == "block_gru" and args.recompute == "full":
+        parser.error("--recompute full is not supported for --rnn block_gru.")
+
+    device = torch.device(args.device)
+    if device.type != "cuda":
+        sys.stdout.write(
+            "[torchrl-benchmark-rnn] CUDA required for timing/memory. Skipping.\n"
+        )
+        return
+    if device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
+    # Timing events and kernel launches must target the benchmarked device.
+    torch.cuda.set_device(device)
+
     dtype = torch.float32 if args.dtype == "float32" else torch.bfloat16
     if args.recompute == "full":
         backends = [b for b in backends if b != "cudnn"]

@@ -26,19 +26,17 @@ from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 from torch.autograd.function import once_differentiable
 from torch.nn import functional as F, GRUCell
-from torchrl._utils import implement_for
+from torchrl._utils import _triton_version_at_least, implement_for
 from torchrl.modules.functional import symexp, symlog  # noqa: F401
-from torchrl.modules.models._dreamer_v3_block_gru_triton import (
-    _activation_code as _dreamer_v3_triton_activation_code,
-    _has_triton as _has_dreamer_v3_triton,
-    dreamer_v3_block_gru_triton,
-)
 from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.rnn import (
     _maybe_warm_scan_backward,
     _scan as _higher_order_scan,
 )
 
+# The heavy ``_dreamer_v3_block_gru_triton`` module imports triton at import
+# time, so it is only imported lazily where the "triton" backend is requested.
+_has_dreamer_v3_triton = _triton_version_at_least("3.3")
 
 _DEFAULT_NUM_BINS = 255
 _DEFAULT_BIN_RANGE = 20.0
@@ -940,7 +938,11 @@ class DreamerV3BlockGRU(nn.Module):
         update_bias (float, optional): Fixed update-gate logit offset. Defaults
             to ``-1.0``.
         recurrent_backend ("reference", "scan", or "triton", optional):
-            Sequence backend. Defaults to ``"reference"``.
+            Sequence backend. Defaults to ``"reference"``. The ``"triton"``
+            backend only supports :class:`~torch.nn.SiLU`,
+            :class:`~torch.nn.Tanh`, and :class:`~torch.nn.ReLU` activations
+            and ``torch.float32`` / ``torch.bfloat16`` inputs (mixed input and
+            hidden dtypes are promoted like the reference backend).
         device (torch.device, optional): Parameter device. Defaults to None.
 
     Examples:
@@ -991,7 +993,12 @@ class DreamerV3BlockGRU(nn.Module):
                 raise RuntimeError(
                     "recurrent_backend='triton' requires Triton 3.3 or newer."
                 )
-            _dreamer_v3_triton_activation_code(self.cell.activation)
+            from torchrl.modules.models._dreamer_v3_block_gru_triton import (
+                _activation_code,
+            )
+
+            # Validates eagerly so unsupported activations fail at construction.
+            _activation_code(self.cell.activation)
 
     def _reference(
         self,
@@ -1043,6 +1050,10 @@ class DreamerV3BlockGRU(nn.Module):
         hidden: torch.Tensor,
         is_init: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        from torchrl.modules.models._dreamer_v3_block_gru_triton import (
+            dreamer_v3_block_gru_triton,
+        )
+
         parameters = []
         for linear, norm in zip(self.cell.dynamic_linears, self.cell.dynamic_norms):
             parameters.extend((linear.weight, linear.bias, norm.weight))

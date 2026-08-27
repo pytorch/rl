@@ -117,7 +117,9 @@ mixed episode resets. The sequence module uses an ordinary-autograd reference
 loop by default and offers an opt-in compiled scan backend for long training
 sequences. On CUDA, the explicit ``"triton"`` backend supports SiLU, Tanh, and
 ReLU dynamics and fuses the complete forward and reverse-time recurrences. It
-requires Triton 3.3 or newer and never silently falls back to another backend.
+runs in ``float32`` or ``bfloat16`` (mixed input and hidden dtypes are promoted
+like the reference backend; other dtypes raise an error), requires Triton 3.3
+or newer, and never silently falls back to another backend.
 
 Selecting and benchmarking the sequence backend
 ------------------------------------------------
