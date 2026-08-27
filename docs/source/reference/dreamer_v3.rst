@@ -119,6 +119,41 @@ sequences. On CUDA, the explicit ``"triton"`` backend supports SiLU, Tanh, and
 ReLU dynamics and fuses the complete forward and reverse-time recurrences. It
 requires Triton 3.3 or newer and never silently falls back to another backend.
 
+Selecting and benchmarking the sequence backend
+------------------------------------------------
+
+The sequence backend is selected directly on the high-level module:
+
+.. code-block:: python
+
+    from torchrl.modules import DreamerV3BlockGRU
+
+    gru = DreamerV3BlockGRU(
+        input_size=512,
+        hidden_size=512,
+        recurrent_backend="triton",
+    ).cuda()
+
+The reference backend remains the portable default. Select ``"scan"`` or
+``"triton"`` explicitly so missing dependencies or unsupported devices are
+reported instead of silently changing execution.
+
+Installed TorchRL packages also provide ``torchrl-benchmark-rnn``. The
+following command compares the optimized DreamerV3 sequence backends on the
+current CUDA device using synchronized forward and backward timings, peak
+memory, and 95% confidence intervals:
+
+.. code-block:: bash
+
+    torchrl-benchmark-rnn --rnn block_gru \
+        --backends scan,triton --batches 16 --seq-lens 64,512 \
+        --hiddens 512 --input-size 512 --projection-size 512 --blocks 8 \
+        --dtype bfloat16 --warmup 10 --iters 30
+
+Use the batch size, sequence length, widths, block count, dtype, and compile
+modes from the intended workload: backend performance is hardware- and
+shape-dependent.
+
 The three objectives
 --------------------
 
