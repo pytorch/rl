@@ -462,6 +462,116 @@ class TestSamplers:
 
         assert len(trajs_unique_id) == 4
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_slice_sampler_fragmented_interleaved_nested_keys(self, device):
+        records = [
+            (trajectory, step)
+            for step in range(6)
+            for trajectory in range(2)
+        ]
+        trajectory = torch.tensor(
+            [trajectory for trajectory, _ in records], device=device
+        )
+        step = torch.tensor([step for _, step in records], device=device)
+        data = TensorDict(
+            {
+                "metadata": TensorDict(
+                    {"trajectory": trajectory, "step": step},
+                    batch_size=[len(records)],
+                ),
+                "observation": trajectory * 100 + step,
+            },
+            batch_size=[len(records)],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(20, device=device),
+            sampler=SliceSampler(
+                slice_len=3,
+                traj_key=("metadata", "trajectory"),
+                step_key=("metadata", "step"),
+                fragmented=True,
+            ),
+            batch_size=96,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        rb.extend(data)
+
+        sample = rb.sample().reshape(32, 3)
+        sampled_trajectory = sample["metadata", "trajectory"]
+        sampled_step = sample["metadata", "step"]
+        storage_index = sample["index"].squeeze(-1)
+        assert (sampled_trajectory == sampled_trajectory[:, :1]).all()
+        assert (sampled_step[:, 1:] == sampled_step[:, :-1] + 1).all()
+        assert (storage_index[:, 1:] != storage_index[:, :-1] + 1).all()
+
+    def test_slice_sampler_fragmented_incremental_wraparound(self, monkeypatch):
+        trajectory = torch.arange(2).repeat(3)
+        step = torch.arange(3).repeat_interleave(2)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(6),
+            sampler=SliceSampler(
+                slice_len=3,
+                traj_key="trajectory",
+                step_key="step",
+                fragmented=True,
+            ),
+            batch_size=48,
+        )
+        rb.extend(
+            TensorDict(
+                {"trajectory": trajectory, "step": step},
+                batch_size=[6],
+            )
+        )
+        rb.sample()
+
+        def rebuild_is_forbidden(*args, **kwargs):
+            raise AssertionError("tracked writes must update the index incrementally")
+
+        monkeypatch.setattr(
+            rb.sampler._fragmented_index, "_full_rebuild", rebuild_is_forbidden
+        )
+        for trajectory_id in range(2):
+            rb.add(
+                TensorDict(
+                    {
+                        "trajectory": torch.tensor(trajectory_id),
+                        "step": torch.tensor(3),
+                    },
+                    batch_size=[],
+                )
+            )
+
+        sample = rb.sample().reshape(16, 3)
+        assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
+        assert torch.equal(
+            sample["step"], torch.tensor([1, 2, 3]).expand(16, 3)
+        )
+
+    def test_slice_sampler_fragmented_missing_step_splits_run(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4),
+            sampler=SliceSampler(
+                slice_len=2,
+                traj_key="trajectory",
+                step_key="step",
+                fragmented=True,
+            ),
+            batch_size=16,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "trajectory": torch.zeros(3, dtype=torch.long),
+                    "step": torch.tensor([0, 2, 3]),
+                },
+                batch_size=[3],
+            )
+        )
+
+        sample = rb.sample().reshape(8, 2)
+        assert torch.equal(sample["step"], torch.tensor([2, 3]).expand(8, 2))
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)

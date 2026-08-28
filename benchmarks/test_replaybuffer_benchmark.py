@@ -164,6 +164,37 @@ def test_slice_sampler_boundary_query_benchmark(
     benchmark(sampler._get_stop_and_length, rb.storage)
 
 
+@pytest.mark.parametrize("size", [1_000, 100_000])
+def test_fragmented_slice_sampler_cached_sample(benchmark, size):
+    device = _replay_boundary_device()
+    num_trajectories = 8
+    storage_order = torch.arange(size, device=device)
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size, device=device),
+        sampler=SliceSampler(
+            slice_len=8,
+            traj_key="trajectory",
+            step_key="step",
+            fragmented=True,
+        ),
+        batch_size=256,
+        generator=torch.Generator(device=device).manual_seed(0),
+    )
+    rb.extend(
+        TensorDict(
+            {
+                "trajectory": storage_order % num_trajectories,
+                "step": storage_order // num_trajectories,
+            },
+            [size],
+            device=device,
+        )
+    )
+    rb.sample()
+
+    benchmark(rb.sample)
+
+
 @pytest.mark.parametrize("compiled", [False, True])
 def test_replay_boundary_kernel_benchmark(benchmark, compiled):
     device = _replay_boundary_device()
