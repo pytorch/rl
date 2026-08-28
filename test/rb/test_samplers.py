@@ -688,6 +688,49 @@ class TestSamplers:
         assert (sample["step"][:, 1:] == sample["step"][:, :-1] + 1).all()
         assert (sample["trajectory"] == 1).any()
 
+    def test_slice_sampler_fragmented_deterministic_after_rebuild(self):
+        # For a given RNG state and identical buffer contents, samples must
+        # not depend on whether the index was maintained incrementally or
+        # rebuilt from scratch (e.g. after restoring a checkpoint).
+        generator = torch.Generator().manual_seed(0)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4),
+            sampler=SliceSampler(
+                slice_len=1,
+                traj_key="trajectory",
+                step_key="step",
+                fragmented=True,
+            ),
+            batch_size=8,
+            generator=generator,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "trajectory": torch.tensor([1, 1, 2, 2]),
+                    "step": torch.tensor([0, 1, 0, 1]),
+                },
+                batch_size=[4],
+            )
+        )
+        rb.sample()
+        # A wraparound write introduces a new trajectory through the
+        # incremental path.
+        rb.add(
+            TensorDict(
+                {"trajectory": torch.tensor(3), "step": torch.tensor(0)},
+                batch_size=[],
+            )
+        )
+
+        rng_state = generator.get_state()
+        incremental = rb.sample()
+        generator.set_state(rng_state)
+        rb.sampler.load_state_dict({})  # drops the index, forcing a rebuild
+        rebuilt = rb.sample()
+        assert torch.equal(incremental["index"], rebuilt["index"])
+        assert torch.equal(incremental["trajectory"], rebuilt["trajectory"])
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)

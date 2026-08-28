@@ -21,7 +21,10 @@ class _FragmentedTrajectoryIndex:
         self.trajectory_key = trajectory_key
         self.step_key = step_key
         self._trajectory_positions: dict[int, dict[int, int]] | None = None
-        self._slot_records: dict[int, tuple[int, int]] | None = None
+        # Per-slot record columns (CPU, long). A step of -1 marks a slot
+        # without a live record.
+        self._slot_traj: torch.Tensor | None = None
+        self._slot_step: torch.Tensor | None = None
         self._device: torch.device | None = None
         self._runs: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         self._pending_indices: list[torch.Tensor] = []
@@ -44,7 +47,7 @@ class _FragmentedTrajectoryIndex:
         trajectory: torch.Tensor | None,
         step: torch.Tensor | None,
         index: torch.Tensor,
-    ) -> tuple[list[int], list[int], list[int], torch.device]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.device]:
         expected = index.numel()
         for key, value in (
             (self.trajectory_key, trajectory),
@@ -79,11 +82,11 @@ class _FragmentedTrajectoryIndex:
             dim=-1,
         ).cpu()
         slots, trajectories, steps = metadata.unbind(-1)
-        return slots.tolist(), trajectories.tolist(), steps.tolist(), step.device
+        return slots, trajectories, steps, step.device
 
     def _read_records(
         self, storage: Storage, index: torch.Tensor
-    ) -> tuple[list[int], list[int], list[int], torch.device]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.device]:
         storage_device = self._storage_device(storage)
         if storage_device is not None and index.device != storage_device:
             index = index.to(storage_device)
@@ -118,7 +121,8 @@ class _FragmentedTrajectoryIndex:
 
     def clear(self) -> None:
         self._trajectory_positions = None
-        self._slot_records = None
+        self._slot_traj = None
+        self._slot_step = None
         self._device = None
         self._runs = None
         self._pending_indices.clear()
@@ -137,12 +141,9 @@ class _FragmentedTrajectoryIndex:
         index = torch.arange(storage_length, dtype=torch.long)
         slots, trajectories, steps, device = self._read_records(storage, index)
         trajectory_positions: dict[int, dict[int, int]] = defaultdict(dict)
-        # Keyed by slot: list storages default to an unbounded max_size, so
-        # bookkeeping cannot be sized by capacity.
-        slot_records: dict[int, tuple[int, int]] = {}
-        for position, trajectory, step in zip(slots, trajectories, steps):
-            trajectory = int(trajectory)
-            step = int(step)
+        for position, trajectory, step in zip(
+            slots.tolist(), trajectories.tolist(), steps.tolist()
+        ):
             if step < 0:
                 raise ValueError(
                     f"Step numbers must be non-negative, got {step} under "
@@ -156,9 +157,11 @@ class _FragmentedTrajectoryIndex:
                     "be unique in the live storage."
                 )
             positions[step] = position
-            slot_records[position] = (trajectory, step)
 
-        self._slot_records = slot_records
+        # The read index is arange(storage_length), so the metadata rows are
+        # already slot-aligned columns.
+        self._slot_traj = trajectories.clone()
+        self._slot_step = steps.clone()
         self._trajectory_positions = dict(trajectory_positions)
         self._device = device
         self._runs = None
@@ -193,7 +196,9 @@ class _FragmentedTrajectoryIndex:
         slots, trajectories, steps, _ = self._read_records(storage, index)
         records = {
             slot: (trajectory, step)
-            for slot, trajectory, step in zip(slots, trajectories, steps)
+            for slot, trajectory, step in zip(
+                slots.tolist(), trajectories.tolist(), steps.tolist()
+            )
             if 0 <= slot < storage_length
         }
         slots = list(records)
@@ -203,22 +208,32 @@ class _FragmentedTrajectoryIndex:
         trajectories, steps = zip(*records.values())
 
         try:
+            size = self._slot_step.numel()
+            max_slot = max(slots)
+            if max_slot >= size:
+                grow = max_slot + 1 - size
+                self._slot_traj = torch.cat(
+                    [self._slot_traj, self._slot_traj.new_zeros(grow)]
+                )
+                self._slot_step = torch.cat(
+                    [self._slot_step, self._slot_step.new_full((grow,), -1)]
+                )
+
             for slot in slots:
-                record = self._slot_records.pop(slot, None)
-                if record is None:
+                step = int(self._slot_step[slot])
+                if step < 0:
                     continue
-                trajectory, step = record
+                trajectory = int(self._slot_traj[slot])
                 positions = self._trajectory_positions[trajectory]
                 if positions.get(step) == slot:
                     del positions[step]
                 if not positions:
                     del self._trajectory_positions[trajectory]
+                self._slot_step[slot] = -1
 
             new_records = []
             seen = set()
             for slot, trajectory, step in zip(slots, trajectories, steps):
-                trajectory = int(trajectory)
-                step = int(step)
                 if step < 0:
                     raise ValueError(
                         f"Step numbers must be non-negative, got {step} under "
@@ -237,7 +252,8 @@ class _FragmentedTrajectoryIndex:
 
             for slot, trajectory, step in new_records:
                 self._trajectory_positions.setdefault(trajectory, {})[step] = slot
-                self._slot_records[slot] = (trajectory, step)
+                self._slot_traj[slot] = trajectory
+                self._slot_step[slot] = step
         except Exception:
             # The pending list is already consumed and the maps may be half
             # mutated; drop the index so the next refresh rebuilds instead of
@@ -298,32 +314,32 @@ class _FragmentedTrajectoryIndex:
         if self._runs is not None:
             return self._runs
 
-        ordered_slots = []
-        run_offsets = []
-        run_lengths = []
-        for positions in self._trajectory_positions.values():
-            sorted_steps = sorted(positions)
-            run_start = 0
-            for run_end, step in enumerate(sorted_steps):
-                if (
-                    run_end < len(sorted_steps) - 1
-                    and sorted_steps[run_end + 1] == step + 1
-                ):
-                    continue
-                slots = [
-                    positions[run_step]
-                    for run_step in sorted_steps[run_start : run_end + 1]
-                ]
-                run_offsets.append(len(ordered_slots))
-                run_lengths.append(len(slots))
-                ordered_slots.extend(slots)
-                run_start = run_end + 1
+        live = (self._slot_step >= 0).nonzero().squeeze(-1)
+        trajectory = self._slot_traj[live]
+        step = self._slot_step[live]
+        # Stable lexsort by (trajectory, step): the packing is then a pure
+        # function of the stored values, so samples drawn with a given RNG
+        # state do not depend on the write or rebuild history.
+        order = torch.argsort(step, stable=True)
+        order = order[torch.argsort(trajectory[order], stable=True)]
+        sorted_trajectory = trajectory[order]
+        sorted_step = step[order]
+        new_run = torch.ones_like(sorted_step, dtype=torch.bool)
+        if sorted_step.numel() > 1:
+            new_run[1:] = (sorted_trajectory[1:] != sorted_trajectory[:-1]) | (
+                sorted_step[1:] != sorted_step[:-1] + 1
+            )
+        run_offsets = new_run.nonzero().squeeze(-1)
+        boundaries = torch.cat(
+            [run_offsets, run_offsets.new_tensor([sorted_step.numel()])]
+        )
+        run_lengths = boundaries[1:] - boundaries[:-1]
 
         device = self._device
         self._runs = (
-            torch.tensor(ordered_slots, dtype=torch.long, device=device),
-            torch.tensor(run_offsets, dtype=torch.long, device=device),
-            torch.tensor(run_lengths, dtype=torch.long, device=device),
+            live[order].to(device),
+            run_offsets.to(device),
+            run_lengths.to(device),
         )
         return self._runs
 
@@ -331,7 +347,8 @@ class _FragmentedTrajectoryIndex:
         state = self.__dict__.copy()
         for key in (
             "_trajectory_positions",
-            "_slot_records",
+            "_slot_traj",
+            "_slot_step",
             "_device",
             "_runs",
         ):
