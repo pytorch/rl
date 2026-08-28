@@ -27,6 +27,7 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
+from torch.amp import GradScaler
 from torchrl._utils import (
     _CKPT_BACKEND,
     implement_for,
@@ -315,6 +316,224 @@ class DefaultOptimizationStepper(OptimizationStepper):
         trainer.optimizer.zero_grad()
 
         return losses_td
+
+
+class MixedPrecisionOptimizationStepper(OptimizationStepper):
+    """Optimization step with mixed precision and gradient accumulation.
+
+    This stepper wraps each forward/backward pass in ``torch.amp.autocast``
+    and optionally scales gradients with ``torch.amp.GradScaler`` (for fp16).
+    It also implements *gradient accumulation*: gradients are accumulated for
+    ``gradient_accumulation_steps`` micro-batches before the optimizer is
+    stepped and zeroed.
+
+    It can be used with any :class:`~torchrl.trainers.Trainer`; LLM trainers
+    such as :class:`~torchrl.trainers.algorithms.GRPOTrainer` construct it by
+    default.
+
+    Args:
+        optimizer (optim.Optimizer): The optimizer to use.
+
+    Keyword Args:
+        mixed_precision (bool, optional): Whether to enable mixed-precision
+            training. Default: ``False``.
+        autocast_dtype (torch.dtype, optional): The dtype to use inside
+            ``autocast``. Default: ``torch.bfloat16``.
+        gradient_accumulation_steps (int, optional): Number of micro-batches
+            over which gradients are accumulated before a step. Default: ``1``.
+        clip_norm (float, optional): Maximum gradient norm for clipping.
+            Default: ``1.0``.
+        device_type (str, optional): Device type passed to ``autocast`` and
+            ``GradScaler`` (e.g. ``"cuda"`` or ``"cpu"``). Defaults to the
+            device type of the optimizer's first parameter.
+
+    .. note::
+        ``GradScaler`` is only enabled when ``mixed_precision=True`` *and*
+        ``autocast_dtype=torch.float16``.  With bfloat16 (the recommended
+        dtype for modern GPUs) the scaler is a no-op and is not created.
+    """
+
+    def __init__(
+        self,
+        optimizer: optim.Optimizer,
+        *,
+        mixed_precision: bool = False,
+        autocast_dtype: torch.dtype = torch.bfloat16,
+        gradient_accumulation_steps: int = 1,
+        clip_norm: float | None = 1.0,
+        device_type: str | None = None,
+    ) -> None:
+        if gradient_accumulation_steps < 1:
+            raise ValueError("gradient_accumulation_steps must be >= 1")
+        self.optimizer = optimizer
+        self.mixed_precision = mixed_precision
+        self.autocast_dtype = autocast_dtype
+        self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.clip_norm = clip_norm
+        if device_type is None:
+            params = [p for group in optimizer.param_groups for p in group["params"]]
+            device_type = params[0].device.type if params else "cpu"
+        self.device_type = device_type
+
+        # GradScaler is only useful for fp16; bf16 doesn't need it.
+        self._use_scaler = mixed_precision and (autocast_dtype == torch.float16)
+        self.scaler = GradScaler(self.device_type, enabled=self._use_scaler)
+
+        # Internal micro-batch counter (reset after every optimizer step).
+        self._micro_step: int = 0
+        self._optimizer_step_count: int = 0
+        self._skipped_nonfinite_steps: int = 0
+
+    @property
+    def optimizer_step_count(self) -> int:
+        """Number of completed optimizer steps.
+
+        Discounts gradient-accumulation micro-steps and steps skipped by the
+        GradScaler on overflow or by the non-finite guards. Read by hooks that
+        act on an optimizer-step cadence (e.g.
+        :class:`~torchrl.trainers.UpdateWeights` with
+        ``interval_unit="optim_steps"``).
+        """
+        return self._optimizer_step_count
+
+    # ------------------------------------------------------------------
+    # Checkpointing (optimizer + scaler state)
+    # ------------------------------------------------------------------
+
+    def state_dict(self) -> dict[str, Any]:
+        if self._micro_step % self.gradient_accumulation_steps != 0:
+            raise RuntimeError(
+                f"Cannot save stepper state mid-accumulation. (micro_step={self._micro_step}, "
+                f"accumulation_steps={self.gradient_accumulation_steps}). "
+                "Adjust your save_interval to align with the gradient accumulation window."
+            )
+
+        sd: dict[str, Any] = {
+            "optimizer": self.optimizer.state_dict(),
+            "micro_step": self._micro_step,
+            "optimizer_step_count": self._optimizer_step_count,
+            "skipped_nonfinite_steps": self._skipped_nonfinite_steps,
+        }
+        if self._use_scaler:
+            sd["scaler"] = self.scaler.state_dict()
+        return sd
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        self._micro_step = state_dict.get("micro_step", 0)
+        self._optimizer_step_count = state_dict.get("optimizer_step_count", 0)
+        self._skipped_nonfinite_steps = state_dict.get("skipped_nonfinite_steps", 0)
+        if self._use_scaler and "scaler" in state_dict:
+            self.scaler.load_state_dict(state_dict["scaler"])
+
+    # ------------------------------------------------------------------
+    # Core step
+    # ------------------------------------------------------------------
+
+    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Perform one forward pass and scaled backward pass.
+
+        The optimizer is only stepped and zeroed every
+        ``gradient_accumulation_steps`` calls.
+
+        Args:
+            trainer (Trainer): The owning :class:`~torchrl.trainers.Trainer`.
+            sub_batch (TensorDictBase): Mini-batch used for this step.
+
+        Returns:
+            A :class:`~tensordict.TensorDict` with scalar metrics (losses,
+            grad_norm) suitable for logging.
+        """
+        # ---- forward pass (optionally under autocast) ----
+        with torch.amp.autocast(
+            self.device_type,
+            enabled=self.mixed_precision,
+            dtype=self.autocast_dtype,
+        ):
+            losses_td = trainer.compute_loss(sub_batch)
+            # Sum all loss_* keys and normalise by accumulation steps.
+            loss_items = [v for k, v in losses_td.items() if k.startswith("loss")]
+            if not loss_items:
+                raise RuntimeError(
+                    "The loss module returned no 'loss_*' keys. "
+                    "Make sure your loss module prefixes scalar outputs with 'loss'."
+                )
+            loss = sum(loss_items) / self.gradient_accumulation_steps
+
+        # ---- non-finite loss guard ----
+        # A single non-finite loss would poison the gradients accumulated so
+        # far, so the whole accumulation window is dropped and restarted.
+        if not torch.isfinite(loss.detach()).all():
+            self._skipped_nonfinite_steps += 1
+            torchrl_logger.warning(
+                f"Skipping optimization step because the loss is non-finite: "
+                f"{loss.detach()}. Skipped non-finite steps: "
+                f"{self._skipped_nonfinite_steps}."
+            )
+            self.optimizer.zero_grad(set_to_none=True)
+            self._micro_step = 0
+            return self._reduce_metrics(losses_td)
+
+        # ---- backward pass ----
+        if self._use_scaler:
+            self.scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+        self._micro_step += 1
+
+        # ---- optimizer step every `gradient_accumulation_steps` micro-batches ----
+        grad_norm = None
+        if self._micro_step % self.gradient_accumulation_steps == 0:
+            if self._use_scaler:
+                self.scaler.unscale_(self.optimizer)
+
+            grad_norm = 0.0
+            if self.clip_norm is not None:
+                params = [
+                    p for group in self.optimizer.param_groups for p in group["params"]
+                ]
+                grad_norm = float(nn.utils.clip_grad_norm_(params, self.clip_norm))
+
+            if self._use_scaler:
+                scale_before = self.scaler.get_scale()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                # If scale dropped, an overflow occurred and optimizer.step() was skipped.
+                if self.scaler.get_scale() >= scale_before:
+                    self._optimizer_step_count += 1
+            elif self.clip_norm is not None and not math.isfinite(grad_norm):
+                # Without a GradScaler (e.g. bf16 or full precision) nothing
+                # skips overflowing updates, so guard the step explicitly.
+                self._skipped_nonfinite_steps += 1
+                torchrl_logger.warning(
+                    f"Skipping optimizer step because the gradient norm is "
+                    f"non-finite: {grad_norm}. Skipped non-finite steps: "
+                    f"{self._skipped_nonfinite_steps}."
+                )
+                grad_norm = 0.0
+            else:
+                self.optimizer.step()
+                self._optimizer_step_count += 1
+            self.optimizer.zero_grad(set_to_none=True)
+
+        metrics = self._reduce_metrics(losses_td)
+        if grad_norm is not None:
+            metrics["grad_norm"] = torch.tensor(grad_norm)
+        return metrics
+
+    @staticmethod
+    def _reduce_metrics(losses_td: TensorDictBase) -> TensorDictBase:
+        """Detach the loss output and reduce non-scalar entries to their mean.
+
+        Steppers must return scalar metrics suitable for logging; loss modules
+        such as :class:`~torchrl.objectives.llm.GRPOLoss` also emit per-token
+        diagnostics (KL divergences) that are reduced here.
+        """
+        metrics = {}
+        for key, value in losses_td.detach().items():
+            metrics[key] = value.float().mean() if value.numel() > 1 else value
+        return TensorDict(metrics, [])
 
 
 class Trainer:
@@ -1417,7 +1636,7 @@ class Trainer:
         self._setup_hook()
 
         for batch in iterator:
-            if not self.async_collection:
+            if not self.async_collection and batch is not None:
                 batch = self._process_batch_hook(batch)
                 current_frames = (
                     batch.get(("collector", "mask"), torch.tensor(batch.numel()))
@@ -1427,10 +1646,16 @@ class Trainer:
                 )
                 self.collected_frames += current_frames
             else:
-                # In async mode, batch is None and we track frames via write_count
+                # Batch is None: either async collection, or a synchronous
+                # collector that writes directly to the replay buffer (e.g.
+                # LLM collectors created with a replay_buffer). Frames are
+                # tracked via the buffer write count in both cases.
                 batch = None
                 cf = self.collected_frames
-                self.collected_frames = self.collector.getattr_rb("write_count")
+                if self.replay_buffer is not None:
+                    self.collected_frames = self._replay_write_count()
+                else:
+                    self.collected_frames = self.collector.getattr_rb("write_count")
                 current_frames = self.collected_frames - cf
 
             # LOGGING POINT 1: Pre-optimization logging (e.g., rewards, frame counts)
@@ -2696,10 +2921,10 @@ class UpdateWeights(TrainerHookBase):
     intervals. If the devices match, this will result in a no-op.
 
     Args:
-        collector (BaseCollector): A data collector where the policy weights
-            must be synced.
-        update_weights_interval (int): Interval (in terms of number of batches
-            collected) where the sync must take place.
+        collector (BaseCollector, optional): A data collector where the policy
+            weights must be synced. Not required when a ``sender`` is given.
+        update_weights_interval (int, optional): Interval where the sync must
+            take place, counted in units of ``interval_unit``. Default: ``1``.
         policy_weights_getter (Callable, optional): A callable that returns the policy
             weights to sync. Used for backward compatibility. If both this and
             weight_update_map are provided, weight_update_map takes precedence.
@@ -2707,7 +2932,22 @@ class UpdateWeights(TrainerHookBase):
             (keys in collector's weight_sync_schemes) to source paths on the trainer.
             Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
         trainer (Trainer, optional): The trainer instance, required when using
-            weight_update_map to resolve source paths.
+            weight_update_map to resolve source paths, or when
+            ``interval_unit="optim_steps"`` (to read the optimizer step count).
+
+    Keyword Args:
+        sender (optional): A weight-sync sender object exposing an
+            ``update_weights()`` method (e.g. the sender returned by a
+            :class:`~torchrl.weight_update.weight_sync_schemes.WeightSyncScheme`'s
+            ``create_sender()``). When provided, weights are pushed through the
+            sender instead of ``collector.update_policy_weights_()``. This is
+            used by LLM trainers whose inference engine (vLLM, SGLang) is fed
+            by a standalone sender.
+        interval_unit (str, optional): Unit of ``update_weights_interval``:
+            ``"batches"`` (default) counts collected batches and registers the
+            hook at the ``post_steps`` stage; ``"optim_steps"`` counts
+            optimizer steps and registers the hook at the ``post_optim`` stage,
+            enabling weight pushes in the middle of an optimization loop.
 
     Examples:
         >>> # Legacy usage with policy_weights_getter
@@ -2728,15 +2968,27 @@ class UpdateWeights(TrainerHookBase):
         ... )
         >>> trainer.register_op("post_steps", update_weights)
 
+        >>> # Sender-based usage with optimizer-step cadence (LLM trainers)
+        >>> update_weights = UpdateWeights(
+        ...     update_weights_interval=10,
+        ...     trainer=trainer,
+        ...     sender=sender,
+        ...     interval_unit="optim_steps",
+        ... )
+        >>> update_weights.register(trainer)
+
     """
 
     def __init__(
         self,
-        collector: BaseCollector,
-        update_weights_interval: int,
+        collector: BaseCollector | None = None,
+        update_weights_interval: int = 1,
         policy_weights_getter: Callable[[Any], Any] | None = None,
         weight_update_map: dict[str, str] | None = None,
         trainer: Trainer | None = None,
+        *,
+        sender: Any | None = None,
+        interval_unit: Literal["batches", "optim_steps"] = "batches",
     ):
         self.collector = collector
         self.update_weights_interval = update_weights_interval
@@ -2744,28 +2996,72 @@ class UpdateWeights(TrainerHookBase):
         self.policy_weights_getter = policy_weights_getter
         self.weight_update_map = weight_update_map
         self.trainer = trainer
+        self.sender = sender
+        self.interval_unit = interval_unit
+        self._last_update_count = 0
 
         # Validate inputs
+        if update_weights_interval < 1:
+            raise ValueError("update_weights_interval must be >= 1")
+        if interval_unit not in ("batches", "optim_steps"):
+            raise ValueError(
+                f"interval_unit must be 'batches' or 'optim_steps', got {interval_unit!r}"
+            )
+        if sender is None and collector is None:
+            raise ValueError("either a collector or a sender must be provided")
+        if sender is not None and (
+            policy_weights_getter is not None or weight_update_map is not None
+        ):
+            raise ValueError(
+                "sender is mutually exclusive with policy_weights_getter and "
+                "weight_update_map"
+            )
         if weight_update_map is not None and trainer is None:
             raise ValueError("trainer must be provided when using weight_update_map")
+        if interval_unit == "optim_steps" and trainer is None:
+            raise ValueError(
+                "trainer must be provided when interval_unit='optim_steps'"
+            )
+
+    def _optimizer_step_count(self) -> int:
+        """Read the optimizer step count from the trainer.
+
+        Prefers the stepper's ``optimizer_step_count`` (which discounts
+        gradient-accumulation micro-steps and skipped steps) and falls back to
+        the trainer's raw optimization-loop counter.
+        """
+        stepper = getattr(self.trainer, "optimization_stepper", None)
+        count = getattr(stepper, "optimizer_step_count", None)
+        if count is None:
+            count = self.trainer._optim_count
+        return count
 
     def __call__(self):
-        self.counter += 1
-        if self.counter % self.update_weights_interval == 0:
-            # New approach: use weight_update_map if provided
-            if self.weight_update_map is not None:
-                self._update_with_map()
-            # Legacy approach: use policy_weights_getter
+        if self.interval_unit == "optim_steps":
+            count = self._optimizer_step_count()
+            if count - self._last_update_count < self.update_weights_interval:
+                return
+            self._last_update_count = count
+        else:
+            self.counter += 1
+            if self.counter % self.update_weights_interval != 0:
+                return
+        if self.sender is not None:
+            self.sender.update_weights()
+        # New approach: use weight_update_map if provided
+        elif self.weight_update_map is not None:
+            self._update_with_map()
+        # Legacy approach: use policy_weights_getter
+        else:
+            weights = (
+                self.policy_weights_getter()
+                if self.policy_weights_getter is not None
+                else None
+            )
+            if weights is not None:
+                self.collector.update_policy_weights_(weights)
             else:
-                weights = (
-                    self.policy_weights_getter()
-                    if self.policy_weights_getter is not None
-                    else None
-                )
-                if weights is not None:
-                    self.collector.update_policy_weights_(weights)
-                else:
-                    self.collector.update_policy_weights_()
+                self.collector.update_policy_weights_()
 
     def _update_with_map(self):
         """Update weights using the weight_update_map."""
@@ -2796,17 +3092,24 @@ class UpdateWeights(TrainerHookBase):
         self.collector.update_policy_weights_(weights_dict=weights_dict)
 
     def register(self, trainer: Trainer, name: str = "update_weights"):
+        if self.trainer is None:
+            self.trainer = trainer
         trainer.register_module(name, self)
+        stage = "post_optim" if self.interval_unit == "optim_steps" else "post_steps"
         trainer.register_op(
-            "post_steps",
+            stage,
             self,
         )
 
     def state_dict(self) -> dict:
-        return {"counter": self.counter}
+        return {
+            "counter": self.counter,
+            "last_update_count": self._last_update_count,
+        }
 
     def load_state_dict(self, state_dict) -> None:
         self.counter = state_dict.get("counter", 0)
+        self._last_update_count = state_dict.get("last_update_count", 0)
 
 
 class CountFramesLog(TrainerHookBase):

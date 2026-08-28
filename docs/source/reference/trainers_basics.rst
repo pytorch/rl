@@ -14,6 +14,7 @@ Trainer and hooks
 
     Trainer
     TrainerHookBase
+    MixedPrecisionOptimizationStepper
 
 Algorithm-specific trainers
 ---------------------------
@@ -35,6 +36,7 @@ Algorithm-specific trainers
     IQLTrainer
     CQLTrainer
     TD3Trainer
+    GRPOTrainer
 
 Builders
 --------

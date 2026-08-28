@@ -21,6 +21,7 @@ from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, Con
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
@@ -1635,6 +1636,109 @@ def _make_td3_trainer(*args, **kwargs) -> TD3Trainer:
         auto_log_optim_steps=auto_log_optim_steps,
         target_net_updater=target_net_updater,
         exploration_module=exploration_module,
+    )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
+
+
+@dataclass
+class GRPOTrainerConfig(TrainerConfig):
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.GRPOTrainer`.
+
+    Every kwarg accepted by ``GRPOTrainer.__init__`` is exposed as a field
+    here. ``autocast_dtype`` is a dtype name (e.g. ``"bfloat16"``); ``None``
+    keeps the trainer default (``torch.bfloat16``).
+    """
+
+    collector: Any
+    total_frames: int
+    loss_module: Any
+    optim_steps_per_batch: int | None = None
+    optimizer: Any | None = None
+    optimization_stepper: Any | None = None
+    # LLM-specific
+    weight_sync_sender: Any | None = None
+    weight_update_frequency: int = 1
+    empty_replay_buffer_on_weight_update: bool = False
+    # Replay buffer
+    replay_buffer: Any | None = None
+    batch_size: int | None = None
+    device: Any = None
+    # Mixed precision / gradient accumulation
+    mixed_precision: bool = False
+    autocast_dtype: str | None = None
+    gradient_accumulation_steps: int = 1
+    # Standard trainer args
+    logger: Any | None = None
+    clip_norm: float | None = 1.0
+    progress_bar: bool = True
+    seed: int | None = None
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    save_trainer_file: Any | None = None
+    checkpoint: Any | None = None
+    checkpoint_rotation: Any | None = None
+    checkpoint_metadata: Any | None = None
+    num_epochs: int = 1
+    async_collection: bool = False
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    # Logging toggles
+    log_rewards: bool = True
+    log_kl: bool = True
+    frame_skip: int = 1
+    hooks: list[Any] | None = None
+    _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_grpo_trainer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_grpo_trainer(**kwargs) -> GRPOTrainer:
+    from torchrl.trainers.trainers import Logger
+
+    collector = kwargs.pop("collector")
+    total_frames = kwargs.pop("total_frames")
+    if total_frames is None:
+        total_frames = collector.total_frames
+    loss_module = kwargs.pop("loss_module")
+    optimizer = kwargs.pop("optimizer", None)
+    replay_buffer = kwargs.pop("replay_buffer", None)
+    async_collection = kwargs.pop("async_collection", False)
+    autocast_dtype = kwargs.pop("autocast_dtype", None)
+    logger = kwargs.pop("logger", None)
+    hooks = kwargs.pop("hooks", None)
+
+    # Instantiate partial configs, mirroring the other trainer factories
+    if not isinstance(collector, BaseCollector):
+        if not async_collection:
+            collector = collector()
+        else:
+            collector = collector(replay_buffer=replay_buffer)
+    if not isinstance(loss_module, torch.nn.Module):
+        loss_module = loss_module()
+    if optimizer is not None and not isinstance(optimizer, torch.optim.Optimizer):
+        optimizer = optimizer(params=loss_module.parameters())
+
+    if logger is not None and not isinstance(logger, Logger):
+        raise TypeError(f"logger must be a Logger or None, got {type(logger)}")
+
+    if autocast_dtype is not None:
+        if not hasattr(torch, autocast_dtype) or not isinstance(
+            getattr(torch, autocast_dtype), torch.dtype
+        ):
+            raise ValueError(f"Unknown dtype name: {autocast_dtype!r}")
+        kwargs["autocast_dtype"] = getattr(torch, autocast_dtype)
+
+    trainer = GRPOTrainer(
+        collector=collector,
+        total_frames=total_frames,
+        loss_module=loss_module,
+        optimizer=optimizer,
+        replay_buffer=replay_buffer,
+        async_collection=async_collection,
+        logger=logger,
+        **kwargs,
     )
     _register_trainer_hooks(trainer, hooks)
     return trainer

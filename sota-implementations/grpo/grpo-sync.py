@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import contextlib
-import gc
 import os
 from functools import partial
 from pathlib import Path
@@ -14,7 +13,6 @@ from pathlib import Path
 import hydra
 
 from torchrl import merge_ray_runtime_env, torchrl_logger
-from torchrl.data.llm.history import History
 from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.weight_update.llm import get_model_metadata
 
@@ -24,10 +22,8 @@ except ImportError:
     raise ImportError(
         "Ray is required for sync training. Please install ray with `pip install ray`."
     )
-import time
 
 import torch
-import tqdm
 
 from grpo_utils import (
     add_kl_transforms_to_replay_buffer,
@@ -35,7 +31,6 @@ from grpo_utils import (
     compute_device_allocation,
     get_inference_model,
     get_train_model,
-    log_training_metrics,
     make_env,
     make_weight_sync_scheme,
 )
@@ -47,13 +42,11 @@ except ImportError:
     raise ImportError(
         "TensorDict is required. Please install it with `pip install tensordict`."
     )
-from torch.amp.autocast_mode import autocast
-from torch.amp.grad_scaler import GradScaler
-from torchrl._utils import timeit
 from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
+from torchrl.trainers.algorithms.grpo import GRPOTrainer
 
 
 def _finish_wandb_logger(wandb_logger: WandbLogger | None, exit_code: int) -> None:
@@ -87,20 +80,21 @@ def train(
     inference_policy,
     devices: list[int] | None = None,
 ):
-    """Main training loop for GRPO sync.
+    """Main training entry point for GRPO sync.
 
-    This function implements synchronous training where data collection and optimization
-    happen in separate, consecutive steps. The total number of steps is determined by the number of epochs,
-    samples per epoch, and batches collected.
+    Data collection and optimization happen in separate, consecutive steps.
+    The training loop is fully managed by :class:`~torchrl.trainers.GRPOTrainer`.
 
     Args:
-        replay_buffer: The replay buffer to store experiences. The sampler will typically be a `SamplerWithoutReplacement`.
-        cfg: The configuration object containing training parameters
+        replay_buffer: The replay buffer to store experiences. The sampler will
+            typically be a :class:`~torchrl.data.SamplerWithoutReplacement`.
+        cfg: The configuration object containing training parameters.
         collector: The collector object.
+        inference_policy: The inference-side LLM wrapper.
         devices: The devices to use for the training model.
     """
     # Setup training model and tokenizer
-    policy_training, train_tokenizer = get_train_model(cfg, devices=devices)
+    policy_training, _train_tokenizer = get_train_model(cfg, devices=devices)
     train_device = torch.device(f"cuda:{devices[0]}" if devices else "cuda:0")
 
     # Setup loss function
@@ -142,10 +136,8 @@ def train(
     sender.register_collector(collector)
 
     # First weight update
-    with timeit("update_policy_weights"):
-        sender.update_weights()
-    timeit.print(prefix="First update_policy_weights_ time")
-    timeit.reset()
+    torchrl_logger.info("Performing first weight update...")
+    sender.update_weights()
 
     # Make optimizer
     torchrl_logger.info("Starting optimizer.")
@@ -156,7 +148,6 @@ def train(
         eps=getattr(cfg.optimizer, "eps", 1e-8),
         fused=False,
     )
-    scaler = GradScaler(enabled=cfg.train.mixed_precision)
 
     # Make checkpoint dir
     checkpoint_dir = Path(cfg.logging.checkpoint_dir)
@@ -169,161 +160,57 @@ def train(
         experiment_name = [experiment_name]
     else:
         experiment_name = []
-
     experiment_name.append(cfg.env.dataset)
     experiment_name.append(cfg.model.name)
     wandb_logger = WandbLogger(
         project="grpo-sync", exp_name="-".join(["grpo-sync"] + experiment_name)
     )
 
-    # Training loop
+    # Build the GRPOTrainer — replaces the manual training loop
+    torchrl_logger.info("Building GRPOTrainer...")
+    autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
+    trainer = GRPOTrainer(
+        collector=collector,
+        total_frames=cfg.train.total_dialog_turns,
+        frame_skip=1,
+        # None: iterate over the whole replay buffer once per epoch, matching
+        # the reference GRPO loop (`for batch in replay_buffer`).
+        optim_steps_per_batch=None,
+        loss_module=loss_fn,
+        optimizer=optimizer,
+        weight_sync_sender=sender,
+        weight_update_frequency=1,  # sync mode: push weights every collected batch
+        empty_replay_buffer_on_weight_update=cfg.train.empty_replay_buffer,
+        replay_buffer=replay_buffer,
+        device=train_device,
+        mixed_precision=cfg.train.mixed_precision,
+        autocast_dtype=autocast_dtype,
+        gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
+        clip_norm=cfg.optimizer.clip_grad_norm,
+        logger=wandb_logger,
+        log_interval=cfg.train.logging_frequency,
+        num_epochs=cfg.train.epochs,
+        async_collection=False,
+        log_rewards=True,
+        log_kl=cfg.train.use_kl_to_ref,
+        log_timings=True,
+    )
+
+    # Run training
     torchrl_logger.info("Starting training loop.")
-    pbar = tqdm.tqdm(collector)
-    grad_norm = 0.0  # Initialize grad_norm
-    data_read_count = 0
-
-    global_step = 0
-    start_time = time.time()
-    for data in pbar:
-        # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
-        #  so the buffer may not be filled straight away
-        if not len(replay_buffer):
-            torchrl_logger.info("Waiting for replay buffer to be filled")
-            continue
-        else:
-            torchrl_logger.info(f"Replay buffer filled: {len(replay_buffer)}")
-
-        pbar.update(1)
-
-        # data is None as the collector directly writes to the replay buffer
-        if data is not None:
-            raise ValueError("Data is not None")
-
-        for _ in range(cfg.train.epochs):
-            # Iterate over the replay buffer
-            for batch in replay_buffer:
-                batch = batch.to(train_device)
-                global_step += 1
-                pbar.set_description(
-                    f"Gradient step {global_step}, writes: {replay_buffer.write_count}, batch size: {batch.shape}"
-                )
-                history: History = batch.view(-1)[0]["next", "history"].prompt
-                history_str: list[str] | str = history.apply_chat_template(
-                    tokenizer=train_tokenizer
-                )
-                while not isinstance(history_str, str):
-                    history_str = "\n".join(history_str)
-
-                data_read_count += batch.numel()
-
-                with timeit("forward_pass"):
-                    # Use the model's dtype for autocast to avoid bf16→fp16 downcast
-                    autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
-                    with autocast(
-                        "cuda",
-                        enabled=cfg.train.mixed_precision,
-                        dtype=autocast_dtype,
-                    ):
-                        loss = loss_fn(batch)
-                        loss_val = (
-                            loss.mean(reduce=True)
-                            / cfg.train.gradient_accumulation_steps
-                        )
-
-                with timeit("backward_pass"):
-                    if (
-                        cfg.train.mixed_precision
-                        and cfg.train_model.torch_dtype == "float16"
-                    ):
-                        scaler = GradScaler(enabled=True)
-                        scaler.scale(loss_val).backward()
-                    else:
-                        loss_val.backward()
-
-                if ((global_step + 1) % cfg.train.gradient_accumulation_steps) == 0:
-                    with timeit("optim_step"):
-                        if (
-                            cfg.train.mixed_precision
-                            and cfg.train_model.torch_dtype == "float16"
-                        ):
-                            scaler.unscale_(optimizer)
-
-                        grad_norm = torch.nn.utils.clip_grad_norm_(
-                            policy_training.parameters(),
-                            cfg.optimizer.clip_grad_norm,
-                        )
-
-                        if (
-                            cfg.train.mixed_precision
-                            and cfg.train_model.torch_dtype == "float16"
-                        ):
-                            scaler.step(optimizer)
-                            scaler.update()
-                        else:
-                            optimizer.step()
-                        optimizer.zero_grad(set_to_none=True)
-
-                del loss_val
-                # TODO: do we need this? Does it interfere with other processes?
-                # torch.cuda.empty_cache()
-                gc.collect()
-
-                if (global_step % cfg.train.logging_frequency) == 0:
-                    log_training_metrics(
-                        wandb_logger=wandb_logger,
-                        replay_buffer=replay_buffer,
-                        batch=batch,
-                        loss=loss,
-                        grad_norm=grad_norm,
-                        global_step=global_step,
-                        data_read_count=data_read_count,
-                        collector=collector,
-                        start_time=start_time,
-                        gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
-                        history_str=history_str,
-                        use_kl_to_ref=cfg.train.use_kl_to_ref,
-                    )
-
-                # Checkpointing disabled to prevent disk space issues
-                # if (global_step + 1) % cfg.train.checkpoint_frequency == 0:
-                #     with timeit("save_checkpoint"):
-                #         torchrl_logger.info(
-                #             f"Saving checkpoint {(global_step+1) // cfg.train.checkpoint_frequency}..."
-                #         )
-                #         checkpoint = {
-                #             "step": global_step,
-                #             "model_state_dict": policy_training.model.state_dict(),
-                #             "optimizer_state_dict": optimizer.state_dict(),
-                #             "scaler_state_dict": scaler.state_dict(),
-                #             "config": dict(cfg),
-                #         }
-                #         torch.save(checkpoint, checkpoint_dir / f"checkpoint_{global_step:04d}.pt")
-
-        with timeit("update_policy_weights"):
-            torchrl_logger.info("Updating policy weights...")
-            sender.update_weights()
-            # TODO: do we need this? Does it interfere with other processes?
-            # torch.cuda.empty_cache()
-            gc.collect()
-
-        timeit.print(prefix="timeit")
-        wandb_logger.log_metrics(
-            {f"timeit/{key}": val for key, val in timeit.todict().items()}
-        )
-        timeit.reset()
-
-        if cfg.train.empty_replay_buffer:
-            replay_buffer.empty(empty_write_count=False)
-
-    pbar.close()
-    with contextlib.suppress(Exception):
-        _finish_wandb_logger(wandb_logger, 0)
-    with contextlib.suppress(Exception):
-        collector.shutdown()
-    shutdown = getattr(sender, "shutdown", None)
-    if shutdown is not None:
+    exit_code = 1
+    try:
+        trainer.train()
+        exit_code = 0
+    finally:
         with contextlib.suppress(Exception):
-            shutdown()
+            _finish_wandb_logger(wandb_logger, exit_code)
+        with contextlib.suppress(Exception):
+            collector.shutdown()
+        shutdown = getattr(sender, "shutdown", None)
+        if shutdown is not None:
+            with contextlib.suppress(Exception):
+                shutdown()
 
 
 @hydra.main(version_base="1.3", config_path="config", config_name="grpo_gsm8k")
@@ -334,7 +221,8 @@ def main(cfg):
     # Force sync mode
     if not cfg.train.sync:
         raise ValueError(
-            "grpo-sync.py must run in sync mode (`python grpo-sync.py mode=sync`). Please use grpo-async.py for async mode (`python grpo-async.py mode=async`)."
+            "grpo-sync.py must run in sync mode (`python grpo-sync.py mode=sync`). "
+            "Please use grpo-async.py for async mode (`python grpo-async.py mode=async`)."
         )
     if cfg.train.weight_update_frequency is not None:
         raise ValueError("weight_update_frequency must be left empty in sync mode.")

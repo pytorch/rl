@@ -131,6 +131,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     CQLTrainerConfig,
     DDPGTrainerConfig,
     DQNTrainerConfig,
+    GRPOTrainerConfig,
     IQLTrainerConfig,
     OfflineToOnlineTrainerConfig,
     OnPolicyTrainerConfig,
@@ -426,6 +427,7 @@ __all__ = [
     "SACTrainerConfig",
     "TD3TrainerConfig",
     "TrainerConfig",
+    "GRPOTrainerConfig",
     # Hooks
     "HookConfig",
     "BatchSubSamplerConfig",
@@ -713,6 +715,7 @@ def _register_configs():
     cs.store(group="trainer", name="reinforce", node=ReinforceTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
+    cs.store(group="trainer", name="grpo", node=GRPOTrainerConfig)
 
     # =============================================================================
     # Hook Configurations
