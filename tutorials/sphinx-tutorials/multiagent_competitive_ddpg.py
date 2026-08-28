@@ -647,6 +647,7 @@ collector = Collector(
     device=device,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
+    auto_register_policy_transforms=True,
 )
 
 ######################################################################

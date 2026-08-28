@@ -607,6 +607,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #         policy_device="cuda",       # (fast collection)
 #         storing_device="cpu",       # but spill the batch to host RAM
 #         no_cuda_sync=False,         # keep explicit syncs unless transfers
+#         auto_register_policy_transforms=True,
 #     )                               # are already correctly ordered
 #
 # The rule of thumb: keep ``env_device`` / ``policy_device`` on the
@@ -714,6 +715,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #         frames_per_batch=1024,
 #         total_frames=1_000_000,
 #         compact_obs=True,                       # halve obs memory
+#         auto_register_policy_transforms=True,
 #     )
 #     rb = ReplayBuffer(
 #         storage=LazyMemmapStorage(1_000_000),   # spill to disk
@@ -746,6 +748,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #         policy=policy,
 #         frames_per_batch=1024,
 #         total_frames=1_000_000,
+#         auto_register_policy_transforms=True,
 #     )
 #     rb = ReplayBuffer(
 #         storage=LazyMemmapStorage(1_000_000),

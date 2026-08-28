@@ -866,6 +866,7 @@ collector = Collector(
     split_trajs=False,
     device=collector_device,
     exploration_type=ExplorationType.RANDOM,
+    auto_register_policy_transforms=True,
 )
 
 ###############################################################################

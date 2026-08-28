@@ -79,6 +79,9 @@ policy_explore = Seq(policy, exploration_module)
 # Here comes the data part: we need a
 # :ref:`data collector <gs_storage_collector>` to easily get batches of data
 # and a :ref:`replay buffer <gs_storage_rb>` to store that data for training.
+# ``auto_register_policy_transforms=True`` asks the collector to attach any
+# environment transforms required by the policy, such as episode-start markers
+# and recurrent-state primers. The registration is spec-based and idempotent.
 #
 
 from torchrl.collectors import Collector
@@ -93,6 +96,7 @@ collector = Collector(
     frames_per_batch=frames_per_batch,
     total_frames=-1,
     init_random_frames=init_rand_steps,
+    auto_register_policy_transforms=True,
 )
 rb = ReplayBuffer(storage=LazyTensorStorage(100_000))
 

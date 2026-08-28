@@ -42,7 +42,10 @@ Using Replay Buffers
 # - How to use :ref:`prioritized replay buffers <tuto_rb_prb>`;
 # - How to :ref:`transform data <tuto_rb_transform>` coming in and out from
 #   the buffer;
-# - How to store :ref:`trajectories <tuto_rb_traj>` in the buffer.
+# - How to store :ref:`trajectories <tuto_rb_traj>` in the buffer;
+# - How to sample structured sequences and query complete trajectories;
+# - Which replay-buffer tools support offline-to-online and asynchronous
+#   training workflows.
 #
 #
 # Basics: building a vanilla replay buffer
@@ -107,7 +110,7 @@ print("length after adding elements:", len(buffer))
 #   of efficiency;
 # - The :class:`~torchrl.data.replay_buffers.LazyTensorStorage` stores tensors data
 #   structures contiguously.
-#   It works naturally with :class:`~tensordidct.TensorDict`
+#   It works naturally with :class:`~tensordict.TensorDict`
 #   (or :class:`~torchrl.data.tensorclass`)
 #   objects. The storage is contiguous on a per-tensor basis, meaning that
 #   sampling will be more efficient than when using a list, but the
@@ -796,15 +799,12 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # In many cases, it is desirable to access trajectories from the buffer rather
 # than simple transitions. TorchRL offers multiple ways of achieving this.
 #
-# The preferred way is currently to store trajectories along the first
-# dimension of the buffer and use a :class:`~torchrl.data.replay_buffers.SliceSampler` to
-# sample these batches of data. This class only needs a couple of information
-# about your data structure to do its job (not that as of now it is only
-# compatible with tensordict-structured data): the number of slices or their
-# length and some information about where the separation between the
-# episodes can be found (e.g. :ref:`recall that <gs_storage_collector>` with a
-# :ref:`DataCollector <ref_collectors>`, the trajectory id is stored in
-# ``("collector", "traj_ids")``). In this simple example, we construct a data
+# A common approach is to store trajectories along the first dimension of the
+# buffer and use a :class:`~torchrl.data.replay_buffers.SliceSampler` to sample
+# them. The sampler reads the desired number or length of slices and the
+# markers that identify episode boundaries. For example, a
+# :ref:`DataCollector <ref_collectors>` stores trajectory identifiers under
+# ``("collector", "traj_ids")``. In this example, we construct data
 # with 4 consecutive short trajectories and sample 4 slices out of it, each of
 # length 2 (since the batch size is 8, and 8 items // 4 slices = 2 time steps).
 # We mark the steps as well.
@@ -840,6 +840,82 @@ print("steps are successive", sample["steps"])
 gc.collect()
 
 ######################################################################
+# Sequence sampling and trajectory queries
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# A sampler chooses anchor records. A
+# :class:`~torchrl.data.replay_buffers.SampleUnit` controls what each anchor
+# expands into. :class:`~torchrl.data.replay_buffers.Sequence` can include a
+# burn-in prefix for recurrent state, a learning region, and bootstrap context
+# for a target estimator. It also returns masks that distinguish real records
+# from padding and identify the learning region.
+#
+# Trajectory queries operate on the same boundary markers. The
+# :data:`~torchrl.data.traj` expression below selects complete trajectories by
+# length and accumulated reward without coupling the query to the storage
+# layout.
+
+from torchrl.data import Sequence, traj
+
+trajectory_ids = torch.tensor([0, 0, 0, 1, 1, 1, 1, 1])
+done = torch.zeros(8, 1, dtype=torch.bool)
+done[2] = done[7] = True
+trajectory_data = TensorDict(
+    {
+        "observation": torch.arange(8, dtype=torch.float32).unsqueeze(-1),
+        ("collector", "traj_ids"): trajectory_ids,
+        ("next", "reward"): torch.tensor(
+            [1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+        ).unsqueeze(-1),
+        ("next", "done"): done,
+    },
+    batch_size=[8],
+)
+
+sequence_rb = TensorDictReplayBuffer(
+    storage=LazyTensorStorage(8),
+    batch_size=2,
+    sample_unit=Sequence(
+        length=2,
+        burn_in=1,
+        bootstrap=1,
+        episode_boundary="pad",
+    ),
+)
+sequence_rb.extend(trajectory_data)
+sequence_sample, sequence_info = sequence_rb.sample(return_info=True)
+
+# Two anchors expand to four records each: one burn-in record, two learning
+# records, and one bootstrap record. A loss should only use entries selected
+# by both masks.
+assert sequence_sample.batch_size == torch.Size([8])
+loss_mask = sequence_info["learning_mask"] & sequence_info["validity_mask"]
+assert loss_mask.shape == torch.Size([8])
+
+selected = sequence_rb.query((traj.length >= 5) & (traj.reward.sum() > 5))
+assert len(selected) == 1
+assert selected[0].length == 5
+
+######################################################################
+# Offline-to-online and asynchronous workflows
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# :class:`~torchrl.data.OfflineToOnlineReplayBuffer` presents offline and
+# online data through one sampling interface, while
+# :func:`~torchrl.data.prefill_replay_buffer` copies an initial dataset into a
+# destination buffer. :class:`~torchrl.trainers.algorithms.OfflineToOnlineTrainer`
+# coordinates collection, sampling, optimization, and the transition between
+# the two data sources.
+#
+# Long-running or asynchronous systems can inspect
+# :meth:`~torchrl.data.ReplayBuffer.stats`, retire records with
+# ``consume_after_n_samples``, and enable generation tracking on a
+# :class:`~torchrl.data.RoundRobinWriter` before applying delayed updates with
+# :meth:`~torchrl.data.ReplayBuffer.update_if_present`. These controls keep
+# monitoring, data lifetime, and stale-write protection independent from the
+# storage and sampling strategy.
+
+######################################################################
 # Storing trajectories from a collector
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
@@ -867,7 +943,13 @@ gc.collect()
 #         ),
 #         batch_size=256,
 #     )
-#     collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
+#     collector = Collector(
+#         env,
+#         policy,
+#         frames_per_batch=200,
+#         total_frames=-1,
+#         auto_register_policy_transforms=True,
+#     )
 #     for data in collector:
 #         rb.extend(data)
 #         batch = rb.sample()  # contiguous sub-sequences
@@ -911,7 +993,9 @@ gc.collect()
 #
 # - Create a Replay Buffer, customize its storage, sampler and transforms;
 # - Choose the best storage type for your problem (list, memory or disk-based);
-# - Minimize the memory footprint of your buffer.
+# - Minimize the memory footprint of your buffer;
+# - Sample learning sequences and filter complete trajectories;
+# - Choose lifecycle controls for offline-to-online or asynchronous training.
 #
 # Next steps
 # ----------
@@ -923,4 +1007,7 @@ gc.collect()
 #   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
 #   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`, or other writers
 #   such as :class:`~torchrl.data.replay_buffers.TensorDictMaxValueWriter`.
+# - See :ref:`the replay-buffer reference <ref_buffers>` for sequence sampling,
+#   trajectory queries, consuming samples, statistics, and generation-aware
+#   updates.
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
