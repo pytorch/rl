@@ -32,23 +32,48 @@ def _receive_batch(
     if timeout is not None and timeout < 0:
         raise ValueError(f"timeout must be non-negative, got {timeout}.")
 
-    items = [result_queue.get()]
+    # The deadline is anchored at call entry and bounds the entire call,
+    # including the wait for the first result.
     deadline_timer = (
         None if timeout is None else timeit("async_env_batch_deadline").start()
     )
 
+    items: list[Any] = []
     while len(items) < min_get:
-        items.append(result_queue.get())
+        if deadline_timer is None:
+            items.append(result_queue.get())
+            continue
+        remaining = timeout - deadline_timer.elapsed()
+        try:
+            if remaining <= 0:
+                # Deadline passed: drain what is already available without
+                # waiting before giving up.
+                items.append(result_queue.get_nowait())
+            else:
+                items.append(result_queue.get(timeout=remaining))
+        except queue.Empty:
+            # Requeue the partial harvest so no result is lost, then signal
+            # the missed deadline. The pool's pending-result accounting is
+            # only updated by the caller on success, so state stays
+            # consistent.
+            for item in items:
+                result_queue.put(item)
+            raise TimeoutError(
+                f"async recv timed out: {len(items)}/{min_get} results after "
+                f"{timeout}s; partial results were requeued and remain "
+                f"available to the next call."
+            ) from None
 
     limit = max_get if max_get is not None else float("inf")
     while len(items) < limit:
         try:
             if deadline_timer is None:
                 items.append(result_queue.get_nowait())
+                continue
+            remaining = timeout - deadline_timer.elapsed()
+            if remaining <= 0:
+                items.append(result_queue.get_nowait())
             else:
-                remaining = timeout - deadline_timer.elapsed()
-                if remaining <= 0:
-                    break
                 items.append(result_queue.get(timeout=remaining))
         except queue.Empty:
             break

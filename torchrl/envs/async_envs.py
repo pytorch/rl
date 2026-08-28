@@ -480,6 +480,32 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         max_get: int | None = None,
         timeout: float | None = None,
     ) -> TensorDictBase:
+        """Collects step results from the pool.
+
+        Args:
+            min_get (int, optional): minimum number of results to collect
+                before returning. Defaults to ``self.min_get``.
+            env_index (int, optional): if provided, waits for the result of
+                this specific env instead of forming a batch; ``min_get``,
+                ``max_get`` and ``timeout`` are ignored.
+
+        Keyword Args:
+            max_get (int, optional): maximum number of results to return.
+                ``None`` (default) drains everything available once
+                ``min_get`` is satisfied.
+            timeout (float, optional): deadline in seconds for the entire
+                call, measured from call entry. If fewer than ``min_get``
+                results are available when the deadline expires, a
+                :class:`TimeoutError` is raised; results collected so far are
+                put back and remain available to the next call. Once
+                ``min_get`` is satisfied, the call returns at the deadline
+                with whatever is ready (up to ``max_get``). ``timeout=0``
+                polls without blocking. ``None`` (default) waits
+                indefinitely.
+
+        Returns:
+            TensorDictBase: the stacked results, carrying ``"env_index"``.
+        """
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -497,6 +523,18 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         max_get: int | None = None,
         timeout: float | None = None,
     ) -> tuple[TensorDictBase, TensorDictBase]:
+        """Collects step-and-maybe-reset results from the pool.
+
+        ``min_get``, ``env_index``, ``max_get`` and ``timeout`` behave as in
+        :meth:`async_step_recv`; in particular ``timeout`` bounds the entire
+        call and raises :class:`TimeoutError` (without losing results) if
+        fewer than ``min_get`` results arrive in time.
+
+        Returns:
+            tuple of (TensorDictBase, TensorDictBase): the stacked step
+            results and the stacked roots of the next steps (reset where
+            needed), both carrying ``"env_index"``.
+        """
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -516,6 +554,17 @@ class AsyncEnvPool(EnvBase, metaclass=_AsyncEnvMeta):
         max_get: int | None = None,
         timeout: float | None = None,
     ) -> TensorDictBase:
+        """Collects reset results from the pool.
+
+        ``min_get``, ``env_index``, ``max_get`` and ``timeout`` behave as in
+        :meth:`async_step_recv`; in particular ``timeout`` bounds the entire
+        call and raises :class:`TimeoutError` (without losing results) if
+        fewer than ``min_get`` results arrive in time.
+
+        Returns:
+            TensorDictBase: the stacked reset results, carrying
+            ``"env_index"``.
+        """
         raise NotImplementedError
 
     def stats(self, *, reset: bool = False) -> dict[str, float | int]:
@@ -1118,12 +1167,33 @@ class ThreadingAsyncEnvPool(AsyncEnvPool):
         limit = len(futures) if max_get is None else max_get
         pending = set(futures)
         completed = []
-        deadline_timer = None
+        # The deadline is anchored at call entry and bounds the entire call,
+        # including the wait for the first result.
+        deadline_timer = (
+            None
+            if timeout is None
+            else timeit("async_env_future_batch_deadline").start()
+        )
         while pending and len(completed) < min_get:
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            if deadline_timer is None:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            else:
+                remaining = timeout - deadline_timer.elapsed()
+                # A non-positive remaining still polls: wait(timeout=0)
+                # returns whatever is already done without blocking.
+                done, pending = wait(
+                    pending, timeout=max(remaining, 0.0), return_when=FIRST_COMPLETED
+                )
+                if not done:
+                    # Completed futures stay in the pool's pending lists (the
+                    # caller only removes returned ones), so no result is
+                    # lost and state stays consistent.
+                    raise TimeoutError(
+                        f"async recv timed out: {len(completed)}/{min_get} "
+                        f"results after {timeout}s; completed futures remain "
+                        f"available to the next call."
+                    )
             completed.extend(list(done)[: limit - len(completed)])
-            if deadline_timer is None and timeout is not None:
-                deadline_timer = timeit("async_env_future_batch_deadline").start()
         while pending and len(completed) < limit:
             done = {future for future in pending if future.done()}
             if not done:
