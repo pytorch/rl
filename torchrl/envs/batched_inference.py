@@ -104,7 +104,7 @@ class FixedBatchedInference:
         double_buffer: bool = True,
         add_valid_mask: bool = True,
         stream: torch.cuda.Stream | None = None,
-    ) -> None:
+    ):
         bucket_sizes = sorted(set(bucket_sizes))
         if not bucket_sizes:
             raise ValueError("bucket_sizes must not be empty.")
