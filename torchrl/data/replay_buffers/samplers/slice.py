@@ -541,6 +541,9 @@ class SliceSampler(Sampler):
     ) -> None:
         if self.fragmented and self._fragmented_index is not None:
             self._fragmented_index.mark_update(index, storage=storage)
+        # Delegate cooperatively so classes mixing SliceSampler with e.g.
+        # PrioritizedSampler keep their write hook.
+        super().mark_update(index, storage=storage)
 
     def __repr__(self):
         return (

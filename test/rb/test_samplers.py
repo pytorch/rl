@@ -615,6 +615,36 @@ class TestSamplers:
         sample = rb.sample().reshape(2, 2)
         assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
 
+    def test_slice_sampler_mark_update_cooperative(self):
+        # Classes mixing SliceSampler with a sampler that implements
+        # mark_update (e.g. PrioritizedSampler) must keep their write hook:
+        # SliceSampler.mark_update has to delegate to the next class in the
+        # MRO rather than swallow the call.
+        class _RecordingSampler(RandomSampler):
+            def __init__(self):
+                super().__init__()
+                self.marked = []
+
+            def mark_update(self, index, *, storage=None):
+                self.marked.append(index)
+
+        class _ComboSampler(SliceSampler, _RecordingSampler):
+            def __init__(self, **kwargs):
+                SliceSampler.__init__(self, **kwargs)
+                self.marked = []
+
+        sampler = _ComboSampler(slice_len=2, traj_key="trajectory")
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4), sampler=sampler, batch_size=4
+        )
+        rb.extend(
+            TensorDict(
+                {"trajectory": torch.tensor([0, 0, 1, 1])},
+                batch_size=[4],
+            )
+        )
+        assert len(sampler.marked) == 1
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)
