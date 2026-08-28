@@ -108,7 +108,7 @@ collector = Collector(
     frames_per_batch=frames_per_batch,
     total_frames=-1,
     init_random_frames=init_rand_steps,
-    auto_register_policy_transforms=True,
+    auto_register_policy_transforms=False,
 )
 rb = ReplayBuffer(storage=LazyTensorStorage(100_000))
 
