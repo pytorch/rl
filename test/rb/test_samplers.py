@@ -464,11 +464,7 @@ class TestSamplers:
 
     @pytest.mark.parametrize("device", get_default_devices())
     def test_slice_sampler_fragmented_interleaved_nested_keys(self, device):
-        records = [
-            (trajectory, step)
-            for step in range(6)
-            for trajectory in range(2)
-        ]
+        records = [(trajectory, step) for step in range(6) for trajectory in range(2)]
         trajectory = torch.tensor(
             [trajectory for trajectory, _ in records], device=device
         )
@@ -544,9 +540,7 @@ class TestSamplers:
 
         sample = rb.sample().reshape(16, 3)
         assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
-        assert torch.equal(
-            sample["step"], torch.tensor([1, 2, 3]).expand(16, 3)
-        )
+        assert torch.equal(sample["step"], torch.tensor([1, 2, 3]).expand(16, 3))
 
     def test_slice_sampler_fragmented_missing_step_splits_run(self):
         rb = TensorDictReplayBuffer(

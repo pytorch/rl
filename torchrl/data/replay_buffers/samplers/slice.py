@@ -391,9 +391,7 @@ class SliceSampler(Sampler):
                     "fragmented=True; provide traj_key and step_key."
                 )
             if span:
-                raise NotImplementedError(
-                    "span is not supported with fragmented=True."
-                )
+                raise NotImplementedError("span is not supported with fragmented=True.")
             if compile:
                 raise NotImplementedError(
                     "compile is not supported with fragmented=True."
@@ -901,11 +899,13 @@ class SliceSampler(Sampler):
         selected_run_lengths = lengths[run_idx]
         available_starts = selected_run_lengths - sampled_lengths + 1
         relative_starts = (
-            torch.rand(
-                num_slices, device=lengths.device, generator=self._rng
+            (
+                torch.rand(num_slices, device=lengths.device, generator=self._rng)
+                * available_starts
             )
-            * available_starts
-        ).floor().to(run_offsets.dtype)
+            .floor()
+            .to(run_offsets.dtype)
+        )
         packed_starts = run_offsets[run_idx] + relative_starts
 
         if target_seq_length is not None:

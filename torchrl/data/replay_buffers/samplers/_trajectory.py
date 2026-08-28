@@ -8,7 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 import torch
-from tensordict import TensorDictBase, is_tensor_collection
+from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl.data.replay_buffers.storages import Storage
@@ -290,9 +290,7 @@ class _FragmentedTrajectoryIndex:
             removed_slots=removed_slots,
         )
 
-    def refresh(
-        self, storage: Storage
-    ) -> _FragmentedTrajectoryIndexUpdate | None:
+    def refresh(self, storage: Storage) -> _FragmentedTrajectoryIndexUpdate | None:
         revision = int(storage._mutation_revision)
         if self._trajectory_positions is None or self._cache_storage_id != id(storage):
             return self._full_rebuild(storage, revision)
