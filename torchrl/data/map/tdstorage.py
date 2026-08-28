@@ -204,6 +204,8 @@ class TensorDictMap(
                 storage. Defaults to a custom value for each known storage type (stack for
                 :class:`~torchrl.data.ListStorage`, identity for :class:`~torchrl.data.TensorStorage`
                 subtypes and others).
+            write_fn (callable, optional): a function used to write values into
+                the storage. Defaults to ``None``.
             consolidated (bool, optional): whether to consolidate the storage in a single storage tensor.
                 Defaults to ``False``.
 

@@ -36,7 +36,12 @@ rm -f pyproject.toml.bak
 
 # Set nightly version (YYYY.MM.DD format)
 echo "Setting nightly version..."
-echo "$(date +%Y.%m.%d)" > version.txt
+NIGHTLY_VERSION="$(date +%Y.%m.%d)"
+echo "$NIGHTLY_VERSION" > version.txt
+# PyPI rejects PEP 440 local version identifiers (e.g. "+g<sha>"). Pin the
+# build version explicitly: setup.py uses TORCHRL_BUILD_VERSION verbatim and
+# skips the local "+g<sha>" suffix it would otherwise append.
+export TORCHRL_BUILD_VERSION="$NIGHTLY_VERSION"
 
 # Build the package
 echo "Building nightly package..."

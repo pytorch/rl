@@ -48,6 +48,9 @@ __all__ = [
     # Async SGLang
     "AsyncSGLang",
     "RLSGLangEngine",
+    # TRL interoperability adapters (optional-dep guarded)
+    "TorchRLBufferDataset",
+    "HFRewardModelWrapper",
 ]
 
 
@@ -66,4 +69,13 @@ def __getattr__(name: str) -> Any:  # noqa: ANN401
         from . import backends  # local import is intentional / required
 
         return getattr(backends, name)
+    # TRL interoperability adapters: loaded on demand so neither ``trl`` nor
+    # ``transformers`` is required just to import ``torchrl.modules.llm``.
+    if name in {"TorchRLBufferDataset", "HFRewardModelWrapper"}:
+        from .trl_interop import HFRewardModelWrapper, TorchRLBufferDataset
+
+        return {
+            "TorchRLBufferDataset": TorchRLBufferDataset,
+            "HFRewardModelWrapper": HFRewardModelWrapper,
+        }[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

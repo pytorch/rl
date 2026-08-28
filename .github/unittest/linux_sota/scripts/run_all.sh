@@ -70,7 +70,7 @@ uv pip install \
   hypothesis \
   future \
   cloudpickle \
-  pyvers \
+  "pyvers>=0.2.3" \
   packaging \
   pygame \
   "moviepy<2.0.0" \
@@ -86,7 +86,7 @@ uv pip install \
   pyyaml \
   scipy \
   psutil \
-  hydra-core \
+  "hydra-core>=1.3,<1.4" \
   "imageio==2.26.0" \
   dm_control \
   "mujoco<3.3.6" \
@@ -146,6 +146,9 @@ uv pip install -e . --no-build-isolation --no-deps
 
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 bash ${this_dir}/run_test.sh
 

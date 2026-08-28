@@ -7,12 +7,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.configs.envs import EnvConfig
+
+if TYPE_CHECKING:
+    _CollectorBackend = Literal[
+        "direct", "process", "ray", "rpc", "distributed", "submitit"
+    ]
+else:
+    # OmegaConf structured configs do not support Literal on all supported
+    # versions.
+    _CollectorBackend = str
 
 
 @dataclass
@@ -22,14 +31,21 @@ class BaseCollectorConfig(ConfigBase):
 
 @dataclass
 class CollectorConfig(BaseCollectorConfig):
-    """A class to configure a synchronous data collector (Collector)."""
+    """Hydra configuration for :class:`~torchrl.collectors.Collector`.
+
+    Every kwarg accepted by ``Collector.__init__`` is exposed as a field here.
+    """
 
     create_env_fn: ConfigBase = MISSING
     policy: Any = None
     policy_factory: Any = None
+    backend: _CollectorBackend | None = None
+    backend_options: dict[str, Any] | None = None
+    num_collectors: int | None = None
+    sync: bool | None = None
     frames_per_batch: int | None = None
     total_frames: int = -1
-    init_random_frames: int | None = 0
+    init_random_frames: int | None = None
     device: str | None = None
     storing_device: str | None = None
     policy_device: str | None = None
@@ -38,22 +54,33 @@ class CollectorConfig(BaseCollectorConfig):
     max_frames_per_traj: int | None = None
     reset_at_each_iter: bool = False
     postproc: Any = None
-    split_trajs: bool = False
+    split_trajs: bool | None = None
+    track_traj_ids: bool = True
     exploration_type: str = "RANDOM"
     return_same_td: bool = False
+    reset_when_done: bool = True
     interruptor: Any = None
     set_truncated: bool = False
-    use_buffers: bool = False
+    use_buffers: bool | None = None
     replay_buffer: Any = None
-    extend_buffer: bool = False
-    trust_policy: bool = True
+    extend_buffer: bool = True
+    trust_policy: bool | None = None
     compile_policy: Any = None
     cudagraph_policy: Any = None
     no_cuda_sync: bool = False
     weight_updater: Any = None
     weight_sync_schemes: Any = None
+    weight_recv_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+    worker_idx: int | None = None
+    trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
+    traj_format: str | None = None
+    auto_register_policy_transforms: bool | None = None
+    pre_collect_hook: Any = None
+    post_collect_hook: Any = None
+    compact_obs: bool = False
+
     _target_: str = "torchrl.collectors.Collector"
     _partial_: bool = False
 
@@ -65,13 +92,14 @@ class CollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-SyncDataCollectorConfig = CollectorConfig
-
-
 @dataclass
 class AsyncCollectorConfig(BaseCollectorConfig):
-    """Configuration for asynchronous data collector (AsyncCollector)."""
+    """Hydra configuration for :class:`~torchrl.collectors.AsyncCollector`.
+
+    Every kwarg accepted by ``AsyncCollector.__init__`` is exposed as a field here.
+    Fields that AsyncCollector forwards to its inner ``Collector`` via ``**kwargs``
+    (replay buffer, weight sync, ...) are also exposed for convenience.
+    """
 
     create_env_fn: ConfigBase = field(
         default_factory=partial(EnvConfig, _partial_=True)
@@ -91,6 +119,11 @@ class AsyncCollectorConfig(BaseCollectorConfig):
     postproc: ConfigBase | None = None
     split_trajs: bool = False
     exploration_type: str = "RANDOM"
+    reset_when_done: bool = True
+    update_at_each_batch: bool = False
+    preemptive_threshold: float | None = None
+    num_threads: int | None = None
+    num_sub_threads: int = 1
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
@@ -102,7 +135,7 @@ class AsyncCollectorConfig(BaseCollectorConfig):
     weight_updater: Any = None
     weight_sync_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+
     _target_: str = "torchrl.collectors.AsyncCollector"
     _partial_: bool = False
 
@@ -114,13 +147,12 @@ class AsyncCollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-AsyncDataCollectorConfig = AsyncCollectorConfig
-
-
 @dataclass
 class MultiSyncCollectorConfig(BaseCollectorConfig):
-    """Configuration for multi-synchronous data collector (MultiSyncCollector)."""
+    """Hydra configuration for :class:`~torchrl.collectors.MultiSyncCollector`.
+
+    Every kwarg accepted by ``MultiSyncCollector.__init__`` is exposed as a field here.
+    """
 
     create_env_fn: Any = MISSING
     num_workers: int | None = None
@@ -134,11 +166,18 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     policy_device: str | None = None
     env_device: str | None = None
     create_env_kwargs: dict | None = None
+    collector_class: Any = None
     max_frames_per_traj: int | None = None
     reset_at_each_iter: bool = False
     postproc: ConfigBase | None = None
     split_trajs: bool = False
     exploration_type: str = "RANDOM"
+    reset_when_done: bool = True
+    update_at_each_batch: bool = False
+    preemptive_threshold: float | None = None
+    num_threads: int | None = None
+    num_sub_threads: int = 1
+    cat_results: Any = None
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
@@ -149,8 +188,14 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     no_cuda_sync: bool = False
     weight_updater: Any = None
     weight_sync_schemes: Any = None
+    weight_recv_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+    worker_idx: int | None = None
+    trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
+    traj_format: str | None = None
+    init_fn: Any = None
+
     _target_: str = "torchrl.collectors.MultiSyncCollector"
     _partial_: bool = False
 
@@ -163,13 +208,14 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-MultiSyncCollectorConfig = MultiSyncCollectorConfig
-
-
 @dataclass
 class MultiAsyncCollectorConfig(BaseCollectorConfig):
-    """Configuration for multi-asynchronous data collector (MultiAsyncCollector)."""
+    """Hydra configuration for :class:`~torchrl.collectors.MultiAsyncCollector`.
+
+    ``MultiAsyncCollector`` shares its constructor surface with
+    ``MultiSyncCollector`` (both forward to the same multi-worker base), so the
+    same kwargs are exposed here.
+    """
 
     create_env_fn: Any = MISSING
     num_workers: int | None = None
@@ -183,11 +229,18 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     policy_device: str | None = None
     env_device: str | None = None
     create_env_kwargs: dict | None = None
+    collector_class: Any = None
     max_frames_per_traj: int | None = None
     reset_at_each_iter: bool = False
     postproc: ConfigBase | None = None
     split_trajs: bool = False
     exploration_type: str = "RANDOM"
+    reset_when_done: bool = True
+    update_at_each_batch: bool = False
+    preemptive_threshold: float | None = None
+    num_threads: int | None = None
+    num_sub_threads: int = 1
+    cat_results: Any = None
     set_truncated: bool = False
     use_buffers: bool = False
     replay_buffer: ConfigBase | None = None
@@ -198,8 +251,14 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     no_cuda_sync: bool = False
     weight_updater: Any = None
     weight_sync_schemes: Any = None
+    weight_recv_schemes: Any = None
     track_policy_version: bool = False
-    local_init_rb: bool = False
+    worker_idx: int | None = None
+    trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
+    traj_format: str | None = None
+    init_fn: Any = None
+
     _target_: str = "torchrl.collectors.MultiAsyncCollector"
     _partial_: bool = False
 
@@ -210,7 +269,3 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:
             self.weight_updater._partial_ = True
-
-
-# Legacy alias
-MultiAsyncCollectorConfig = MultiAsyncCollectorConfig

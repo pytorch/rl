@@ -13,9 +13,12 @@ import torch
 from tensordict import is_tensor_collection
 from tensordict.base import TensorDictBase
 
+from torchrl._utils import _RayServiceMetaClass
 from torchrl.data.tensor_specs import DEVICE_TYPING, TensorSpec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.transforms import Transform
+
+__all__ = ["RayTransform", "_RayServiceMetaClass"]
 
 T = TypeVar("T")
 
@@ -625,39 +628,3 @@ class RayTransform(Transform, ABC):
             except Exception:
                 # Fall back to local setting for attributes that can't be set remotely
                 super().__setattr__(name, value)
-
-
-class _RayServiceMetaClass(type):
-    """Metaclass that enables dynamic class selection based on use_ray_service parameter.
-
-    This metaclass allows a class to dynamically return either itself or a Ray-based
-    alternative class when instantiated with use_ray_service=True.
-
-    Usage:
-        >>> class MyRayClass():
-        ...     def __init__(self, **kwargs):
-        ...         ...
-        ...
-        >>> class MyClass(metaclass=_RayServiceMetaClass):
-        ...     _RayServiceClass = MyRayClass
-        ...
-        ...     def __init__(self, use_ray_service=False, **kwargs):
-        ...         # Regular implementation
-        ...         pass
-        ...
-        >>> # Returns MyClass instance
-        >>> obj1 = MyClass(use_ray_service=False)
-        >>>
-        >>> # Returns MyRayClass instance
-        >>> obj2 = MyClass(use_ray_service=True)
-    """
-
-    def __call__(cls, *args, use_ray_service=False, **kwargs):
-        if use_ray_service:
-            if not hasattr(cls, "_RayServiceClass"):
-                raise ValueError(
-                    f"Class {cls.__name__} does not have a _RayServiceClass attribute"
-                )
-            return cls._RayServiceClass(*args, **kwargs)
-        else:
-            return super().__call__(*args, **kwargs)

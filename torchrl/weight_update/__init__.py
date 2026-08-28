@@ -9,11 +9,19 @@ from ._noupdate import NoWeightSyncScheme
 from ._ray import RayModuleTransformScheme, RayTransport, RayWeightSyncScheme
 from ._rpc import RPCTransport, RPCWeightSyncScheme
 from ._shared import SharedMemTransport, SharedMemWeightSyncScheme
-from .weight_sync_schemes import TransportBackend, WeightStrategy, WeightSyncScheme
+from .weight_sync_schemes import (
+    InitialSyncTransport,
+    TransportBackend,
+    WeightStrategy,
+    WeightSyncBackend,
+    WeightSyncScheme,
+)
 
 __all__ = [
     # Base classes
     "TransportBackend",
+    "InitialSyncTransport",
+    "WeightSyncBackend",
     "WeightStrategy",
     "WeightSyncScheme",
     # Transports

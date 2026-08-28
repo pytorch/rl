@@ -1996,7 +1996,7 @@ class TransformersWrapper(LLMWrapperBase):
         td = TensorDict(logits=logits, tokens=tokens).auto_batch_size_()
         with td.flatten() as tdflat:
             tdflat["log_probs"] = -torch.nn.functional.cross_entropy(
-                tdflat["logits"], tdflat["tokens"], reduce=False, ignore_index=pad_val
+                tdflat["logits"], tdflat["tokens"], reduce=False, ignore_index=-100
             )
         td["log_probs"][:, 0] = 0
         log_probs = td["log_probs"]
@@ -2049,7 +2049,7 @@ class TransformersWrapper(LLMWrapperBase):
                 tdflat["logits"],
                 tdflat["tokens"],
                 reduce=False,
-                ignore_index=pad_val,
+                ignore_index=-100,
             )
         # For consistency with vllm, we set the log-probs of the first token to 0
         #  However, the first element may not be the first - we want the first of the attention mask,

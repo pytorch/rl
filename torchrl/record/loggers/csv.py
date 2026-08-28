@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import tensordict.utils
@@ -14,7 +14,7 @@ import torch
 from tensordict import MemoryMappedTensor
 from torch import Tensor
 
-from .common import Logger
+from .common import _write_video, Logger
 
 
 class CSVExperiment:
@@ -57,9 +57,11 @@ class CSVExperiment:
         - `"pt"`: uses :func:`~torch.save` to save the video tensor);
         - `"memmap"`: saved the file as memory-mapped array (reading this file will require
           the dtype and shape to be known at read time);
-        - `"mp4"`: saves the file as an `.mp4` file using torchvision :func:`~torchvision.io.write_video`
-          API. Any ``kwargs`` passed to ``add_video`` will be transmitted to ``write_video``.
-          These include ``preset``, ``crf`` and others.
+        - `"mp4"`: saves the file as an `.mp4` file using
+          :class:`~torchcodec.encoders.VideoEncoder`. Any ``kwargs``
+          passed to ``add_video`` will be transmitted to the underlying
+          writer. These include ``video_codec``, ``options``
+          (a dict, e.g. ``{"crf": "23", "preset": "medium"}``), and others.
           See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
 
         """
@@ -87,8 +89,6 @@ class CSVExperiment:
         elif self.video_format == "memmap":
             MemoryMappedTensor.from_tensor(vid_tensor, filename=filepath)
         elif self.video_format == "mp4":
-            import torchvision
-
             if vid_tensor.shape[-3] not in (3, 1):
                 raise RuntimeError(
                     "expected the video tensor to be of format [T, C, H, W] but the third channel "
@@ -99,7 +99,7 @@ class CSVExperiment:
             vid_tensor = vid_tensor.permute((0, 2, 3, 1))
             vid_tensor = vid_tensor.expand(*vid_tensor.shape[:-1], 3)
             kwargs.setdefault("fps", self.video_fps)
-            torchvision.io.write_video(filepath, vid_tensor, **kwargs)
+            _write_video(filepath, vid_tensor, **kwargs)
         else:
             raise ValueError(
                 f"Unknown video format {self.video_format}. Must be one of 'pt', 'memmap' or 'mp4'."
@@ -131,6 +131,8 @@ class CSVExperiment:
 class CSVLogger(Logger):
     """A minimal-dependency CSV logger.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.CSVLoggerConfig`.
+
     Args:
         exp_name (str): The name of the experiment.
         log_dir (str or Path, optional): where the experiment should be saved.
@@ -138,7 +140,7 @@ class CSVLogger(Logger):
         video_format (str, optional): how videos should be saved when calling :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video`. Must be one of
             ``"pt"`` (video saved as a `video_<tag>_<step>.pt` file with torch.save),
             ``"memmap"`` (video saved as a `video_<tag>_<step>.memmap` file with :class:`~tensordict.MemoryMappedTensor`),
-            ``"mp4"`` (video saved as a `video_<tag>_<step>.mp4` file, requires torchvision to be installed).
+            ``"mp4"`` (video saved as a `video_<tag>_<step>.mp4` file, requires torchcodec to be installed).
             Defaults to ``"pt"``.
         video_fps (int, optional): the video frames-per-seconds if `video_format="mp4"`. Defaults to 30.
 
@@ -167,6 +169,19 @@ class CSVLogger(Logger):
             log_dir, video_format=self.video_format, video_fps=self.video_fps
         )
 
+    def _checkpoint_state(self) -> dict[str, object]:
+        return {
+            "scalars": dict(self.experiment.scalars),
+            "videos_counter": dict(self.experiment.videos_counter),
+            "text_counter": dict(self.experiment.text_counter),
+        }
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, object]) -> None:
+        for name in ("scalars", "videos_counter", "text_counter"):
+            target = getattr(self.experiment, name)
+            target.clear()
+            target.update(state_dict.get(name, {}))
+
     def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.
 
@@ -188,8 +203,8 @@ class CSVLogger(Logger):
             step (int, optional): The step at which the video is logged. Defaults to None.
             **kwargs: other kwargs passed to the underlying video logger.
 
-        .. note:: If the video format is `mp4`, many more arguments can be passed to the :meth:`~torchvision.io.write_video`
-            function.
+        .. note:: If the video format is `mp4`, additional arguments (e.g. ``video_codec``, ``options``)
+            can be passed through to the underlying video writer.
             For more information on video logging with :class:`~torchrl.record.loggers.csv.CSVLogger`,
             see the :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video` documentation.
         """

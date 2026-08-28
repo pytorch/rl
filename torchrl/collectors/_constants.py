@@ -51,30 +51,32 @@ _is_osx = sys.platform.startswith("darwin")
 
 
 class _Interruptor:
-    """A class for managing the collection state of a process.
+    """A shared-memory flag for interrupting rollout collection across processes.
 
-    This class provides methods to start and stop collection, and to check
-    whether collection has been stopped. The collection state is protected
-    by a lock to ensure thread-safety.
+    The main process raises the flag with ``start_collection`` and clears it
+    with ``stop_collection``; workers poll ``collection_stopped`` once per env
+    step and cut their rollout short when it returns ``True``.
+
+    The flag is a single shared-memory byte with exactly one writer (the main
+    process), so no lock is needed: one-byte reads cannot be torn and workers
+    only ever read. Like any ``multiprocessing.sharedctypes`` value, the object
+    must be handed to workers at process-creation time (it is inherited and
+    cannot be sent through queues or pipes afterwards).
     """
 
     # interrupter vs interruptor: google trends seems to indicate that "or" is more
     # widely used than "er" even if my IDE complains about that...
     def __init__(self):
-        self._collect = True
-        self._lock = mp.Lock()
+        self._collect = mp.Value("b", True, lock=False)
 
     def start_collection(self):
-        with self._lock:
-            self._collect = True
+        self._collect.value = True
 
     def stop_collection(self):
-        with self._lock:
-            self._collect = False
+        self._collect.value = False
 
     def collection_stopped(self):
-        with self._lock:
-            return self._collect is False
+        return not self._collect.value
 
 
 class _InterruptorManager(SyncManager):
@@ -82,6 +84,11 @@ class _InterruptorManager(SyncManager):
 
     This class extends the SyncManager class and allows to share an Interruptor object
     between processes.
+
+    .. note::
+        No longer used internally: :class:`_Interruptor` is now backed by shared
+        memory and inherited directly by worker processes. Kept for backward
+        compatibility.
     """
 
 

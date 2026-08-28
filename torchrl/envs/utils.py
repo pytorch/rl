@@ -771,12 +771,27 @@ def check_env_specs(
         fake_tensordict = LazyStackedTensorDict.lazy_stack(
             [fake_tensordict.clone() for _ in range(3)], -1
         )
-    # eliminate empty containers
+    # state_spec keys may optionally appear in "next" if _step returns them,
+    # so exclude them from all comparisons to avoid false positives in either
+    # direction (real has them but fake doesn't, or vice versa).
+    state_spec_next_keys = {
+        ("next", *k) if isinstance(k, tuple) else ("next", k)
+        for k in env.state_spec.keys(True, True)
+    }
+    # eliminate empty containers, excluding state_spec keys from "next"
     fake_tensordict_select = fake_tensordict.select(
-        *fake_tensordict.keys(True, True, is_leaf=_default_is_leaf)
+        *[
+            k
+            for k in fake_tensordict.keys(True, True, is_leaf=_default_is_leaf)
+            if k not in state_spec_next_keys
+        ]
     )
     real_tensordict_select = real_tensordict.select(
-        *real_tensordict.keys(True, True, is_leaf=_default_is_leaf)
+        *[
+            k
+            for k in real_tensordict.keys(True, True, is_leaf=_default_is_leaf)
+            if k not in state_spec_next_keys
+        ]
     )
     # check keys
     fake_tensordict_keys = set(
@@ -785,6 +800,8 @@ def check_env_specs(
     real_tensordict_keys = set(
         real_tensordict.keys(True, True, is_leaf=_is_leaf_nontensor)
     )
+    fake_tensordict_keys -= state_spec_next_keys
+    real_tensordict_keys -= state_spec_next_keys
     if fake_tensordict_keys != real_tensordict_keys:
         keys_in_real_not_in_fake = real_tensordict_keys - fake_tensordict_keys
         keys_in_fake_not_in_real = fake_tensordict_keys - real_tensordict_keys
@@ -800,6 +817,9 @@ def check_env_specs(
             "zeroing the two tensordicts did not make them identical. "
             f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
         )
+
+    def _zeros_like_on_common_device(data):
+        return torch.zeros_like(data).to(torch.device("cpu"))
 
     from torchrl.envs.common import _has_dynamic_specs
 
@@ -818,7 +838,9 @@ def check_env_specs(
                     ) from e
 
             fake = fake.apply(expand, real, named=True, nested_keys=True)
-            if (torch.zeros_like(real) != torch.zeros_like(fake)).any():
+            if (
+                _zeros_like_on_common_device(real) != _zeros_like_on_common_device(fake)
+            ).any():
                 raise AssertionError(zeroing_err_msg())
 
             # Checks shapes and eventually dtypes of keys at all nesting levels
@@ -826,8 +848,8 @@ def check_env_specs(
 
     else:
         if (
-            torch.zeros_like(fake_tensordict_select)
-            != torch.zeros_like(real_tensordict_select)
+            _zeros_like_on_common_device(fake_tensordict_select)
+            != _zeros_like_on_common_device(real_tensordict_select)
         ).any():
             raise AssertionError(zeroing_err_msg())
 
@@ -1376,7 +1398,7 @@ def _aggregate_end_of_traj(
     batch_size = data.batch_size
     n = len(batch_size)
     if done_keys is not None and reset_keys is None:
-        reset_keys = {_replace_last(key, "done") for key in done_keys}
+        reset_keys = done_keys
     if reset_keys is not None:
         reset = False
         has_missing = None

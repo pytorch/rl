@@ -5,21 +5,69 @@
 from __future__ import annotations
 
 import contextlib
+import platform
+import sys
+import warnings
 from collections.abc import Callable, Sequence
+from typing import Literal
 
 import torch
 from pyvers import implement_for
 
-from tensordict import NestedKey, pad, set_lazy_legacy, TensorDict, TensorDictBase
+from tensordict import (
+    NestedKey,
+    NonTensorData,
+    NonTensorStack,
+    pad,
+    set_lazy_legacy,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.base import _is_leaf_nontensor, _NESTED_TENSORS_AS_LISTS
 from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
+
+from torchrl._utils import DEFAULT_DONE_KEYS
 
 _NON_NN_POLICY_WEIGHTS = (
     "The policy is not an nn.Module. TorchRL will assume that the parameter set is empty and "
     "update_policy_weights_ will be a no-op. Consider passing a local/weight_updater object "
     "to your collector to handle the weight updates."
 )
+
+
+def _log_prob_key_from_sample_key(key: NestedKey) -> NestedKey:
+    if isinstance(key, tuple):
+        return (*key[:-1], f"{key[-1]}_log_prob")
+    return f"{key}_log_prob"
+
+
+def _ensure_derived_policy_output_keys(policy: Callable | None) -> None:
+    """Restore derived policy-output metadata after policy serialization.
+
+    Collectors already discover declared policy-produced keys, including
+    arbitrary non-action metadata, with the initial policy dry-run. Some
+    modules derive additional output-key metadata at construction time. If
+    serialization drops that metadata, the first dry-run cannot see those
+    outputs, so restore the known derived keys before collection starts.
+    """
+    if policy is None:
+        return
+    modules = policy.modules() if isinstance(policy, nn.Module) else (policy,)
+    for module in modules:
+        if not getattr(module, "return_log_prob", False):
+            continue
+        try:
+            log_prob_keys = module.log_prob_keys
+        except AttributeError:
+            continue
+        if log_prob_keys:
+            continue
+        out_keys = getattr(module, "out_keys", None)
+        if not out_keys:
+            continue
+        module.log_prob_keys = [_log_prob_key_from_sample_key(key) for key in out_keys]
 
 
 def _stack_output(fun) -> Callable:
@@ -89,6 +137,20 @@ def split_trajectories(
         A ``"mask"`` boolean entry sharing the ``trajectory_key`` prefix
         and the tensordict shape is also added. It indicated the valid elements of the tensordict,
         as well as a ``"traj_ids"`` entry if ``trajectory_key`` could not be found.
+
+    .. note:: This function splits whatever the input contains: trajectories
+        spanning several collector batches stay split across the corresponding
+        calls. To collect batches made of complete trajectories only, pass
+        ``trajs_per_batch`` to the collector instead (see
+        :ref:`collectors_replay_trajs`).
+
+    .. seealso:: This function operates on contiguous *rollout batches* (fresh
+        collector output). To recover trajectory boundaries from data laid out
+        in a replay-buffer storage -- where the ring buffer can wrap and the
+        write cursor acts as an implicit truncation -- use
+        :func:`~torchrl.data.find_start_stop_traj` instead. Note that the
+        padded layout this function produces is discouraged for new code
+        unless explicitly needed; see :ref:`data-layout-split-trajectories`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -295,7 +357,11 @@ def _make_meta_policy(policy: nn.Module):
         On exit, the original parameters are restored to the policy.
     """
     param_and_buf = TensorDict.from_module(policy, as_module=True)
-    return param_and_buf.data.to("meta").apply(_cast, param_and_buf).to_module(policy)
+    return (
+        param_and_buf.data.to("meta")
+        .apply(_cast, param_and_buf)
+        .to_module(policy, preserve_module_state=False)
+    )
 
 
 @implement_for("torch", None, "2.8")
@@ -356,6 +422,113 @@ def _map_to_cpu_if_needed(x):
     return x
 
 
+def _platform_supports_cuda_ipc() -> bool:
+    """Whether torch.multiprocessing can share CUDA tensors with other processes.
+
+    CUDA tensors are exchanged between processes through CUDA IPC handles,
+    which the CUDA driver only implements on native Linux. On Windows and on
+    WSL2 the exchange fails silently: the receiving process observes zeroed
+    tensors and the sender's CUDA memory can be corrupted as well. See
+    https://github.com/pytorch/pytorch/issues/149155 and
+    https://github.com/pytorch/rl/issues/3985.
+    """
+    if sys.platform != "linux":
+        return False
+    return "microsoft" not in platform.uname().release.lower()
+
+
+def _device_shareable_across_processes(device: torch.device | str | int) -> bool:
+    """Whether tensors on ``device`` can be sent to another process without a copy.
+
+    CPU and meta tensors can be shared on every platform. CUDA tensors rely on
+    CUDA IPC, which is only available on native Linux. Other backends
+    (MPS, NPU, ...) cannot be shared across processes at all.
+    """
+    if not isinstance(device, torch.device):
+        device = torch.device(device)
+    if device.type in ("cpu", "meta"):
+        return True
+    if device.type == "cuda":
+        return _platform_supports_cuda_ipc()
+    return False
+
+
+def _unshareable_devices(
+    device: torch.device | str | int | None, weights: TensorDictBase | None
+) -> list[torch.device]:
+    """Return the devices of ``weights`` that cannot cross process boundaries.
+
+    ``device`` is the target device the weights are about to be moved to; when
+    it is ``None`` the weights are shipped on their current devices, so each
+    leaf tensor's device is checked instead.
+    """
+    if device is not None:
+        if _device_shareable_across_processes(device):
+            return []
+        return [torch.device(device)]
+    if weights is None:
+        return []
+    return sorted(
+        {
+            tensor.device
+            for tensor in weights.values(True, True)
+            if not _device_shareable_across_processes(tensor.device)
+        },
+        key=str,
+    )
+
+
+def _stage_unshareable_weights_on_cpu(
+    weights: TensorDictBase | dict | None,
+) -> TensorDictBase | dict | None:
+    """Return ``weights`` moved to CPU when any leaf cannot cross process boundaries.
+
+    Accepts a ``TensorDictBase`` or a state-dict mapping and returns the input
+    unchanged when every leaf tensor can be shared with other processes.
+    A warning is emitted when staging happens.
+    """
+    if isinstance(weights, TensorDictBase):
+        offending = _unshareable_devices(None, weights)
+        if offending:
+            _warn_cpu_staging(offending)
+            weights = weights.to("cpu")
+        return weights
+    if isinstance(weights, dict):
+        offending = sorted(
+            {
+                value.device
+                for value in weights.values()
+                if isinstance(value, torch.Tensor)
+                and not _device_shareable_across_processes(value.device)
+            },
+            key=str,
+        )
+        if offending:
+            _warn_cpu_staging(offending)
+            weights = {
+                key: value.cpu() if isinstance(value, torch.Tensor) else value
+                for key, value in weights.items()
+            }
+        return weights
+    return weights
+
+
+def _warn_cpu_staging(devices: Sequence[torch.device]) -> None:
+    """Warn that weights bound for ``devices`` are staged through CPU shared memory."""
+    device_names = sorted({str(d) for d in devices})
+    warnings.warn(
+        f"Policy weights on device(s) {device_names} cannot be shared across processes "
+        "on this platform: sharing CUDA tensors requires CUDA IPC, which is only "
+        "available on native Linux (not Windows or WSL2), and backends such as MPS "
+        "cannot be shared at all. Sending such tensors to another process silently "
+        "corrupts them (they are received as zeros and the sender's memory can be "
+        "zeroed too, see https://github.com/pytorch/rl/issues/3985). The weights will "
+        "be staged through CPU shared memory instead and moved back to the policy "
+        "device inside each worker, adding a host-device copy to every weight sync.",
+        UserWarning,
+    )
+
+
 def _make_meta_params(param):
     is_param = isinstance(param, Parameter)
 
@@ -386,6 +559,16 @@ class _TrajectoryPool:
             self._traj_id.copy_(1 + out[-1].item())
         return out
 
+    def state_dict(self) -> dict[str, torch.Tensor]:
+        """Return the next trajectory identifier without exposing shared storage."""
+        with self.lock:
+            return {"traj_id": self._traj_id.clone()}
+
+    def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
+        """Restore the next trajectory identifier in-place."""
+        with self.lock:
+            self._traj_id.copy_(state_dict["traj_id"])
+
 
 def _map_weight(
     weight,
@@ -404,6 +587,180 @@ def _map_weight(
     elif is_buffer:
         weight = Buffer(weight)
     return weight
+
+
+def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
+    """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
+    for leaf in DEFAULT_DONE_KEYS:
+        signal = chunk.get(("next", leaf), None)
+        if signal is not None and signal[-1].any().item():
+            return True
+    return False
+
+
+def _maybe_normalize_replay_buffer_tensordict_device(
+    data: TensorDictBase,
+    replay_buffer,
+) -> TensorDictBase:
+    """Align TensorDict root device metadata with replay-buffer storage when safe."""
+    if not isinstance(data, TensorDictBase):
+        return data
+
+    storage = getattr(replay_buffer, "_storage", None)
+    if storage is None:
+        storage = getattr(replay_buffer, "storage", None)
+    storage_device = getattr(storage, "device", None)
+    if storage_device is None:
+        storage_data = getattr(storage, "_storage", None)
+        storage_device = getattr(storage_data, "device", None)
+    if storage_device is None or storage_device == "auto":
+        return data
+    storage_device = torch.device(storage_device)
+
+    for value in data.values(
+        include_nested=True,
+        leaves_only=True,
+        is_leaf=_NESTED_TENSORS_AS_LISTS,
+    ):
+        value_device = getattr(value, "device", None)
+        if value_device is not None and torch.device(value_device) != storage_device:
+            return data
+
+    data = data.copy()
+    data.clear_device_()
+    return data.to(storage_device)
+
+
+def _traj_ingest(
+    batch: TensorDictBase,
+    partial_trajs: dict,
+    complete_trajs: list,
+) -> None:
+    """Route steps from *batch* into per-trajectory buffers.
+
+    Completed trajectories are moved from *partial_trajs* into *complete_trajs*.
+    """
+    flat = batch.reshape(-1)
+    traj_ids = flat.get(("collector", "traj_ids"), None)
+    if traj_ids is None:
+        raise KeyError(
+            "trajs_per_batch requires ('collector', 'traj_ids') in every "
+            "collector batch.  Make sure the collector is initialized with "
+            "split_trajs=False (the default)."
+        )
+
+    order = torch.argsort(traj_ids.reshape(-1), stable=True)
+    flat = flat[order]
+    traj_ids = traj_ids.reshape(-1)[order]
+    unique_ids, counts = traj_ids.unique_consecutive(return_counts=True)
+    start = 0
+    for tid_tensor, count in zip(unique_ids, counts):
+        tid = tid_tensor.item()
+        stop = start + count.item()
+        chunk = flat[start:stop]
+        start = stop
+
+        if tid in partial_trajs:
+            partial_trajs[tid].append(chunk)
+        else:
+            partial_trajs[tid] = [chunk]
+
+        if _traj_chunk_ends_done(chunk):
+            chunks = partial_trajs.pop(tid)
+            complete = torch.cat(chunks, dim=0) if len(chunks) > 1 else chunks[0]
+            complete_trajs.append(complete)
+
+
+def _traj_emit(
+    complete_trajs: list,
+    num_trajectories: int,
+    traj_format: Literal["padded", "cat"] = "padded",
+) -> TensorDictBase:
+    """Dequeue *num_trajectories* complete trajectories as a single batch.
+
+    With ``traj_format="padded"`` (default), trajectories are zero-padded
+    along time and stacked into a ``(num_trajectories, max_traj_len)`` batch
+    with a ``("collector", "mask")`` entry marking the valid steps.
+
+    With ``traj_format="cat"``, trajectories are concatenated along time into
+    a flat ``[sum_i T_i]`` batch (no padding, no mask): trajectories are
+    contiguous, in completion order, with ``("next", "done")`` ``True`` at the
+    last step of each and ``("collector", "traj_ids")`` constant within each.
+    """
+    trajs = complete_trajs[:num_trajectories]
+    del complete_trajs[:num_trajectories]
+
+    if traj_format == "cat":
+        return torch.cat(trajs, 0) if len(trajs) > 1 else trajs[0]
+
+    max_len = max(t.shape[0] for t in trajs)
+    padded = []
+    for traj in trajs:
+        traj = traj.copy()
+        traj.set(
+            ("collector", "mask"),
+            torch.ones(traj.shape[0], dtype=torch.bool, device=traj.device),
+        )
+        pad_len = max_len - traj.shape[0]
+        if not pad_len:
+            padded.append(traj)
+            continue
+        # tensordict.pad drops NonTensor entries (e.g. language
+        # instructions), valid steps included: pad those separately by
+        # repeating the last element (the mask marks validity anyway)
+        non_tensor_keys = [
+            key
+            for key in traj.keys(True, True, is_leaf=_is_leaf_nontensor)
+            if isinstance(traj.get(key), (NonTensorData, NonTensorStack))
+        ]
+        if non_tensor_keys:
+            non_tensor = {key: traj.get(key) for key in non_tensor_keys}
+            padded_traj = pad(traj.exclude(*non_tensor_keys), [0, pad_len])
+            for key, value in non_tensor.items():
+                filler = torch.cat([value[-1:]] * pad_len, 0)
+                padded_traj.set(key, torch.cat([value, filler], 0))
+        else:
+            padded_traj = pad(traj, [0, pad_len])
+        padded.append(padded_traj)
+
+    return torch.stack(padded, 0)
+
+
+def _validate_traj_format(
+    traj_format: Literal["padded", "cat"] | None,
+    trajs_per_batch: int | None,
+    *,
+    has_replay_buffer: bool = False,
+) -> Literal["padded", "cat"]:
+    """Validate and resolve the ``traj_format`` / ``trajs_per_batch`` keyword pair.
+
+    ``None`` resolves to the current default (``"padded"``) and emits a
+    :class:`FutureWarning` announcing the upcoming default change whenever the
+    choice matters, i.e. when ``trajs_per_batch`` batches are yielded rather
+    than written to a replay buffer (replay-buffer writes are always flat).
+    """
+    if traj_format is None:
+        if trajs_per_batch is not None and not has_replay_buffer:
+            warnings.warn(
+                "trajs_per_batch is set but traj_format is not. The current "
+                "default trajectory layout is 'padded', but it will change "
+                "to 'cat' in torchrl v0.16. Pass traj_format='padded' to "
+                "keep the current behavior, or traj_format='cat' "
+                "(recommended) to opt in to the new flat, unpadded layout.",
+                FutureWarning,
+                stacklevel=3,
+            )
+        return "padded"
+    if traj_format not in ("padded", "cat"):
+        raise ValueError(f"traj_format must be 'padded' or 'cat', got {traj_format!r}.")
+    if traj_format != "padded" and trajs_per_batch is None:
+        raise ValueError(
+            "traj_format has no effect unless trajs_per_batch is set: the "
+            "collector only assembles whole trajectories when asked to yield "
+            "them. Set trajs_per_batch to the number of complete "
+            "trajectories per batch."
+        )
+    return traj_format
 
 
 def _make_policy_factory(
@@ -431,4 +788,5 @@ def _make_policy_factory(
         )
         # Synchronize initial weights
         weight_sync_scheme.connect(worker_idx=worker_idx)
+    _ensure_derived_policy_output_keys(policy)
     return policy

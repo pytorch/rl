@@ -10,10 +10,19 @@ from functools import partial
 from typing import Any
 
 import torch
-
 from omegaconf import MISSING
-
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from tensordict.nn import TensorDictModule, TensorDictSequential
+from torchrl.modules import (
+    AdditiveGaussianModule,
+    QValueActor,
+    TanhModule,
+    ValueOperator,
+)
+from torchrl.trainers.algorithms.configs.common import (
+    _normalize_hydra_key,
+    _normalize_hydra_keys,
+    ConfigBase,
+)
 
 
 @dataclass
@@ -188,6 +197,38 @@ class ConvNetConfig(NetworkConfig):
             self.aggregator_class = AggregatorConfig(
                 _target_=self.aggregator_class, _partial_=True
             )
+
+
+@dataclass
+class QMixerNetworkConfig(NetworkConfig):
+    """A class to configure a QMIX mixer network.
+
+    .. seealso:: :class:`torchrl.modules.models.multiagent.QMixer`
+    """
+
+    state_shape: Any = MISSING
+    mixing_embed_dim: int = 32
+    n_agents: int = MISSING
+    device: Any = None
+    _target_: str = "torchrl.modules.models.multiagent.QMixer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+@dataclass
+class VDNMixerNetworkConfig(NetworkConfig):
+    """A class to configure a VDN mixer network.
+
+    .. seealso:: :class:`torchrl.modules.models.multiagent.VDNMixer`
+    """
+
+    n_agents: int = MISSING
+    device: Any = None
+    _target_: str = "torchrl.modules.models.multiagent.VDNMixer"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
 
 
 @dataclass
@@ -384,13 +425,16 @@ class AdditiveGaussianModuleConfig(ModelConfig):
         super().__post_init__()
 
 
-def _make_tensordict_module(*args, **kwargs):
+def _make_tensordict_module(*args, **kwargs) -> TensorDictModule:
     """Helper function to create a TensorDictModule."""
     from hydra.utils import instantiate
-    from tensordict.nn import TensorDictModule
 
     module = kwargs.pop("module")
     shared = kwargs.pop("shared", False)
+
+    for key in ("in_keys", "out_keys"):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_keys(kwargs[key])
 
     # Instantiate the module if it's a config
     if hasattr(module, "_target_"):
@@ -408,16 +452,15 @@ def _make_tensordict_module(*args, **kwargs):
     return tensordict_module
 
 
-def _make_tensordict_sequential(*args, **kwargs):
+def _make_tensordict_sequential(*args, **kwargs) -> TensorDictSequential:
     """Helper function to create a TensorDictSequential."""
     from hydra.utils import instantiate
     from omegaconf import DictConfig, ListConfig
-    from tensordict.nn import TensorDictSequential
 
     modules = kwargs.pop("modules")
     shared = kwargs.pop("shared", False)
     partial_tolerant = kwargs.pop("partial_tolerant", False)
-    selected_out_keys = kwargs.pop("selected_out_keys", None)
+    selected_out_keys = _normalize_hydra_keys(kwargs.pop("selected_out_keys", None))
     inplace = kwargs.pop("inplace", None)
 
     def _instantiate_module(module):
@@ -464,9 +507,9 @@ def _make_tanh_normal_model(*args, **kwargs):
 
     # Extract parameters
     network = kwargs.pop("network")
-    in_keys = list(kwargs.pop("in_keys", ["observation"]))
-    param_keys = list(kwargs.pop("param_keys", ["loc", "scale"]))
-    out_keys = list(kwargs.pop("out_keys", ["action"]))
+    in_keys = _normalize_hydra_keys(kwargs.pop("in_keys", ["observation"]))
+    param_keys = _normalize_hydra_keys(kwargs.pop("param_keys", ["loc", "scale"]))
+    out_keys = _normalize_hydra_keys(kwargs.pop("out_keys", ["action"]))
     extract_normal_params = kwargs.pop("extract_normal_params", True)
     scale_mapping = kwargs.pop("scale_mapping", "biased_softplus_1.0")
     scale_lb = kwargs.pop("scale_lb", 1e-4)
@@ -509,14 +552,16 @@ def _make_tanh_normal_model(*args, **kwargs):
     return result
 
 
-def _make_value_model(*args, **kwargs):
+def _make_value_model(*args, **kwargs) -> ValueOperator:
     """Helper function to create a ValueOperator with the given network."""
     from hydra.utils import instantiate
 
-    from torchrl.modules import ValueOperator
-
     network = kwargs.pop("network")
     shared = kwargs.pop("shared", False)
+
+    for key in ("in_keys", "out_keys"):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_keys(kwargs[key])
 
     # Instantiate the network if it's a config
     if hasattr(network, "_target_"):
@@ -534,37 +579,76 @@ def _make_value_model(*args, **kwargs):
     return value_operator
 
 
-def _make_tanh_module(*args, **kwargs):
+def _make_tanh_module(*args, **kwargs) -> TanhModule:
     """Helper function to create a TanhModule."""
-    from omegaconf import ListConfig
-
-    from torchrl.modules import TanhModule
-
     kwargs.pop("shared", False)
 
-    if "in_keys" in kwargs and isinstance(kwargs["in_keys"], ListConfig):
-        kwargs["in_keys"] = list(kwargs["in_keys"])
-    if "out_keys" in kwargs and isinstance(kwargs["out_keys"], ListConfig):
-        kwargs["out_keys"] = list(kwargs["out_keys"])
+    if "in_keys" in kwargs:
+        kwargs["in_keys"] = _normalize_hydra_keys(kwargs["in_keys"])
+    if "out_keys" in kwargs:
+        kwargs["out_keys"] = _normalize_hydra_keys(kwargs["out_keys"])
 
     return TanhModule(**kwargs)
 
 
-def _make_additive_gaussian_module(*args, **kwargs):
+def _make_additive_gaussian_module(*args, **kwargs) -> AdditiveGaussianModule:
     """Helper function to create an AdditiveGaussianModule."""
-    from omegaconf import ListConfig
-
-    from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
-
     kwargs.pop("shared", False)
     kwargs.pop("in_keys", None)
     kwargs.pop("out_keys", None)
 
-    if "action_key" in kwargs and isinstance(kwargs["action_key"], ListConfig):
-        action_key_list = list(kwargs["action_key"])
-        if len(action_key_list) == 1:
-            kwargs["action_key"] = action_key_list[0]
-        else:
-            kwargs["action_key"] = tuple(action_key_list)
+    if "action_key" in kwargs:
+        kwargs["action_key"] = _normalize_hydra_key(kwargs["action_key"])
 
     return AdditiveGaussianModule(**kwargs)
+
+
+@dataclass
+class QValueModelConfig(ModelConfig):
+    """A class to configure a QValueActor model.
+
+    .. seealso:: :class:`torchrl.modules.QValueActor`
+    """
+
+    _target_: str = "torchrl.trainers.algorithms.configs.modules._make_qvalue_model"
+    network: NetworkConfig = MISSING
+    action_space: Any = None
+    action_key: Any = None
+    action_value_key: Any = None
+    chosen_action_value_key: Any = None
+    action_mask_key: Any = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+
+def _make_qvalue_model(*args, **kwargs) -> QValueActor:
+    """Helper function to create a QValueActor with the given network."""
+    from hydra.utils import instantiate
+
+    network = kwargs.pop("network")
+    shared = kwargs.pop("shared", False)
+    kwargs.pop("out_keys", None)
+    if "in_keys" in kwargs:
+        kwargs["in_keys"] = _normalize_hydra_keys(kwargs["in_keys"])
+
+    for key in (
+        "action_key",
+        "action_value_key",
+        "chosen_action_value_key",
+        "action_mask_key",
+    ):
+        if key in kwargs:
+            kwargs[key] = _normalize_hydra_key(kwargs[key])
+
+    if hasattr(network, "_target_"):
+        network = instantiate(network)
+    elif callable(network) and hasattr(network, "func"):
+        network = network()
+
+    qvalue_actor = QValueActor(network, **kwargs)
+
+    if shared:
+        qvalue_actor = qvalue_actor.share_memory()
+
+    return qvalue_actor

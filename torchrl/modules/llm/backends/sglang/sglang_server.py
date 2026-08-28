@@ -15,6 +15,7 @@ from __future__ import annotations
 import atexit
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Iterator
@@ -30,11 +31,43 @@ from .sglang_utils import (
     check_server_health,
     convert_sampling_params,
     dtype_to_str,
+    get_local_ip_address,
     get_model_info,
     get_open_port,
     get_server_info,
     wait_for_server,
 )
+
+
+_SGLANG_GENERATE_RETRIES_ENV = "TORCHRL_SGLANG_GENERATE_RETRIES"
+_SGLANG_GENERATE_RETRY_DELAY_ENV = "TORCHRL_SGLANG_GENERATE_RETRY_DELAY"
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        torchrl_logger.warning(
+            f"Ignoring invalid integer value for {name}: {value!r}; "
+            f"using {default}."
+        )
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        torchrl_logger.warning(
+            f"Ignoring invalid float value for {name}: {value!r}; " f"using {default}."
+        )
+        return default
 
 
 class AsyncSGLang(RLSGLangEngine):
@@ -100,11 +133,12 @@ class AsyncSGLang(RLSGLangEngine):
 
         self._managed_process: subprocess.Popen | None = None
         self._log_file_path: str | None = None
+        self._preserve_log_file: bool = False
         self._server_info: dict[str, Any] | None = None
         self._model_info: dict[str, Any] | None = None
 
         # Weight sync state
-        self._master_address: str = "localhost"
+        self._master_address: str = get_local_ip_address()
         self._master_port: int | None = None
         self._weight_update_initialized: bool = False
 
@@ -143,9 +177,21 @@ class AsyncSGLang(RLSGLangEngine):
         port = self._server_kwargs.pop("port", None) or get_open_port()
         host = self._server_kwargs.pop("host", "127.0.0.1")
 
+        # Extract cuda_devices for GPU pinning via --base-gpu-id.
+        # We use base_gpu_id instead of CUDA_VISIBLE_DEVICES so that all
+        # processes see the full set of GPUs — required for NCCL device ID
+        # consistency when doing cross-process weight broadcasts.
+        cuda_devices = self._server_kwargs.pop("cuda_devices", None)
+        base_gpu_id = 0
+        if cuda_devices is not None and len(cuda_devices) > 0:
+            base_gpu_id = cuda_devices[0]
+            torchrl_logger.info(
+                f"Pinning SGLang server to GPU {base_gpu_id} via --base-gpu-id"
+            )
+
         # Build command line arguments
         cmd = [
-            "python3",
+            sys.executable,
             "-m",
             "sglang.launch_server",
             "--model-path",
@@ -158,6 +204,8 @@ class AsyncSGLang(RLSGLangEngine):
             str(self._tp_size),
             "--dp-size",
             str(self._dp_size),
+            "--base-gpu-id",
+            str(base_gpu_id),
         ]
 
         # Add additional kwargs
@@ -180,11 +228,29 @@ class AsyncSGLang(RLSGLangEngine):
         self._log_file_path = log_file.name
         torchrl_logger.info(f"SGLang server output logging to: {self._log_file_path}")
 
+        # Set up environment for the server subprocess.
+        # Disable NCCL P2P/IPC: Ray may restrict CUDA_VISIBLE_DEVICES for the
+        # trainer worker while this server sees all GPUs. The topology mismatch
+        # causes NCCL P2P/IPC channel setup to fail with "invalid argument".
+        env = os.environ.copy()
+        python_bin_dir = os.path.dirname(sys.executable)
+        env["PATH"] = python_bin_dir + os.pathsep + env.get("PATH", "")
+        env["NCCL_P2P_DISABLE"] = "1"
+        env["NCCL_SHM_DISABLE"] = "1"
+        grpc_port = env.get("SGLANG_GRPC_PORT")
+        try:
+            valid_grpc_port = grpc_port is not None and 0 < int(grpc_port) <= 65535
+        except ValueError:
+            valid_grpc_port = False
+        if not valid_grpc_port:
+            env["SGLANG_GRPC_PORT"] = str(get_open_port())
+
         # Launch subprocess with output going to the log file
         self._managed_process = subprocess.Popen(
             cmd,
             stdout=log_file,
             stderr=subprocess.STDOUT,
+            env=env,
         )
 
         torchrl_logger.info(
@@ -367,6 +433,13 @@ class AsyncSGLang(RLSGLangEngine):
         if return_logprobs:
             sglang_params["return_logprob"] = True
 
+        if not hasattr(self, "_logged_sglang_params"):
+            torchrl_logger.info(
+                f"SGLang generate: merged_params={merged_params}, "
+                f"sglang_params={sglang_params}"
+            )
+            self._logged_sglang_params = True
+
         timeout = timeout or self._timeout
 
         # Determine if using text or token mode
@@ -387,26 +460,55 @@ class AsyncSGLang(RLSGLangEngine):
             else:
                 inputs = prompts
 
+        # SGLang's /generate endpoint expects sampling parameters nested
+        # under a "sampling_params" key, not as flat top-level fields.
+        # Extract top-level GenerateReqInput fields from sglang_params.
+        top_level_keys = {
+            "return_logprob",
+            "stream",
+            "return_text_in_logprobs",
+            "logprob_start_len",
+            "top_logprobs_num",
+        }
+        top_level_params = {
+            k: sglang_params.pop(k) for k in top_level_keys if k in sglang_params
+        }
+
         results = []
         for inp in inputs:
             if use_tokens:
                 data = {
                     "input_ids": inp,
-                    **sglang_params,
+                    "sampling_params": sglang_params,
+                    **top_level_params,
                 }
             else:
                 data = {
                     "text": inp,
-                    **sglang_params,
+                    "sampling_params": sglang_params,
+                    **top_level_params,
                 }
 
-            response = requests.post(
-                f"{self.server_url}/generate",
-                json=data,
-                timeout=timeout,
-            )
-            response.raise_for_status()
-            results.append(response.json())
+            retries = max(0, _env_int(_SGLANG_GENERATE_RETRIES_ENV, 0))
+            retry_delay = max(0.0, _env_float(_SGLANG_GENERATE_RETRY_DELAY_ENV, 1.0))
+            for attempt in range(retries + 1):
+                try:
+                    response = requests.post(
+                        f"{self.server_url}/generate",
+                        json=data,
+                        timeout=timeout,
+                    )
+                    response.raise_for_status()
+                    results.append(response.json())
+                    break
+                except requests.exceptions.RequestException as err:
+                    if attempt >= retries:
+                        raise
+                    torchrl_logger.warning(
+                        f"SGLang generate request failed ({err}); retrying "
+                        f"attempt {attempt + 1}/{retries}."
+                    )
+                    time.sleep(retry_delay)
 
         return results[0] if single_input else results
 
@@ -622,8 +724,23 @@ class AsyncSGLang(RLSGLangEngine):
 
     def shutdown(self) -> None:
         """Shutdown the managed SGLang server if running."""
+        preserve_log = False
         if self._managed_process is not None:
             torchrl_logger.info("Shutting down managed SGLang server...")
+            poll_result = self._managed_process.poll()
+            if poll_result is not None and poll_result != 0:
+                preserve_log = True
+                self._preserve_log_file = True
+                if self._log_file_path is not None and os.path.exists(
+                    self._log_file_path
+                ):
+                    with open(self._log_file_path) as f:
+                        output = f.read()
+                    torchrl_logger.error(
+                        f"SGLang server exited with code {poll_result}. "
+                        f"Output log preserved at {self._log_file_path}; "
+                        f"last 20000 chars:\n{output[-20000:]}"
+                    )
             self._managed_process.terminate()
             try:
                 self._managed_process.wait(timeout=10)
@@ -633,12 +750,36 @@ class AsyncSGLang(RLSGLangEngine):
             torchrl_logger.info("SGLang server shutdown complete")
 
         # Clean up the log file
-        if self._log_file_path is not None and os.path.exists(self._log_file_path):
+        if (
+            not preserve_log
+            and not self._preserve_log_file
+            and self._log_file_path is not None
+            and os.path.exists(self._log_file_path)
+        ):
             try:
                 os.unlink(self._log_file_path)
             except OSError:
                 pass  # Ignore cleanup errors
             self._log_file_path = None
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Serialize the client state without transferring subprocess ownership."""
+        state = self.__dict__.copy()
+        # Remote workers should reconnect to the existing server instead of
+        # inheriting the managed subprocess handle from the parent process.
+        state["_managed_process"] = None
+        state["_log_file_path"] = None
+        state["_nccl_group"] = None
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore the client state and reconnect to the server when needed."""
+        self.__dict__.update(state)
+        self._managed_process = None
+        self._log_file_path = None
+        self._nccl_group = None
+        if self._server_url is not None:
+            self._validate_and_connect()
 
     def __del__(self) -> None:
         """Cleanup on deletion."""

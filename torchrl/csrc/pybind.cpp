@@ -10,6 +10,9 @@
 
 #include <memory>
 
+#ifdef WITH_CUDA
+#include "cuda_segment_tree.h"
+#endif
 #include "segment_tree.h"
 #include "utils.h"
 
@@ -21,6 +24,14 @@ PYBIND11_MODULE(_torchrl, m) {
 
   torchrl::DefineMinSegmentTree<float>("Fp32", m);
   torchrl::DefineMinSegmentTree<double>("Fp64", m);
+
+#ifdef WITH_CUDA
+  torchrl::DefineCudaSumSegmentTree<float>("Fp32", m);
+  torchrl::DefineCudaSumSegmentTree<double>("Fp64", m);
+
+  torchrl::DefineCudaMinSegmentTree<float>("Fp32", m);
+  torchrl::DefineCudaMinSegmentTree<double>("Fp64", m);
+#endif
 
   m.def("safetanh", &safetanh, "Safe Tanh");
   m.def("safeatanh", &safeatanh, "Safe Inverse Tanh");

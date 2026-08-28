@@ -16,6 +16,8 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.nn.distributions import Delta
+from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
 from torch.distributions import Categorical
@@ -122,12 +124,31 @@ class Actor(SafeModule):
             **kwargs,
         )
 
+    def get_dist(self, tensordict: TensorDictBase) -> torch.distributions.Distribution:
+        """Returns a Delta distribution centered at the deterministic action.
+
+        For deterministic actors, this returns a Delta distribution which has
+        log-probability 0 for the exact action and -inf for any other action.
+
+        Args:
+            tensordict (TensorDictBase): input tensordict containing observations.
+
+        Returns:
+            torch.distributions.Distribution: A Delta distribution.
+        """
+        # Forward pass to get the action
+        td_out = self(tensordict)
+        action = td_out.get(self.out_keys[0])
+
+        return Delta(action)
+
 
 class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     """General class for probabilistic actors in RL.
 
-    The Actor class comes with default values for the out_keys (["action"])
-    and if the spec is provided but not as a Composite object, it will be
+    The ProbabilisticActor class comes with default values for the out_keys (["action"])
+    and if the spec is provided but not as a
+    Composite object, it will be
     automatically translated into :obj:`spec = Composite(action=spec)`
 
     Args:
@@ -199,6 +220,17 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
+        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
+            Routes sampling through an explicit RNG instead of the global PyTorch RNG.
+            Accepts a :class:`torch.Generator` (used in place, advances across calls),
+            an :class:`int` (shorthand for ``Generator().manual_seed(int)``), or a
+            :class:`NestedKey` to fetch the generator from the input tensordict on every
+            call (the value can be a ``Generator`` or a scalar int / Tensor used as a
+            JAX-style stream-key with a ``next_seed`` written back). Defaults to ``None``,
+            in which case the global RNG is used. Useful when the agent's RNG stream must
+            be isolated from the environment's — see Patterson et al.,
+            "Empirical Design in Reinforcement Learning" (`arXiv:2304.01315
+            <https://arxiv.org/abs/2304.01315>`_).
 
     Examples:
         >>> import torch
@@ -538,10 +570,12 @@ class QValueModule(TensorDictModuleBase):
         var_nums: int | None = None,
         spec: TensorSpec | None = None,
         safe: bool = False,
+        strict_shape: bool | str | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise TypeError("Using specs in action_space is deprecated")
         action_space, spec = _process_action_space_spec(action_space, spec)
+        self.strict_shape = strict_shape
         self.action_space = action_space
         self.var_nums = var_nums
         self.action_func_mapping = {
@@ -618,6 +652,48 @@ class QValueModule(TensorDictModuleBase):
             self.action_space, self._default_action_value
         )
         chosen_action_value = action_value_func(action_values, action)
+
+        # Enforce action shape to match spec (after chosen_action_value computation)
+        action_key = self.out_keys[0]
+        action_spec = (
+            self.spec.get(action_key, None)
+            if isinstance(self.spec, Composite)
+            else None
+        )
+        if action_spec is not None and self.strict_shape is not False:
+            composite_batch_ndim = len(self.spec.shape)
+            per_sample_shape = action_spec.shape[composite_batch_ndim:]
+            batch_shape = action_values.shape[:-1]
+            target_shape = torch.Size(list(batch_shape) + list(per_sample_shape))
+
+            if action.shape != target_shape:
+                if self.strict_shape is True:
+                    raise RuntimeError(
+                        f"Action shape {action.shape} does not match expected shape {target_shape} "
+                        f"(per-sample spec shape: {per_sample_shape}). "
+                        f"Set strict_shape='auto' to attempt automatic reshaping."
+                    )
+                elif self.strict_shape == "auto":
+                    try:
+                        action = action.reshape(target_shape)
+                    except RuntimeError:
+                        raise RuntimeError(
+                            f"Cannot reshape action from {action.shape} to {target_shape}."
+                        )
+                elif self.strict_shape is None:
+                    import warnings
+
+                    warnings.warn(
+                        f"Action shape {action.shape} does not match expected shape {target_shape} "
+                        f"(per-sample spec shape: {per_sample_shape}). "
+                        f"In v0.14, this will raise an error. "
+                        f"Set strict_shape='auto' to automatically reshape, "
+                        f"strict_shape=True to raise immediately, "
+                        f"or strict_shape=False to silence this warning.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+
         tensordict.update(
             dict(zip(self.out_keys, (action, action_values, chosen_action_value)))
         )
@@ -1067,6 +1143,10 @@ class QValueActor(SafeSequential):
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
             match one of its output keys. Otherwise, this string represents
             the name of the action-value entry in the output tensordict.
+        action_key (str or tuple of str, optional): The output key for the selected
+            action. Defaults to ``"action"``.
+        chosen_action_value_key (str or tuple of str, optional): The output key for
+            the selected action value. Defaults to ``"chosen_action_value"``.
         action_mask_key (str or tuple of str, optional): The input key
             representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
 
@@ -1126,7 +1206,10 @@ class QValueActor(SafeSequential):
         safe=False,
         action_space: str | None = None,
         action_value_key=None,
+        action_key: NestedKey | None = None,
+        chosen_action_value_key: NestedKey | None = None,
         action_mask_key: NestedKey | None = None,
+        strict_shape: bool | str | None = None,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(
@@ -1139,10 +1222,14 @@ class QValueActor(SafeSequential):
         self.action_value_key = action_value_key
         if action_value_key is None:
             action_value_key = "action_value"
+        if action_key is None:
+            action_key = "action"
+        if chosen_action_value_key is None:
+            chosen_action_value_key = "chosen_action_value"
         out_keys = [
-            "action",
+            action_key,
             action_value_key,
-            "chosen_action_value",
+            chosen_action_value_key,
         ]
         if isinstance(module, TensorDictModuleBase):
             if action_value_key not in module.out_keys:
@@ -1159,12 +1246,12 @@ class QValueActor(SafeSequential):
             spec = Composite()
         if isinstance(spec, Composite):
             spec = spec.clone()
-            if "action" not in spec.keys():
-                spec["action"] = None
+            if action_key not in spec.keys(True, True):
+                spec[action_key] = None
         else:
-            spec = Composite(action=spec, shape=spec.shape[:-1])
+            spec = Composite({action_key: spec}, shape=spec.shape[:-1])
         spec[action_value_key] = None
-        spec["chosen_action_value"] = None
+        spec[chosen_action_value_key] = None
         qvalue = QValueModule(
             action_value_key=action_value_key,
             out_keys=out_keys,
@@ -1172,6 +1259,7 @@ class QValueActor(SafeSequential):
             safe=safe,
             action_space=action_space,
             action_mask_key=action_mask_key,
+            strict_shape=strict_shape,
         )
 
         super().__init__(module, qvalue)
@@ -2215,13 +2303,34 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         action_keys (list of NestedKeys, optional): the action keys from
             the environment. Can be retrieved from ``env.action_keys``.
             Defaults to all ``out_keys`` of the ``actor`` which end
-            with the ``"action"`` string.
+            with the ``"action"`` string. If ``chunk_keys`` is provided (or
+            can be inferred from the actor's output keys) and ``action_keys`` is
+            omitted, the action keys are inferred from the chunk keys. For
+            example ``"action_chunk"`` and ``("vla_action", "chunk")`` both map
+            to ``"action"``.
+        chunk_keys (list of NestedKeys, optional): the keys written by the
+            wrapped actor that hold action chunks. Defaults to VLA-style chunk
+            outputs (``("vla_action", "chunk")`` first, then keys ending in
+            ``"_chunk"``) when present, and to ``action_keys`` otherwise.
+            When a chunk key differs from the corresponding environment action
+            key, the chunk key itself is used as the cache. A separate
+            ``*_orig`` cache key is only introduced when the chunk key and the
+            action key are the same.
         init_key (NestedKey, optional): the key of the entry indicating
             when the environment has gone through a reset.
             Defaults to ``"is_init"`` which is the ``out_key`` from the
             :class:`~torchrl.envs.transforms.InitTracker` transform.
         keep_dim (bool, optional): whether to keep the time dimension of
             the macro during indexing. Defaults to ``False``.
+        replan_interval (int, optional): re-query the wrapped actor after this
+            many actions have been consumed from the cache (receding-horizon
+            execution; the actor call is skipped in between, which is the
+            point of action chunking for expensive policies such as VLAs).
+            Must be in ``[1, n_steps]``; ``replan_interval=1`` re-plans at
+            every step (closed loop). Defaults to ``None``, i.e. the whole
+            cache is consumed before re-querying (open loop). With
+            ``n_steps=None`` the bound is enforced at execution time against
+            the actual chunk length instead.
 
     Examples:
         >>> import torch.nn
@@ -2293,13 +2402,26 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         n_steps: int | None = None,
         *,
         action_keys: list[NestedKey] | None = None,
+        chunk_keys: list[NestedKey] | None = None,
         init_key: list[NestedKey] | None = None,
         keep_dim: bool = False,
+        replan_interval: int | None = None,
     ):
         self.action_keys = action_keys
+        self.chunk_keys = chunk_keys
         self.init_key = init_key
         self.n_steps = n_steps
         self.keep_dim = keep_dim
+        if replan_interval is not None:
+            replan_interval = int(replan_interval)
+            if replan_interval < 1 or (
+                n_steps is not None and replan_interval > n_steps
+            ):
+                raise ValueError(
+                    f"replan_interval must be in [1, n_steps={n_steps}], got "
+                    f"{replan_interval}."
+                )
+        self.replan_interval = replan_interval
 
         super().__init__()
         self.actor = actor
@@ -2310,11 +2432,13 @@ class MultiStepActorWrapper(TensorDictModuleBase):
 
     @property
     def out_keys(self):
-        return (
-            self.actor.out_keys
-            + list(self._actor_keys_map.values())
-            + [self.counter_key]
-        )
+        out_keys = list(self.actor.out_keys)
+        for key in (
+            self.action_keys + list(self._actor_keys_map.values()) + [self.counter_key]
+        ):
+            if key not in out_keys:
+                out_keys.append(key)
+        return out_keys
 
     def _get_and_move(self, tensordict: TensorDictBase) -> TensorDictBase:
         for action_key in self.action_keys:
@@ -2336,39 +2460,54 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         counter = tensordict.get(self.counter_key, None)
         if counter is None:
             counter = is_init.int()
-        is_init = is_init | (counter == self.n_steps)
+        # re-query the actor every `replan_interval` actions (receding
+        # horizon); by default the whole cache is consumed first (open loop)
+        interval = (
+            self.replan_interval if self.replan_interval is not None else self.n_steps
+        )
+        if interval is not None:
+            is_init = is_init | (counter >= interval)
         if is_init.any():
             counter = counter.masked_fill(is_init, 0)
             tensordict_filtered = tensordict[is_init.reshape(tensordict.shape)]
             output = self.actor(tensordict_filtered)
 
-            for action_key, action_key_orig in self._actor_keys_map.items():
-                action_computed = output.get(action_key, default=None)
-                action_orig = tensordict.get(action_key_orig, default=None)
-                if action_orig is None:
+            for action_key, cache_key in self._actor_keys_map.items():
+                chunk_key = self._chunk_keys_map[action_key]
+                action_computed = output.get(chunk_key, default=None)
+                cached_action = tensordict.get(cache_key, default=None)
+                if cached_action is None:
                     if not is_init.all():
                         raise self._NO_INIT_ERR
                 else:
-                    is_init_expand = expand_as_right(is_init, action_orig)
+                    is_init_expand = expand_as_right(is_init, cached_action)
+                    # Only the chunk/cache tensor is refreshed on partial
+                    # re-plans; auxiliary VLA leaves such as tokens or
+                    # log-probs are not used for action dispatch.
                     action_computed = torch.masked_scatter(
-                        action_orig, is_init_expand, action_computed
+                        cached_action, is_init_expand, action_computed
                     )
-                tensordict.set(action_key_orig, action_computed)
-        tensordict.set("counter", counter + 1)
+                if cached_action is None and not isinstance(cache_key, str):
+                    cache_parent = output.get(cache_key[:-1], default=None)
+                    if cache_parent is not None:
+                        tensordict.set(cache_key[:-1], cache_parent)
+                        continue
+                tensordict.set(cache_key, action_computed)
+        tensordict.set(self.counter_key, counter + 1)
 
     def forward(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         self._init(tensordict)
-        for action_key, action_key_orig in self._actor_keys_map.items():
-            # get orig
-            if isinstance(action_key_orig, str):
+        counter = tensordict.get(self.counter_key)
+        for action_key, cache_key in self._actor_keys_map.items():
+            if isinstance(cache_key, str):
                 parent_td = tensordict
-                action_entry = parent_td.get(action_key_orig, None)
+                action_entry = parent_td.get(cache_key, None)
             else:
-                parent_td = tensordict.get(action_key_orig[:-1])
-                action_entry = parent_td.get(action_key_orig[-1], None)
+                parent_td = tensordict.get(cache_key[:-1])
+                action_entry = parent_td.get(cache_key[-1], None)
             if action_entry is None:
                 raise self._NO_INIT_ERR
             if (
@@ -2379,34 +2518,52 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                     f"The action's time dimension (dim={parent_td.ndim}) doesn't match the n_steps argument ({self.n_steps}). "
                     f"The action shape was {action_entry.shape}."
                 )
-            base_idx = (
-                slice(
-                    None,
-                ),
-            ) * parent_td.ndim
-            if not self.keep_dim:
-                cur_action = action_entry[base_idx + (0,)]
-            else:
-                cur_action = action_entry[base_idx + (slice(1),)]
-            tensordict.set(action_key, cur_action)
-            tensordict.set(
-                action_key_orig,
-                torch.roll(action_entry, shifts=-1, dims=parent_td.ndim),
+            if (
+                self.replan_interval is not None
+                and action_entry.shape[parent_td.ndim] < self.replan_interval
+            ):
+                raise RuntimeError(
+                    f"replan_interval ({self.replan_interval}) exceeds the "
+                    f"actor's action chunk length "
+                    f"({action_entry.shape[parent_td.ndim]}): the cache would "
+                    "replay stale actions before re-planning."
+                )
+            action_index = (
+                (counter - 1)
+                .to(torch.long)
+                .reshape(action_entry.shape[: parent_td.ndim])
             )
+            if self.n_steps is None and self.replan_interval is None:
+                action_index = action_index.remainder(
+                    action_entry.shape[parent_td.ndim]
+                )
+            index = action_index.reshape(
+                *action_entry.shape[: parent_td.ndim],
+                1,
+                *([1] * (action_entry.ndim - parent_td.ndim - 1)),
+            ).expand(
+                *action_entry.shape[: parent_td.ndim],
+                1,
+                *action_entry.shape[parent_td.ndim + 1 :],
+            )
+            cur_action = action_entry.gather(parent_td.ndim, index)
+            if not self.keep_dim:
+                cur_action = cur_action.squeeze(parent_td.ndim)
+            tensordict.set(action_key, cur_action)
         return tensordict
 
     @property
     def action_keys(self) -> list[NestedKey]:
         action_keys = self.__dict__.get("_action_keys", None)
         if action_keys is None:
-
-            def ends_with_action(key):
-                if isinstance(key, str):
-                    return key == "action"
-                return key[-1] == "action"
-
-            action_keys = [key for key in self.actor.out_keys if ends_with_action(key)]
-
+            chunk_keys = self.chunk_keys
+            if chunk_keys != self._default_action_keys_from_actor():
+                action_keys = [
+                    self._infer_action_key_from_chunk_key(key) for key in chunk_keys
+                ]
+                self.__dict__["_action_keys"] = action_keys
+                return action_keys
+            action_keys = chunk_keys
             self.__dict__["_action_keys"] = action_keys
         return action_keys
 
@@ -2415,23 +2572,111 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         if value is None:
             return
         self.__dict__["_actor_keys_map_values"] = None
+        self.__dict__["_chunk_keys_map_values"] = None
         if not isinstance(value, list):
             value = [value]
         self._action_keys = [unravel_key(key) for key in value]
+
+    @staticmethod
+    def _infer_action_key_from_chunk_key(chunk_key: NestedKey) -> NestedKey:
+        chunk_key = unravel_key(chunk_key)
+        if isinstance(chunk_key, str):
+            if chunk_key.endswith("_chunk"):
+                action_key = chunk_key[: -len("_chunk")]
+                return action_key or chunk_key
+            return chunk_key
+        last = chunk_key[-1]
+        if last == "chunk" and len(chunk_key) >= 2 and chunk_key[-2] == "vla_action":
+            return "action"
+        if last.endswith("_chunk"):
+            action_key = last[: -len("_chunk")]
+            return (*chunk_key[:-1], action_key or last)
+        return chunk_key
+
+    @staticmethod
+    def _is_vla_chunk_key(key: NestedKey) -> bool:
+        return (
+            isinstance(key, tuple)
+            and len(key) >= 2
+            and key[-2:]
+            == (
+                "vla_action",
+                "chunk",
+            )
+        )
+
+    @staticmethod
+    def _is_chunk_key(key: NestedKey) -> bool:
+        if MultiStepActorWrapper._is_vla_chunk_key(key):
+            return True
+        if isinstance(key, str):
+            return key.endswith("_chunk")
+        return key[-1].endswith("_chunk")
+
+    def _default_action_keys_from_actor(self) -> list[NestedKey]:
+        def ends_with_action(key):
+            if isinstance(key, str):
+                return key == "action"
+            return key[-1] == "action"
+
+        return [key for key in self.actor.out_keys if ends_with_action(key)]
+
+    def _default_chunk_keys_from_actor(self) -> list[NestedKey]:
+        out_keys = list(self.actor.out_keys)
+        vla_chunk_keys = [key for key in out_keys if self._is_vla_chunk_key(key)]
+        if vla_chunk_keys:
+            return vla_chunk_keys
+        return [key for key in out_keys if self._is_chunk_key(key)]
+
+    @property
+    def chunk_keys(self) -> list[NestedKey]:
+        chunk_keys = self.__dict__.get("_chunk_keys", None)
+        if chunk_keys is None:
+            chunk_keys = self._default_chunk_keys_from_actor()
+            if not chunk_keys:
+                chunk_keys = self._default_action_keys_from_actor()
+            self.__dict__["_chunk_keys"] = chunk_keys
+        return chunk_keys
+
+    @chunk_keys.setter
+    def chunk_keys(self, value):
+        if value is None:
+            return
+        self.__dict__["_actor_keys_map_values"] = None
+        self.__dict__["_chunk_keys_map_values"] = None
+        if not isinstance(value, list):
+            value = [value]
+        self._chunk_keys = [unravel_key(key) for key in value]
+
+    @property
+    def _chunk_keys_map(self) -> dict[NestedKey, NestedKey]:
+        val = self.__dict__.get("_chunk_keys_map_values", None)
+        if val is None:
+            action_keys = self.action_keys
+            chunk_keys = self.chunk_keys
+            if len(action_keys) != len(chunk_keys):
+                raise ValueError(
+                    "action_keys and chunk_keys must have the same length, got "
+                    f"{len(action_keys)} and {len(chunk_keys)}."
+                )
+            val = dict(zip(action_keys, chunk_keys))
+            self.__dict__["_chunk_keys_map_values"] = val
+        return val
 
     @property
     def _actor_keys_map(self) -> dict[NestedKey, NestedKey]:
         val = self.__dict__.get("_actor_keys_map_values", None)
         if val is None:
 
-            def _replace_last(action_key):
+            def _default_cache_key(action_key):
+                chunk_key = self._chunk_keys_map[action_key]
+                if chunk_key != action_key:
+                    return chunk_key
                 if isinstance(action_key, tuple):
-                    action_key_orig = (*action_key[:-1], action_key[-1] + "_orig")
-                else:
-                    action_key_orig = action_key + "_orig"
-                return action_key_orig
+                    return (*action_key[:-1], action_key[-1] + "_orig")
+                return action_key + "_orig"
 
-            val = {key: _replace_last(key) for key in self.action_keys}
+            val = {key: _default_cache_key(key) for key in self.action_keys}
             self.__dict__["_actor_keys_map_values"] = val
         return val
 
@@ -2455,3 +2700,282 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     @property
     def counter_key(self):
         return _replace_last(self.init_key, "counter")
+
+
+class _DDPMModule(nn.Module):
+    """Internal DDPM denoising module used by :class:`DiffusionActor`.
+
+    Implements a fixed linear-beta DDPM scheduler and runs the full reverse
+    diffusion chain (``num_steps`` denoising steps) at inference time.
+
+    Args:
+        score_network (nn.Module): Network that predicts noise given
+            ``(noisy_action, observation, timestep)``.  Its input size must
+            be ``obs_dim + action_dim + 1`` and output size ``action_dim``.
+        action_dim (int): Dimensionality of the action.
+        num_steps (int): Number of DDPM denoising steps.  Defaults to 100.
+        beta_start (float): Starting beta for the linear schedule.
+            Defaults to 1e-4.
+        beta_end (float): Ending beta for the linear schedule.
+            Defaults to 0.02.
+    """
+
+    def __init__(
+        self,
+        score_network: nn.Module,
+        action_dim: int,
+        num_steps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+    ) -> None:
+        super().__init__()
+        self.score_network = score_network
+        self.action_dim = action_dim
+        self.num_steps = num_steps
+
+        # Linear beta schedule — fixed, not learnable
+        betas = torch.linspace(beta_start, beta_end, num_steps)
+        alphas = 1.0 - betas
+        alphas_cumprod = torch.cumprod(alphas, dim=0)
+
+        self.register_buffer("betas", betas)
+        self.register_buffer("alphas", alphas)
+        self.register_buffer("alphas_cumprod", alphas_cumprod)
+
+    def _apply(self, fn, recurse=True):
+        schedule = {
+            "betas": self.betas,
+            "alphas": self.alphas,
+            "alphas_cumprod": self.alphas_cumprod,
+        }
+        super()._apply(fn, recurse=recurse)
+        for name, value in schedule.items():
+            target = getattr(self, name)
+            setattr(self, name, value.to(device=target.device))
+        return self
+
+    def _schedule(
+        self, reference: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        dtype = reference.dtype
+        if dtype in (torch.float16, torch.bfloat16):
+            dtype = torch.float32
+        return (
+            self.betas.to(device=reference.device, dtype=dtype),
+            self.alphas.to(device=reference.device, dtype=dtype),
+            self.alphas_cumprod.to(device=reference.device, dtype=dtype),
+        )
+
+    def _validate_timestep_dtype(self, dtype: torch.dtype) -> None:
+        max_steps = {
+            torch.bfloat16: 257,
+            torch.float16: 2049,
+        }.get(dtype)
+        if max_steps is not None and self.num_steps > max_steps:
+            raise ValueError(
+                f"num_steps={self.num_steps} cannot be represented without duplicate "
+                f"timesteps in {dtype}. Use at most {max_steps} steps or a float32 model."
+            )
+
+    def add_noise(
+        self, clean_action: torch.Tensor, t: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward diffusion: corrupt *clean_action* with noise at timestep *t*.
+
+        This is the training-time counterpart to :meth:`forward`.  Given a
+        clean action and a (randomly sampled) timestep, it returns the noisy
+        action and the noise that was added, which can be used to compute a
+        denoising loss.
+
+        Args:
+            clean_action: ``(..., action_dim)`` tensor of clean actions.
+            t: Integer tensor of shape ``(...)`` with timestep indices in
+                ``[0, num_steps)``.
+
+        Returns:
+            Tuple of ``(noisy_action, noise)`` both of shape
+            ``(..., action_dim)``.
+        """
+        self._validate_timestep_dtype(clean_action.dtype)
+        _, _, alphas_cumprod = self._schedule(clean_action)
+        alpha_bar_t = alphas_cumprod[t]  # (...)
+        # Broadcast scalar/batch alpha_bar_t to match action dimensions
+        while alpha_bar_t.dim() < clean_action.dim():
+            alpha_bar_t = alpha_bar_t.unsqueeze(-1)
+        noise = torch.randn_like(clean_action)
+        noisy_action = (
+            alpha_bar_t.sqrt() * clean_action.to(alpha_bar_t.dtype)
+            + (1.0 - alpha_bar_t).sqrt() * noise.to(alpha_bar_t.dtype)
+        ).to(clean_action.dtype)
+        return noisy_action, noise
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        """Run the full DDPM reverse chain conditioned on *observation*.
+
+        Respects :func:`~tensordict.nn.probabilistic.interaction_type`:
+        when the interaction type is ``DETERMINISTIC``, the chain starts from
+        an all-zero latent and skips stochastic noise injection. This produces
+        repeatable output but does not sample from the Gaussian DDPM prior.
+
+        Args:
+            observation: ``(..., obs_dim)`` tensor.
+
+        Returns:
+            Denoised action of shape ``(..., action_dim)``.
+        """
+        batch_shape = observation.shape[:-1]
+        device = observation.device
+        dtype = observation.dtype
+        deterministic = interaction_type() == InteractionType.DETERMINISTIC
+        self._validate_timestep_dtype(dtype)
+
+        betas, alphas, alphas_cumprod = self._schedule(observation)
+        schedule_dtype = betas.dtype
+
+        if deterministic:
+            x = torch.zeros(*batch_shape, self.action_dim, device=device, dtype=dtype)
+        else:
+            x = torch.randn(*batch_shape, self.action_dim, device=device, dtype=dtype)
+
+        for t in reversed(range(self.num_steps)):
+            t_tensor = torch.full((*batch_shape, 1), t, dtype=dtype, device=device)
+            model_input = torch.cat([x, observation, t_tensor], dim=-1)
+            predicted_noise = self.score_network(model_input)
+
+            beta_t = betas[t]
+            alpha_t = alphas[t]
+            alpha_bar_t = alphas_cumprod[t]
+
+            # DDPM reverse step
+            x = x.to(schedule_dtype)
+            predicted_noise = predicted_noise.to(schedule_dtype)
+            x = (1.0 / alpha_t.sqrt()) * (
+                x - (beta_t / (1.0 - alpha_bar_t).sqrt()) * predicted_noise
+            )
+            # Use torch.where instead of a Python conditional to avoid
+            # graph breaks under torch.compile.
+            if not deterministic:
+                noise = torch.randn_like(x)
+                x = x + torch.where(
+                    torch.tensor(t > 0, device=device),
+                    beta_t.sqrt() * noise,
+                    torch.zeros_like(x),
+                )
+            x = x.to(dtype)
+
+        return x
+
+
+class DiffusionActor(SafeModule):
+    """Diffusion-based actor for RL.
+
+    Implements a score-based policy that denoises latent actions conditioned on
+    observations using a fixed DDPM scheduler.  A small MLP is used as the
+    score network by default; pass a custom ``score_network`` to override.
+
+    The strict TensorDict contract is ``in_keys=["observation"]`` →
+    ``out_keys=["action"]``.
+
+    Respects :func:`~tensordict.nn.probabilistic.interaction_type`: setting
+    the interaction type to ``DETERMINISTIC`` starts from an all-zero latent
+    and disables stochastic noise injection during the reverse chain. The
+    result is repeatable but is not a sample from the Gaussian DDPM prior.
+
+    Args:
+        action_dim (int): Dimensionality of the action space.
+        obs_dim (int, optional): Dimensionality of the observation space.
+            Only required when ``score_network`` is ``None`` (i.e., when the
+            default MLP is used).  When a custom ``score_network`` is
+            provided this argument is ignored.  Defaults to ``None``.
+        score_network (nn.Module, optional): Network that predicts noise given
+            ``(noisy_action, observation, timestep)`` concatenated along the
+            last dimension.  If ``None``, a two-hidden-layer MLP of width 256
+            with a :class:`~torch.nn.LazyLinear` first layer is constructed
+            automatically (``obs_dim`` need not be specified in this case).
+        num_steps (int): Number of DDPM denoising steps. Reduced-precision
+            models require at most 257 steps for bfloat16 and 2049 steps for
+            float16 so every raw integer timestep remains distinct. Defaults
+            to 100.
+        beta_start (float): Starting beta for the linear schedule.
+            Defaults to 1e-4.
+        beta_end (float): Ending beta for the linear schedule.
+            Defaults to 0.02.
+        in_keys (list of NestedKey, optional): Keys read from the input
+            TensorDict.  Defaults to ``["observation"]``.
+        out_keys (list of NestedKey, optional): Keys written to the output
+            TensorDict.  Defaults to ``["action"]``.
+        spec (TensorSpec, optional): Spec for the action output.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import DiffusionActor
+        >>> # obs_dim not required when using the default network
+        >>> actor = DiffusionActor(action_dim=2, num_steps=10)
+        >>> td = TensorDict({"observation": torch.randn(4, 3)}, batch_size=[4])
+        >>> td = actor(td)
+        >>> td["action"].shape
+        torch.Size([4, 2])
+    """
+
+    def __init__(
+        self,
+        action_dim: int,
+        obs_dim: int | None = None,
+        score_network: nn.Module | None = None,
+        num_steps: int = 100,
+        beta_start: float = 1e-4,
+        beta_end: float = 0.02,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        spec: TensorSpec | None = None,
+        **kwargs,
+    ) -> None:
+        if in_keys is None:
+            in_keys = ["observation"]
+        if out_keys is None:
+            out_keys = ["action"]
+        if (
+            "action" in out_keys
+            and spec is not None
+            and not isinstance(spec, Composite)
+        ):
+            spec = Composite(action=spec)
+
+        if score_network is None:
+            if obs_dim is not None:
+                # Fully-specified MLP: input size known upfront
+                score_network = nn.Sequential(
+                    nn.Linear(action_dim + obs_dim + 1, 256),
+                    nn.SiLU(),
+                    nn.Linear(256, 256),
+                    nn.SiLU(),
+                    nn.Linear(256, action_dim),
+                )
+            else:
+                # LazyLinear infers input size on first forward pass;
+                # obs_dim need not be specified by the caller.
+                score_network = nn.Sequential(
+                    nn.LazyLinear(256),
+                    nn.SiLU(),
+                    nn.Linear(256, 256),
+                    nn.SiLU(),
+                    nn.Linear(256, action_dim),
+                )
+
+        module = _DDPMModule(
+            score_network=score_network,
+            action_dim=action_dim,
+            num_steps=num_steps,
+            beta_start=beta_start,
+            beta_end=beta_end,
+        )
+
+        super().__init__(
+            module,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            spec=spec,
+            **kwargs,
+        )

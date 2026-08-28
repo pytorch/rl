@@ -21,7 +21,6 @@ from tensordict.utils import _zip_strict
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
-from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.distributions.discrete import LLMMaskedCategorical
@@ -1303,8 +1302,6 @@ class LLMWrapperBase(TensorDictModuleBase):
         # Make the response mask using prompt tokens
         if not self.pad_output:
             # Check that the lengths of the mask is the same as the logits
-            torchrl_logger.info(f"Response mask: {response_mask}")
-            torchrl_logger.info(f"Logits: {logits}")
             for m, lg in _zip_strict(response_mask, logits):
                 if m.shape[-1] != lg.shape[-2]:
                     raise ValueError(
@@ -1708,9 +1705,12 @@ def _extract_responses_from_full_histories(
         prompt_histories.unbind(0), full_histories.unbind(0)
     ):
         if h_full.shape[0] <= h_prompt.shape[0]:
-            raise RuntimeError(
-                f"Full history is shorter than prompt history: {h_full.shape} <= {h_prompt.shape}"
+            # Empty response: model generated 0 tokens. Create a minimal
+            # response history with an empty assistant message.
+            response_histories.append(
+                History(role="assistant", content="", batch_size=(1,))
             )
+            continue
         # Note: there can be more than one response, so the response has the same number of dims as prompt
         response_histories.append(h_full[h_prompt.shape[0] :])
 

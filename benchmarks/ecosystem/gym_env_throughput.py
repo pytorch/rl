@@ -20,11 +20,7 @@ import time
 import torch
 import tqdm
 from torchrl._utils import timeit
-from torchrl.collectors import (
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv
 from torchrl.envs.libs.gym import gym_backend as gym_bc, set_gym_backend
 from torchrl.modules import RandomPolicy
@@ -109,7 +105,7 @@ if __name__ == "__main__":
                     env_make = EnvCreator(make)
                     # penv = SerialEnv(num_workers, env_make)
                     penv = ParallelEnv(num_workers, env_make, device=device)
-                    collector = SyncDataCollector(
+                    collector = Collector(
                         penv,
                         RandomPolicy(penv.action_spec),
                         frames_per_batch=1024,
@@ -171,7 +167,7 @@ if __name__ == "__main__":
                         EnvCreator(make_env),
                         device=device,
                     )
-                    collector = MultiaSyncDataCollector(
+                    collector = MultiAsyncCollector(
                         [penv] * num_collectors,
                         policy=RandomPolicy(penv.action_spec),
                         frames_per_batch=1024,
@@ -213,7 +209,7 @@ if __name__ == "__main__":
                             num_workers=num_workers
                         )
                     )
-                    collector = MultiaSyncDataCollector(
+                    collector = MultiAsyncCollector(
                         [penv] * num_collectors,
                         policy=RandomPolicy(penv().action_spec),
                         frames_per_batch=1024,
@@ -251,7 +247,7 @@ if __name__ == "__main__":
                         EnvCreator(make_env),
                         device=device,
                     )
-                    collector = MultiSyncDataCollector(
+                    collector = MultiSyncCollector(
                         [penv] * num_collectors,
                         policy=RandomPolicy(penv.action_spec),
                         frames_per_batch=1024,
@@ -293,7 +289,7 @@ if __name__ == "__main__":
                             num_workers=num_workers
                         )
                     )
-                    collector = MultiSyncDataCollector(
+                    collector = MultiSyncCollector(
                         [penv] * num_collectors,
                         policy=RandomPolicy(penv().action_spec),
                         frames_per_batch=1024,

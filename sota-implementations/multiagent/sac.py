@@ -13,7 +13,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torch.distributions import Categorical, OneHotCategorical
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -31,7 +31,7 @@ def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="sac")
+@hydra.main(version_base="1.3", config_path="", config_name="sac")
 def train(cfg: DictConfig):  # noqa: F821
     # Device
     cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
@@ -181,7 +181,7 @@ def train(cfg: DictConfig):  # noqa: F821
             out_keys=[("agents", "action_value")],
         )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy,
         device=cfg.env.device,

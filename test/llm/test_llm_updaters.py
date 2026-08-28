@@ -7,12 +7,16 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import random
+import socket
 import time
 from abc import ABC, abstractmethod
 
 import pytest
 import torch
 from torchrl._utils import _DTYPE_TO_STR_DTYPE, _STR_DTYPE_TO_DTYPE, logger
+from torchrl.modules.llm.backends import AsyncVLLM
+from torchrl.modules.llm.policies import vLLMWrapper
 
 # Check for dependencies
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -27,8 +31,6 @@ if _has_vllm:
     except ImportError:
         # In vLLM 0.13+, get_open_port may be in a different location
         def get_open_port():
-            import socket
-
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.bind(("", 0))
                 return s.getsockname()[1]
@@ -64,7 +66,6 @@ else:
 if _has_vllm and _has_transformers:
     from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
     from torchrl.modules.llm.backends import (
-        AsyncVLLM,
         LocalLLMWrapper,
         make_vllm_worker,
         RayLLMWorker,
@@ -228,11 +229,6 @@ class BaseVLLMUpdaterTest(ABC):
         logger.info("✓ Error handling tests passed")
 
 
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "ray.get(pg.ready(), timeout=180) times out. See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 class TestVLLMUpdaterV2WithAsyncVLLM(BaseVLLMUpdaterTest):
     """Test vLLMUpdaterV2 with AsyncVLLM engines.
@@ -261,7 +257,9 @@ class TestVLLMUpdaterV2WithAsyncVLLM(BaseVLLMUpdaterTest):
             dtype="float16",
             max_model_len=512,  # Short context for minimal KV cache
             max_num_seqs=1,  # Minimal batch size
-            enable_prefix_caching=False,  # Disable to save memory
+            # Enabled so weight-update tests exercise the automatic
+            # prefix-cache reset path.
+            enable_prefix_caching=True,
         )
 
         logger.info(f"Created AsyncVLLM service with {service.num_replicas} replicas")
@@ -294,6 +292,16 @@ class TestVLLMUpdaterV2WithAsyncVLLM(BaseVLLMUpdaterTest):
         assert target_vllm_engine._launched is True
 
         logger.info("✓ AsyncVLLM-specific tests passed")
+
+    def test_prefix_cache_reset_after_update(self, target_vllm_engine):
+        """Prefix-cache opt-in must survive launch and reset must run cleanly."""
+        # The opt-in must reach the engine args (regression: launch() used to
+        # clobber enable_prefix_caching back to False).
+        assert target_vllm_engine.engine_args.enable_prefix_caching is True
+
+        # The reset RPC must round-trip on a live engine; update_weights calls
+        # this automatically after every weight sync.
+        target_vllm_engine.reset_prefix_cache()
 
 
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
@@ -411,11 +419,6 @@ class TestVLLMUpdaterV2WithLocalLLM(BaseVLLMUpdaterTest):
         logger.info("✓ Local LLM-specific tests passed")
 
 
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 @pytest.mark.gpu
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
@@ -471,12 +474,12 @@ class TestWeightSyncVLLMNCCL:
     @staticmethod
     def _make_worker_vllm(model_name: str = "Qwen/Qwen2.5-0.5B"):
         """Create a vLLM wrapper with AsyncVLLM backend."""
-        from torchrl.modules.llm.backends import AsyncVLLM
-        from torchrl.modules.llm.policies import vLLMWrapper
-
         async_engine = AsyncVLLM.from_pretrained(
             model_name,
             num_replicas=2,  # Number of engine replicas
+            # Enabled so the NCCL weight-sync path exercises the automatic
+            # prefix-cache reset before generation resumes.
+            enable_prefix_caching=True,
         )
         wrapper = vLLMWrapper(async_engine, input_mode="history")
         return wrapper
@@ -520,8 +523,6 @@ class TestWeightSyncVLLMNCCL:
         try:
             # Create scheme configuration
             # Use a unique port for each test run to avoid conflicts
-            import random
-
             test_port = random.randint(30000, 40000)
             scheme_config = {
                 "master_address": "localhost",
@@ -614,11 +615,6 @@ class TestWeightSyncVLLMNCCL:
 
 
 @pytest.mark.gpu
-@pytest.mark.xfail(
-    reason="AsyncVLLM tests fail due to Ray placement group timeout. "
-    "See LLM_TEST_ISSUES.md for details.",
-    strict=False,
-)
 @pytest.mark.skipif(not _has_ray, reason="missing ray dependencies")
 @pytest.mark.skipif(not _has_vllm, reason="missing vllm dependencies")
 @pytest.mark.skipif(not _has_transformers, reason="missing transformers dependencies")
@@ -636,9 +632,6 @@ class TestWeightSyncVLLMDoubleBuffer:
     @staticmethod
     def _make_worker_vllm(model_name: str = "Qwen/Qwen2.5-0.5B"):
         """Create a vLLM wrapper with AsyncVLLM backend."""
-        from torchrl.modules.llm.backends import AsyncVLLM
-        from torchrl.modules.llm.policies import vLLMWrapper
-
         async_engine = AsyncVLLM.from_pretrained(
             model_name,
             num_replicas=1,  # Single replica for simplicity
@@ -745,6 +738,48 @@ class TestWeightSyncVLLMDoubleBuffer:
         finally:
             if ray.is_initialized():
                 ray.shutdown()
+
+
+class TestDoubleBufferPrefixCacheReset:
+    """CPU-only: double-buffer weight loads must invalidate the prefix cache."""
+
+    def test_apply_weights_resets_prefix_cache_direct_path(self):
+        from types import SimpleNamespace
+
+        from tensordict import TensorDict
+        from torchrl.weight_update.llm.vllm_double_buffer import (
+            VLLMDoubleBufferWeightReceiver,
+        )
+
+        loaded, resets = [], []
+
+        class FakeEngine:
+            # no collective_rpc attribute: exercises the direct-load branch
+            llm_engine = SimpleNamespace(
+                model_executor=SimpleNamespace(
+                    driver_worker=SimpleNamespace(
+                        model_runner=SimpleNamespace(
+                            model=SimpleNamespace(
+                                load_weights=lambda w: loaded.append(list(w))
+                            )
+                        )
+                    )
+                )
+            )
+
+            def reset_prefix_cache(self):
+                resets.append(True)
+                # first attempt reports blocks still in use, second succeeds
+                return len(resets) > 1
+
+        receiver = VLLMDoubleBufferWeightReceiver.__new__(
+            VLLMDoubleBufferWeightReceiver
+        )
+        receiver._vllm_engine = FakeEngine()
+        receiver.apply_weights(TensorDict(w=torch.zeros(2)))
+
+        assert len(loaded) == 1
+        assert len(resets) == 2  # retried once after the partial clear
 
 
 if __name__ == "__main__":

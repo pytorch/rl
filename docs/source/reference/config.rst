@@ -58,6 +58,7 @@ TorchRL organizes configurations into several categories using the ``@`` syntax 
 - ``sampler@<target>``: Sampling strategy configurations
 - ``writer@<target>``: Writer strategy configurations
 - ``trainer@<target>``: Training loop configurations
+- ``hook@<target>``: Trainer hook configurations
 - ``optimizer@<target>``: Optimizer configurations
 - ``loss@<target>``: Loss function configurations
 - ``logger@<target>``: Logging configurations
@@ -324,6 +325,7 @@ Environment Library Configurations
     JumanjiEnvConfig
     MeltingpotEnvConfig
     MOGymEnvConfig
+    MJLabEnvConfig
     MultiThreadedEnvConfig
     OpenMLEnvConfig
     OpenSpielEnvConfig
@@ -349,6 +351,10 @@ Model and Network Configurations
     TensorDictModuleConfig
     TanhNormalModelConfig
     ValueModelConfig
+    QValueModelConfig
+    TanhModuleConfig
+    TensorDictSequentialConfig
+    AdditiveGaussianModuleConfig
 
 Transform Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -449,6 +455,7 @@ Replay Buffer and Storage Configurations
 
     ReplayBufferConfig
     TensorDictReplayBufferConfig
+    ConsumingSamplerConfig
     RandomSamplerConfig
     SamplerWithoutReplacementConfig
     PrioritizedSamplerConfig
@@ -473,7 +480,36 @@ Training and Optimization Configurations
     :template: rl_template_class.rst
 
     TrainerConfig
+    OnPolicyTrainerConfig
+    A2CTrainerConfig
     PPOTrainerConfig
+    ReinforceTrainerConfig
+    SACTrainerConfig
+    OfflineToOnlineTrainerConfig
+    DQNTrainerConfig
+    DDPGTrainerConfig
+    IQLTrainerConfig
+    CQLTrainerConfig
+    TD3TrainerConfig
+
+Trainer Hook Configurations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.hooks
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_class.rst
+
+    HookConfig
+    BatchSubSamplerConfig
+    ClearCudaCacheConfig
+    CountFramesLogConfig
+    EarlyStoppingConfig
+    LogScalarConfig
+    LogTimingConfig
+    RewardNormalizerConfig
+    SelectKeysConfig
 
 .. currentmodule:: torchrl.trainers.algorithms.configs.objectives
 
@@ -482,7 +518,19 @@ Training and Optimization Configurations
     :template: rl_template_class.rst
 
     LossConfig
+    A2CLossConfig
     PPOLossConfig
+    ReinforceLossConfig
+    SACLossConfig
+    DQNLossConfig
+    DDPGLossConfig
+    IQLLossConfig
+    CQLLossConfig
+    TD3LossConfig
+    GAEConfig
+    TargetNetUpdaterConfig
+    SoftUpdateConfig
+    HardUpdateConfig
 
 .. currentmodule:: torchrl.trainers.algorithms.configs.utils
 
@@ -517,6 +565,7 @@ Logging Configurations
     LoggerConfig
     WandbLoggerConfig
     TensorboardLoggerConfig
+    TrackioLoggerConfig
     CSVLoggerConfig
 
 Creating Custom Configurations
@@ -553,14 +602,20 @@ Best Practices
 5. **Version Control**: Keep your configuration files under version control
 6. **Use Variable Interpolation**: Use ``${variable}`` syntax to avoid duplication
 
-Future Extensions
------------------
+Supported Algorithms
+--------------------
 
-As TorchRL adds more algorithms beyond PPO (such as SAC, TD3, DQN), the configuration system will expand with:
+TorchRL currently provides configuration-driven trainers for the following algorithms:
 
-- New trainer configurations (e.g., ``SACTrainerConfig``, ``TD3TrainerConfig``)
-- Algorithm-specific loss configurations
-- Specialized collector configurations for different algorithms
-- Additional environment and model configurations
+- **A2C** (on-policy): ``A2CTrainerConfig``, ``A2CLossConfig``
+- **PPO** (on-policy): ``PPOTrainerConfig``, ``PPOLossConfig``
+- **REINFORCE** (on-policy): ``ReinforceTrainerConfig``, ``ReinforceLossConfig``
+- **SAC** (off-policy, continuous): ``SACTrainerConfig``, ``SACLossConfig``
+- **Offline-to-online SAC**: ``OfflineToOnlineTrainerConfig``, ``SACLossConfig``
+- **DQN** (off-policy, discrete): ``DQNTrainerConfig``, ``DQNLossConfig``
+- **DDPG** (off-policy, continuous): ``DDPGTrainerConfig``, ``DDPGLossConfig``
+- **IQL** (offline): ``IQLTrainerConfig``, ``IQLLossConfig``
+- **CQL** (offline): ``CQLTrainerConfig``, ``CQLLossConfig``
+- **TD3** (off-policy, continuous): ``TD3TrainerConfig``, ``TD3LossConfig``
 
-The modular design ensures easy integration while maintaining backward compatibility.
+The modular design ensures easy integration of additional algorithms while maintaining backward compatibility.

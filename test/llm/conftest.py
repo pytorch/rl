@@ -12,9 +12,12 @@ This module provides common fixtures for test cleanup, especially for:
 """
 
 import gc
+import importlib.util
 
 import pytest
 import torch
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 
 @pytest.fixture(scope="session", autouse=True)

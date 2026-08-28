@@ -259,7 +259,6 @@ class GSM8KEnv(DatasetChatEnv):
                             is_shared=False),
                         reward: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         reward_answer: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward_contained: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         reward_right: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         reward_think: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         step_count: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int64, is_shared=False),
@@ -293,7 +292,7 @@ class GSM8KEnv(DatasetChatEnv):
             device=None,
             is_shared=False,
             stack_dim=0)
-        >>> assert s["next", "reward"] >= 10
+        >>> assert s["next", "reward"] > 0
         >>> assert s["next", "done"].all()
 
     """

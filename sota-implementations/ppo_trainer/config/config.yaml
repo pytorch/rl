@@ -27,7 +27,7 @@ defaults:
   - trainer@trainer: ppo
   - optimizer@optimizer: adam
   - loss@loss: ppo
-  - logger@logger: wandb
+  - logger@logger: csv
   - _self_
 
 # Network configurations
@@ -137,3 +137,7 @@ trainer:
   optim_steps_per_batch: null
   num_epochs: 2
   async_collection: false
+
+hydra:
+  job:
+    chdir: true

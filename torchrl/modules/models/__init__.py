@@ -4,9 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import sys
+
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
+from . import model_based
+from .act import ACTModel
 from .batchrenorm import BatchRenorm1d
+from .cross_group_critic import CrossCriticGroupSpec, CrossGroupCritic
 
 from .decision_transformer import DecisionTransformer
 from .exploration import (
@@ -16,14 +21,22 @@ from .exploration import (
     NoisyLinear,
     reset_noise,
 )
+from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
+    DreamerV3BlockGRU,
+    DreamerV3BlockGRUCell,
+    DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
+    RSSMPosteriorV3,
     RSSMPrior,
+    RSSMPriorV3,
     RSSMRollout,
+    RSSMRolloutV3,
+    SymExpTwoHot,
 )
 from .models import (
     Conv2dNet,
@@ -46,24 +59,22 @@ from .multiagent import (
     QMixer,
     VDNMixer,
 )
+from .rbf_controller import RBFController
 from .utils import Squeeze2dLayer, SqueezeLayer
 
+
+# Preserve the module paths shipped in TorchRL 0.13 without keeping duplicate
+# compatibility files. New code should import from ``model_based``.
+sys.modules[f"{__name__}.dreamer_v3"] = model_based
+sys.modules[f"{__name__}.model_based_v3"] = model_based
+
 __all__ = [
-    "DistributionalDQNnet",
+    "ACTModel",
     "BatchRenorm1d",
-    "DecisionTransformer",
-    "GPT2RewardModel",
+    "CrossCriticGroupSpec",
+    "CrossGroupCritic",
     "ConsistentDropout",
     "ConsistentDropoutModule",
-    "NoisyLazyLinear",
-    "NoisyLinear",
-    "reset_noise",
-    "DreamerActor",
-    "ObsDecoder",
-    "ObsEncoder",
-    "RSSMPosterior",
-    "RSSMPrior",
-    "RSSMRollout",
     "Conv2dNet",
     "Conv3dNet",
     "ConvNet",
@@ -71,16 +82,37 @@ __all__ = [
     "DdpgCnnQNet",
     "DdpgMlpActor",
     "DdpgMlpQNet",
+    "DecisionTransformer",
+    "DistributionalDQNnet",
+    "DreamerActor",
+    "DreamerV3BlockGRU",
+    "DreamerV3BlockGRUCell",
+    "DreamerV3MLP",
     "DTActor",
     "DuelingCnnDQNet",
     "DuelingMlpDQNet",
+    "GPT2RewardModel",
+    "GPWorldModel",
     "MLP",
-    "OnlineDTActor",
     "MultiAgentConvNet",
     "MultiAgentMLP",
     "MultiAgentNetBase",
+    "NoisyLazyLinear",
+    "NoisyLinear",
+    "ObsDecoder",
+    "ObsEncoder",
+    "OnlineDTActor",
     "QMixer",
-    "VDNMixer",
+    "RBFController",
+    "RSSMPosterior",
+    "RSSMPosteriorV3",
+    "RSSMPrior",
+    "RSSMPriorV3",
+    "RSSMRollout",
+    "RSSMRolloutV3",
     "Squeeze2dLayer",
     "SqueezeLayer",
+    "SymExpTwoHot",
+    "VDNMixer",
+    "reset_noise",
 ]

@@ -3,7 +3,9 @@
 Single Node Collectors
 ======================
 
-TorchRL provides several collector classes for single-node data collection, each with different execution strategies.
+Use :class:`Collector` as the construction entry point for direct and local
+multi-process collection. The concrete classes below remain public for
+advanced use and document the implementation returned by each selection.
 
 Single node data collectors
 ---------------------------
@@ -15,37 +17,137 @@ Single node data collectors
     BaseCollector
     Collector
     AsyncCollector
+    AsyncBatchedCollector
     MultiCollector
     MultiSyncCollector
     MultiAsyncCollector
 
-.. note::
-    The following legacy names are also available for backward compatibility:
+.. _collectors_single_traj:
 
-    - ``DataCollectorBase`` → ``BaseCollector``
-    - ``SyncDataCollector`` → ``Collector``
-    - ``aSyncDataCollector`` → ``AsyncCollector``
-    - ``_MultiDataCollector`` → ``MultiCollector``
-    - ``MultiSyncDataCollector`` → ``MultiSyncCollector``
-    - ``MultiaSyncDataCollector`` → ``MultiAsyncCollector``
+Trajectory batching
+-------------------
 
-Using MultiCollector
---------------------
+Pass ``trajs_per_batch=N`` to any collector to receive batches of exactly *N*
+complete, zero-padded trajectories instead of fixed-frame batches.
+Trajectories that span multiple internal collection steps are automatically
+reassembled. Each yielded :class:`~tensordict.TensorDict` has shape
+``(N, max_traj_len)`` and includes a ``("collector", "mask")`` boolean tensor
+marking valid time steps.
 
-The :class:`MultiCollector` class is the recommended way to run parallel data collection.
-It uses a ``sync`` parameter to dispatch to either :class:`MultiSyncCollector` or :class:`MultiAsyncCollector`:
+``frames_per_batch`` still controls how frequently the environment is polled
+internally; it does **not** determine the output batch size when
+``trajs_per_batch`` is set.
 
 .. code-block:: python
 
-    from torchrl.collectors import MultiCollector
+    from torchrl.collectors import Collector
+    from torchrl.envs import GymEnv
+
+    collector = Collector(
+        GymEnv("CartPole-v1"),
+        policy=my_policy,
+        frames_per_batch=200,  # controls internal polling frequency
+        total_frames=10000,
+        trajs_per_batch=4,
+        traj_format="padded",
+    )
+
+    for batch in collector:
+        # batch.shape == (4, max_traj_len)
+        valid = batch[("collector", "mask")]  # (4, max_traj_len) bool
+        loss = compute_loss(batch, valid)
+        collector.update_policy_weights_()
+
+**Unpadded batches**: with ``traj_format="cat"`` the *N* trajectories are
+concatenated along time instead of stacked and padded.  Each yield is then a
+flat ``[sum_i T_i]`` batch with no mask: trajectories are contiguous, in
+completion order, with ``("next", "done")`` ``True`` at the last step of each
+and ``("collector", "traj_ids")`` identifying them.  Prefer it when episode
+lengths vary widely or frames are large — the padded layout materializes
+``N * max_traj_len`` frames, the flat one only the steps actually collected.
+
+.. note::
+    The current default layout is ``"padded"``, but it will change to
+    ``"cat"`` in torchrl v0.16.  Omitting ``traj_format`` while yielding
+    ``trajs_per_batch`` batches emits a :class:`FutureWarning`; pass the
+    layout explicitly.
+
+**Replay buffer integration**: when a ``replay_buffer`` is also provided,
+complete trajectories are written to the buffer as **flat 1-D sequences** (no
+padding) instead of being yielded.  This is the recommended pattern for
+off-policy training with :class:`~torchrl.data.replay_buffers.SliceSampler`, especially
+with multi-process collectors where fixed-frame batches can silently mix
+episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
+
+.. note::
+    The deprecated collector aliases were removed in v0.13. Construct new
+    collectors with ``Collector``. ``BaseCollector``, ``AsyncCollector``,
+    ``MultiCollector``, ``MultiSyncCollector``, and ``MultiAsyncCollector``
+    remain available as concrete implementation APIs.
+
+Using AsyncBatchedCollector
+---------------------------
+
+The :class:`AsyncBatchedCollector` pairs an :class:`~torchrl.envs.AsyncEnvPool`
+with an :class:`~torchrl.modules.inference_server.InferenceServer` to pipeline environment
+stepping and batched GPU inference.  You only need to supply **env factories**
+and a **policy** -- all internal wiring is handled automatically:
+
+.. code-block:: python
+
+    from torchrl.collectors import AsyncBatchedCollector
+    from torchrl.envs import GymEnv
+    from tensordict.nn import TensorDictModule
+    import torch.nn as nn
+
+    policy = TensorDictModule(
+        nn.Sequential(nn.Linear(4, 64), nn.ReLU(), nn.Linear(64, 2)),
+        in_keys=["observation"],
+        out_keys=["action"],
+    )
+
+    collector = AsyncBatchedCollector(
+        create_env_fn=[lambda: GymEnv("CartPole-v1")] * 8,
+        policy=policy,
+        frames_per_batch=200,
+        total_frames=10000,
+        max_batch_size=8,
+    )
+
+    for data in collector:
+        # data is a lazy-stacked TensorDict of collected transitions
+        pass
+
+    collector.shutdown()
+
+**Key advantages over direct collection through** :class:`Collector`:
+
+- The inference server automatically **batches policy forward passes** from
+  all environments, maximising GPU utilisation.
+- Environment stepping and inference run in **overlapping fashion**, reducing
+  idle time.
+- Supports ``yield_completed_trajectories=True`` for episode-level yields.
+
+Scaling ``Collector`` across local processes
+--------------------------------------------
+
+Pass ``num_collectors`` to :class:`Collector` to run parallel local collection.
+The ``sync`` parameter selects synchronous or asynchronous delivery and the
+constructor returns :class:`MultiSyncCollector` or :class:`MultiAsyncCollector`,
+respectively:
+
+.. code-block:: python
+
+    from torchrl.collectors import Collector
     from torchrl.envs import GymEnv
 
     def make_env():
         return GymEnv("CartPole-v1")
 
     # Synchronous multi-worker collection (recommended for on-policy algorithms)
-    sync_collector = MultiCollector(
-        create_env_fn=[make_env] * 4,  # 4 parallel workers
+    sync_collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=4,
         policy=my_policy,
         frames_per_batch=1000,
         total_frames=100000,
@@ -53,8 +155,9 @@ It uses a ``sync`` parameter to dispatch to either :class:`MultiSyncCollector` o
     )
 
     # Asynchronous multi-worker collection (recommended for off-policy algorithms)
-    async_collector = MultiCollector(
-        create_env_fn=[make_env] * 4,
+    async_collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=4,
         policy=my_policy,
         frames_per_batch=1000,
         total_frames=100000,
@@ -98,7 +201,8 @@ If you want to run a data collector in the background, simply run :meth:`~torchr
     ...     data = rb.sample()  # Sampling from the replay buffer
     ...     # rest of the training loop
 
-Single-process collectors (:class:`~torchrl.collectors.Collector`) will run the process using multithreading,
+Direct collectors (``Collector(backend="direct")``) run background collection
+using multithreading,
 so be mindful of Python's GIL and related multithreading restrictions.
 
 Multiprocessed collectors will on the other hand let the child processes handle the filling of the buffer on their own,
@@ -106,6 +210,40 @@ which truly decouples the data collection and training.
 
 Data collectors that have been started with `start()` should be shut down using
 :meth:`~torchrl.collectors.BaseCollector.async_shutdown`.
+
+.. tip::
+
+    For maximum throughput with trajectory-based training (e.g. recurrent
+    policies, decision transformers), combine ``start()`` with
+    ``trajs_per_batch`` and a :class:`~torchrl.data.replay_buffers.SliceSampler`:
+
+    .. code-block:: python
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(100_000),
+            sampler=SliceSampler(slice_len=32, end_key=("next", "done")),
+            batch_size=256,
+            shared=True,
+        )
+        collector = Collector(
+            make_env,
+            policy,
+            num_collectors=4,
+            replay_buffer=rb,
+            frames_per_batch=200,
+            total_frames=-1,
+            trajs_per_batch=8,
+            sync=False,
+        )
+        collector.start()
+        for step in range(train_steps):
+            batch = rb.sample()  # clean trajectory slices
+            # ...
+        collector.async_shutdown()
+
+    Each worker writes only **complete trajectories** to the buffer, so the
+    sampler never draws slices that cross episode boundaries.  See
+    :ref:`collectors_replay_trajs` for a full discussion.
 
 .. warning:: Running a collector asynchronously decouples the collection from training, which means that the training
     performance may be drastically different depending on the hardware, load and other factors (although it is generally

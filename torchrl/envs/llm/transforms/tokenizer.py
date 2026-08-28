@@ -184,7 +184,7 @@ class Tokenizer(UnaryTransform):
             )
             kwargs["return_attention_mask"] = self.return_attention_mask
             # kwargs["return_token_type_ids"] = False
-            out = self.tokenizer.batch_encode_plus(value, return_tensors="pt", **kwargs)
+            out = self.tokenizer(value, return_tensors="pt", **kwargs)
             if self.return_attention_mask:
                 attention_mask = out["attention_mask"]
             out = out["input_ids"]

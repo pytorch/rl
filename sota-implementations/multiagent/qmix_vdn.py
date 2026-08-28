@@ -11,7 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -29,7 +29,7 @@ def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="qmix_vdn")
+@hydra.main(version_base="1.3", config_path="", config_name="qmix_vdn")
 def train(cfg: DictConfig):  # noqa: F821
     # Device
     cfg.train.device = "cpu" if not torch.cuda.device_count() else "cuda:0"
@@ -133,7 +133,7 @@ def train(cfg: DictConfig):  # noqa: F821
     else:
         raise ValueError("Mixer type not in the example")
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         qnet_explore,
         device=cfg.env.device,

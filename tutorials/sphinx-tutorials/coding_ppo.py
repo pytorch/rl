@@ -41,7 +41,7 @@ We will cover six crucial components of TorchRL:
 # .. code-block:: bash
 #
 #    !pip3 install torchrl
-#    !pip3 install gym[mujoco]
+#    !pip3 install "gymnasium[mujoco]"
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
@@ -108,13 +108,14 @@ We will cover six crucial components of TorchRL:
 # sphinx_gallery_start_ignore
 import warnings
 
+from torch import multiprocessing as _multiprocessing
+
 warnings.filterwarnings("ignore")
 # Set multiprocessing start method to fork if not already set
 # This allows the tutorial to run as a script without if __name__ == "__main__"
-from torch import multiprocessing
 
-if multiprocessing.get_start_method(allow_none=True) is None:
-    multiprocessing.set_start_method("fork")
+if _multiprocessing.get_start_method(allow_none=True) is None:
+    _multiprocessing.set_start_method("fork")
 
 # sphinx_gallery_end_ignore
 
@@ -124,9 +125,9 @@ import matplotlib.pyplot as plt
 import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
+from torch import multiprocessing, nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -151,10 +152,6 @@ from tqdm import tqdm
 # We set the hyperparameters for our algorithm. Depending on the resources
 # available, one may choose to execute the policy on GPU or on another
 # device.
-# The ``frame_skip`` will control how for how many frames is a single
-# action being executed. The rest of the arguments that count frames
-# must be corrected for this value (since one environment step will
-# actually return ``frame_skip`` frames).
 #
 
 is_fork = multiprocessing.get_start_method() == "fork"
@@ -302,8 +299,8 @@ print("normalization constant shape:", env.transform[0].loc.shape)
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`~torchrl.envs.libs.gym.GymWrapper` and
-# :class:`~torchrl.envs.libs.gym.GymEnv` that inherits
+# In our example, the :class:`~torchrl.envs.GymWrapper` and
+# :class:`~torchrl.envs.GymEnv` that inherits
 # from it already take care of setting the proper specs for your environment so
 # you should not have to care about this.
 #
@@ -321,7 +318,7 @@ print("input_spec:", env.input_spec)
 print("action_spec (as defined by input_spec):", env.action_spec)
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -458,20 +455,48 @@ value_module = ValueOperator(
 )
 
 ######################################################################
-# let's try our policy and value modules. As we said earlier, the usage of
+# Let's try our policy and value modules. As we said earlier, the usage of
 # :class:`~tensordict.nn.TensorDictModule` makes it possible to directly read the output
 # of the environment to run these modules, as they know what information to read
-# and where to write it:
+# and where to write it.
 #
-print("Running policy:", policy_module(env.reset()))
-print("Running value:", value_module(env.reset()))
+# .. note::
+#     Running these modules with a dummy batch of data is not just for testing!
+#     Since we used ``nn.LazyLinear``, this step is required to initialize the
+#     network parameters. Without it, you will get an ``UninitializedParameter``
+#     error when the algorithm attempts to disable gradients or update the weights.
+#
+
+# Run a dummy forward pass to initialize the Lazy modules (strictly required!)
+out_policy = policy_module(env.reset())
+out_value = value_module(env.reset())
+
+print("Running policy:", out_policy)
+print("Running value:", out_value)
+
+######################################################################
+# Model mode
+# ----------
+#
+# We keep the policy and value modules in ``eval`` mode during PPO training.
+# This controls PyTorch module behavior, such as dropout and batch
+# normalization, but it is independent from TorchRL's exploration/interaction
+# mode and from autograd context managers such as ``torch.no_grad()``. See
+# :ref:`rl_execution_modes` for details.
+#
+# Set the mode before constructing the collector: some collectors may wrap,
+# move, or copy the policy during initialization.
+#
+policy_module.eval()
+value_module.eval()
 
 ######################################################################
 # Data collector
 # --------------
 #
-# TorchRL provides a set of :ref:`DataCollector classes <ref_collectors>`.
-# Briefly, these classes execute three operations: reset an environment,
+# TorchRL provides the :class:`~torchrl.collectors.Collector` construction API
+# for the execution strategies in :ref:`ref_collectors`. Briefly, collectors
+# execute three operations: reset an environment,
 # compute an action given the latest observation, execute a step in the environment,
 # and repeat the last two steps until the environment signals a stop (or reaches
 # a done state).
@@ -482,14 +507,12 @@ print("Running value:", value_module(env.reset()))
 # on which ``device`` the policy should be executed, etc. They are also
 # designed to work efficiently with batched and multiprocessed environments.
 #
-# The simplest data collector is the :class:`~torchrl.collectors.SyncDataCollector`:
-# it is an iterator that you can use to get batches of data of a given length, and
-# that will stop once a total number of frames (``total_frames``) have been
-# collected.
-# Other data collectors (:class:`~torchrl.collectors.MultiSyncDataCollector` and
-# :class:`~torchrl.collectors.MultiaSyncDataCollector`) will execute
-# the same operations in synchronous and asynchronous manner over a
-# set of multiprocessed workers.
+# :class:`~torchrl.collectors.Collector` is the main construction entry point.
+# It is an iterator that yields batches of a given length and stops once a
+# total number of frames (``total_frames``) has been collected. The default
+# runs directly in the training process; ``num_collectors`` and ``sync`` select
+# synchronous or asynchronous local worker processes, while ``backend`` selects
+# Ray, RPC, or distributed execution.
 #
 # As for the policy and environment before, the data collector will return
 # :class:`~tensordict.TensorDict` instances with a total number of elements that will
@@ -497,7 +520,7 @@ print("Running value:", value_module(env.reset()))
 # training loop allows you to write data loading pipelines
 # that are 100% oblivious to the actual specificities of the rollout content.
 #
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy_module,
     frames_per_batch=frames_per_batch,
@@ -593,7 +616,11 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 #
 # * Repeat
 #
-
+# .. note::
+#     This tutorial keeps the policy and value networks in ``eval`` mode during
+#     both data collection and optimization. The collector's exploration mode
+#     still controls whether actions are sampled randomly during collection.
+#
 
 logs = defaultdict(list)
 pbar = tqdm(total=total_frames)
@@ -643,20 +670,20 @@ for i, tensordict_data in enumerate(collector):
         # number of steps (1000, which is our ``env`` horizon).
         # The ``rollout`` method of the ``env`` can take a policy as argument:
         # it will then execute this policy at each step.
+        # The context manager below changes the action-selection mode only; it
+        # does not switch the module between train and eval modes.
         with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
-            logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
-            logs["eval reward (sum)"].append(
-                eval_rollout["next", "reward"].sum().item()
-            )
-            logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-            eval_str = (
-                f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
-                f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
-                f"eval step-count: {logs['eval step_count'][-1]}"
-            )
-            del eval_rollout
+        logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
+        logs["eval reward (sum)"].append(eval_rollout["next", "reward"].sum().item())
+        logs["eval step_count"].append(eval_rollout["step_count"].max().item())
+        eval_str = (
+            f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
+            f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
+            f"eval step-count: {logs['eval step_count'][-1]}"
+        )
+        del eval_rollout
     pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
 
     # We're also using a learning rate scheduler. Like the gradient clipping,

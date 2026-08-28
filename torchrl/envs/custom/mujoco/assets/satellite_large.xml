@@ -1,0 +1,151 @@
+<!--
+  Large high-altitude satellite with 4 Control Moment Gyros (CMGs)
+  in a pyramid arrangement.
+
+  Bus: 500 kg box (1.0 x 1.0 x 0.5 m)
+  CMGs: 4 single-gimbal CMGs at skew angle beta = 54.73 deg (arctan(sqrt(2)))
+        arranged on the +X, +Y, -X, -Y faces of the bus.
+
+  Each CMG is a gimbal-rotor pair:
+    - Gimbal: hinge joint (actuated via velocity servo)
+    - Rotor:  hinge joint spinning about an axis perpendicular to the gimbal axis,
+              tilted at the pyramid skew angle from the bus Z axis.
+
+  The gyroscopic torque on the bus arises automatically from MuJoCo's
+  Coriolis/centrifugal terms c(q,v) when the gimbal tilts while the rotor spins.
+
+  sin(54.73 deg) ~ 0.8165,  cos(54.73 deg) ~ 0.5774
+-->
+<mujoco model="satellite_large">
+  <compiler angle="radian" autolimits="true"/>
+  <option gravity="0 0 0" timestep="0.001"/>
+
+  <default>
+    <joint damping="0.1" armature="0.01"/>
+    <geom contype="0" conaffinity="0"/>
+  </default>
+
+  <worldbody>
+    <light name="key" pos="3 -3 5" dir="-0.4 0.4 -0.7"
+           diffuse="0.9 0.9 0.9" ambient="0.3 0.3 0.3" directional="true"/>
+    <light name="fill" pos="-3 3 2" dir="0.4 -0.4 -0.3"
+           diffuse="0.4 0.4 0.5" directional="true"/>
+
+    <body name="satellite" pos="0 0 0">
+      <freejoint name="root"/>
+
+      <!-- Bus structure -->
+      <geom name="bus" type="box" size="0.5 0.5 0.25" mass="500"
+            rgba="0.85 0.75 0.4 1"/>
+
+      <!-- Solar panels -->
+      <geom name="panel_port" type="box" pos="0 -1.2 0"
+            size="0.4 0.6 0.01" mass="5" rgba="0.12 0.12 0.45 0.9"/>
+      <geom name="panel_starboard" type="box" pos="0 1.2 0"
+            size="0.4 0.6 0.01" mass="5" rgba="0.12 0.12 0.45 0.9"/>
+
+      <!-- Antenna mast -->
+      <geom name="antenna" type="cylinder" pos="0 0 0.35"
+            size="0.03 0.1" mass="1" rgba="0.7 0.7 0.7 1"/>
+      <geom name="antenna_dish" type="sphere" pos="0 0 0.48"
+            size="0.06" mass="0.5" rgba="0.9 0.9 0.9 1"/>
+
+      <!-- Solar-panel normal sensor (for sun-pointing reward) -->
+      <site name="solar_normal" pos="0 0 0.26" type="sphere" size="0.03"
+            rgba="1 1 0 1"/>
+
+      <!-- ============================================================
+           CMG 1  (+X face)
+           gimbal axis = (0, 1, 0)
+           rotor  axis = (0.8165, 0, 0.5774)
+           ============================================================ -->
+      <body name="cmg1_gimbal" pos="0.55 0 0">
+        <joint name="gimbal1" type="hinge" axis="0 1 0" damping="0.5"/>
+        <geom name="cmg1_bracket" type="box" size="0.04 0.06 0.06"
+              mass="1" rgba="0.5 0.5 0.5 1"/>
+        <body name="cmg1_rotor">
+          <joint name="rotor1" type="hinge" axis="0.8165 0 0.5774"/>
+          <geom name="cmg1_disk" type="cylinder"
+                fromto="-0.041 0 -0.029 0.041 0 0.029"
+                size="0.2" mass="10" rgba="0.8 0.8 0.9 1"/>
+          <geom name="cmg1_stripe" type="capsule"
+                fromto="0 -0.18 0 0 0.18 0"
+                size="0.012" mass="0.001" rgba="0.9 0.15 0.15 1"/>
+        </body>
+      </body>
+
+      <!-- ============================================================
+           CMG 2  (+Y face)
+           gimbal axis = (-1, 0, 0)
+           rotor  axis = (0, 0.8165, 0.5774)
+           ============================================================ -->
+      <body name="cmg2_gimbal" pos="0 0.55 0">
+        <joint name="gimbal2" type="hinge" axis="-1 0 0" damping="0.5"/>
+        <geom name="cmg2_bracket" type="box" size="0.06 0.04 0.06"
+              mass="1" rgba="0.5 0.5 0.5 1"/>
+        <body name="cmg2_rotor">
+          <joint name="rotor2" type="hinge" axis="0 0.8165 0.5774"/>
+          <geom name="cmg2_disk" type="cylinder"
+                fromto="0 -0.041 -0.029 0 0.041 0.029"
+                size="0.2" mass="10" rgba="0.8 0.8 0.9 1"/>
+          <geom name="cmg2_stripe" type="capsule"
+                fromto="-0.18 0 0 0.18 0 0"
+                size="0.012" mass="0.001" rgba="0.9 0.15 0.15 1"/>
+        </body>
+      </body>
+
+      <!-- ============================================================
+           CMG 3  (-X face)
+           gimbal axis = (0, -1, 0)
+           rotor  axis = (-0.8165, 0, 0.5774)
+           ============================================================ -->
+      <body name="cmg3_gimbal" pos="-0.55 0 0">
+        <joint name="gimbal3" type="hinge" axis="0 -1 0" damping="0.5"/>
+        <geom name="cmg3_bracket" type="box" size="0.04 0.06 0.06"
+              mass="1" rgba="0.5 0.5 0.5 1"/>
+        <body name="cmg3_rotor">
+          <joint name="rotor3" type="hinge" axis="-0.8165 0 0.5774"/>
+          <geom name="cmg3_disk" type="cylinder"
+                fromto="0.041 0 -0.029 -0.041 0 0.029"
+                size="0.2" mass="10" rgba="0.8 0.8 0.9 1"/>
+          <geom name="cmg3_stripe" type="capsule"
+                fromto="0 -0.18 0 0 0.18 0"
+                size="0.012" mass="0.001" rgba="0.9 0.15 0.15 1"/>
+        </body>
+      </body>
+
+      <!-- ============================================================
+           CMG 4  (-Y face)
+           gimbal axis = (1, 0, 0)
+           rotor  axis = (0, -0.8165, 0.5774)
+           ============================================================ -->
+      <body name="cmg4_gimbal" pos="0 -0.55 0">
+        <joint name="gimbal4" type="hinge" axis="1 0 0" damping="0.5"/>
+        <geom name="cmg4_bracket" type="box" size="0.06 0.04 0.06"
+              mass="1" rgba="0.5 0.5 0.5 1"/>
+        <body name="cmg4_rotor">
+          <joint name="rotor4" type="hinge" axis="0 -0.8165 0.5774"/>
+          <geom name="cmg4_disk" type="cylinder"
+                fromto="0 0.041 -0.029 0 -0.041 0.029"
+                size="0.2" mass="10" rgba="0.8 0.8 0.9 1"/>
+          <geom name="cmg4_stripe" type="capsule"
+                fromto="-0.18 0 0 0.18 0 0"
+                size="0.012" mass="0.001" rgba="0.9 0.15 0.15 1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <!-- Gimbal rate servos (RL controls these) -->
+    <velocity name="gimbal1_act" joint="gimbal1" kv="100"/>
+    <velocity name="gimbal2_act" joint="gimbal2" kv="100"/>
+    <velocity name="gimbal3_act" joint="gimbal3" kv="100"/>
+    <velocity name="gimbal4_act" joint="gimbal4" kv="100"/>
+    <!-- Rotor spin servos (held at constant speed) -->
+    <velocity name="rotor1_act" joint="rotor1" kv="50"/>
+    <velocity name="rotor2_act" joint="rotor2" kv="50"/>
+    <velocity name="rotor3_act" joint="rotor3" kv="50"/>
+    <velocity name="rotor4_act" joint="rotor4" kv="50"/>
+  </actuator>
+</mujoco>

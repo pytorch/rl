@@ -1,18 +1,51 @@
 .. currentmodule:: torchrl.modules
 
-World Models and Model-Based RL
-===============================
+Robot Learning
+==============
 
-Modules for model-based reinforcement learning, including world models and dynamics models.
+Policy architectures for robot manipulation and imitation learning.
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    ACTModel
+
+World Models and Model-Based RL
+===============================
+
+Modules for model-based reinforcement learning, including world models and dynamics models.
+For an overview of how the DreamerV3 components fit together, see
+:doc:`DreamerV3 in a nutshell <dreamer_v3>`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    WorldModel
     WorldModelWrapper
     DreamerActor
     ObsEncoder
     ObsDecoder
     RSSMPosterior
+    RSSMPosteriorV3
     RSSMPrior
+    RSSMPriorV3
     RSSMRollout
+    RSSMRolloutV3
+    SymExpTwoHot
+    DreamerV3BlockGRUCell
+    DreamerV3BlockGRU
+    DreamerV3MLP
+
+PILCO
+-----
+
+Components for moment-matching model-based policy search (PILCO).
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    GPWorldModel
+    RBFController

@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import torch
+from tensordict import TensorDict
 from tensordict.nn import composite_lp_aggregate
 
 # Check that we're using the new behavior
@@ -15,6 +17,26 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
+  collector.groups_per_iter=2 \
+  collector.group_size=2 \
+  collector.total_iters=3 \
+  loss.mini_batch_size=8 \
+  logger.backend= \
+  logger.eval_iter=2 \
+  logger.eval_episodes=4 \
+  checkpoint.save_iter=2
+""",
+    "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
+  optim.gradient_steps=55 \
+  replay_buffer.dataset= \
+  replay_buffer.demo_episodes=5 \
+  env.name=Pendulum-v1 \
+  env.max_episode_steps=200 \
+  network.num_steps=5 \
+  logger.backend= \
+  logger.eval_iter=50
+""",
     "td3_bc": """python sota-implementations/td3_bc/td3_bc.py \
   optim.gradient_steps=55 \
   logger.backend=
@@ -35,6 +57,16 @@ commands = {
   loss.ppo_epochs=2 \
   logger.backend= \
   logger.test_interval=10
+""",
+    "rnd_mujoco": """python sota-implementations/rnd/rnd_mujoco.py \
+  env.env_name=HalfCheetah-v4 \
+  collector.total_frames=40 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=10 \
+  loss.ppo_epochs=2 \
+  logger.backend= \
+  logger.test_interval=40 \
+  logger.num_test_episodes=1
 """,
     "ppo_atari": """python sota-implementations/ppo/ppo_atari.py \
   collector.total_frames=80 \
@@ -121,6 +153,19 @@ commands = {
   optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
+  logger.backend=
+""",
+    "tqc": """python sota-implementations/tqc/tqc.py \
+  collector.total_frames=48 \
+  collector.init_random_frames=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector.device= \
+  optim.batch_size=10 \
+  optim.utd_ratio=1 \
+  replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
+  network.device= \
   logger.backend=
 """,
     "discrete_sac": """python sota-implementations/discrete_sac/discrete_sac.py \
@@ -278,7 +323,7 @@ commands = {
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
+    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100 --dataset=synthetic
 """,
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
   optimization.total_optim_steps=2 \
@@ -297,7 +342,82 @@ commands = {
   replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
 """,
+    "dreamer_v3": """python sota-implementations/dreamer_v3/train.py \
+  collector.total_frames=400 \
+  collector.frames_per_batch=200 \
+  replay_buffer.batch_size=2 \
+  replay_buffer.seq_len=4 \
+  replay_buffer.warmup_factor=1 \
+  optimization.updates_per_batch=1 \
+  logger.eval_every=200 \
+  logger.eval_episodes=1 \
+  logger.output_plot= \
+  networks.hidden_dim=8 \
+  networks.encoder_layers=1 \
+  networks.decoder_layers=1 \
+  networks.reward_layers=1 \
+  networks.actor_layers=1 \
+  networks.value_layers=1 \
+  networks.num_categoricals=2 \
+  networks.num_classes=2 \
+  networks.num_reward_bins=11 \
+  networks.num_value_bins=11 \
+  networks.rnn_hidden_dim=8 \
+  networks.obs_embed_dim=8
+""",
 }
+
+_OFFLINE_DATASETS = {
+    "gail": "halfcheetah-expert-v2",
+    "td3_bc": "halfcheetah-medium-v2",
+}
+
+
+def _write_synthetic_d4rl_dataset(root: Path, dataset_id: str) -> None:
+    generator = torch.Generator().manual_seed(0)
+    size = 512
+    done = torch.zeros(size, 1, dtype=torch.bool)
+    truncated = torch.zeros_like(done)
+    dataset = TensorDict(
+        {
+            "observation": torch.randn(size, 17, generator=generator),
+            "action": torch.randn(size, 6, generator=generator).tanh(),
+            "reward": torch.randn(size, 1, generator=generator),
+            "done": done,
+            "terminated": done.clone(),
+            "truncated": truncated,
+            "next": {
+                "observation": torch.randn(size, 17, generator=generator),
+                "reward": torch.randn(size, 1, generator=generator),
+                "done": done.clone(),
+                "terminated": done.clone(),
+                "truncated": truncated.clone(),
+            },
+        },
+        [size],
+    )
+    dataset.memmap_(root / ".cache" / "torchrl" / "d4rl" / dataset_id)
+
+
+# CI sharding: the smoke list runs as SOTA_NUM_SHARDS parallel jobs, each
+# selecting an interleaved slice of the sorted command list via SOTA_SHARD
+# (1-based). Interleaving keeps the heavy neighbors (dreamer/dreamer_v3) on
+# different shards. Both variables unset (the local default) runs everything.
+_num_shards = int(os.environ.get("SOTA_NUM_SHARDS", "1"))
+_shard = os.environ.get("SOTA_SHARD")
+if _num_shards > 1:
+    if _shard is None:
+        raise RuntimeError("SOTA_NUM_SHARDS is set but SOTA_SHARD is not.")
+    _shard_index = int(_shard) - 1
+    if not 0 <= _shard_index < _num_shards:
+        raise RuntimeError(
+            f"SOTA_SHARD={_shard} is out of range for SOTA_NUM_SHARDS={_num_shards}."
+        )
+    commands = {
+        algo: command
+        for index, (algo, command) in enumerate(sorted(commands.items()))
+        if index % _num_shards == _shard_index
+    }
 
 
 def run_command(command):
@@ -326,5 +446,9 @@ def run_command(command):
 
 
 @pytest.mark.parametrize("algo", list(commands))
-def test_commands(algo):
+def test_commands(algo, monkeypatch, tmp_path):
+    dataset_id = _OFFLINE_DATASETS.get(algo)
+    if dataset_id is not None:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        _write_synthetic_d4rl_dataset(tmp_path, dataset_id)
     run_command(commands[algo])

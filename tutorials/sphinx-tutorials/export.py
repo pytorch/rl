@@ -63,7 +63,7 @@ from tensordict.nn import (
 from torch.optim import Adam
 
 from torchrl._utils import timeit
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 
 from torchrl.envs import (
@@ -102,7 +102,7 @@ policy_explore = Seq(policy, exploration_module)
 init_rand_steps = 5000
 frames_per_batch = 100
 optim_steps = 10
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy_explore,
     frames_per_batch=frames_per_batch,
@@ -121,6 +121,11 @@ t0 = time.time()
 for data in collector:
     # Write data in replay buffer
     rb.extend(data)
+    num_frames = data.numel()
+    total_count += num_frames
+    total_episodes += data["next", "done"].sum().item()
+    # Update the exploration factor once per collected frame
+    exploration_module.step(num_frames)
     max_length = rb[:]["next", "step_count"].max()
     if len(rb) > init_rand_steps:
         # Optim loop (we do several optim steps
@@ -131,12 +136,8 @@ for data in collector:
             loss_vals["loss"].backward()
             optim.step()
             optim.zero_grad()
-            # Update exploration factor
-            exploration_module.step(data.numel())
             # Update target params
             updater.step()
-            total_count += data.numel()
-            total_episodes += data["next", "done"].sum()
     if max_length > 200:
         break
 

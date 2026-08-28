@@ -24,7 +24,7 @@ jobs:
   # Job 1: vLLM tests (uses conda + pip)
   # Runs all LLM tests EXCEPT SGLang tests
   unittests-vllm:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -38,11 +38,11 @@ jobs:
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=nightly
         fi
+        # vLLM pins its own stable PyTorch, so always use stable here
+        export TORCH_VERSION=stable
 
         set -euo pipefail
         export PYTHON_VERSION="3.12"
@@ -54,13 +54,20 @@ jobs:
 
         bash .github/unittest/llm/scripts_llm/setup_env.sh
         bash .github/unittest/llm/scripts_llm/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        if [[ "$RELEASE" == 0 ]]; then
+          TENSORDICT_EXPECTATION=main
+        else
+          TENSORDICT_EXPECTATION=stable
+        fi
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_tensordict_versions.sh "$TORCH_VERSION" "$TENSORDICT_EXPECTATION"
         bash .github/unittest/llm/scripts_llm/run_test.sh
         bash .github/unittest/llm/scripts_llm/post_process.sh
 
   # Job 2: SGLang tests (uses uv, separate from vLLM due to Triton version conflicts)
   # SGLang requires a different Triton version than vLLM, so we run it in a separate job
   unittests-sglang:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ', '), 'llm/')) }}
     strategy:
       matrix:
         python_version: ["3.12"]
@@ -74,11 +81,11 @@ jobs:
       script: |
         if [[ "${{ github.ref }}" =~ release/* ]]; then
           export RELEASE=1
-          export TORCH_VERSION=stable
         else
           export RELEASE=0
-          export TORCH_VERSION=nightly
         fi
+        # SGLang pins its own stable PyTorch, so always use stable here
+        export TORCH_VERSION=stable
 
         set -euo pipefail
         export PYTHON_VERSION="3.12"
@@ -92,5 +99,12 @@ jobs:
         # This avoids Triton version conflicts between vLLM and SGLang
         bash .github/unittest/llm/scripts_sglang/setup_env.sh
         bash .github/unittest/llm/scripts_sglang/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        if [[ "$RELEASE" == 0 ]]; then
+          TENSORDICT_EXPECTATION=main
+        else
+          TENSORDICT_EXPECTATION=stable
+        fi
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_tensordict_versions.sh "$TORCH_VERSION" "$TENSORDICT_EXPECTATION"
         bash .github/unittest/llm/scripts_sglang/run_test.sh
         bash .github/unittest/llm/scripts_sglang/post_process.sh

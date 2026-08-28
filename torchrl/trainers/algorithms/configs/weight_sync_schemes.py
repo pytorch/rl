@@ -13,7 +13,10 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 @dataclass
 class WeightSyncSchemeConfig(ConfigBase):
-    """Base configuration for weight synchronization schemes."""
+    """Hydra configuration for :class:`~torchrl.weight_update.WeightSyncScheme`.
+
+    Every kwarg accepted by ``WeightSyncScheme.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.weight_update.WeightSyncScheme"
     _partial_: bool = False
@@ -27,16 +30,16 @@ class WeightSyncSchemeConfig(ConfigBase):
 
 @dataclass
 class MultiProcessWeightSyncSchemeConfig(ConfigBase):
-    """Configuration for MultiProcessWeightSyncScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.MultiProcessWeightSyncScheme`.
 
-    Weight synchronization for multiprocess operations using pipes.
-    This scheme creates transports that communicate via multiprocessing pipes.
+    Every kwarg accepted by ``MultiProcessWeightSyncScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.MultiProcessWeightSyncScheme"
     _partial_: bool = False
 
     strategy: str = "tensordict"  # "tensordict" or "state_dict"
+    sync: bool = True
 
     def __post_init__(self) -> None:
         """Post-initialization hook for multiprocess weight sync scheme configurations."""
@@ -44,16 +47,17 @@ class MultiProcessWeightSyncSchemeConfig(ConfigBase):
 
 @dataclass
 class SharedMemWeightSyncSchemeConfig(ConfigBase):
-    """Configuration for SharedMemWeightSyncScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.SharedMemWeightSyncScheme`.
 
-    Weight synchronization using shared memory for in-place weight updates.
-    Workers automatically see weight updates without explicit message passing.
+    Every kwarg accepted by ``SharedMemWeightSyncScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.SharedMemWeightSyncScheme"
     _partial_: bool = False
 
     strategy: str = "tensordict"  # "tensordict" or "state_dict"
+    sync: bool = True
+    per_worker_weights: bool = False
 
     def __post_init__(self) -> None:
         """Post-initialization hook for shared memory weight sync scheme configurations."""
@@ -61,9 +65,9 @@ class SharedMemWeightSyncSchemeConfig(ConfigBase):
 
 @dataclass
 class NoWeightSyncSchemeConfig(ConfigBase):
-    """Configuration for NoWeightSyncScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.NoWeightSyncScheme`.
 
-    No-op weight synchronization scheme that disables weight synchronization entirely.
+    Every kwarg accepted by ``NoWeightSyncScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.NoWeightSyncScheme"
@@ -77,16 +81,16 @@ class NoWeightSyncSchemeConfig(ConfigBase):
 
 @dataclass
 class RayWeightSyncSchemeConfig(ConfigBase):
-    """Configuration for RayWeightSyncScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.RayWeightSyncScheme`.
 
-    Weight synchronization for Ray distributed computing. Uses Ray's object store
-    and remote calls to synchronize weights across distributed workers (Ray actors).
+    Every kwarg accepted by ``RayWeightSyncScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.RayWeightSyncScheme"
     _partial_: bool = False
 
     strategy: str = "tensordict"  # "tensordict" or "state_dict"
+    backend: str = "gloo"
 
     def __post_init__(self) -> None:
         """Post-initialization hook for Ray weight sync scheme configurations."""
@@ -94,16 +98,16 @@ class RayWeightSyncSchemeConfig(ConfigBase):
 
 @dataclass
 class RayModuleTransformSchemeConfig(ConfigBase):
-    """Configuration for RayModuleTransformScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.RayModuleTransformScheme`.
 
-    Weight synchronization for RayModuleTransform actors. This scheme is designed
-    specifically for updating models hosted within Ray actors.
+    Every kwarg accepted by ``RayModuleTransformScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.RayModuleTransformScheme"
     _partial_: bool = False
 
     strategy: str = "tensordict"  # "tensordict" or "state_dict"
+    backend: str = "gloo"
 
     def __post_init__(self) -> None:
         """Post-initialization hook for Ray module transform scheme configurations."""
@@ -111,10 +115,9 @@ class RayModuleTransformSchemeConfig(ConfigBase):
 
 @dataclass
 class RPCWeightSyncSchemeConfig(ConfigBase):
-    """Configuration for RPCWeightSyncScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.RPCWeightSyncScheme`.
 
-    Weight synchronization for torch.distributed.rpc. Uses RPC calls to synchronize
-    weights across distributed workers.
+    Every kwarg accepted by ``RPCWeightSyncScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.RPCWeightSyncScheme"
@@ -128,10 +131,9 @@ class RPCWeightSyncSchemeConfig(ConfigBase):
 
 @dataclass
 class DistributedWeightSyncSchemeConfig(ConfigBase):
-    """Configuration for DistributedWeightSyncScheme.
+    """Hydra configuration for :class:`~torchrl.weight_update.DistributedWeightSyncScheme`.
 
-    Weight synchronization for torch.distributed. Uses torch.distributed primitives
-    (send/recv) to synchronize weights across distributed workers.
+    Every kwarg accepted by ``DistributedWeightSyncScheme.__init__`` is exposed as a field here.
     """
 
     _target_: str = "torchrl.weight_update.DistributedWeightSyncScheme"
@@ -139,7 +141,7 @@ class DistributedWeightSyncSchemeConfig(ConfigBase):
 
     backend: str = "gloo"  # "gloo", "nccl", etc.
     sync: bool = True
-    strategy: str = "tensordict"  # "tensordict" or "state_dict"
+    timeout: float = 3600.0
 
     def __post_init__(self) -> None:
         """Post-initialization hook for distributed weight sync scheme configurations."""

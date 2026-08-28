@@ -11,10 +11,10 @@ from typing import overload, TYPE_CHECKING
 import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import _RayServiceMetaClass, logger as torchrl_logger
 
 from torchrl.data.tensor_specs import TensorSpec
-from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
+from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Transform
 
 if TYPE_CHECKING:
@@ -276,7 +276,7 @@ class ModuleTransform(Transform, metaclass=_RayServiceMetaClass):
                 return self.module(td)
 
     def _update_weights_tensordict(self, params: TensorDictBase) -> None:
-        params.to_module(self.module)
+        params.to_module(self.module, preserve_module_state=False)
 
     def _update_weights_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
         self.module.load_state_dict(state_dict)

@@ -74,8 +74,8 @@ print(rollout)
 # codebase, TorchRL offers a range of specialized wrappers designed to be
 # used as actors, including :class:`~torchrl.modules.tensordict_module.Actor`,
 # # :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`,
-# # :class:`~torchrl.modules.tensordict_module.ActorValueOperator` or
-# # :class:`~torchrl.modules.tensordict_module.ActorCriticOperator`.
+# # :class:`~torchrl.modules.ActorValueOperator` or
+# # :class:`~torchrl.modules.ActorCriticOperator`.
 # For example, :class:`~torchrl.modules.tensordict_module.Actor` provides
 # default values for the ``in_keys`` and ``out_keys``, making integration
 # with many common environments straightforward:
@@ -168,7 +168,7 @@ print(rollout)
 # You can control the sampling of the action to use the expected value or
 # other properties of the distribution instead of using random samples if
 # your application requires it. This can be controlled via the
-# :func:`~torchrl.envs.utils.set_exploration_type` function:
+# :func:`~torchrl.envs.set_exploration_type` function:
 
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
@@ -265,7 +265,7 @@ value_net = TensorDictModule(
 
 ###################################
 # We can easily build our Q-Value actor by adding a
-# :class:`~torchrl.modules.tensordict_module.QValueModule` after our value
+# :class:`~torchrl.modules.QValueModule` after our value
 # network:
 
 from torchrl.modules import QValueModule
@@ -287,7 +287,7 @@ print(rollout)
 ###################################
 # Because it relies on the ``argmax`` operator, this policy is deterministic.
 # During data collection, we will need to explore the environment. For that,
-# we are using the :class:`~torchrl.modules.tensordict_module.EGreedyModule`
+# we are using the :class:`~torchrl.modules.EGreedyModule`
 # once again:
 
 policy_explore = TensorDictSequential(policy, EGreedyModule(env.action_spec))

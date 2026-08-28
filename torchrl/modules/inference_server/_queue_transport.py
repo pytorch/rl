@@ -1,0 +1,127 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+"""Shared base classes for queue-based inference transports.
+
+:class:`QueueBasedTransport` factors out the common submit/drain/resolve logic
+used by :class:`~torchrl.modules.inference_server.MPTransport`,
+:class:`~torchrl.modules.inference_server.RayTransport`, and
+:class:`~torchrl.modules.inference_server.MonarchTransport`.  Each concrete
+subclass only needs to supply the queue objects (request + per-actor response).
+"""
+from __future__ import annotations
+
+from tensordict.base import TensorDictBase
+
+from torchrl._comm import Mailbox, MailboxClient, MailboxFuture
+from torchrl.modules.inference_server._transport import InferenceTransport
+
+# Private aliases retained for compatibility with imports from the concrete
+# inference transports.
+_QueueFuture = MailboxFuture
+_QueueInferenceClient = MailboxClient
+
+
+class QueueBasedTransport(InferenceTransport):
+    """Base class for transports that use a request queue and per-actor response queues.
+
+    Subclasses must set the following attributes in ``__init__`` (before or
+    after calling ``super().__init__()``):
+
+    * ``_request_queue`` -- the shared request queue (any object with
+      ``.put()``, ``.get(timeout=...)``, and ``.get(block=False)``).
+    * ``_response_queues`` -- a ``dict[int, <queue>]`` mapping actor ids to
+      per-actor response queues.
+
+    Subclasses must implement:
+
+    * :meth:`_make_response_queue` -- factory for creating a new response queue.
+
+    .. note::
+        ``wait_for_work`` uses a blocking ``get`` to detect new work.  The
+        retrieved item is stored in ``_peeked`` and consumed by the next
+        ``drain`` call, preserving FIFO ordering.
+    """
+
+    def __init__(self):
+        self._mailbox: Mailbox | None = None
+        self._peer_alive = None
+
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        # Recreate the mailbox after unpickling so its response queue factory
+        # is bound to the unpickled transport rather than the original owner.
+        state["_mailbox"] = None
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+
+    def _set_peer_alive(self, alive_event) -> None:
+        """Attach the server-liveness flag propagated to new clients."""
+        self._peer_alive = alive_event
+        if self._mailbox is not None:
+            self._mailbox.peer_alive = alive_event
+
+    def _ensure_mailbox(self) -> Mailbox:
+        mailbox = self._mailbox
+        if mailbox is None:
+            mailbox = Mailbox(
+                self._request_queue,
+                self._make_response_queue,
+                response_queues=self._response_queues,
+                peer_alive=self._peer_alive,
+            )
+            self._mailbox = mailbox
+        return mailbox
+
+    # -- to be implemented by subclasses --------------------------------------
+
+    def _make_response_queue(self):
+        """Create a new response queue for an actor."""
+        raise NotImplementedError
+
+    # -- actor API ------------------------------------------------------------
+
+    def client(self) -> _QueueInferenceClient:
+        """Create an actor-side client with a dedicated response queue.
+
+        Returns:
+            A :class:`_QueueInferenceClient`.
+        """
+        return self._ensure_mailbox().client()
+
+    def submit(self, td: TensorDictBase):
+        """Not supported -- use :meth:`client` to obtain an actor handle."""
+        raise RuntimeError(
+            f"{type(self).__name__}.submit() is not supported. "
+            "Call transport.client() to create a client."
+        )
+
+    # -- server API -----------------------------------------------------------
+
+    def drain(
+        self, max_items: int
+    ) -> tuple[list[TensorDictBase], list[tuple[int, int]]]:
+        """Dequeue up to *max_items* pending requests (non-blocking)."""
+        items, callbacks, _submitted_at = self.drain_with_timing(max_items)
+        return items, callbacks
+
+    def drain_with_timing(
+        self, max_items: int
+    ) -> tuple[list[TensorDictBase], list[tuple[int, int]], list[float | None]]:
+        """Dequeue requests and include actor-side submission timestamps."""
+        return self._ensure_mailbox().drain(max_items)
+
+    def wait_for_work(self, timeout: float) -> None:
+        """Block until at least one request is available or *timeout* elapses."""
+        self._ensure_mailbox().wait_for_work(timeout)
+
+    def resolve(self, callback: tuple[int, int], result: TensorDictBase) -> None:
+        """Route the result to the correct actor's response queue."""
+        self._ensure_mailbox().resolve(callback, result)
+
+    def resolve_exception(self, callback: tuple[int, int], exc: BaseException) -> None:
+        """Route an exception to the correct actor's response queue."""
+        self._ensure_mailbox().reject(callback, exc)

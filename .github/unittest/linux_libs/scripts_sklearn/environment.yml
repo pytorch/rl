@@ -18,6 +18,6 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
-    - hydra-core
+    - hydra-core<1.4
     - scikit-learn
     - pandas

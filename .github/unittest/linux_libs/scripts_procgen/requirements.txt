@@ -1,6 +1,6 @@
 # Core dependencies for tensordict/torchrl (installed with --no-deps)
 numpy
-pyvers
+pyvers>=0.2.3
 packaging
 cloudpickle
 

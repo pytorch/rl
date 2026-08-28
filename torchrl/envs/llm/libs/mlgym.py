@@ -761,7 +761,7 @@ def get_args(
     """Parse command line arguments and return a ScriptArguments object.
 
     Args:
-        args: Optional list of arguments to parse. If not provided, uses sys.argv.
+        task: Task identifier used to build the ML Gym task config path.
     """
     import mlgym.environment.registration  # noqa
     from mlgym import CONFIG_DIR

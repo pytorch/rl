@@ -40,7 +40,7 @@ def _get_envs():
 
 
 class _BraxMeta(_EnvPostInit):
-    """Metaclass for BraxEnv that returns a lazy ParallelEnv when num_workers > 1."""
+    """Metaclass for BraxEnv that returns a ParallelEnv when num_workers > 1."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         # Extract num_workers from explicit kwarg or kwargs dict
@@ -61,8 +61,7 @@ class _BraxMeta(_EnvPostInit):
             def make_env(_env_name=env_name, _kwargs=env_kwargs):
                 return cls(_env_name, num_workers=1, **_kwargs)
 
-            # Return lazy ParallelEnv (workers not started yet)
-            return ParallelEnv(num_workers, make_env)
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
 
         return super().__call__(*args, **kwargs)
 
@@ -551,9 +550,10 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
-        num_workers (int, optional): if greater than 1, a lazy :class:`~torchrl.envs.ParallelEnv`
+        num_workers (int, optional): if greater than 1, a :class:`~torchrl.envs.ParallelEnv`
             will be returned instead, with each worker instantiating its own
-            :class:`~torchrl.envs.BraxEnv` instance. Defaults to ``None``.
+            :class:`~torchrl.envs.BraxEnv` instance and reporting metadata directly
+            to the parent. Defaults to ``None``.
 
     .. note::
         There are two orthogonal ways to scale environment throughput:
@@ -689,16 +689,20 @@ class BraxEnv(BraxWrapper, metaclass=_BraxMeta):
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)
         cache_clear_frequency = kwargs.pop("cache_clear_frequency", False)
+        camera_id = kwargs.pop("camera_id", 0)
+        render_kwargs = kwargs.pop("render_kwargs", None)
         if kwargs:
             raise ValueError("kwargs not supported.")
         self.wrapper_frame_skip = 1
-        env = self.lib.envs.get_environment(env_name, **kwargs)
+        env = self.lib.envs.get_environment(env_name)
         return super()._build_env(
             env,
             pixels_only=pixels_only,
             from_pixels=from_pixels,
             requires_grad=requires_grad,
             cache_clear_frequency=cache_clear_frequency,
+            camera_id=camera_id,
+            render_kwargs=render_kwargs,
         )
 
     @property

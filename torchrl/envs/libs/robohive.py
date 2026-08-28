@@ -297,11 +297,12 @@ class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
             _dict.update(get_obs())
             _dict["action"] = action = env.action_space.sample()
             _, r, trunc, term, done, _ = self._output_transform(env.step(action))
-            _dict[("next", "reward")] = r.reshape(1)
-            _dict[("next", "done")] = [1]
-            _dict[("next", "terminated")] = [1]
-            _dict[("next", "truncated")] = [1]
-            _dict["next"] = get_obs()
+            next_dict = get_obs()
+            next_dict["reward"] = r.reshape(1)
+            next_dict["done"] = [1]
+            next_dict["terminated"] = [1]
+            next_dict["truncated"] = [1]
+            _dict["next"] = next_dict
             rollout[i] = TensorDict(_dict, [])
 
         observation_spec = make_composite_from_td(

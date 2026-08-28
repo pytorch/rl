@@ -36,7 +36,7 @@ from utils import (
 torch.set_float32_matmul_precision("high")
 
 
-@hydra.main(config_path="", config_name="offline_config")
+@hydra.main(config_path="", config_name="offline_config", version_base="1.3")
 def main(cfg: DictConfig):  # noqa: F821
     set_gym_backend(cfg.env.backend).set()
 

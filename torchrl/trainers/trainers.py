@@ -7,31 +7,37 @@ from __future__ import annotations
 
 import abc
 import itertools
+import json
+import math
 import pathlib
+import sys
 import time
 import warnings
+import weakref
 from collections import defaultdict, OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from textwrap import indent
 from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import NestedKey, pad, TensorDict, TensorDictBase
+from tensordict import NestedKey, NonTensorData, pad, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
 from torch import nn, optim
-
 from torchrl._utils import (
     _CKPT_BACKEND,
+    implement_for,
     KeyDependentDefaultDict,
     logger as torchrl_logger,
     rl_warnings,
     timeit,
     VERBOSE,
 )
+
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import (
@@ -60,6 +66,7 @@ try:
 except ImportError:
     _has_ts = False
 
+
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
     "circular": TensorDictReplayBuffer,
@@ -74,6 +81,93 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+# On Windows, a memory-mapped checkpoint keeps the file locked for as long as
+# the loaded tensors are alive, so the checkpoint could neither be deleted nor
+# safely re-saved. Only default to ``mmap=True`` on other platforms.
+_MMAP_CKPT_DEFAULT = sys.platform != "win32"
+
+
+@implement_for("torch", "2.4")
+def _torch_load_defaults() -> dict[str, Any]:
+    return {"weights_only": True, "mmap": _MMAP_CKPT_DEFAULT}
+
+
+@implement_for("torch", None, "2.4")
+def _torch_load_defaults() -> dict[str, Any]:  # noqa: F811
+    # The weights-only unpickler of torch < 2.4 does not allow
+    # ``torch.device``, which TensorDict state-dicts carry as their
+    # ``__device`` metadata entry.
+    return {"weights_only": False, "mmap": _MMAP_CKPT_DEFAULT}
+
+
+class _TrainerCheckpointState:
+    """State-dict view over Trainer progress counters."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        return dict(self.trainer._get_state())
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.trainer.collected_frames = state_dict["collected_frames"]
+        self.trainer._last_log = state_dict["_last_log"]
+        self.trainer._last_save = state_dict["_last_save"]
+        self.trainer._optim_count = state_dict["_optim_count"]
+
+
+class _ExecutionCheckpointState:
+    """Semantic state view over a private learner execution backend."""
+
+    def __init__(self, trainer: Trainer) -> None:
+        self.trainer = trainer
+
+    def state_dict(self) -> dict[str, Any]:
+        backend = self.trainer._execution_backend
+        if backend is None or not backend.is_alive():
+            raise RuntimeError(
+                "Remote learner checkpointing requires a running learner backend."
+            )
+        return {
+            "backend": backend.state_dict(),
+            "controller": self.trainer._execution_controller_state(),
+        }
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        backend = self.trainer._execution_backend
+        if backend is None:
+            raise RuntimeError("Remote learner execution backend is missing.")
+        if not backend.is_alive():
+            backend.start()
+        backend.load_state_dict(state_dict["backend"])
+        self.trainer._load_execution_controller_state(state_dict.get("controller", {}))
+        self.trainer._published_model_version = -1
+
+
+def _state_dict_to_td(sd: dict) -> TensorDict:
+    """Convert a state dict to a :class:`~tensordict.TensorDict`.
+
+    Tensor values are stored directly; everything else is wrapped in
+    :class:`~tensordict.NonTensorData` so that :meth:`~tensordict.TensorDict.dumps`
+    can persist the whole state without pickle dependencies.
+    """
+    return TensorDict(
+        {
+            k: v if isinstance(v, torch.Tensor) else NonTensorData(v)
+            for k, v in sd.items()
+        },
+        [],
+    )
+
+
+def _td_to_state_dict(td: TensorDict) -> dict:
+    """Inverse of :func:`_state_dict_to_td`.
+
+    Unwraps :class:`~tensordict.NonTensorData` back to plain Python values and
+    leaves tensors (including :class:`~tensordict.MemoryMappedTensor`) as-is.
+    """
+    return {k: v.data if isinstance(v, NonTensorData) else v for k, v in td.items()}
 
 
 class TrainerHookBase:
@@ -134,6 +228,10 @@ class OptimizationStepper(TrainerHookBase):
         """
         raise NotImplementedError
 
+    def _step(self, context: Any, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Run this stepper against a private optimization context."""
+        return self.step(context, sub_batch)
+
     def state_dict(self) -> dict[str, Any]:
         return {}
 
@@ -188,7 +286,7 @@ class DefaultOptimizationStepper(OptimizationStepper):
         return float(gn)
 
     def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
-        losses_td = trainer.loss_module(sub_batch)
+        losses_td = trainer.compute_loss(sub_batch)
 
         if trainer.optimizer is None:
             raise RuntimeError(
@@ -263,6 +361,16 @@ class Trainer:
             in frame count. Default is 10000.
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
+        checkpoint (Checkpoint, optional): unified checkpoint object used for
+            scheduled saves and restores. The trainer registers any missing
+            standard components on this object. When omitted, the legacy
+            ``CKPT_BACKEND`` path is retained during the compatibility window.
+        checkpoint_rotation (CheckpointRotation, optional): retention policy used
+            for scheduled unified checkpoints. Requires ``checkpoint`` and cannot
+            be combined with ``save_trainer_file``.
+        checkpoint_metadata (Callable, optional): function called with the trainer
+            before each rotated save. Its returned mapping is added to the
+            checkpoint manifest metadata.
         async_collection (bool, optional): Whether to collect data asynchronously.
             This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
@@ -271,6 +379,20 @@ class Trainer:
             timing information for all hooks to the logger (e.g., wandb, tensorboard).
             Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
             Default is False.
+        auto_log_optim_steps (bool, optional): If True, automatically log ``optim_steps`` and the
+            keys of the averaged loss TensorDict at the end of every optimization loop, in addition
+            to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
+            this logging to user-registered hooks. Default is True.
+        replay_buffer (optional): Replay owner used by a remote learner backend.
+        target_net_updater (TargetNetUpdater, optional): Target updater serialized
+            with the learner object graph.
+        batch_size (int, optional): Global learner batch size. Defaults to the
+            replay buffer batch size.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+            Defaults to ``"local"``.
+        learner_backend_options (dict, optional): Backend-specific options.
+        learner_poll_interval (float): Remote replay polling interval. Defaults
+            to ``0.05`` seconds.
     """
 
     @classmethod
@@ -298,6 +420,12 @@ class Trainer:
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
         optimization_stepper: OptimizationStepper | None = None,
+        replay_buffer: Any | None = None,
+        target_net_updater: TargetNetUpdater | None = None,
+        batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -306,15 +434,44 @@ class Trainer:
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
         # objects
         self.frame_skip = frame_skip
         self.collector = collector
         self.loss_module = loss_module
         self.optimizer = optimizer
+        self.replay_buffer = replay_buffer
+        self.target_net_updater = target_net_updater
+        self.batch_size = batch_size
+        self.learner_backend = learner_backend
+        self.learner_backend_options = dict(learner_backend_options or {})
+        if learner_backend not in ("local", "ray"):
+            raise ValueError("learner_backend must be 'local' or 'ray'.")
+        if learner_backend == "ray":
+            if isinstance(optim_steps_per_batch, bool) or not isinstance(
+                optim_steps_per_batch, int
+            ):
+                raise TypeError(
+                    "optim_steps_per_batch must be an integer with "
+                    "learner_backend='ray'."
+                )
+            if optim_steps_per_batch <= 0:
+                raise ValueError(
+                    "optim_steps_per_batch must be positive with "
+                    "learner_backend='ray'."
+                )
+        if learner_poll_interval <= 0:
+            raise ValueError("learner_poll_interval must be positive.")
+        self.learner_poll_interval = float(learner_poll_interval)
+        self._execution_backend = None
+        self._published_model_version = -1
         self.logger = logger
         self.async_collection = async_collection
 
@@ -340,8 +497,27 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.checkpoint = checkpoint
+        if checkpoint_rotation is not None and checkpoint is None:
+            raise ValueError("checkpoint_rotation requires checkpoint.")
+        if checkpoint_rotation is not None and save_trainer_file is not None:
+            raise ValueError(
+                "checkpoint_rotation and save_trainer_file cannot both be set."
+            )
+        if checkpoint_metadata is not None and checkpoint_rotation is None:
+            raise ValueError("checkpoint_metadata requires checkpoint_rotation.")
+        if checkpoint_metadata is not None and not callable(checkpoint_metadata):
+            raise TypeError("checkpoint_metadata must be callable.")
+        self.checkpoint_rotation = checkpoint_rotation
+        self.checkpoint_metadata = checkpoint_metadata
+        self._checkpoint_state = _TrainerCheckpointState(self)
+        self._execution_checkpoint_state = _ExecutionCheckpointState(self)
+        self._checkpoint_skip_warnings: set[str] = set()
+        self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
+        self._stop_training = False
+        self._stop_reason = None
 
         # Hook collections for different stages of the training loop
         self._batch_process_ops = (
@@ -365,6 +541,9 @@ class Trainer:
         self._post_epoch_log_ops = (
             []
         )  # After each epoch logging (e.g., epoch completion metrics)
+        self._post_optim_complete_log_ops = (
+            []
+        )  # After all optimization steps for a batch (e.g., logging average_losses)
 
         # Regular hook collections for non-logging operations
         self._pre_epoch_ops = (
@@ -387,14 +566,20 @@ class Trainer:
             []
         )  # Process batches for optimization (e.g., subsampling)
         self._post_optim_ops = []  # After optimization (e.g., weight syncing)
+        self._setup_ops = []  # Before training starts (e.g., warmups, lazy init)
+        self._shutdown_ops = []  # At training end (e.g., final eval, publish)
 
         self._modules = {}
 
         self.optimization_stepper = optimization_stepper
-        if self.optimization_stepper is not None:
+        if self.optimization_stepper is not None and self.learner_backend == "local":
             self.optimization_stepper.register(self, name="optimization_stepper")
 
-        if self.optimizer is not None and self.optimization_stepper is None:
+        if (
+            self.optimizer is not None
+            and self.optimization_stepper is None
+            and self.learner_backend == "local"
+        ):
             # Only auto-create the OptimizerHook when no stepper is
             # provided.  When a stepper is present it may access
             # trainer.optimizer directly, so creating the hook would leave a
@@ -408,12 +593,160 @@ class Trainer:
             log_timing_hook = LogTiming(prefix="time", percall=True, erase=False)
             log_timing_hook.register(self)
 
+        if self.learner_backend == "ray":
+            if replay_buffer is None:
+                raise ValueError(
+                    "replay_buffer is required with learner_backend='ray'."
+                )
+            if not isinstance(loss_module, LossModule):
+                raise TypeError(
+                    "learner_backend='ray' requires an ordinary LossModule object."
+                )
+            global_batch_size = batch_size
+            if global_batch_size is None:
+                global_batch_size = getattr(replay_buffer, "batch_size", None)
+            if global_batch_size is None:
+                raise ValueError(
+                    "batch_size is required when replay_buffer.batch_size is unset."
+                )
+            # Kept lazy to break the intentional Trainer/stepper import cycle.
+            from torchrl.trainers._ray_execution import _RayTrainerExecution
+
+            prepare_weight_sync = getattr(collector, "_learner_weight_sync", None)
+            if prepare_weight_sync is None:
+                raise TypeError(
+                    "learner_backend='ray' requires a collector that exposes "
+                    "TorchRL WeightSyncScheme receivers."
+                )
+            self._execution_backend = _RayTrainerExecution(
+                loss_module=loss_module,
+                optimizer=optimizer,
+                optimization_stepper=optimization_stepper,
+                target_net_updater=target_net_updater,
+                replay_buffer=replay_buffer,
+                global_batch_size=global_batch_size,
+                options=self.learner_backend_options,
+                seed=seed,
+                clip_grad_norm=clip_grad_norm,
+                clip_norm=clip_norm,
+                update_replay_priority=not getattr(
+                    optimization_stepper, "updates_replay_priority", False
+                ),
+                weight_sync_factory=prepare_weight_sync,
+            )
+
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
+    def compute_loss(
+        self, sub_batch: TensorDictBase, method: str | None = None
+    ) -> TensorDictBase | tuple[Any, ...]:
+        """Evaluate the configured loss through the active execution boundary."""
+        if method is None:
+            return self.loss_module(sub_batch)
+        return getattr(self.loss_module, method)(sub_batch)
+
     def register_module(self, module_name: str, module: Any) -> None:
         if module_name in self._modules:
             raise RuntimeError(
                 f"{module_name} is already registered, choose a different name."
             )
         self._modules[module_name] = module
+        if self.checkpoint is not None:
+            self._sync_checkpoint_components()
+
+    @staticmethod
+    def _is_checkpointable(component: Any) -> bool:
+        return (
+            callable(getattr(component, "dump", None))
+            and callable(getattr(component, "load", None))
+        ) or (
+            callable(getattr(component, "state_dict", None))
+            and callable(getattr(component, "load_state_dict", None))
+        )
+
+    def _checkpoint_policy(self) -> Any | None:
+        for name in ("actor_network", "value_network", "local_value_network"):
+            policy = getattr(self.loss_module, name, None)
+            if policy is not None:
+                return policy
+        return None
+
+    def _sync_checkpoint_components(
+        self, checkpoint: Checkpoint | None = None
+    ) -> Checkpoint:
+        if checkpoint is None:
+            checkpoint = self.checkpoint
+        if checkpoint is None:
+            checkpoint = Checkpoint()
+
+        def register(name: str, component: Any) -> None:
+            if name in checkpoint or component is None:
+                return
+            if self._is_checkpointable(component):
+                checkpoint.register(name, component)
+            elif name not in self._checkpoint_skip_warnings:
+                torchrl_logger.warning(
+                    "Skipping non-checkpointable Trainer component %r (%s).",
+                    name,
+                    type(component).__name__,
+                )
+                self._checkpoint_skip_warnings.add(name)
+
+        if self.learner_backend == "ray":
+            # These adapters refer to already-live services, so Checkpoint's
+            # deterministic name-based load order is safe. Driver copies of
+            # loss/optimizer state are not authoritative in this mode and are
+            # intentionally omitted. Policy weights are republished after the
+            # complete checkpoint has loaded.
+            register("replay_buffer", self.replay_buffer)
+            register("collector", self.collector)
+            register("trainer_state", self._checkpoint_state)
+            register("logger", self.logger)
+            register("exploration", getattr(self, "greedy_module", None))
+            register("exploration", getattr(self, "exploration_module", None))
+            for name, module in self._modules.items():
+                register(f"trainer_module.{name}", module)
+            register("learner_execution", self._execution_checkpoint_state)
+            return checkpoint
+
+        register("policy", self._checkpoint_policy())
+        register("loss_module", self.loss_module)
+
+        optimizer = self.optimizer
+        if not self._is_checkpointable(optimizer):
+            optimizer_hook = self._modules.get("optimizer")
+            hook_optimizer = getattr(optimizer_hook, "optimizer", optimizer_hook)
+            optimizer = (
+                hook_optimizer
+                if self._is_checkpointable(hook_optimizer)
+                else optimizer_hook
+            )
+        register("optimizer", optimizer)
+
+        register("collector", self.collector)
+        replay_buffer = getattr(self, "replay_buffer", None)
+        if not self._is_checkpointable(replay_buffer):
+            replay_buffer_hook = self._modules.get("replay_buffer")
+            hook_replay_buffer = getattr(
+                replay_buffer_hook, "replay_buffer", replay_buffer_hook
+            )
+            replay_buffer = (
+                hook_replay_buffer
+                if self._is_checkpointable(hook_replay_buffer)
+                else replay_buffer_hook
+            )
+        register("replay_buffer", replay_buffer)
+        register("logger", self.logger)
+        register("exploration", getattr(self, "greedy_module", None))
+        register("exploration", getattr(self, "exploration_module", None))
+        register("target_updater", getattr(self, "target_net_updater", None))
+        register("trainer_state", self._checkpoint_state)
+        for name, module in self._modules.items():
+            if name in ("optimizer", "replay_buffer") and name in checkpoint:
+                continue
+            register(f"trainer_module.{name}", module)
+        return checkpoint
 
     def _wrap_hook_with_timing(
         self, op: Callable, hook_name: str | None = None
@@ -494,7 +827,36 @@ class Trainer:
         self._last_save = state_dict["state"]["_last_save"]
         self._optim_count = state_dict["state"]["_optim_count"]
 
+    def request_stop(self, reason: str | None = None) -> None:
+        """Signal that training should stop at the next loop boundary."""
+        self._stop_training = True
+        self._stop_reason = reason
+
     def _save_trainer(self) -> None:
+        if self.checkpoint is not None:
+            checkpoint = self._sync_checkpoint_components()
+            if self.checkpoint_rotation is not None:
+                self.checkpoint_rotation.save(
+                    checkpoint,
+                    step=self.collected_frames,
+                    metadata=self._checkpoint_manifest_metadata(),
+                )
+            else:
+                checkpoint.save(self.save_trainer_file)
+            return
+        warnings.warn(
+            "The default Trainer checkpoint format will change from the legacy "
+            "CKPT_BACKEND format to torchrl.checkpoint in v0.15. Pass "
+            "checkpoint=Checkpoint(...) to opt in now.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        warnings.warn(
+            "The legacy CKPT_BACKEND trainer checkpoint path is deprecated and "
+            "will be removed in v0.16. Use checkpoint=Checkpoint(...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if _CKPT_BACKEND == "torchsnapshot":
             if not _has_ts:
                 raise ImportError(
@@ -503,33 +865,181 @@ class Trainer:
                 )
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
-            torch.save(self.state_dict(), self.save_trainer_file)
+            # Write to a temporary file and atomically swap it in: an
+            # interrupted save cannot destroy the previous checkpoint, and
+            # tensors still memory-mapped from a previous
+            # ``load_from_file(mmap=True)`` keep reading from the old inode
+            # instead of from a truncated file.
+            file = pathlib.Path(self.save_trainer_file)
+            tmp_file = file.with_name(file.name + ".tmp")
+            try:
+                torch.save(self.state_dict(), tmp_file)
+                tmp_file.replace(file)
+            except BaseException:
+                tmp_file.unlink(missing_ok=True)
+                raise
+        elif _CKPT_BACKEND == "memmap":
+            state = self.state_dict()
+            path = pathlib.Path(self.save_trainer_file)
+            path.mkdir(parents=True, exist_ok=True)
+            # Persist all module state dicts using TensorDict memmap.
+            # Non-tensor values (scalars, bools, nested dicts) are wrapped in
+            # NonTensorData automatically by _state_dict_to_td, so no pickle
+            # dependency is needed.
+            for key in ("loss_module", "collector", *self._modules):
+                sd = state[key]
+                if sd:
+                    _state_dict_to_td(sd).dumps(str(path / key))
+            # Persist non-tensor training counters as JSON.
+            with open(path / "state.json", "w") as f:
+                json.dump(dict(state["state"]), f)
         else:
             raise NotImplementedError(
                 f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
             )
 
+    def _has_checkpoint_destination(self) -> bool:
+        return (
+            self.checkpoint_rotation is not None or self.save_trainer_file is not None
+        )
+
+    def _checkpoint_manifest_metadata(self) -> dict[str, Any]:
+        metadata = {}
+        if self.checkpoint_metadata is not None:
+            custom_metadata = self.checkpoint_metadata(self)
+            if not isinstance(custom_metadata, Mapping):
+                raise TypeError("checkpoint_metadata must return a mapping.")
+            metadata.update(custom_metadata)
+        metadata.update(
+            collected_frames=self.collected_frames,
+            optim_steps=self._optim_count,
+        )
+        return metadata
+
     def save_trainer(self, force_save: bool = False) -> None:
         _save = force_save
-        if self.save_trainer_file is not None:
+        if self._has_checkpoint_destination():
             if (self.collected_frames - self._last_save) > self.save_trainer_interval:
                 self._last_save = self.collected_frames
                 _save = True
-        if _save and self.save_trainer_file:
+        if _save and self._has_checkpoint_destination():
             self._save_trainer()
 
     def load_from_file(self, file: str | pathlib.Path, **kwargs) -> Trainer:
         """Loads a file and its state-dict in the trainer.
 
-        Keyword arguments are passed to the :func:`~torch.load` function.
+        Keyword arguments are passed to the :func:`~torch.load` function for
+        legacy torch checkpoints and unified components explicitly saved with
+        the torch state-dict payload format. Unified checkpoints additionally
+        accept ``strict`` to control missing or incompatible components.
+        Arguments are ignored when ``CKPT_BACKEND=memmap``.
+
+        .. note::
+            Unified state-dict components use TensorDict storage by default and
+            do not invoke the pickle loader. For explicit torch payloads and
+            ``CKPT_BACKEND=torch`` checkpoints, ``weights_only=True`` is the
+            default for safer deserialization. Pass ``weights_only=False``
+            explicitly only if the state dict contains custom objects. On
+            torch < 2.4 the default is ``weights_only=False`` because the
+            weights-only unpickler of those versions cannot deserialize the
+            ``torch.device`` instances contained in TensorDict state-dicts.
+
+        .. note::
+            Explicit torch payloads and ``CKPT_BACKEND=torch`` checkpoints use
+            ``mmap=True`` by default. Pass ``mmap=False`` for legacy pre-zipfile
+            ``torch.save`` files or file-like objects. On Windows the default
+            is ``mmap=False`` because a mapped checkpoint keeps the file locked,
+            preventing deletion or re-save.
+
+        .. note::
+            Unified checkpoint tensors are mapped to CPU by default. Pass an
+            explicit ``map_location`` to select another device mapping.
+
+        .. note::
+            After restoring an independently registered policy component, the
+            trainer synchronizes the collector once so local policy copies and
+            remote workers observe the restored learner weights.
 
         """
-        if _CKPT_BACKEND == "torchsnapshot":
+        if Checkpoint.is_checkpoint(file):
+            checkpoint = self.checkpoint
+            if checkpoint is None:
+                checkpoint = Checkpoint()
+            map_location = kwargs.pop("map_location", "cpu")
+            strict = kwargs.pop("strict", None)
+            for key, value in _torch_load_defaults().items():
+                kwargs.setdefault(key, value)
+            checkpoint = self._sync_checkpoint_components(checkpoint)
+            if self.learner_backend == "ray":
+                # Service owners must be restored before learner actors create
+                # rank-aware clients. The learner state is deliberately last.
+                registered = set(checkpoint.components)
+                ordered = [
+                    name
+                    for name in ("replay_buffer", "collector")
+                    if name in registered
+                ]
+                ordered.extend(
+                    sorted(
+                        registered.difference(
+                            {"replay_buffer", "collector", "learner_execution"}
+                        )
+                    )
+                )
+                if "learner_execution" in registered:
+                    ordered.append("learner_execution")
+                loaded = set()
+                for name in ordered:
+                    result = checkpoint.load(
+                        file,
+                        components=[name],
+                        map_location=map_location,
+                        tensor_load_kwargs=kwargs,
+                        strict=strict,
+                    )
+                    loaded.update(result.loaded)
+            else:
+                result = checkpoint.load(
+                    file,
+                    map_location=map_location,
+                    tensor_load_kwargs=kwargs,
+                    strict=strict,
+                )
+                loaded = result.loaded
+            if "learner_execution" in loaded:
+                self._publish_execution_weights(force=True)
+            elif "policy" in loaded:
+                # The collector payload is restored before the independently
+                # registered policy component. Synchronize once more after all
+                # components have loaded so local copies, remote workers, and
+                # weight-transport caches observe the restored learner policy.
+                policy = checkpoint.components["policy"]
+                if policy is self._checkpoint_policy():
+                    self.collector.update_policy_weights_()
+                else:
+                    self.collector.update_policy_weights_(policy)
+        elif _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
+            for key, value in _torch_load_defaults().items():
+                kwargs.setdefault(key, value)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
+        elif _CKPT_BACKEND == "memmap":
+            path = pathlib.Path(file)
+            state: dict = {}
+            for key in ("loss_module", "collector", *self._modules):
+                key_path = path / key
+                if key_path.exists():
+                    state[key] = _td_to_state_dict(
+                        TensorDict.load_memmap(str(key_path))
+                    )
+                else:
+                    state[key] = {}
+            with open(path / "state.json") as f:
+                state["state"] = json.load(f)
+            self.load_state_dict(state)
         return self
 
     def set_seed(self):
@@ -561,12 +1071,28 @@ class Trainer:
             "post_optim_log",
             "pre_epoch_log",
             "post_epoch_log",
+            "post_optim_complete_log",
             "pre_epoch",
             "post_epoch",
+            "setup",
+            "shutdown",
         ],
         op: Callable,
         **kwargs,
     ) -> None:
+        if self.learner_backend == "ray" and dest not in {
+            "batch_process",
+            "post_steps",
+            "pre_steps_log",
+            "post_steps_log",
+            "setup",
+            "shutdown",
+        }:
+            raise RuntimeError(
+                f"The {dest!r} hook stage executes inside the local optimization "
+                "loop and is unavailable with learner_backend='ray'. Move this "
+                "behavior into an OptimizationStepper or a learner-owned component."
+            )
         # Wrap hook with timing for performance monitoring
         # Get hook name from registered modules if available
         hook_name = None
@@ -670,6 +1196,12 @@ class Trainer:
             )
             self._post_epoch_log_ops.append((timed_op, kwargs))
 
+        elif dest == "post_optim_complete_log":
+            _check_input_output_typehint(
+                op, input=[int, TensorDictBase | None], output=tuple[str, float]
+            )
+            self._post_optim_complete_log_ops.append((timed_op, kwargs))
+
         elif dest == "pre_epoch":
             _check_input_output_typehint(op, input=None, output=None)
             self._pre_epoch_ops.append((timed_op, kwargs))
@@ -678,13 +1210,21 @@ class Trainer:
             _check_input_output_typehint(op, input=None, output=None)
             self._post_epoch_ops.append((timed_op, kwargs))
 
+        elif dest == "setup":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._setup_ops.append((timed_op, kwargs))
+
+        elif dest == "shutdown":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._shutdown_ops.append((timed_op, kwargs))
+
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
                 f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
                 f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
-                f"pre_epoch, post_epoch)"
+                f"post_optim_complete_log, setup, shutdown, pre_epoch, post_epoch)"
             )
 
     register_hook = register_op
@@ -798,6 +1338,24 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _post_optim_complete_log_hook(
+        self, optim_steps: int, average_losses: TensorDictBase | None
+    ) -> None:
+        """Execute logging hooks that run AFTER all steps in the optimization loop.
+
+        These hooks log metrics that use the total step count and averaged loss TensorDict.
+        Called once per optimization loop.
+        """
+        for op, kwargs in self._post_optim_complete_log_ops:
+            result = op(optim_steps, average_losses, **kwargs)
+            if result is not None:
+                self._log(**result)
+        if self.auto_log_optim_steps:
+            if average_losses is not None:
+                self._log(optim_steps=optim_steps, **average_losses)
+            else:
+                self._log(optim_steps=optim_steps)
+
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
 
@@ -831,7 +1389,17 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _setup_hook(self) -> None:
+        for op, kwargs in self._setup_ops:
+            op(**kwargs)
+
+    def _shutdown_hook(self) -> None:
+        for op, kwargs in self._shutdown_ops:
+            op(**kwargs)
+
     def train(self):
+        if self.learner_backend == "ray":
+            return self._train_with_execution_backend()
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
             self._pbar_str = {}
@@ -845,6 +1413,8 @@ class Trainer:
             iterator = self._async_iterator()
         else:
             iterator = self.collector
+
+        self._setup_hook()
 
         for batch in iterator:
             if not self.async_collection:
@@ -873,6 +1443,12 @@ class Trainer:
             # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
             self._post_steps_log_hook(batch)
 
+            if self._stop_training:
+                if self._stop_reason and VERBOSE:
+                    torchrl_logger.info(f"Trainer stopping early: {self._stop_reason}")
+                self.save_trainer(force_save=True)
+                break
+
             if self.progress_bar:
                 self._pbar.update(current_frames)
                 self._pbar_description()
@@ -882,7 +1458,171 @@ class Trainer:
                 break
             self.save_trainer()
 
+        self._shutdown_hook()
         self.collector.shutdown()
+
+    def _train_with_execution_backend(self) -> None:
+        """Run collection while the private backend owns optimization state."""
+        backend = self._execution_backend
+        if backend is None:
+            raise RuntimeError("The configured learner execution backend is missing.")
+        if self.progress_bar:
+            self._pbar = tqdm(total=self.total_frames, initial=self.collected_frames)
+            self._pbar_str = {}
+
+        setup_complete = False
+        try:
+            if hasattr(self.replay_buffer, "start"):
+                self.replay_buffer.start()
+            backend.start()
+            self._publish_execution_weights(force=True)
+            self._setup_hook()
+            setup_complete = True
+
+            previous_write_count = self._replay_write_count()
+            if self.async_collection:
+                self.collector.start()
+                iterator = itertools.repeat(None)
+            else:
+                iterator = iter(self.collector)
+
+            for batch in iterator:
+                previous_frames = self.collected_frames
+                if batch is not None:
+                    batch = self._process_batch_hook(batch)
+                    current_frames = int(
+                        batch.get(("collector", "mask"), torch.tensor(batch.numel()))
+                        .sum()
+                        .item()
+                    )
+                    replay_batch = batch
+                    if ("collector", "mask") in replay_batch.keys(True):
+                        replay_batch = replay_batch[
+                            replay_batch.get(("collector", "mask"))
+                        ]
+                    else:
+                        replay_batch = replay_batch.reshape(-1)
+                    self.replay_buffer.extend(replay_batch)
+                    self.collected_frames += current_frames * self.frame_skip
+                    self._pre_steps_log_hook(batch)
+                else:
+                    write_count = self._replay_write_count()
+                    current_frames = max(0, write_count - previous_write_count)
+                    previous_write_count = write_count
+                    self.collected_frames += current_frames * self.frame_skip
+
+                if (
+                    self.collected_frames
+                    >= getattr(self.collector, "init_random_frames", 0)
+                    and len(self.replay_buffer) >= backend.global_batch_size
+                    and current_frames > 0
+                ):
+                    num_steps = self.optim_steps_per_batch * self.num_epochs
+                    receipt = backend.step(num_steps)
+                    self._optim_count += receipt.optim_steps
+                    metrics = receipt.metrics.flatten_keys(".").to_dict()
+                    if self.auto_log_optim_steps:
+                        metrics["optim_steps"] = self._optim_count
+                    self._log(**metrics)
+                    self._publish_execution_weights()
+
+                self._post_steps_hook()
+
+                if batch is not None:
+                    self._post_steps_log_hook(batch)
+                if self.progress_bar and self.collected_frames > previous_frames:
+                    self._pbar.update(self.collected_frames - previous_frames)
+                    self._pbar_description()
+                if self._stop_training or self.collected_frames >= self.total_frames:
+                    self._save_execution_checkpoint(
+                        force_save=True, resume_collection=False
+                    )
+                    break
+                self._save_execution_checkpoint()
+                if self.async_collection and current_frames == 0:
+                    time.sleep(self.learner_poll_interval)
+        finally:
+            if setup_complete:
+                self._shutdown_hook()
+            try:
+                self.collector.shutdown()
+            finally:
+                backend.shutdown()
+
+    def _save_execution_checkpoint(
+        self, *, force_save: bool = False, resume_collection: bool = True
+    ) -> None:
+        if not self._has_checkpoint_destination():
+            return
+        if (
+            not force_save
+            and (self.collected_frames - self._last_save) <= self.save_trainer_interval
+        ):
+            return
+        if self.async_collection:
+            pause = getattr(self.collector, "pause", None)
+            if not callable(pause):
+                raise RuntimeError(
+                    "Asynchronous remote checkpointing requires a collector "
+                    "with a pause() boundary."
+                )
+            with pause(resume=resume_collection):
+                self.save_trainer(force_save=force_save)
+        else:
+            self.save_trainer(force_save=force_save)
+
+    def _publish_execution_weights(self, *, force: bool = False) -> None:
+        backend = self._execution_backend
+        model_version = backend.model_version
+        if not force and model_version <= self._published_model_version:
+            return
+        model_weights_key, auxiliary_weights = self._execution_weight_publication()
+        published_version = backend.publish_weights(
+            expected_version=model_version,
+            model_weights_key=model_weights_key,
+            auxiliary_weights=auxiliary_weights,
+        )
+        if published_version != model_version:
+            raise RuntimeError(
+                f"Published model version {published_version} does not match "
+                f"learner version {model_version}."
+            )
+        self._published_model_version = published_version
+
+    def _execution_weight_publication(
+        self,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        return None, None
+
+    @staticmethod
+    def _compose_execution_weight_publication(
+        auxiliary_module: nn.Module | None,
+    ) -> tuple[NestedKey | None, TensorDictBase | None]:
+        """Compose learner policy weights with a controller-owned module."""
+        if auxiliary_module is None:
+            return None, None
+        auxiliary_weights = TensorDict(
+            {"module": TensorDict({"1": TensorDict.from_module(auxiliary_module)})}
+        )
+        return ("module", "0"), auxiliary_weights
+
+    def _execution_controller_state(self) -> dict[str, Any]:
+        return {
+            "published_model_version": self._published_model_version,
+            "learner_generation": self._execution_backend.generation,
+        }
+
+    def _load_execution_controller_state(self, state_dict: Mapping[str, Any]) -> None:
+        # A restored backend always starts a fresh generation and republishes
+        # its semantic model version before collection resumes.
+        del state_dict
+        self._published_model_version = -1
+
+    def _replay_write_count(self) -> int:
+        write_count = self.replay_buffer.write_count
+        if callable(write_count):
+            write_count = write_count()
+        return int(write_count)
 
     def _async_iterator(self):
         """Create an iterator for async collection that monitors replay buffer write_count.
@@ -967,12 +1707,8 @@ class Trainer:
             self._post_epoch_hook()
 
         if j >= 0:
-            # Log optimization statistics and average losses after completing all optimization steps
-            # This is the main logging point for training metrics like loss values and optimization step count
-            self._log(
-                optim_steps=self._optim_count,
-                **average_losses,
-            )
+            # LOGGING POINT 6: After all optimization for this batch (e.g., logging average_losses)
+            self._post_optim_complete_log_hook(self._optim_count, average_losses)
 
     def _log(self, log_pbar=False, **kwargs) -> None:
         """Main logging method that handles both logger output and progress bar updates.
@@ -1001,6 +1737,12 @@ class Trainer:
 
             # Log to external logger (e.g., tensorboard, wandb) if conditions are met
             if _log and self.logger is not None:
+                if (
+                    method == "log_scalar"
+                    and isinstance(item, torch.Tensor)
+                    and item.ndim > 0
+                ):
+                    continue
                 getattr(self.logger, method)(key, item, step=collected_frames)
 
             # Update progress bar if requested and method is scalar
@@ -1332,6 +2074,16 @@ class ClearCudaCache(TrainerHookBase):
         if self.count % self.interval == 0:
             torch.cuda.empty_cache()
 
+    def state_dict(self) -> dict[str, Any]:
+        return {"count": self.count}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.count = state_dict["count"]
+
+    def register(self, trainer: Trainer, name: str = "clear_cuda_cache"):
+        trainer.register_module(name, self)
+        trainer.register_op("pre_optim_steps", self)
+
 
 class LogTiming(TrainerHookBase):
     """Hook to log timing information collected by timeit context managers.
@@ -1503,6 +2255,12 @@ class LogScalar(TrainerHookBase):
 
         return result
 
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        pass
+
     def register(self, trainer: Trainer, name: str | None = None):
         if name is None:
             name = f"log_{self.logname}"
@@ -1607,8 +2365,10 @@ class RewardNormalizer(TrainerHookBase):
         }
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        # deepcopy to decouple the normalizer stats from the caller's tensors
+        # (which may e.g. be mmap-backed by a checkpoint file)
         for key, value in state_dict.items():
-            setattr(self, key, value)
+            setattr(self, key, deepcopy(value))
 
     def register(self, trainer: Trainer, name: str = "reward_normalizer"):
         trainer.register_op("batch_process", self.update_reward_stats)
@@ -2043,10 +2803,10 @@ class UpdateWeights(TrainerHookBase):
         )
 
     def state_dict(self) -> dict:
-        return {}
+        return {"counter": self.counter}
 
     def load_state_dict(self, state_dict) -> None:
-        return
+        self.counter = state_dict.get("counter", 0)
 
 
 class CountFramesLog(TrainerHookBase):
@@ -2148,6 +2908,119 @@ class TargetNetUpdaterHook(TrainerHookBase):
         trainer.register_op("post_steps", self)
 
 
+class ValueEstimatorHook(TrainerHookBase):
+    """A hook that computes value estimates over a collected batch.
+
+    Wraps a value estimator module such as :class:`~torchrl.objectives.value.GAE`
+    and applies it to the whole collected batch at the ``pre_epoch`` stage, so
+    that advantage and value-target entries are available when the loss module
+    consumes sub-batches during optimization.
+
+    In async-collection mode the training loop has no batch to hand to the
+    ``pre_epoch`` stage (``batch`` is ``None``); the hook then passes the batch
+    through untouched, and value estimates are expected to be computed
+    elsewhere (e.g. by a replay-buffer transform).
+
+    Args:
+        value_estimator (Callable[[TensorDictBase], TensorDictBase]): the value
+            estimator to apply to the collected batch, e.g. an instance of
+            :class:`~torchrl.objectives.value.GAE`.
+
+    Examples:
+        >>> gae = GAE(gamma=0.99, lmbda=0.95, value_network=critic, average_gae=True)
+        >>> value_estimator_hook = ValueEstimatorHook(gae)
+        >>> value_estimator_hook.register(trainer)
+    """
+
+    def __init__(
+        self, value_estimator: Callable[[TensorDictBase], TensorDictBase]
+    ) -> None:
+        self.value_estimator = value_estimator
+
+    def __call__(self, batch: TensorDictBase | None) -> TensorDictBase | None:
+        if batch is None:
+            return batch
+        return self.value_estimator(batch)
+
+    def state_dict(self) -> dict[str, Any]:
+        if hasattr(self.value_estimator, "state_dict"):
+            return {"value_estimator": self.value_estimator.state_dict()}
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        if "value_estimator" in state_dict and hasattr(
+            self.value_estimator, "load_state_dict"
+        ):
+            self.value_estimator.load_state_dict(state_dict["value_estimator"])
+
+    def register(self, trainer: Trainer, name: str = "value_estimator"):
+        trainer.register_op("pre_epoch", self)
+        trainer.register_module(name, self)
+
+
+class LRSchedulerHook(TrainerHookBase):
+    """A hook that steps a learning-rate scheduler during training.
+
+    Args:
+        scheduler (torch.optim.lr_scheduler.LRScheduler): the scheduler to step.
+        interval (Literal["batch", "optim"], optional): ``"batch"`` to step the
+            scheduler once per collected batch, or ``"optim"`` to step it after
+            every optimization step. With ``"optim"``, the number of scheduler
+            steps per collected batch scales with ``num_epochs`` and the number
+            of sub-batches per batch. Defaults to ``"batch"``.
+
+    Once registered with a trainer, the hook only steps the scheduler when at
+    least one optimization step has run since its last call, so the learning
+    rate is not decayed during warmup phases (e.g. while
+    ``collector.init_random_frames`` has not been reached).
+
+    Examples:
+        >>> scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100)
+        >>> lr_scheduler_hook = LRSchedulerHook(scheduler)
+        >>> lr_scheduler_hook.register(trainer)
+    """
+
+    def __init__(
+        self,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
+        interval: Literal["batch", "optim"] = "batch",
+    ) -> None:
+        if interval not in ("batch", "optim"):
+            raise ValueError(f"interval must be 'batch' or 'optim', got {interval}")
+        self.scheduler = scheduler
+        self.interval = interval
+        self._trainer_ref: weakref.ReferenceType[Trainer] | None = None
+        self._last_optim_count: int = 0
+
+    def __call__(self, batch: TensorDictBase | None = None) -> TensorDictBase | None:
+        trainer = self._trainer_ref() if self._trainer_ref is not None else None
+        if trainer is not None:
+            optim_count = trainer._optim_count
+            if optim_count == self._last_optim_count:
+                # no optimization step has run since the last call (e.g. during
+                # the init_random_frames warmup): keep the learning rate as is
+                return batch
+            self._last_optim_count = optim_count
+        self.scheduler.step()
+        return batch
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "scheduler": self.scheduler.state_dict(),
+            "last_optim_count": self._last_optim_count,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.scheduler.load_state_dict(state_dict["scheduler"])
+        self._last_optim_count = state_dict.get("last_optim_count", 0)
+
+    def register(self, trainer: Trainer, name: str = "lr_scheduler"):
+        self._trainer_ref = weakref.ref(trainer)
+        dest = "post_optim" if self.interval == "optim" else "post_steps"
+        trainer.register_op(dest, self)
+        trainer.register_module(name, self)
+
+
 class UTDRHook(TrainerHookBase):
     """Hook for logging Update-to-Data (UTD) ratio during async collection.
 
@@ -2214,3 +3087,143 @@ class UTDRHook(TrainerHookBase):
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Load state from dictionary."""
+
+
+class EarlyStopping(TrainerHookBase):
+    """Early stopping hook for :class:`~torchrl.trainers.Trainer`.
+
+    This hook monitors a scalar metric and stops training when that metric
+    does not improve according to a configured criterion.
+
+    By default, the hook monitors ``"r_evaluation"``.
+
+    Args:
+        monitor (NestedKey, optional): Metric name to monitor.
+            Defaults to ``"r_evaluation"``.
+        mode (Literal["min", "max"], optional): One of ``"min"`` or ``"max"``.
+            In ``"max"`` mode, larger metric values are considered better.
+            Defaults to ``"max"``.
+        min_delta (float, optional): Minimum absolute improvement required to
+            qualify as better. Defaults to ``0.0``.
+        patience (int, optional): Maximum number of non-improving frames
+            allowed before stopping. Defaults to ``100_000``.
+        wait_for (int, optional): Number of initial frames to ignore before
+            checking the stopping criterion. Defaults to ``1_000_000``.
+        check_finite (bool, optional): If ``True``, non-finite metric values
+            (NaN or inf) trigger early stopping. Defaults to ``True``.
+
+    Examples:
+        >>> LogScalar(("next", "reward"), "r_training").register(trainer)
+        >>> EarlyStopping(monitor="r_training", patience=10_000).register(trainer)
+    """
+
+    def __init__(
+        self,
+        *,
+        monitor: NestedKey = "r_evaluation",
+        mode: Literal["min", "max"] = "max",
+        min_delta: float = 0.0,
+        patience: int = 100_000,
+        wait_for: int = 1_000_000,
+        check_finite: bool = True,
+    ) -> None:
+        if mode not in {"min", "max"}:
+            raise ValueError(f"mode must be either 'min' or 'max', got {mode}.")
+        if patience < 0:
+            raise ValueError(f"patience must be >= 0, got {patience}.")
+        if wait_for < 0:
+            raise ValueError(f"wait_for must be >= 0, got {wait_for}.")
+
+        self.monitor = monitor
+        self.mode = mode
+        self.min_delta = float(min_delta)
+        self.patience = int(patience)
+        self.wait_for = int(wait_for)
+        self.check_finite = check_finite
+
+        self.best_score: float | None = None
+        self.stop_reason: str | None = None
+        self._trainer: Trainer | None = None
+        self._last_improvement_frame: int | None = None
+
+    def _resolve_metric(self, trainer: Trainer) -> float:
+        metric_values = trainer._log_dict.get(self.monitor, None)
+        if not metric_values:
+            raise RuntimeError(
+                "EarlyStopping could not find monitored metric "
+                f"'{self.monitor}' in trainer._log_dict."
+            )
+
+        metric = metric_values[-1]
+        if isinstance(metric, torch.Tensor):
+            if metric.numel() != 1:
+                raise RuntimeError(
+                    "EarlyStopping expects scalar metrics, "
+                    f"got shape {tuple(metric.shape)} for '{self.monitor}'."
+                )
+            metric = float(metric.item())
+        else:
+            metric = float(metric)
+        return metric
+
+    def _is_improvement(self, score: float, best_score: float) -> bool:
+        if self.mode == "max":
+            return score > (best_score + self.min_delta)
+        return score < (best_score - self.min_delta)
+
+    def _stop(self, trainer: Trainer, reason: str) -> None:
+        self.stop_reason = reason
+        trainer.request_stop(reason)
+
+    def __call__(self, batch: TensorDictBase | None = None) -> None:
+        if self._trainer is not None and self._trainer._stop_training:
+            return
+        if self._trainer is None:
+            raise RuntimeError("EarlyStopping is not attached to a trainer.")
+
+        trainer = self._trainer
+        score = self._resolve_metric(trainer)
+
+        current_frame = int(trainer.collected_frames)
+        if current_frame < self.wait_for:
+            return
+
+        if self.check_finite and not math.isfinite(score):
+            self._stop(
+                trainer,
+                f"Monitored metric '{self.monitor}' became non-finite ({score}).",
+            )
+            return
+
+        if self.best_score is None:
+            self.best_score = score
+            self._last_improvement_frame = current_frame
+            return
+
+        if self._is_improvement(score, self.best_score):
+            self.best_score = score
+            self._last_improvement_frame = current_frame
+        else:
+            if current_frame - self._last_improvement_frame >= self.patience:
+                self._stop(
+                    trainer,
+                    f"Monitored metric '{self.monitor}' did not improve for "
+                    f"{current_frame - self._last_improvement_frame} frames.",
+                )
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "best_score": self.best_score,
+            "stop_reason": self.stop_reason,
+            "_last_improvement_frame": self._last_improvement_frame,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.best_score = state_dict.get("best_score", None)
+        self.stop_reason = state_dict.get("stop_reason", None)
+        self._last_improvement_frame = state_dict.get("_last_improvement_frame", None)
+
+    def register(self, trainer: Trainer, name: str = "early_stopping") -> None:
+        self._trainer = trainer
+        trainer.register_op("post_steps_log", self)
+        trainer.register_module(name, self)

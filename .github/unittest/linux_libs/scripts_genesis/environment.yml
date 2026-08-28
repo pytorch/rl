@@ -1,0 +1,20 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - cloudpickle
+    - numpy
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - pytest-asyncio
+    - expecttest
+    - pybind11[global]
+    - pyyaml
+    - scipy
+    - genesis-world

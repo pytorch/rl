@@ -37,7 +37,11 @@ try:
     except ImportError:  # pragma: no cover
         from importlib_metadata import version as _dist_version  # type: ignore
 
-    __version__ = _dist_version("torchrl")
+    try:
+        __version__ = _dist_version("torchrl")
+    except Exception:
+        # Nightly builds ship under a different distribution name.
+        __version__ = _dist_version("torchrl-nightly")
 except Exception:
     try:
         from ._version import __version__
@@ -54,20 +58,25 @@ except ImportError:
 
 _init_extension()
 
+from torchrl._comm.backends import service_backend, transport_backend  # noqa: E402
 from torchrl._utils import (  # noqa: E402
     _get_default_mp_start_method,
     auto_unwrap_transformed_env,
     compile_with_warmup,
+    cuda_memory_profile,
+    cuda_memory_stats,
     get_ray_default_runtime_env,
     implement_for,
     logger,
     merge_ray_runtime_env,
+    reset_cuda_peak_stats,
     set_auto_unwrap_transformed_env,
     set_profiling_enabled,
     timeit,
 )
 
 logger = logger
+torchrl_logger = logger
 
 # TorchRL's multiprocessing default.
 _preferred_start_method = _get_default_mp_start_method()
@@ -134,11 +143,16 @@ ComposeTransform.inv = _inv
 __all__ = [
     "auto_unwrap_transformed_env",
     "compile_with_warmup",
+    "cuda_memory_profile",
+    "cuda_memory_stats",
     "get_ray_default_runtime_env",
     "implement_for",
+    "logger",
     "merge_ray_runtime_env",
+    "reset_cuda_peak_stats",
     "set_auto_unwrap_transformed_env",
+    "service_backend",
     "timeit",
-    "logger",
-    "logger",
+    "torchrl_logger",
+    "transport_backend",
 ]

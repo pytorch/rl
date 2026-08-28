@@ -20,12 +20,19 @@ import io
 import json
 import os
 import sys
+import time
 import zipfile
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+
+
+def log(msg: str = "") -> None:
+    """Print with flush to ensure output is visible even if the runner dies."""
+    print(msg, flush=True)
+
 
 # =============================================================================
 # Configuration - Thresholds for flaky test detection
@@ -56,7 +63,7 @@ def get_github_token() -> str:
     """Get GitHub token from environment."""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
-        print("Error: GH_TOKEN or GITHUB_TOKEN environment variable required")
+        log("Error: GH_TOKEN or GITHUB_TOKEN environment variable required")
         sys.exit(1)
     return token
 
@@ -66,8 +73,18 @@ def get_repo() -> str:
     return os.environ.get("GITHUB_REPOSITORY", "pytorch/rl")
 
 
+def _check_rate_limit(response: requests.Response) -> None:
+    """Sleep if we're close to hitting the GitHub API rate limit."""
+    remaining = response.headers.get("X-RateLimit-Remaining")
+    if remaining is not None and int(remaining) < 50:
+        reset_at = int(response.headers.get("X-RateLimit-Reset", 0))
+        wait = max(0, reset_at - int(time.time())) + 1
+        log(f"Rate limit low ({remaining} remaining), sleeping {wait}s...")
+        time.sleep(wait)
+
+
 def github_api_request(endpoint: str, token: str) -> dict | list | None:
-    """Make a GitHub API request."""
+    """Make a GitHub API request with rate-limit awareness."""
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
@@ -77,14 +94,16 @@ def github_api_request(endpoint: str, token: str) -> dict | list | None:
 
     response = requests.get(url, headers=headers, timeout=30)
 
+    _check_rate_limit(response)
+
     if response.status_code == 404:
         return None
     elif response.status_code == 403:
         # Rate limit or permission issue
-        print(f"Warning: API request failed (403): {endpoint}")
+        log(f"Warning: API request failed (403): {endpoint}")
         return None
     elif response.status_code != 200:
-        print(f"Warning: API request failed ({response.status_code}): {endpoint}")
+        log(f"Warning: API request failed ({response.status_code}): {endpoint}")
         return None
 
     return response.json()
@@ -103,7 +122,7 @@ def download_artifact(artifact_url: str, token: str) -> bytes | None:
     )
 
     if response.status_code != 200:
-        print(f"Warning: Failed to download artifact ({response.status_code})")
+        log(f"Warning: Failed to download artifact ({response.status_code})")
         return None
 
     return response.content
@@ -166,9 +185,9 @@ def extract_test_results(artifact_content: bytes) -> list[dict]:
                         data = json.loads(content)
                         results.append(data)
                     except (json.JSONDecodeError, KeyError) as e:
-                        print(f"Warning: Failed to parse {filename}: {e}")
+                        log(f"Warning: Failed to parse {filename}: {e}")
     except zipfile.BadZipFile:
-        print("Warning: Invalid zip file")
+        log("Warning: Invalid zip file")
 
     return results
 
@@ -177,15 +196,15 @@ def collect_test_data(
     repo: str, workflow_name: str, num_runs: int, token: str
 ) -> tuple[list[dict], dict]:
     """Collect test data from recent workflow runs."""
-    print(f"Fetching last {num_runs} runs of {workflow_name} on main...")
+    log(f"Fetching last {num_runs} runs of {workflow_name} on main...")
 
     runs = list_workflow_runs(repo, workflow_name, "main", num_runs, token)
-    print(f"Found {len(runs)} completed runs")
+    log(f"Found {len(runs)} completed runs")
 
     all_test_data = []
     run_metadata = {}
 
-    for run in runs:
+    for i, run in enumerate(runs):
         run_id = run["id"]
         run_date = run["created_at"]
         commit_sha = run["head_sha"]
@@ -202,6 +221,13 @@ def collect_test_data(
         # Also check default artifacts from pytorch/test-infra
         if not test_artifacts:
             test_artifacts = artifacts
+
+        # If the first run has no artifacts at all, skip this workflow entirely
+        if i == 0 and not test_artifacts:
+            log(f"  No test artifacts found in first run — skipping {workflow_name}")
+            break
+
+        log(f"  Run {i + 1}/{len(runs)}: {len(test_artifacts)} artifacts")
 
         for artifact in test_artifacts:
             # Download artifact
@@ -223,7 +249,7 @@ def collect_test_data(
             "conclusion": run["conclusion"],
         }
 
-    print(
+    log(
         f"Collected {len(all_test_data)} test result files from {len(run_metadata)} runs"
     )
     return all_test_data, run_metadata
@@ -603,43 +629,43 @@ def main():
     else:
         workflows = [w.strip() for w in args.workflows.split(",") if w.strip()]
 
-    print(f"Analyzing flaky tests for {repo}")
-    print(f"  Workflows: {', '.join(workflows)}")
-    print(f"  Runs to analyze per workflow: {args.runs}")
-    print()
+    log(f"Analyzing flaky tests for {repo}")
+    log(f"  Workflows: {', '.join(workflows)}")
+    log(f"  Runs to analyze per workflow: {args.runs}")
+    log()
 
     # Collect test data from all workflows
     all_test_data = []
     all_run_metadata = {}
 
     for workflow in workflows:
-        print(f"\n{'=' * 60}")
-        print(f"Processing workflow: {workflow}")
-        print("=" * 60)
+        log(f"\n{'=' * 60}")
+        log(f"Processing workflow: {workflow}")
+        log("=" * 60)
 
         test_data, run_metadata = collect_test_data(repo, workflow, args.runs, token)
         all_test_data.extend(test_data)
         all_run_metadata.update(run_metadata)
 
     if not all_test_data:
-        print("\nNo test data collected from any workflow. Generating empty report.")
+        log("\nNo test data collected from any workflow. Generating empty report.")
         test_stats = {}
         flaky_tests = []
     else:
         # Aggregate statistics
-        print("\n" + "=" * 60)
-        print("Aggregating test statistics across all workflows...")
-        print("=" * 60)
+        log("\n" + "=" * 60)
+        log("Aggregating test statistics across all workflows...")
+        log("=" * 60)
         test_stats = aggregate_test_stats(all_test_data)
-        print(f"Analyzed {len(test_stats)} unique tests")
+        log(f"Analyzed {len(test_stats)} unique tests")
 
         # Identify flaky tests
-        print("Identifying flaky tests...")
+        log("Identifying flaky tests...")
         flaky_tests = identify_flaky_tests(test_stats)
-        print(f"Found {len(flaky_tests)} flaky tests")
+        log(f"Found {len(flaky_tests)} flaky tests")
 
     # Generate reports
-    print("\nGenerating reports...")
+    log("\nGenerating reports...")
 
     json_report = generate_json_report(
         flaky_tests, test_stats, all_run_metadata, output_dir / "flaky-tests.json"
@@ -655,10 +681,10 @@ def main():
     generate_markdown_report(json_report, output_dir / "flaky-tests.md")
     generate_badge_json(len(flaky_tests), output_dir / "badge.json")
 
-    print(f"\nReports written to {output_dir}/")
-    print("  - flaky-tests.json")
-    print("  - flaky-tests.md")
-    print("  - badge.json")
+    log(f"\nReports written to {output_dir}/")
+    log("  - flaky-tests.json")
+    log("  - flaky-tests.md")
+    log("  - badge.json")
 
     # Set outputs for GitHub Actions
     if os.environ.get("GITHUB_OUTPUT"):
@@ -667,7 +693,7 @@ def main():
             f.write(f"new_flaky_count={json_report['summary']['new_flaky_count']}\n")
             f.write(f"resolved_count={json_report['summary']['resolved_count']}\n")
 
-    print("\nDone!")
+    log("\nDone!")
 
 
 if __name__ == "__main__":

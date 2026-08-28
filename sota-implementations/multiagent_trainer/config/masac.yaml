@@ -1,0 +1,179 @@
+defaults:
+  - env@training_env: transformed_env
+  - env@training_env.base_env: vmas
+  - transform@training_env.transform: reward_sum
+  - transform@postproc0: expand_as
+  - transform@postproc1: expand_as
+  - transform@postproc: compose
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: sac
+  - optimizer@optimizer: adam
+  - loss@loss: sac
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+seed: 0
+
+env:
+  scenario_name: balance
+  n_agents: 3
+  max_steps: 100
+  vmas_envs: 60
+
+model:
+  shared_parameters: true
+  centralized_critic: true
+
+train:
+  device: cpu
+  minibatch_size: 128
+  lr: 5e-5
+  max_grad_norm: 5.0
+
+networks:
+  policy_network:
+    _target_: torchrl.modules.models.multiagent.MultiAgentMLP
+    n_agent_inputs: 16
+    n_agent_outputs: 4
+    n_agents: ${env.n_agents}
+    centralized: false
+    share_params: ${model.shared_parameters}
+    device: ${train.device}
+    depth: 2
+    num_cells: 256
+    activation_class:
+      _target_: torch.nn.Tanh
+      _partial_: true
+  qvalue_network:
+    _target_: torchrl.modules.models.multiagent.MultiAgentMLP
+    n_agent_inputs: 18
+    n_agent_outputs: 1
+    n_agents: ${env.n_agents}
+    centralized: ${model.centralized_critic}
+    share_params: ${model.shared_parameters}
+    device: ${train.device}
+    depth: 2
+    num_cells: 256
+    activation_class:
+      _target_: torch.nn.Tanh
+      _partial_: true
+
+models:
+  policy_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tanh_normal_model
+    network: ${networks.policy_network}
+    return_log_prob: true
+    in_keys:
+      - [agents, observation]
+    param_keys:
+      - [agents, loc]
+      - [agents, scale]
+    out_keys:
+      - [agents, action]
+  qvalue_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_value_model
+    network: ${networks.qvalue_network}
+    in_keys:
+      - [agents, observation]
+      - [agents, action]
+    out_keys:
+      - [state_action_value]
+
+training_env:
+  base_env:
+    scenario: ${env.scenario_name}
+    num_envs: ${env.vmas_envs}
+    continuous_actions: true
+    max_steps: ${env.max_steps}
+    device: ${train.device}
+    seed: ${seed}
+    scenario_kwargs:
+      n_agents: ${env.n_agents}
+  transform:
+    in_keys:
+      - [agents, reward]
+    out_keys:
+      - [agents, episode_reward]
+
+postproc0:
+  in_key: [next, done]
+  ref_key: [next, agents, reward]
+  out_key: [next, agents, done]
+
+postproc1:
+  in_key: [next, terminated]
+  ref_key: [next, agents, reward]
+  out_key: [next, agents, terminated]
+
+postproc:
+  transforms:
+    - ${postproc0}
+    - ${postproc1}
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  frames_per_batch: 6000
+  total_frames: 10000000
+  device: ${train.device}
+  storing_device: ${train.device}
+  postproc: ${postproc}
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: ${collector.frames_per_batch}
+    device: ${train.device}
+    ndim: 1
+  writer:
+    compilable: false
+  batch_size: ${train.minibatch_size}
+
+loss:
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  delay_qvalue: true
+  num_qvalue_nets: 2
+  target_entropy: auto
+  loss_function: l2
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: ${train.lr}
+
+logger:
+  exp_name: masac_vmas_${env.scenario_name}
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: ${train.max_grad_norm}
+  progress_bar: true
+  seed: ${seed}
+  save_trainer_interval: 25000
+  log_interval: 25000
+  save_trainer_file: null
+  optim_steps_per_batch: 1000
+  actor_network: ${models.policy_model}
+  critic_network: ${models.qvalue_model}
+  reward_key: [agents, reward]
+  episode_reward_key: [agents, episode_reward]
+  done_key: [agents, done]
+  terminated_key: [agents, terminated]
+  action_key: [agents, action]
+  observation_key: [agents, observation]
+  async_collection: false

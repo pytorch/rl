@@ -6,6 +6,8 @@ import importlib.util
 
 import pytest
 
+_has_ray = importlib.util.find_spec("ray") is not None
+
 pytestmark = pytest.mark.skipif(
     not importlib.util.find_spec("ray"), reason="Ray not available"
 )

@@ -113,6 +113,15 @@ def _default_dtype_and_device(
         device = _make_ordinal_device(torch.device(device))
     elif not allow_none_device:
         device = torch.zeros(()).device
+
+    if device is not None and device.type == "mps" and dtype == torch.float64:
+        warnings.warn(
+            "MPS device does not support float64. Downcasting dtype from float64 to float32.",
+            UserWarning,
+            stacklevel=2,
+        )
+        dtype = torch.float32
+
     return dtype, device
 
 
@@ -169,6 +178,16 @@ def _slice_indexing(shape: list[int], idx: slice) -> list[int]:
     # Slicing an empty shape returns the shape
     if len(shape) == 0:
         return shape
+
+    if shape[0] == -1:
+        # dynamic dimension: a full slice preserves it, anything else is
+        # undefined (the actual extent is unknown)
+        if idx.start is idx.stop is None and idx.step in (None, 1):
+            return shape
+        raise IndexError(
+            f"cannot slice a dynamic (-1) dimension with {idx}: the extent of "
+            "the dimension is unknown."
+        )
 
     if idx.start is None:
         start = 0
@@ -1229,9 +1248,7 @@ class TensorSpec(metaclass=abc.ABCMeta):
         if func not in cls.SPEC_HANDLED_FUNCTIONS or not all(
             issubclass(t, (TensorSpec,)) for t in types
         ):
-            return NotImplementedError(
-                f"func {func} for spec {cls} with handles {cls.SPEC_HANDLED_FUNCTIONS}"
-            )
+            return NotImplemented
         return cls.SPEC_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
     def unbind(self, dim: int = 0):
@@ -3670,6 +3687,15 @@ class MultiOneHot(OneHot):
     def to_one_hot_spec(self) -> OneHot:
         """No-op for MultiOneHot."""
         return self
+
+    def to_numpy(self, val: torch.Tensor, safe: bool | None = None) -> np.ndarray:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
+        if safe:
+            if not isinstance(val, torch.Tensor):
+                raise NotImplementedError
+            self.assert_is_in(val)
+        return self.to_categorical(val, safe=False).cpu().numpy()
 
     def expand(self, *shape):
         nvecs = [space.n for space in self.space]

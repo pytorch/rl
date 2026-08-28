@@ -6,14 +6,16 @@
 
 from torchrl.modules.tensordict_module.exploration import RandomPolicy
 
-from ._base import BaseCollector, DataCollectorBase, ProfileConfig
+from ._async_batched import AsyncBatchedCollector
 
-from ._multi_async import MultiAsyncCollector, MultiaSyncDataCollector
-from ._multi_base import MultiCollector, MultiCollector as _MultiDataCollector
-from ._multi_sync import MultiSyncCollector, MultiSyncDataCollector
-from ._single import Collector, SyncDataCollector
+from ._base import BaseCollector, ProfileConfig
+from ._evaluator import Evaluator
 
-from ._single_async import AsyncCollector, aSyncDataCollector
+from ._multi_async import MultiAsyncCollector
+from ._multi_base import MultiCollector
+from ._multi_sync import MultiSyncCollector
+from ._single import Collector
+from ._single_async import AsyncCollector
 from .weight_update import (
     MultiProcessedWeightUpdater,
     RayWeightUpdater,
@@ -23,21 +25,18 @@ from .weight_update import (
 )
 
 __all__ = [
-    # New canonical names (preferred)
+    # Shared collector API
     "BaseCollector",
+    # Main construction API
     "Collector",
+    # Specialized and concrete implementations
     "AsyncCollector",
     "MultiCollector",
     "MultiSyncCollector",
+    "AsyncBatchedCollector",
+    "Evaluator",
     "MultiAsyncCollector",
     "ProfileConfig",
-    # Legacy names (backward-compatible aliases)
-    "DataCollectorBase",
-    "SyncDataCollector",
-    "aSyncDataCollector",
-    "_MultiDataCollector",
-    "MultiSyncDataCollector",
-    "MultiaSyncDataCollector",
     # Other exports
     "WeightUpdaterBase",
     "VanillaWeightUpdater",

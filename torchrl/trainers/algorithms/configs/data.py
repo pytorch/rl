@@ -6,11 +6,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
 from omegaconf import MISSING
-
 from torchrl.trainers.algorithms.configs.common import ConfigBase
+
+if TYPE_CHECKING:
+    _ReplayServiceBackend = Literal["direct", "ray"]
+else:
+    # OmegaConf structured configs resolve this alias at runtime and do not
+    # support Literal on all TorchRL-supported versions.
+    _ReplayServiceBackend = str
 
 
 @dataclass
@@ -25,10 +31,11 @@ class WriterConfig(ConfigBase):
 
 @dataclass
 class RoundRobinWriterConfig(WriterConfig):
-    """Configuration for round-robin writer that distributes data across multiple storages."""
+    """Hydra configuration for :class:`~torchrl.data.RoundRobinWriter`."""
 
     _target_: str = "torchrl.data.replay_buffers.RoundRobinWriter"
     compilable: bool = False
+    track_generations: bool = False
 
     def __post_init__(self) -> None:
         """Post-initialization hook for round-robin writer configurations."""
@@ -57,6 +64,18 @@ class RandomSamplerConfig(SamplerConfig):
 
 
 @dataclass
+class ConsumingSamplerConfig(SamplerConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ConsumingSampler`.
+
+    Every kwarg accepted by ``ConsumingSampler.__init__`` is exposed as a field
+    here.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.ConsumingSampler"
+    max_sample_count: int = 1
+
+
+@dataclass
 class WriterEnsembleConfig(WriterConfig):
     """Configuration for ensemble writer that combines multiple writers."""
 
@@ -76,10 +95,11 @@ class TensorDictMaxValueWriterConfig(WriterConfig):
 
 @dataclass
 class TensorDictRoundRobinWriterConfig(WriterConfig):
-    """Configuration for TensorDict round-robin writer."""
+    """Hydra configuration for :class:`~torchrl.data.TensorDictRoundRobinWriter`."""
 
     _target_: str = "torchrl.data.replay_buffers.TensorDictRoundRobinWriter"
     compilable: bool = False
+    track_generations: bool = False
 
 
 @dataclass
@@ -105,6 +125,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -119,6 +140,7 @@ class PrioritizedSliceSamplerConfig(SamplerConfig):
     beta: float | None = None
     eps: float | None = None
     reduction: str | None = None
+    max_pending: int = 64
     _target_: str = "torchrl.data.replay_buffers.PrioritizedSliceSampler"
 
 
@@ -130,6 +152,7 @@ class SliceSamplerWithoutReplacementConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -149,6 +172,7 @@ class SliceSamplerConfig(SamplerConfig):
     num_slices: int | None = None
     slice_len: int | None = None
     end_key: Any = None
+    end_keys: Any = None
     traj_key: Any = None
     ends: Any = None
     trajectories: Any = None
@@ -169,6 +193,7 @@ class PrioritizedSamplerConfig(SamplerConfig):
     beta: float | None = None
     eps: float | None = None
     reduction: str | None = None
+    max_pending: int = 64
     _target_: str = "torchrl.data.replay_buffers.PrioritizedSampler"
 
 
@@ -179,6 +204,47 @@ class SamplerWithoutReplacementConfig(SamplerConfig):
     _target_: str = "torchrl.data.replay_buffers.SamplerWithoutReplacement"
     drop_last: bool = False
     shuffle: bool = True
+
+
+@dataclass
+class SampleUnitConfig(ConfigBase):
+    """Base configuration class for replay buffer sample units.
+
+    See also :class:`~torchrl.data.replay_buffers.SampleUnit`.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.SampleUnit"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for sample unit configurations."""
+
+
+@dataclass
+class TransitionConfig(SampleUnitConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.Transition`.
+
+    ``Transition.__init__`` takes no arguments, so this config only carries
+    the instantiation target.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.Transition"
+
+
+@dataclass
+class SequenceConfig(SampleUnitConfig):
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.Sequence`.
+
+    Every kwarg accepted by ``Sequence.__init__`` is exposed as a field here
+    with the same default.
+    """
+
+    _target_: str = "torchrl.data.replay_buffers.Sequence"
+    length: int = MISSING
+    episode_boundary: str = "pad"
+    done_key: Any = ("next", "done")
+    burn_in: int = 0
+    bootstrap: int = 0
+    dilation: int = 1
 
 
 @dataclass
@@ -210,11 +276,15 @@ class TensorStorageConfig(StorageConfig):
 
 @dataclass
 class ListStorageConfig(StorageConfig):
-    """Configuration for list-based storage in replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ListStorage`.
+
+    Every kwarg accepted by ``ListStorage.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.ListStorage"
     max_size: int | None = None
     compilable: bool = False
+    device: Any = None
 
 
 @dataclass
@@ -247,26 +317,37 @@ class StorageEnsembleConfig(StorageConfig):
 
 @dataclass
 class LazyMemmapStorageConfig(StorageConfig):
-    """Configuration for lazy memory-mapped storage."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`.
+
+    Every kwarg accepted by ``LazyMemmapStorage.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.LazyMemmapStorage"
     max_size: int | None = None
-    device: Any = None
+    scratch_dir: Any = None
+    device: Any = "cpu"
     ndim: int = 1
+    existsok: bool = False
     compilable: bool = False
     shared_init: bool = False
+    auto_cleanup: bool | None = None
 
 
 @dataclass
 class LazyTensorStorageConfig(StorageConfig):
-    """Configuration for lazy tensor storage."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.LazyTensorStorage`.
+
+    Every kwarg accepted by ``LazyTensorStorage.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.LazyTensorStorage"
     max_size: int | None = None
-    device: Any = None
+    device: Any = "cpu"
     ndim: int = 1
     compilable: bool = False
+    consolidated: bool = False
     shared_init: bool = False
+    cleanup_memmap: bool = True
 
 
 @dataclass
@@ -281,14 +362,33 @@ class ReplayBufferBaseConfig(ConfigBase):
 
 @dataclass
 class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
-    """Configuration for TensorDict-based replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.TensorDictReplayBuffer`.
+
+    Every kwarg accepted by ``TensorDictReplayBuffer.__init__`` (plus the ``ReplayBuffer``
+    kwargs it forwards via ``**kwargs``) is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.TensorDictReplayBuffer"
+    priority_key: str = "td_error"
     sampler: Any = None
+    sample_unit: Any = None
     storage: Any = None
     writer: Any = None
+    collate_fn: Any = None
+    pin_memory: bool = False
+    prefetch: int | None = None
     transform: Any = None
+    transform_factory: Any = None
     batch_size: int | None = None
+    dim_extend: int | None = None
+    checkpointer: Any = None
+    generator: Any = None
+    consume_after_n_samples: int | None = None
+    shared: bool = False
+    compilable: bool | None = None
+    delayed_init: bool | None = None
+    service_backend: _ReplayServiceBackend = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Post-initialization hook for TensorDict replay buffer configurations."""
@@ -297,12 +397,28 @@ class TensorDictReplayBufferConfig(ReplayBufferBaseConfig):
 
 @dataclass
 class ReplayBufferConfig(ReplayBufferBaseConfig):
-    """Configuration for generic replay buffer."""
+    """Hydra configuration for :class:`~torchrl.data.replay_buffers.ReplayBuffer`.
+
+    Every kwarg accepted by ``ReplayBuffer.__init__`` is exposed as a field here.
+    """
 
     _target_: str = "torchrl.data.replay_buffers.ReplayBuffer"
-    sampler: Any = None
     storage: Any = None
+    sampler: Any = None
+    sample_unit: Any = None
     writer: Any = None
+    collate_fn: Any = None
+    pin_memory: bool = False
+    prefetch: int | None = None
     transform: Any = None
+    transform_factory: Any = None
     batch_size: int | None = None
+    dim_extend: int | None = None
+    checkpointer: Any = None
+    generator: Any = None
+    consume_after_n_samples: int | None = None
     shared: bool = False
+    compilable: bool | None = None
+    delayed_init: bool | None = None
+    service_backend: _ReplayServiceBackend = "direct"
+    service_backend_options: dict[str, Any] = field(default_factory=dict)

@@ -355,6 +355,26 @@ class VLLMDoubleBufferWeightReceiver:
             model.load_weights(weights_list)
             logger.info("Weights loaded successfully")
 
+        # Prefix caches are keyed by prompt content, not by the weights that
+        # produced them; without a reset, entries cached before this load are
+        # reused with the new weights. Unlike the NCCL path there is no
+        # scheduling barrier here, so in-flight requests can keep the reset
+        # from fully clearing the cache; retry once and warn if it still
+        # cannot complete. AsyncVLLM's fan-out reset returns None and reports
+        # partial clears itself; a raw vllm.LLM returns False on failure.
+        reset = getattr(self._vllm_engine, "reset_prefix_cache", None)
+        if callable(reset):
+            result = reset()
+            if result is False:
+                result = reset()
+            if result is False:
+                logger.warning(
+                    "reset_prefix_cache could not fully clear the prefix cache "
+                    "after a double-buffer weight load (in-flight requests may "
+                    "still hold KV blocks); stale prefixes may persist until "
+                    "those requests complete."
+                )
+
     def poll_and_apply(self, timeout: float = 180.0) -> bool:
         """Poll for and apply weights from shared storage.
 

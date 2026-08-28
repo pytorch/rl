@@ -15,7 +15,9 @@ from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.envs.llm import RetrieveLogProb
+from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
+from torchrl.envs.llm.datasets.math import MATHEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.weight_update.llm import VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
@@ -63,22 +65,24 @@ def make_env(cfg: DictConfig, devices: list[int] | None = None):
     ref_model = get_ref_model(ref_cfg, train_tokenizer, devices=devices)
 
     # Setup environment
+    common_kwargs = {
+        "repeats": cfg.env.repeats,
+        "tokenizer": train_tokenizer,
+        "num_envs": cfg.env.num_envs,
+        "device": torch.device("cpu"),
+    }
     if cfg.env.dataset == "gsm8k":
         from torchrl.envs.llm import GSM8KEnv
 
-        env = GSM8KEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            device=torch.device("cpu"),
-        )
-    else:  # ifeval
-        env = IFEvalEnv(
-            repeats=cfg.env.repeats,
-            tokenizer=train_tokenizer,
-            num_envs=cfg.env.num_envs,
-            device=torch.device("cpu"),
-        )
+        env = GSM8KEnv(**common_kwargs)
+    elif cfg.env.dataset == "ifeval":
+        env = IFEvalEnv(**common_kwargs)
+    elif cfg.env.dataset == "math":
+        env = MATHEnv(**common_kwargs)
+    elif cfg.env.dataset == "countdown":
+        env = CountdownEnv(**common_kwargs)
+    else:
+        raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
 
     # Pass device directly to RetrieveLogProb - Since, for Ray, the local device is always 0
     # we can just use 0 here.

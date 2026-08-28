@@ -11,7 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import (
@@ -123,7 +123,7 @@ def make_collector(
     device: torch.device | None = None,
 ):
     """Make collector."""
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,

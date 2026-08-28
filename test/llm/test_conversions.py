@@ -3,12 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import importlib.util
 
 import pytest
 import torch
 from tensordict import lazy_stack, TensorDict
 from torchrl.data.llm import History
 from torchrl.modules.llm.policies.common import ChatHistory, Text, Tokens
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 # Test data
 SIMPLE_CONVERSATION = [

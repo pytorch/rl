@@ -71,3 +71,11 @@
 .sd-card:hover:after {
     transform: scaleX(1);
 }
+
+/* The TorchRL docs template exposes tutorial source/notebook links in the
+   call-to-action bar, so keep Sphinx-Gallery's duplicated footer links hidden. */
+.sphx-glr-download-link-note.admonition.note,
+.sphx-glr-footer.sphx-glr-footer-example,
+.sphx-glr-signature {
+    display: none;
+}

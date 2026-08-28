@@ -21,11 +21,12 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
-    - hydra-core
+    - hydra-core<1.4
     - transformers
+    - trl
     - accelerate
     - datasets
-    - vllm
+    - vllm==0.22.0
     # Note: SGLang is installed in a separate workflow (test-linux-llm-sglang.yml)
     # due to Triton version conflicts with vLLM
     - mcp

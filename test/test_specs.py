@@ -263,6 +263,18 @@ class TestRanges:
                     ts.encode(categorical)
                 assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
 
+    @pytest.mark.parametrize("ns", [[11, 3], [2, 3, 4], [5, 2]])
+    @pytest.mark.parametrize("shape", [[], [3], [4, 5]])
+    def test_multionehot_to_numpy(self, shape, ns):
+        ts = MultiOneHot(nvec=ns)
+        for _ in range(10):
+            r = ts.rand(shape)
+            result = ts.to_numpy(r)
+            categorical = ts.to_categorical(r)
+            expected = categorical.cpu().numpy()
+            np.testing.assert_array_equal(result, expected)
+            assert result.shape == (*shape, len(ns))
+
     @pytest.mark.parametrize(
         "ns",
         [
@@ -3480,6 +3492,26 @@ def test_invalid_indexing(spec_class, idx):
         spec[idx]
 
 
+def test_dynamic_dim_indexing():
+    # a full slice over a dynamic (-1) dimension preserves it; any other
+    # slice is undefined and raises. Integer indexing of the leading dim of
+    # a [B, -1, ...] spec (e.g. unbatching a MultiAction-expanded action
+    # spec) must keep the dynamic dim intact.
+    leaf = Categorical(n=4, shape=(1, 1, 2)).expand(1, -1, 2)
+    assert leaf[0].shape == torch.Size([-1, 2])
+    assert leaf[(0, slice(None))].shape == torch.Size([-1, 2])
+    assert leaf[:, :, 0].shape == torch.Size([1, -1])
+    with pytest.raises(IndexError, match="dynamic"):
+        leaf[(0, slice(1, 2))]
+    # the composite path (used by full_action_spec_unbatched) extends the
+    # index with full slices over the leaf's extra dims
+    comp = Composite(action=Categorical(n=4, shape=(1, 2)), shape=(1,))
+    comp = comp.unsqueeze(1).expand(1, -1)
+    indexed = comp[(0,)]
+    assert indexed.shape == torch.Size([-1])
+    assert indexed["action"].shape == torch.Size([-1, 2])
+
+
 # Bounded, MultiCategorical: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
     "spec_class",
@@ -4637,6 +4669,39 @@ class TestIndexSelect:
         assert type(stacked_spec).__name__ == "Stacked"
         with pytest.raises(NotImplementedError, match="index_select is not supported"):
             torch.index_select(stacked_spec, dim=0, index=torch.tensor([0]))
+
+
+def _has_mps():
+    if hasattr(torch, "mps") and hasattr(torch.mps, "is_available"):
+        return torch.mps.is_available()
+    return (
+        getattr(torch.backends, "mps", None) is not None
+        and torch.backends.mps.is_available()
+    )
+
+
+@pytest.mark.skipif(not _has_mps(), reason="MPS device not available")
+class TestMPSDtype:
+    """Tests that MPS-incompatible dtypes (float64) are downcast to float32 in tensor specs."""
+
+    def test_mps_does_not_support_float64(self):
+        """Assert that MPS still doesn't support float64.
+
+        If this test fails, MPS has gained float64 support and the downcasts
+        can be removed (e.g., in _default_dtype_and_device)
+        """
+        with pytest.raises(TypeError, match="MPS framework doesn't support float64"):
+            torch.ones(2, dtype=torch.float64, device="mps")
+
+    def test_unbounded_to_mps_downcasts_float64(self):
+        """Unbounded.to('mps') downcasts float64 -> float32."""
+        spec_cpu = Unbounded(shape=(6,), device="cpu", dtype=torch.float64)
+        assert spec_cpu.dtype == torch.float64
+
+        with pytest.warns(UserWarning, match="MPS device does not support float64"):
+            spec_mps = spec_cpu.to("mps")
+        assert spec_mps.dtype == torch.float32
+        assert spec_mps.device.type == "mps"
 
 
 if __name__ == "__main__":
