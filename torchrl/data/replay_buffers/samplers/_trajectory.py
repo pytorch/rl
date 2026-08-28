@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import weakref
 from collections import defaultdict
 
 import torch
@@ -25,8 +26,10 @@ class _FragmentedTrajectoryIndex:
         self._runs: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         self._pending_indices: list[torch.Tensor] = []
         self._pending_revisions: list[int] = []
-        self._pending_storage_id: int | None = None
-        self._cache_storage_id: int | None = None
+        # Weak references rather than id(): a recycled address of a dead
+        # storage must not be mistaken for the cached one.
+        self._pending_storage_ref: weakref.ref | None = None
+        self._cache_storage_ref: weakref.ref | None = None
         self._cache_revision: int | None = None
 
     @staticmethod
@@ -100,8 +103,8 @@ class _FragmentedTrajectoryIndex:
         self._runs = None
         self._pending_indices.clear()
         self._pending_revisions.clear()
-        self._pending_storage_id = None
-        self._cache_storage_id = None
+        self._pending_storage_ref = None
+        self._cache_storage_ref = None
         self._cache_revision = None
 
     def _full_rebuild(self, storage: Storage, revision: int) -> None:
@@ -141,8 +144,8 @@ class _FragmentedTrajectoryIndex:
         self._runs = None
         self._pending_indices.clear()
         self._pending_revisions.clear()
-        self._pending_storage_id = None
-        self._cache_storage_id = id(storage)
+        self._pending_storage_ref = None
+        self._cache_storage_ref = weakref.ref(storage)
         self._cache_revision = revision
 
     def _consume_pending(self) -> torch.Tensor:
@@ -158,7 +161,7 @@ class _FragmentedTrajectoryIndex:
         index = index.reshape(-1)
         self._pending_indices.clear()
         self._pending_revisions.clear()
-        self._pending_storage_id = None
+        self._pending_storage_ref = None
         return index
 
     def _apply_pending(self, storage: Storage, revision: int) -> None:
@@ -220,9 +223,17 @@ class _FragmentedTrajectoryIndex:
 
     def refresh(self, storage: Storage) -> None:
         revision = int(storage._mutation_revision)
-        if self._trajectory_positions is None or self._cache_storage_id != id(storage):
+        if (
+            self._trajectory_positions is None
+            or self._cache_storage_ref is None
+            or self._cache_storage_ref() is not storage
+        ):
             return self._full_rebuild(storage, revision)
-        if self._pending_indices and self._pending_storage_id == id(storage):
+        if (
+            self._pending_indices
+            and self._pending_storage_ref is not None
+            and self._pending_storage_ref() is storage
+        ):
             changed_revisions = {
                 pending_revision
                 for pending_revision in self._pending_revisions
@@ -242,10 +253,12 @@ class _FragmentedTrajectoryIndex:
         if storage is None:
             self.clear()
             return
-        storage_id = id(storage)
-        if self._pending_storage_id not in (None, storage_id):
+        if (
+            self._pending_storage_ref is not None
+            and self._pending_storage_ref() is not storage
+        ):
             self.clear()
-        self._pending_storage_id = storage_id
+        self._pending_storage_ref = weakref.ref(storage)
         self._pending_indices.append(
             torch.as_tensor(index, dtype=torch.long).detach().reshape(-1)
         )
@@ -298,7 +311,7 @@ class _FragmentedTrajectoryIndex:
             state[key] = None
         state["_pending_indices"] = []
         state["_pending_revisions"] = []
-        state["_pending_storage_id"] = None
-        state["_cache_storage_id"] = None
+        state["_pending_storage_ref"] = None
+        state["_cache_storage_ref"] = None
         state["_cache_revision"] = None
         return state
