@@ -31,9 +31,11 @@ onto your machine and launches the game in offline mode.
   Mojang itself through the build tooling. Recipes (Dockerfiles, scripts) that
   download the game at build/run time on the user's machine are fine; baked
   images are not.
-- **Library licenses.** CraftGround is licensed under LGPL-3.0. TorchRL uses
-  it as a regular, optional Python dependency (no CraftGround code is vendored
-  into TorchRL), which leaves TorchRL's MIT license unaffected.
+- **Library licensing.** CraftGround is a separate, optional dependency; no
+  CraftGround code is vendored or redistributed by TorchRL. At the time of
+  writing, CraftGround's repository ships a GPL-3.0 license file while its
+  package metadata reports MIT. Consult CraftGround's upstream licensing
+  information before distributing software that depends on it.
 
 ## Installation
 

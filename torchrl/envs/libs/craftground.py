@@ -14,9 +14,11 @@
     Minecraft End User License Agreement (https://www.minecraft.net/eula),
     including its restrictions on commercial exploitation. Never redistribute
     the downloaded game files (for instance inside public Docker images or CI
-    caches). CraftGround itself is LGPL-3.0 and is used by TorchRL as a
-    regular, optional Python dependency. See ``knowledge_base/MINECRAFT.md``
-    for details.
+    caches). CraftGround is a separate, optional Python dependency that TorchRL
+    does not vendor or redistribute. Its upstream repository currently ships a
+    GPL-3.0 license file while its package metadata reports MIT; consult the
+    upstream licensing information before distribution. See
+    ``knowledge_base/MINECRAFT.md`` for details.
 """
 from __future__ import annotations
 
@@ -89,9 +91,11 @@ class CraftGroundWrapper(GymWrapper):
         Minecraft EULA (https://www.minecraft.net/eula), including its
         restrictions on commercial exploitation. Never redistribute the
         downloaded game files (e.g. in public Docker images or CI caches).
-        CraftGround itself is licensed under LGPL-3.0 and is used as a regular
-        optional dependency. See ``knowledge_base/MINECRAFT.md`` in the TorchRL
-        repository for details.
+        CraftGround is a separate, optional dependency that TorchRL does not
+        vendor or redistribute. Its upstream repository currently ships a
+        GPL-3.0 license file while its package metadata reports MIT; consult the
+        upstream licensing information before distribution. See
+        ``knowledge_base/MINECRAFT.md`` in the TorchRL repository for details.
 
     .. note:: The environment is spawned lazily: constructing the wrapper only
         binds an IPC channel. The Minecraft client (a Java subprocess built and
@@ -326,9 +330,11 @@ class CraftGroundEnv(CraftGroundWrapper):
         Minecraft EULA (https://www.minecraft.net/eula), including its
         restrictions on commercial exploitation. Never redistribute the
         downloaded game files (e.g. in public Docker images or CI caches).
-        CraftGround itself is licensed under LGPL-3.0 and is used as a regular
-        optional dependency. See ``knowledge_base/MINECRAFT.md`` in the TorchRL
-        repository for details.
+        CraftGround is a separate, optional dependency that TorchRL does not
+        vendor or redistribute. Its upstream repository currently ships a
+        GPL-3.0 license file while its package metadata reports MIT; consult the
+        upstream licensing information before distribution. See
+        ``knowledge_base/MINECRAFT.md`` in the TorchRL repository for details.
 
     Keyword Args:
         initial_env_config (craftground.InitialEnvironmentConfig, optional):
