@@ -8,7 +8,7 @@ import weakref
 from collections import defaultdict
 
 import torch
-from tensordict import is_tensor_collection, TensorDictBase
+from tensordict import is_tensor_collection
 from tensordict.utils import NestedKey
 
 from torchrl.data.replay_buffers.storages import Storage
@@ -40,11 +40,12 @@ class _FragmentedTrajectoryIndex:
         return torch.device(device)
 
     def _validate_metadata(
-        self, data: TensorDictBase, index: torch.Tensor
+        self,
+        trajectory: torch.Tensor | None,
+        step: torch.Tensor | None,
+        index: torch.Tensor,
     ) -> tuple[list[int], list[int], list[int], torch.device]:
         expected = index.numel()
-        trajectory = data.get(self.trajectory_key)
-        step = data.get(self.step_key)
         for key, value in (
             (self.trajectory_key, trajectory),
             (self.step_key, step),
@@ -87,14 +88,33 @@ class _FragmentedTrajectoryIndex:
         if storage_device is not None and index.device != storage_device:
             index = index.to(storage_device)
         lookup_index = index.clamp(0, len(storage) - 1)
-        data = storage.get(lookup_index)
-        if not is_tensor_collection(data):
-            raise TypeError(
-                "Fragmented trajectory indexing requires a single-dimensional "
-                "storage whose slices return a tensor collection, such as "
-                "LazyTensorStorage or LazyStackStorage."
-            )
-        return self._validate_metadata(data, index)
+        # Prefer column reads: advanced-indexing the storage itself would
+        # materialize every stored key just to read two integer columns.
+        trajectory = step = None
+        try:
+            source = storage[:]
+        except Exception:
+            source = None
+        if is_tensor_collection(source):
+            try:
+                trajectory = source.get(self.trajectory_key, default=None)
+                step = source.get(self.step_key, default=None)
+            except Exception:
+                trajectory = step = None
+        if trajectory is not None and step is not None:
+            trajectory = trajectory[lookup_index.to(trajectory.device)]
+            step = step[lookup_index.to(step.device)]
+        else:
+            data = storage.get(lookup_index)
+            if not is_tensor_collection(data):
+                raise TypeError(
+                    "Fragmented trajectory indexing requires a single-dimensional "
+                    "storage whose slices return a tensor collection, such as "
+                    "LazyTensorStorage or LazyStackStorage."
+                )
+            trajectory = data.get(self.trajectory_key)
+            step = data.get(self.step_key)
+        return self._validate_metadata(trajectory, step, index)
 
     def clear(self) -> None:
         self._trajectory_positions = None
