@@ -231,6 +231,24 @@ def test_cuda_output_device():
     assert out["action"].device.type == "cuda"
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_cuda_output_readable_after_stream_handoff():
+    policy = TensorDictModule(
+        torch.nn.Identity(), in_keys=["obs"], out_keys=["action"]
+    ).to("cuda:0")
+    helper = FixedBatchedInference(policy, "cuda:0", bucket_sizes=[8])
+    batch = _make_batch(5)
+    caller_stream = torch.cuda.Stream()
+
+    with torch.cuda.stream(caller_stream):
+        out = helper(batch)
+        observed = out["action"].clone()
+    caller_stream.synchronize()
+
+    torch.testing.assert_close(observed.cpu(), batch["obs"])
+
+
 def test_importable_from_torchrl_envs():
     from torchrl.envs import FixedBatchedInference as FI  # noqa: F401
 

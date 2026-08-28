@@ -249,6 +249,8 @@ class FixedBatchedInference:
         result = output[:B]
         if self.add_valid_mask and self._MASK_KEY in result.keys():
             result = result.exclude(self._MASK_KEY)
+        if self._copy_stream is not None:
+            result.record_stream(caller_stream)
 
         for key in non_tensor_keys:
             result.set(key, batch.get(key))
