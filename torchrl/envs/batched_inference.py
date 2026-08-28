@@ -223,6 +223,7 @@ class FixedBatchedInference:
 
             self._compute_stream.wait_stream(self._copy_stream)
             with torch.cuda.stream(self._compute_stream):
+                device_batch.record_stream(self._compute_stream)
                 output = self.policy(device_batch)
 
             caller_stream = torch.cuda.current_stream(self.device)
