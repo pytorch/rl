@@ -195,6 +195,18 @@ class TestMultipleBuckets:
         assert set(helper._staging.keys()) == {4, 8, 16}
 
 
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_cuda_output_device():
+    helper = FixedBatchedInference(
+        _make_policy().to("cuda:0"), "cuda:0", bucket_sizes=[8]
+    )
+
+    out = helper(_make_batch(3))
+
+    assert out["action"].device.type == "cuda"
+
+
 def test_importable_from_torchrl_envs():
     from torchrl.envs import FixedBatchedInference as FI  # noqa: F401
 
