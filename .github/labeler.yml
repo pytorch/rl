@@ -11,7 +11,10 @@
 
 "Environments/craftground":
   - changed-files:
-    - any-glob-to-any-file: ['torchrl/envs/libs/craftground.py', 'test/libs/test_craftground.py']
+    - any-glob-to-any-file:
+      - 'torchrl/envs/libs/craftground.py'
+      - 'test/libs/test_craftground.py'
+      - '.github/unittest/linux_libs/scripts_craftground/**'
 
 "Environments/mujoco_playground":
   - changed-files:
