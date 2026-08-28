@@ -645,6 +645,49 @@ class TestSamplers:
         )
         assert len(sampler.marked) == 1
 
+    def test_slice_sampler_fragmented_recovers_from_failed_update(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4),
+            sampler=SliceSampler(
+                slice_len=2,
+                traj_key="trajectory",
+                step_key="step",
+                fragmented=True,
+            ),
+            batch_size=32,
+            generator=torch.Generator().manual_seed(0),
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "trajectory": torch.tensor([0, 0, 1, 1]),
+                    "step": torch.tensor([0, 1, 0, 1]),
+                },
+                batch_size=[4],
+            )
+        )
+        rb.sample()
+
+        # An in-place edit creating a duplicate (trajectory, step) pair,
+        # tracked via mark_update without a storage revision bump.
+        rb.storage._storage["trajectory"][3] = 0
+        rb.mark_update(torch.tensor([3]))
+        with pytest.raises(RuntimeError, match="duplicate"):
+            rb.sample()
+        # The failed update must not leave a partially applied index behind:
+        # while the duplicate persists, sampling keeps failing loudly instead
+        # of silently serving stale runs.
+        with pytest.raises(RuntimeError, match="duplicate"):
+            rb.sample()
+
+        # Restoring uniqueness lets sampling recover.
+        rb.storage._storage["trajectory"][3] = 1
+        rb.mark_update(torch.tensor([3]))
+        sample = rb.sample().reshape(16, 2)
+        assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
+        assert (sample["step"][:, 1:] == sample["step"][:, :-1] + 1).all()
+        assert (sample["trajectory"] == 1).any()
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)

@@ -182,41 +182,48 @@ class _FragmentedTrajectoryIndex:
             return
         trajectories, steps = zip(*records.values())
 
-        for slot in slots:
-            record = self._slot_records.pop(slot, None)
-            if record is None:
-                continue
-            trajectory, step = record
-            positions = self._trajectory_positions[trajectory]
-            if positions.get(step) == slot:
-                del positions[step]
-            if not positions:
-                del self._trajectory_positions[trajectory]
+        try:
+            for slot in slots:
+                record = self._slot_records.pop(slot, None)
+                if record is None:
+                    continue
+                trajectory, step = record
+                positions = self._trajectory_positions[trajectory]
+                if positions.get(step) == slot:
+                    del positions[step]
+                if not positions:
+                    del self._trajectory_positions[trajectory]
 
-        new_records = []
-        seen = set()
-        for slot, trajectory, step in zip(slots, trajectories, steps):
-            trajectory = int(trajectory)
-            step = int(step)
-            if step < 0:
-                raise ValueError(
-                    f"Step numbers must be non-negative, got {step} under "
-                    f"step_key={self.step_key!r}."
-                )
-            record = (trajectory, step)
-            positions = self._trajectory_positions.get(trajectory)
-            if record in seen or (positions is not None and step in positions):
-                raise RuntimeError(
-                    "Found duplicate records for trajectory "
-                    f"{trajectory!r} at step {step}. Trajectory-step pairs must "
-                    "be unique in the live storage."
-                )
-            seen.add(record)
-            new_records.append((slot, trajectory, step))
+            new_records = []
+            seen = set()
+            for slot, trajectory, step in zip(slots, trajectories, steps):
+                trajectory = int(trajectory)
+                step = int(step)
+                if step < 0:
+                    raise ValueError(
+                        f"Step numbers must be non-negative, got {step} under "
+                        f"step_key={self.step_key!r}."
+                    )
+                record = (trajectory, step)
+                positions = self._trajectory_positions.get(trajectory)
+                if record in seen or (positions is not None and step in positions):
+                    raise RuntimeError(
+                        "Found duplicate records for trajectory "
+                        f"{trajectory!r} at step {step}. Trajectory-step pairs must "
+                        "be unique in the live storage."
+                    )
+                seen.add(record)
+                new_records.append((slot, trajectory, step))
 
-        for slot, trajectory, step in new_records:
-            self._trajectory_positions.setdefault(trajectory, {})[step] = slot
-            self._slot_records[slot] = (trajectory, step)
+            for slot, trajectory, step in new_records:
+                self._trajectory_positions.setdefault(trajectory, {})[step] = slot
+                self._slot_records[slot] = (trajectory, step)
+        except Exception:
+            # The pending list is already consumed and the maps may be half
+            # mutated; drop the index so the next refresh rebuilds instead of
+            # serving a partially applied update.
+            self.clear()
+            raise
 
         self._runs = None
         self._cache_revision = revision
