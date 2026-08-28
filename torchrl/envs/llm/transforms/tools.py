@@ -25,7 +25,7 @@ from tensordict import lazy_stack, TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 
-from torchrl.envs import Transform
+from torchrl.envs.transforms import Transform
 from typing_extensions import TypedDict
 
 

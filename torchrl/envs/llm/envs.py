@@ -33,7 +33,7 @@ from torchrl.data.tensor_specs import (
     NonTensor,
     Unbounded,
 )
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import _StepMDP
 from torchrl.modules.utils.utils import _unpad_tensors
 

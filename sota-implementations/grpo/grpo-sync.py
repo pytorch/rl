@@ -37,6 +37,7 @@ from grpo_utils import (
     get_train_model,
     log_training_metrics,
     make_env,
+    make_mcadvantage_kwargs,
     make_weight_sync_scheme,
 )
 from omegaconf import DictConfig
@@ -111,7 +112,9 @@ def train(
         else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        masking_strategy="rlhf" if cfg.env.reasoning else "sft",
+        masking_strategy="rlhf"
+        if (cfg.env.reasoning or cfg.env.dataset == "openenv")
+        else "sft",
         device=train_device,
     )
     if cfg.env.reasoning:
@@ -185,6 +188,15 @@ def train(
     global_step = 0
     start_time = time.time()
     for data in pbar:
+        if (
+            cfg.train.total_dialog_turns is not None
+            and replay_buffer.write_count >= cfg.train.total_dialog_turns
+            and not len(replay_buffer)
+        ):
+            torchrl_logger.info(
+                "Replay buffer drained after reaching total_dialog_turns; stopping training loop."
+            )
+            break
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
         if not len(replay_buffer):
@@ -390,6 +402,7 @@ def main(cfg):
             "optim_batch_size must be divisible by gradient_accumulation_steps"
         )
 
+    mcadvantage_kwargs = make_mcadvantage_kwargs(cfg)
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
@@ -400,7 +413,7 @@ def main(cfg):
             else cfg.env.repeats * cfg.env.num_envs,
         ),
         sampler=SamplerWithoutReplacement,
-        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
+        transform_factory=partial(MCAdvantage, **mcadvantage_kwargs),
         batch_size=max(
             1, cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
         ),

@@ -11,9 +11,9 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 from tensordict import NonTensorData, NonTensorStack, TensorClass, TensorDict
 from torchrl.data import Composite, NonTensor, Unbounded
-from torchrl.envs import StepCounter
 from torchrl.envs.llm.chat import DatasetChatEnv
 from torchrl.envs.llm.reward.ifeval import IfEvalScorer
+from torchrl.envs.transforms import StepCounter
 
 if TYPE_CHECKING:
     import transformers

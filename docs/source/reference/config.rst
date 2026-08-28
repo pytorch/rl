@@ -327,6 +327,7 @@ Environment Library Configurations
     MOGymEnvConfig
     MJLabEnvConfig
     MultiThreadedEnvConfig
+    OpenEnvEnvConfig
     OpenMLEnvConfig
     OpenSpielEnvConfig
     PettingZooEnvConfig

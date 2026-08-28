@@ -14,7 +14,7 @@ from .datasets import (
     MATHEnv,
 )
 from .envs import LLMEnv, LLMHashingEnv
-from .libs import make_mlgym, MLGymWrapper
+from .libs import make_mlgym, MLGymWrapper, OpenEnvChatEnv
 from .reward import (
     CountdownRewardParser,
     GSM8KRewardParser,
@@ -61,6 +61,7 @@ __all__ = [
     "LLMHashingEnv",
     "MCPToolTransform",
     "MLGymWrapper",
+    "OpenEnvChatEnv",
     "PythonInterpreter",
     "TemplateTransform",
     "Tokenizer",
