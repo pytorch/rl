@@ -5,20 +5,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl.data.replay_buffers.storages import Storage
-
-
-@dataclass
-class _FragmentedTrajectoryIndexUpdate:
-    full_rebuild: bool
-    affected: dict[int, set[int]]
-    removed_slots: set[int]
 
 
 class _FragmentedTrajectoryIndex:
@@ -29,26 +21,13 @@ class _FragmentedTrajectoryIndex:
         self.step_key = step_key
         self._trajectory_positions: dict[int, dict[int, int]] | None = None
         self._slot_records: list[tuple[int, int] | None] | None = None
-        self._previous: torch.Tensor | None = None
-        self._following: torch.Tensor | None = None
+        self._device: torch.device | None = None
         self._runs: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         self._pending_indices: list[torch.Tensor] = []
         self._pending_revisions: list[int] = []
         self._pending_storage_id: int | None = None
         self._cache_storage_id: int | None = None
         self._cache_revision: int | None = None
-
-    @property
-    def trajectory_positions(self) -> dict[int, dict[int, int]]:
-        return self._trajectory_positions
-
-    @property
-    def previous(self) -> torch.Tensor:
-        return self._previous
-
-    @property
-    def following(self) -> torch.Tensor:
-        return self._following
 
     @staticmethod
     def _storage_device(storage: Storage) -> torch.device | None:
@@ -117,8 +96,7 @@ class _FragmentedTrajectoryIndex:
     def clear(self) -> None:
         self._trajectory_positions = None
         self._slot_records = None
-        self._previous = None
-        self._following = None
+        self._device = None
         self._runs = None
         self._pending_indices.clear()
         self._pending_revisions.clear()
@@ -126,9 +104,7 @@ class _FragmentedTrajectoryIndex:
         self._cache_storage_id = None
         self._cache_revision = None
 
-    def _full_rebuild(
-        self, storage: Storage, revision: int
-    ) -> _FragmentedTrajectoryIndexUpdate:
+    def _full_rebuild(self, storage: Storage, revision: int) -> None:
         if storage.ndim > 1:
             raise NotImplementedError(
                 "Fragmented trajectory indexing only supports single-dimensional "
@@ -158,28 +134,15 @@ class _FragmentedTrajectoryIndex:
             positions[step] = position
             slot_records[position] = (trajectory, step)
 
-        previous = [-1] * capacity
-        following = [-1] * capacity
-        for positions in trajectory_positions.values():
-            for step, position in positions.items():
-                previous[position] = positions.get(step - 1, -1)
-                following[position] = positions.get(step + 1, -1)
-
         self._slot_records = slot_records
         self._trajectory_positions = dict(trajectory_positions)
-        self._previous = torch.tensor(previous, dtype=torch.long, device=device)
-        self._following = torch.tensor(following, dtype=torch.long, device=device)
+        self._device = device
         self._runs = None
         self._pending_indices.clear()
         self._pending_revisions.clear()
         self._pending_storage_id = None
         self._cache_storage_id = id(storage)
         self._cache_revision = revision
-        return _FragmentedTrajectoryIndexUpdate(
-            full_rebuild=True,
-            affected={},
-            removed_slots=set(),
-        )
 
     def _consume_pending(self) -> torch.Tensor:
         if len(self._pending_indices) == 1:
@@ -197,14 +160,12 @@ class _FragmentedTrajectoryIndex:
         self._pending_storage_id = None
         return index
 
-    def _apply_pending(
-        self, storage: Storage, revision: int
-    ) -> _FragmentedTrajectoryIndexUpdate:
+    def _apply_pending(self, storage: Storage, revision: int) -> None:
         index = self._consume_pending()
         storage_length = len(storage)
         if not index.numel():
             self._cache_revision = revision
-            return _FragmentedTrajectoryIndexUpdate(False, {}, set())
+            return
         slots, trajectories, steps, _ = self._read_records(storage, index)
         records = {
             slot: (trajectory, step)
@@ -214,11 +175,9 @@ class _FragmentedTrajectoryIndex:
         slots = list(records)
         if not slots:
             self._cache_revision = revision
-            return _FragmentedTrajectoryIndexUpdate(False, {}, set())
+            return
         trajectories, steps = zip(*records.values())
 
-        affected: dict[int, set[int]] = defaultdict(set)
-        removed_slots = set(slots)
         for slot in slots:
             record = self._slot_records[slot]
             if record is None:
@@ -229,7 +188,6 @@ class _FragmentedTrajectoryIndex:
                 del positions[step]
             if not positions:
                 del self._trajectory_positions[trajectory]
-            affected[trajectory].add(step)
             self._slot_records[slot] = None
 
         new_records = []
@@ -256,41 +214,11 @@ class _FragmentedTrajectoryIndex:
         for slot, trajectory, step in new_records:
             self._trajectory_positions.setdefault(trajectory, {})[step] = slot
             self._slot_records[slot] = (trajectory, step)
-            affected[trajectory].add(step)
 
-        previous_updates = {slot: -1 for slot in removed_slots}
-        following_updates = {slot: -1 for slot in removed_slots}
-        for trajectory, changed_steps in affected.items():
-            positions = self._trajectory_positions.get(trajectory, {})
-            link_steps = set()
-            for step in changed_steps:
-                link_steps.update(range(max(0, step - 1), step + 2))
-            for step in link_steps:
-                slot = positions.get(step)
-                if slot is None:
-                    continue
-                previous_updates[slot] = positions.get(step - 1, -1)
-                following_updates[slot] = positions.get(step + 1, -1)
-
-        packed_updates = [
-            *previous_updates.items(),
-            *following_updates.items(),
-        ]
-        updates = torch.tensor(
-            packed_updates, dtype=torch.long, device=self._previous.device
-        )
-        split = len(previous_updates)
-        self._previous[updates[:split, 0]] = updates[:split, 1]
-        self._following[updates[split:, 0]] = updates[split:, 1]
         self._runs = None
         self._cache_revision = revision
-        return _FragmentedTrajectoryIndexUpdate(
-            full_rebuild=False,
-            affected=dict(affected),
-            removed_slots=removed_slots,
-        )
 
-    def refresh(self, storage: Storage) -> _FragmentedTrajectoryIndexUpdate | None:
+    def refresh(self, storage: Storage) -> None:
         revision = int(storage._mutation_revision)
         if self._trajectory_positions is None or self._cache_storage_id != id(storage):
             return self._full_rebuild(storage, revision)
@@ -351,7 +279,7 @@ class _FragmentedTrajectoryIndex:
                 ordered_slots.extend(slots)
                 run_start = run_end + 1
 
-        device = self._previous.device
+        device = self._device
         self._runs = (
             torch.tensor(ordered_slots, dtype=torch.long, device=device),
             torch.tensor(run_offsets, dtype=torch.long, device=device),
@@ -364,8 +292,7 @@ class _FragmentedTrajectoryIndex:
         for key in (
             "_trajectory_positions",
             "_slot_records",
-            "_previous",
-            "_following",
+            "_device",
             "_runs",
         ):
             state[key] = None
