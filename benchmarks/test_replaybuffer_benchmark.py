@@ -164,35 +164,110 @@ def test_slice_sampler_boundary_query_benchmark(
     benchmark(sampler._get_stop_and_length, rb.storage)
 
 
+@pytest.mark.parametrize(
+    "cache_state",
+    [
+        pytest.param("hot", id="hot-cache"),
+        pytest.param("write_invalidated", id="write-invalidated"),
+        pytest.param("cold", id="cold-start"),
+    ],
+)
+@pytest.mark.parametrize(
+    "layout",
+    [
+        pytest.param("contiguous", id="contiguous"),
+        pytest.param("shuffled", id="fragmented-shuffled"),
+    ],
+)
 @pytest.mark.parametrize("size", [1_000, 100_000])
-def test_fragmented_slice_sampler_cached_sample(benchmark, size):
+def test_slice_sampler_sample(benchmark, size, layout, cache_state):
     device = _replay_boundary_device()
     num_trajectories = 8
-    storage_order = torch.arange(size, device=device)
-    rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(size, device=device),
-        sampler=SliceSampler(
-            slice_len=8,
-            traj_key="trajectory",
-            step_key="step",
-            fragmented=True,
-        ),
-        batch_size=256,
-        generator=torch.Generator(device=device).manual_seed(0),
-    )
-    rb.extend(
-        TensorDict(
-            {
-                "trajectory": storage_order % num_trajectories,
-                "step": storage_order // num_trajectories,
-            },
-            [size],
+    trajectory_length = size // num_trajectories
+    logical_order = torch.arange(size, device=device)
+    trajectory = logical_order // trajectory_length
+    step = logical_order % trajectory_length
+    fragmented = layout == "shuffled"
+    if fragmented:
+        # Preserve the logical trajectories while changing only their physical layout.
+        permutation = torch.randperm(
+            size,
             device=device,
+            generator=torch.Generator(device=device).manual_seed(0),
         )
+        trajectory = trajectory[permutation]
+        step = step[permutation]
+    data = TensorDict(
+        {
+            "trajectory": trajectory,
+            "step": step,
+        },
+        [size],
+        device=device,
     )
-    rb.sample()
 
-    benchmark(rb.sample)
+    def make_replay_buffer():
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(size, device=device),
+            sampler=SliceSampler(
+                slice_len=8,
+                traj_key="trajectory",
+                step_key="step",
+                cache_values=True,
+                fragmented=fragmented,
+            ),
+            batch_size=256,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        rb.extend(data)
+        return rb
+
+    rb = make_replay_buffer()
+    sample = rb.sample().reshape(-1, 8)
+    assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
+    assert (sample["step"].diff(dim=1) == 1).all()
+
+    def sample_replay_buffer(rb):
+        rb.sample()
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+
+    if cache_state == "cold":
+
+        def cold_setup():
+            cold_rb = make_replay_buffer()
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            return (cold_rb,), {}
+
+        benchmark.pedantic(
+            sample_replay_buffer,
+            setup=cold_setup,
+            rounds=10,
+        )
+    elif cache_state == "write_invalidated":
+        next_write = 0
+
+        def write_setup():
+            nonlocal next_write
+            rb.add(data[next_write])
+            next_write = (next_write + 1) % size
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            return (rb,), {}
+
+        benchmark.pedantic(
+            sample_replay_buffer,
+            setup=write_setup,
+            rounds=25,
+        )
+    else:
+        benchmark.pedantic(
+            sample_replay_buffer,
+            args=(rb,),
+            rounds=200,
+            iterations=10,
+        )
 
 
 @pytest.mark.parametrize("compiled", [False, True])
