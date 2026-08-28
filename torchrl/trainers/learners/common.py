@@ -59,7 +59,7 @@ class LearnerCapabilities:
 
 
 class Learner(nn.Module):
-    """Base class for the trainable-policy role.
+    r"""Base class for the trainable-policy role.
 
     A :class:`Learner` owns a trainable model and an optimizer and exposes a
     single, backend-agnostic entry point, :meth:`update`, for taking one
@@ -141,7 +141,8 @@ class Learner(nn.Module):
         the return value -- so nesting a ``Learner`` inside any other module
         would silently drop all of its state). Separate names keep both
         contracts intact: ``state_dict`` behaves exactly as ``nn.Module``'s,
-        and :meth:`checkpoint` covers model + optimizer + accumulation state.
+        and :meth:`checkpoint` covers model + optimizer + loss-owned optimized
+        parameters + accumulation state.
     """
 
     #: Frozen, so this class-level default is safe to share between instances.
@@ -157,6 +158,34 @@ class Learner(nn.Module):
     def _optimized_parameters(self) -> list[torch.nn.Parameter]:
         """Every parameter the optimizer will step -- what to clip, too."""
         return [p for group in self.optimizer.param_groups for p in group["params"]]
+
+    def _extra_optimized_parameters(self) -> list[torch.nn.Parameter]:
+        """Optimized parameters living outside ``model`` (e.g. loss-owned).
+
+        With the canonical ``Adam(loss_module.parameters())`` construction,
+        losses that own trainable parameters (``SACLoss``'s ``log_alpha``, a
+        Lagrange multiplier, ...) step parameters that ``model.state_dict()``
+        never sees. These are identified positionally, in param-group order,
+        which is stable as long as save and load use the same optimizer
+        construction -- the same assumption ``Optimizer.state_dict()`` itself
+        relies on.
+        """
+        model_params = {id(p) for p in self.model.parameters()}
+        return [p for p in self._optimized_parameters() if id(p) not in model_params]
+
+    def _restore_extra_params(self, checkpoint: dict) -> None:
+        extras = self._extra_optimized_parameters()
+        saved = checkpoint.get("extra_params", [])
+        if len(saved) != len(extras):
+            raise RuntimeError(
+                f"This checkpoint carries {len(saved)} optimized parameter(s) "
+                f"living outside the model, but the current optimizer has "
+                f"{len(extras)}. Save and load must use the same optimizer "
+                "construction (same param groups over the same modules)."
+            )
+        with torch.no_grad():
+            for param, value in zip(extras, saved):
+                param.copy_(value)
 
     def _check_optimizer_coverage(self, loss_module: LossModule) -> None:
         """Fail loudly if a parameter got a gradient no param group will step.
@@ -277,6 +306,12 @@ class Learner(nn.Module):
         accepted as-is by :meth:`~torchrl.weight_update.WeightSyncScheme.send`.
         This is the seam between the training role and the weight-sync /
         inference roles.
+
+        .. note::
+            Only ``model`` is reported, by design: inference workers need the
+            policy's weights, not loss-owned parameters (an entropy
+            temperature, a Lagrange multiplier, ...). Loss-owned optimized
+            parameters are covered by :meth:`checkpoint` instead.
         """
         raise NotImplementedError
 
@@ -295,12 +330,24 @@ class Learner(nn.Module):
         checkpointing would otherwise silently corrupt the "saved" checkpoint
         too.
 
+        ``Optimizer.state_dict()`` stores per-parameter *state* (e.g. Adam
+        moments), not the parameter values themselves, so optimized parameters
+        living outside ``model`` -- loss-owned parameters such as ``SACLoss``'s
+        ``log_alpha`` under the canonical ``Adam(loss_module.parameters())``
+        construction -- would otherwise be trained but silently dropped on
+        resume. Their values are saved under ``"extra_params"`` (in param-group
+        order) and restored by :meth:`load_checkpoint`.
+
         Returns:
-            dict: with keys ``"model"``, ``"optimizer"`` and ``"accum_step"``.
+            dict: with keys ``"model"``, ``"optimizer"``, ``"extra_params"``
+            and ``"accum_step"``.
         """
         return {
             "model": _clone_tensors(self.model.state_dict()),
             "optimizer": _clone_tensors(self.optimizer.state_dict()),
+            "extra_params": [
+                p.detach().clone() for p in self._extra_optimized_parameters()
+            ],
             "accum_step": self._accum_step,
         }
 
@@ -320,6 +367,7 @@ class Learner(nn.Module):
         """
         self.model.load_state_dict(checkpoint["model"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
+        self._restore_extra_params(checkpoint)
         self._restore_accum_step(checkpoint.get("accum_step", 0))
 
     def _restore_accum_step(self, accum_step: int) -> None:

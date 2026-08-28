@@ -2506,6 +2506,19 @@ class _ToyRegressionLoss(LossModule):
         return TensorDict({"loss_mse": loss, "metric": metric})
 
 
+class _ScaledRegressionLoss(LossModule):
+    """MSE loss with a loss-owned trainable scale, mimicking SACLoss's log_alpha."""
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+        self.scale = nn.Parameter(torch.tensor(2.0))
+
+    def forward(self, batch: TensorDict) -> TensorDict:
+        pred = self.model(batch["x"]) * self.scale
+        return TensorDict({"loss_mse": (pred - batch["y"]).pow(2).mean()})
+
+
 class _NoLossKeyModule(LossModule):
     """A LossModule whose output has no 'loss'-prefixed key (misconfigured)."""
 
@@ -2674,6 +2687,39 @@ class TestLocalLearner:
             "momentum_buffer"
         ]
         torch.testing.assert_close(restored_momentum, saved_momentum)
+
+    def test_checkpoint_round_trip_restores_loss_owned_params(self):
+        """Optimizer.state_dict() stores moments, not parameter values, so a
+        loss-owned parameter trained via Adam(loss_module.parameters()) must
+        be saved as extra_params or a resume silently keeps whatever value is
+        in memory."""
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        loss_module = _ScaledRegressionLoss(model)
+        learner = LocalLearner(
+            model, torch.optim.Adam(loss_module.parameters(), lr=1e-2)
+        )
+        torch.manual_seed(2)
+        for _ in range(10):
+            learner.update(self._batch(), loss_module)
+        trained_scale = loss_module.scale.detach().clone()
+        assert not torch.equal(trained_scale, torch.tensor(2.0))
+        assert "scale" not in learner.get_weights().keys(True, True)
+
+        checkpoint = learner.checkpoint()
+        with torch.no_grad():
+            loss_module.scale.fill_(99.0)
+        learner.load_checkpoint(checkpoint)
+        torch.testing.assert_close(loss_module.scale.detach(), trained_scale)
+
+    def test_load_checkpoint_extra_params_mismatch_raises(self):
+        model = nn.Linear(4, 1)
+        loss_module = _ScaledRegressionLoss(model)
+        learner = LocalLearner(model, torch.optim.Adam(loss_module.parameters()))
+        checkpoint = learner.checkpoint()
+        checkpoint["extra_params"] = []
+        with pytest.raises(RuntimeError, match="outside the model"):
+            learner.load_checkpoint(checkpoint)
 
     def test_state_dict_keeps_the_nn_module_contract(self):
         # checkpoint()/load_checkpoint() carry the optimizer; state_dict() must
@@ -2933,6 +2979,36 @@ class TestFSDP2Learner:
             "momentum_buffer"
         ].full_tensor()
         torch.testing.assert_close(restored_momentum, saved_momentum)
+
+    def test_checkpoint_round_trip_restores_loss_owned_params(self):
+        """Same contract as the LocalLearner version: a loss-owned parameter
+        (unsharded, outside the model) must survive a checkpoint round trip."""
+        from torch.distributed._composable.fsdp import fully_shard
+        from torch.distributed.device_mesh import init_device_mesh
+
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        mesh = init_device_mesh("cpu", (1,))
+        fully_shard(model, mesh=mesh)
+        loss_module = _ScaledRegressionLoss(model)
+        learner = FSDP2Learner(
+            model, torch.optim.Adam(loss_module.parameters(), lr=1e-2)
+        )
+        for _ in range(5):
+            learner.update(self._batch(seed=1), loss_module)
+        trained_scale = loss_module.scale.detach().clone()
+        assert not torch.equal(trained_scale, torch.tensor(2.0))
+        saved_exp_avg = learner.optimizer.state[loss_module.scale]["exp_avg"].clone()
+
+        checkpoint = learner.checkpoint()
+        with torch.no_grad():
+            loss_module.scale.fill_(99.0)
+            learner.optimizer.state[loss_module.scale]["exp_avg"].zero_()
+        learner.load_checkpoint(checkpoint)
+        torch.testing.assert_close(loss_module.scale.detach(), trained_scale)
+        torch.testing.assert_close(
+            learner.optimizer.state[loss_module.scale]["exp_avg"], saved_exp_avg
+        )
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

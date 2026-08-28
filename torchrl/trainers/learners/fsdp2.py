@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import functools
 
 import torch
@@ -17,7 +18,7 @@ from torchrl.trainers.learners.common import (
 )
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _dist_state_dict():
     """Return ``torch.distributed.checkpoint.state_dict``, imported on demand.
 
@@ -167,6 +168,32 @@ class FSDP2Learner(Learner):
         state_dict = dsd.get_model_state_dict(self.model, options=options)
         return TensorDict(state_dict).unflatten_keys(".")
 
+    @contextlib.contextmanager
+    def _extras_hidden_from_optimizer(self):
+        """Temporarily remove non-model parameters from the optimizer.
+
+        ``torch.distributed.checkpoint.state_dict`` maps optimizer state to
+        model FQNs, so a loss-owned parameter with no FQN makes
+        ``get_state_dict``/``set_state_dict`` fail with a bare ``KeyError``.
+        The extras (values and optimizer state) are carried in the checkpoint
+        explicitly instead -- they are plain unsharded tensors, so DCP has
+        nothing to reshard anyway.
+        """
+        extras = self._extra_optimized_parameters()
+        extra_ids = {id(p) for p in extras}
+        saved_groups = [group["params"] for group in self.optimizer.param_groups]
+        saved_state = {
+            p: self.optimizer.state.pop(p) for p in extras if p in self.optimizer.state
+        }
+        for group in self.optimizer.param_groups:
+            group["params"] = [p for p in group["params"] if id(p) not in extra_ids]
+        try:
+            yield extras, saved_state
+        finally:
+            for group, params in zip(self.optimizer.param_groups, saved_groups):
+                group["params"] = params
+            self.optimizer.state.update(saved_state)
+
     def checkpoint(self) -> dict:
         """DTensor-aware checkpoint: gathers model + optimizer state to rank 0.
 
@@ -179,17 +206,28 @@ class FSDP2Learner(Learner):
         ``cpu_offload=True`` it only copies when the shards are off-CPU, so on a
         CPU mesh (or a single-rank one) the "gathered" tensors alias the live
         shards, and training on would silently mutate the checkpoint.
+
+        Optimized parameters living outside ``model`` (loss-owned, unsharded
+        by construction) cannot be described by
+        ``torch.distributed.checkpoint.state_dict``; their values and
+        optimizer state are carried explicitly under ``"extra_params"`` and
+        ``"extra_optim_state"``.
         """
         dsd = _dist_state_dict()
         options = dsd.StateDictOptions(full_state_dict=True, cpu_offload=True)
-        model_state_dict, optim_state_dict = dsd.get_state_dict(
-            self.model, self.optimizer, options=options
-        )
-        return {
-            "model": _clone_tensors(model_state_dict),
-            "optimizer": _clone_tensors(optim_state_dict),
-            "accum_step": self._accum_step,
-        }
+        with self._extras_hidden_from_optimizer() as (extras, extra_state):
+            model_state_dict, optim_state_dict = dsd.get_state_dict(
+                self.model, self.optimizer, options=options
+            )
+            return {
+                "model": _clone_tensors(model_state_dict),
+                "optimizer": _clone_tensors(optim_state_dict),
+                "extra_params": [p.detach().clone() for p in extras],
+                "extra_optim_state": [
+                    _clone_tensors(extra_state.get(p, {})) for p in extras
+                ],
+                "accum_step": self._accum_step,
+            }
 
     def load_checkpoint(self, checkpoint: dict) -> None:
         """Restore a checkpoint produced by :meth:`checkpoint`.
@@ -197,18 +235,39 @@ class FSDP2Learner(Learner):
         ``broadcast_from_rank0=True`` lets rank 0 hold the full checkpoint
         (as produced by :meth:`checkpoint`) while every rank reshards it
         according to its local shards -- the counterpart of the
-        ``cpu_offload``-gathered save.
+        ``cpu_offload``-gathered save. Optimized parameters living outside
+        ``model`` (``"extra_params"``, unsharded by construction) follow the
+        same rank-0-authoritative contract: they are restored from the local
+        checkpoint where present, then broadcast from rank 0.
 
         Args:
             checkpoint (dict): as returned by :meth:`checkpoint`.
         """
         dsd = _dist_state_dict()
         options = dsd.StateDictOptions(full_state_dict=True, broadcast_from_rank0=True)
-        dsd.set_state_dict(
-            self.model,
-            self.optimizer,
-            model_state_dict=checkpoint["model"],
-            optim_state_dict=checkpoint["optimizer"],
-            options=options,
-        )
+        with self._extras_hidden_from_optimizer() as (extras, _):
+            dsd.set_state_dict(
+                self.model,
+                self.optimizer,
+                model_state_dict=checkpoint["model"],
+                optim_state_dict=checkpoint["optimizer"],
+                options=options,
+            )
+        if not extras or checkpoint.get("extra_params"):
+            self._restore_extra_params(checkpoint)
+            for param, state in zip(
+                extras, checkpoint.get("extra_optim_state", [{}] * len(extras))
+            ):
+                if state:
+                    self.optimizer.state[param] = _clone_tensors(state)
+        if (
+            extras
+            and torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+        ):
+            for param in extras:
+                torch.distributed.broadcast(param.data, src=0)
+                for value in self.optimizer.state.get(param, {}).values():
+                    if isinstance(value, torch.Tensor):
+                        torch.distributed.broadcast(value, src=0)
         self._restore_accum_step(checkpoint.get("accum_step", 0))
