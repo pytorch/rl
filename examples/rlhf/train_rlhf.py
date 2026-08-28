@@ -3,9 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from tempfile import TemporaryDirectory
+
 import hydra
 import torch
+from _smoke import make_prompt_loader, make_tiny_transformer
 from models.actor_critic import init_actor_critic
+from models.reward import init_reward_model
 from torchrl.data.llm.utils import AdaptiveKLController, RolloutFromModel
 
 from torchrl.record.loggers import get_logger
@@ -35,8 +39,12 @@ def main(cfg):
     # ============ Retrieve config ============ #
     #############################################
 
-    # make path absolute
-    cfg.model.name_or_path = resolve_name_or_path(cfg.model.name_or_path)
+    smoke_model_dir = None
+    if cfg.smoke:
+        smoke_model_dir = TemporaryDirectory()
+        cfg.model.name_or_path = str(make_tiny_transformer(smoke_model_dir.name))
+    else:
+        cfg.model.name_or_path = resolve_name_or_path(cfg.model.name_or_path)
 
     # Get some constants: number of iters, grad clip...
     batch_size = cfg.data.batch_size
@@ -55,22 +63,32 @@ def main(cfg):
     ###############################################
     ctx = setup(cfg.sys)
 
-    logger = get_logger(
-        logger_type=cfg.io.logger,
-        logger_name="./log",
-        experiment_name="torchrlhf-gpt2",
-        wandb_kwargs={
-            "config": dict(cfg),
-            "project": cfg.io.project_name,
-            "group": cfg.io.group_name,
-        },
-    )
+    logger = None
+    if not cfg.smoke:
+        logger = get_logger(
+            logger_type=cfg.io.logger,
+            logger_name="./log",
+            experiment_name="torchrlhf-gpt2",
+            wandb_kwargs={
+                "config": dict(cfg),
+                "project": cfg.io.project_name,
+                "group": cfg.io.group_name,
+            },
+        )
 
     # =============== Dataloaders =============== #
     ###############################################
     # We use prompts to get generated data from the generative model
 
-    train_prompt_loader, val_prompt_loader = get_prompt_loaders(cfg.data, cfg.sys)
+    if cfg.smoke:
+        train_prompt_loader = make_prompt_loader(
+            cfg.data.batch_size, cfg.data.block_size, cfg.sys.device
+        )
+        val_prompt_loader = make_prompt_loader(
+            cfg.data.batch_size, cfg.data.block_size, cfg.sys.device
+        )
+    else:
+        train_prompt_loader, val_prompt_loader = get_prompt_loaders(cfg.data, cfg.sys)
 
     # ================= Models ================= #
     ##############################################
@@ -81,7 +99,18 @@ def main(cfg):
     # Freeze layers of the model -- can be customized
     freeze_layers(model)
 
-    reward_model = make_reward_model(reward_model_cfg=cfg.reward_model, sys_cfg=cfg.sys)
+    if cfg.smoke:
+        reward_model = init_reward_model(
+            transformer_path=cfg.model.name_or_path,
+            device=cfg.sys.device,
+            compile_model=False,
+        )
+        reward_model.eval()
+        reward_model.requires_grad_(False)
+    else:
+        reward_model = make_reward_model(
+            reward_model_cfg=cfg.reward_model, sys_cfg=cfg.sys
+        )
 
     # ================= Loss and optimizer ================= #
     ##########################################################
@@ -107,29 +136,34 @@ def main(cfg):
         reward_model,
         kl_scheduler=kl_scheduler,
         num_steps=collection_iters,
+        max_new_tokens=cfg.train.ppo.episode_length,
     )
 
     # ================= Evaluation utils ================= #
     ########################################################
-    evaluator = make_evaluator(
-        ppo_cfg=cfg.train.ppo,
-        io_cfg=cfg.io,
-        model_cfg=cfg.model,
-        train_cfg=cfg.train,
-        val_prompt_loader=val_prompt_loader,
-        model=model,
-        ref_model=ref_model,
-        reward_model=reward_model,
-        ctx=ctx,
-        logger=logger,
-    )
+    evaluator = None
+    if not cfg.smoke:
+        evaluator = make_evaluator(
+            ppo_cfg=cfg.train.ppo,
+            io_cfg=cfg.io,
+            model_cfg=cfg.model,
+            train_cfg=cfg.train,
+            val_prompt_loader=val_prompt_loader,
+            model=model,
+            ref_model=ref_model,
+            reward_model=reward_model,
+            ctx=ctx,
+            logger=logger,
+        )
 
     # ================= Training loop ================= #
     #####################################################
 
-    stats_logger = TrainLogger(
-        collection_iters, log_interval=cfg.io.log_interval, logger=logger
-    )
+    stats_logger = None
+    if not cfg.smoke:
+        stats_logger = TrainLogger(
+            collection_iters, log_interval=cfg.io.log_interval, logger=logger
+        )
     pbar = tqdm(total=max_epochs * collection_iters)
     for _ in range(max_epochs):
         # ----------------- 1. Collect data, fill replay buffer ----------------- #
@@ -143,9 +177,11 @@ def main(cfg):
                 # TODO: moving this to within epoch
                 advantage(td)
             rb.extend(flatten_td(td))
-            stats_logger(td)
-        stats_logger.aggregate()
-        stats_logger.log()
+            if stats_logger is not None:
+                stats_logger(td)
+        if stats_logger is not None:
+            stats_logger.aggregate()
+            stats_logger.log()
 
         rollout_from_model.step_scheduler()
 
@@ -171,7 +207,9 @@ def main(cfg):
             pbar.update(1)
 
             # ----------------- 3. Possibly evaluate ----------------- #
-            evaluator.maybe_evaluate()
+            if evaluator is not None:
+                evaluator.maybe_evaluate()
+    del smoke_model_dir
 
 
 if __name__ == "__main__":

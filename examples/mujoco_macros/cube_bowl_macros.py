@@ -171,7 +171,10 @@ def _run_pick_carry_release(
 
 def main() -> None:
     args = _parse_args()
-    ensure_mjpython_for_passive_viewer()
+    if args.smoke and args.max_rollouts is None:
+        args.max_rollouts = 1
+    if not args.smoke:
+        ensure_mjpython_for_passive_viewer()
     menagerie_path = args.menagerie_path
     if menagerie_path is None:
         menagerie_env = os.environ.get(CubeBowlEnv.MENAGERIE_ENV_VAR)
@@ -207,7 +210,12 @@ def main() -> None:
     # Loop forever: reset the scene, execute the full pick/carry/release macro
     # sequence, pause, and reset to replay it in the MuJoCo viewer.
     rollout_count = 0
-    with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
+    with MujocoViewerLoop(
+        base_env,
+        enabled=not args.smoke,
+        realtime=not args.smoke,
+        speed=args.speed,
+    ) as viewer:
         while viewer.is_running() and (
             args.max_rollouts is None or rollout_count < args.max_rollouts
         ):

@@ -46,6 +46,9 @@ class CustomEnv(gym.Env):
         return observation, reward, terminated, truncated, info
 
 
+gym.register("Custom-v0", CustomEnv)
+
+
 if __name__ == "__main__":
     import torch
     from torchrl.data.tensor_specs import Unbounded
@@ -61,7 +64,6 @@ if __name__ == "__main__":
         env = GymWrapper(env, device="cpu")
     else:
         # Option 2: using GymEnv directly, no need to call AsyncVectorEnv
-        gym.register("Custom-v0", CustomEnv)
         env = GymEnv("Custom-v0", num_envs=num_envs)
 
     keys = ["field1"]
@@ -79,9 +81,9 @@ if __name__ == "__main__":
     print("readers", env.info_dict_reader)
 
     # We need to unlock the specs to make them writable
-    env.observation_spec.unlock_()
+    env.output_spec.unlock_()
     env.observation_spec["field1"] = specs[0]
-    env.observation_spec.lock_()
+    env.output_spec.lock_()
 
     # Check that we did a good job
     check_env_specs(env)

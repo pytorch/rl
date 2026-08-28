@@ -124,7 +124,10 @@ def _sample_attitudes(
 
 def main() -> None:
     args = _parse_args()
-    ensure_mjpython_for_passive_viewer()
+    if args.smoke and args.max_rollouts is None:
+        args.max_rollouts = 1
+    if not args.smoke:
+        ensure_mjpython_for_passive_viewer()
 
     # The viewer examples use the official MuJoCo C-bindings backend so the
     # passive viewer can display the live ``mjData`` object. We repeatedly reset
@@ -160,7 +163,12 @@ def main() -> None:
     generator.manual_seed(int(args.seed))
 
     rollout_count = 0
-    with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
+    with MujocoViewerLoop(
+        base_env,
+        enabled=not args.smoke,
+        realtime=not args.smoke,
+        speed=args.speed,
+    ) as viewer:
         while viewer.is_running() and (
             args.max_rollouts is None or rollout_count < args.max_rollouts
         ):
@@ -184,6 +192,7 @@ def main() -> None:
                     actions=[action] * args.max_macros,
                     tensordict=reset_td,
                     auto_reset=True,
+                    set_state=True,
                     break_when_any_done=True,
                 )
             except ViewerClosed:
