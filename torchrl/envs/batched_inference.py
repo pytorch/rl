@@ -117,8 +117,14 @@ class FixedBatchedInference:
 
     def _init_from_batch(self, batch: TensorDictBase) -> None:
         """Allocate pinned staging buffers per bucket size from the first batch."""
+        tensor_keys = [
+            key
+            for key, value in batch.items(True, True)
+            if isinstance(value, torch.Tensor)
+        ]
+        tensor_template = batch.select(*tensor_keys)[:1]
         for bucket in self.bucket_sizes:
-            template = batch[:1].expand(bucket).clone()
+            template = tensor_template.expand(bucket).clone()
 
             buffers: list[TensorDictBase] = []
             events: list = []
@@ -172,6 +178,13 @@ class FixedBatchedInference:
         if not self._initialized:
             self._init_from_batch(batch)
 
+        tensor_keys = [
+            key
+            for key, value in batch.items(True, True)
+            if isinstance(value, torch.Tensor)
+        ]
+        non_tensor_keys = [key for key in batch.keys() if key not in tensor_keys]
+
         bucket = self._pick_bucket(B)
         buf_idx = self._buf_idx[bucket]
         staging = self._staging[bucket][buf_idx]
@@ -180,7 +193,7 @@ class FixedBatchedInference:
         if event is not None:
             event.synchronize()
 
-        staging[:B].update_(batch)
+        staging[:B].update_(batch.select(*tensor_keys))
 
         if B < bucket:
             staging[B:].zero_()
@@ -206,6 +219,9 @@ class FixedBatchedInference:
         result = output[:B]
         if self.add_valid_mask and self._MASK_KEY in result.keys():
             result = result.exclude(self._MASK_KEY)
+
+        for key in non_tensor_keys:
+            result.set(key, batch.get(key))
 
         return result
 

@@ -8,6 +8,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from tensordict.tensorclass import NonTensorStack
 
 from torchrl.envs.batched_inference import FixedBatchedInference
 
@@ -20,8 +21,11 @@ def _make_policy(in_features: int = 4, out_features: int = 2):
     )
 
 
-def _make_batch(B: int, obs_dim: int = 4) -> TensorDict:
-    return TensorDict({"obs": torch.randn(B, obs_dim)}, batch_size=[B])
+def _make_batch(B: int, obs_dim: int = 4, with_env_index: bool = False) -> TensorDict:
+    batch = TensorDict({"obs": torch.randn(B, obs_dim)}, batch_size=[B])
+    if with_env_index:
+        batch.set("env_index", NonTensorStack(*range(B)))
+    return batch
 
 
 class TestConstruction:
@@ -119,6 +123,12 @@ class TestCPUHotPath:
             helper(_make_batch(3))
             assert helper._initialized
         assert not helper._initialized
+
+    def test_env_index_preserved(self):
+        helper = self._make_helper()
+        out = helper(_make_batch(3, with_env_index=True))
+
+        assert list(out["env_index"]) == [0, 1, 2]
 
 
 class TestDoubleBuffer:
