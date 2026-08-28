@@ -170,6 +170,28 @@ class TestValueNormBase:
         with pytest.raises(TypeError):
             ValueNorm(shape=1)  # type: ignore[abstract]
 
+    def test_legacy_subclass_without_scale_still_instantiates(self):
+        """Subclasses written before scale() existed must keep working (with a
+        deprecation warning) until scale() becomes abstract in v0.16."""
+
+        class LegacyNorm(ValueNorm):
+            def update(self, value_target):
+                pass
+
+            def normalize(self, value_target):
+                return value_target
+
+            def denormalize(self, normalised_value):
+                return normalised_value
+
+        with pytest.warns(DeprecationWarning, match="abstract in v0.16"):
+            vn = LegacyNorm(shape=1)
+        x = torch.randn(4, 1)
+        vn.update(x)
+        torch.testing.assert_close(vn.denormalize(vn.normalize(x)), x)
+        with pytest.raises(NotImplementedError, match="scale"):
+            vn.scale()
+
     @pytest.mark.parametrize(
         "cls", [PopArtValueNorm, RunningValueNorm, PercentileValueNorm]
     )

@@ -26,6 +26,7 @@ your own actor-critic loss) via ``value_norm=...``.
 from __future__ import annotations
 
 import math
+import warnings
 from abc import ABCMeta, abstractmethod
 
 import torch
@@ -43,10 +44,10 @@ class ValueNorm(nn.Module, metaclass=ABCMeta):
     - **denormalize** the critic's output back to the real reward scale when
       forming bootstrapped value estimates inside GAE / TD.
 
-    Subclasses must implement :meth:`update`, :meth:`normalize`, and
-    :meth:`denormalize`. The convention is that all three operate on tensors
-    whose trailing dims match :attr:`shape` (the per-element value shape,
-    usually ``(1,)``).
+    Subclasses must implement :meth:`update`, :meth:`normalize`,
+    :meth:`denormalize`, and :meth:`scale`. The convention is that they all
+    operate on tensors whose trailing dims match :attr:`shape` (the
+    per-element value shape, usually ``(1,)``).
     """
 
     shape: tuple[int, ...]
@@ -64,6 +65,14 @@ class ValueNorm(nn.Module, metaclass=ABCMeta):
         self.shape = tuple(shape)
         self.epsilon = epsilon
         self._device = device
+        if type(self).scale is ValueNorm.scale:
+            warnings.warn(
+                f"{type(self).__name__} does not implement scale(). "
+                "ValueNorm.scale() will become abstract in v0.16; implement it "
+                "in your subclass to keep it instantiable.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     # ------------------------------------------------------------------ API
 
@@ -79,14 +88,22 @@ class ValueNorm(nn.Module, metaclass=ABCMeta):
     def denormalize(self, normalised_value: torch.Tensor) -> torch.Tensor:
         """Inverse of :meth:`normalize` — recover real-scale values."""
 
-    @abstractmethod
     def scale(self) -> torch.Tensor:
         """Multiplicative scale currently applied by :meth:`normalize`.
 
         Exposed separately so consumers can rescale quantities that must not
         be re-centred, e.g. advantages (already centred by the value
         baseline), for which only the division by the scale applies.
+
+        Deliberately not abstract until v0.16 so that subclasses written
+        before it existed keep instantiating (with a ``DeprecationWarning``);
+        this default raises ``NotImplementedError`` when called.
         """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement scale(). Implement it "
+            "to use this normaliser where a multiplicative scale is required "
+            "(e.g. advantage scaling)."
+        )
 
     # ------------------------------------------------------- shared helpers
 

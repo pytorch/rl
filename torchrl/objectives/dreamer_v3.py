@@ -718,10 +718,25 @@ class DreamerV3ActorLoss(LossModule):
             rate=return_normalization_rate,
             min_scale=return_normalization_min_scale,
         )
+        self.register_load_state_dict_pre_hook(self._migrate_legacy_retnorm_state)
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         if lmbda is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
+
+    def _migrate_legacy_retnorm_state(self, module, state_dict, prefix, *args) -> None:
+        # Checkpoints written before the retnorm refactor stored the return
+        # quantiles as flat 0-dim buffers on the loss itself.
+        for legacy, current in (
+            ("return_low", "retnorm.low"),
+            ("return_high", "retnorm.high"),
+        ):
+            legacy_key = prefix + legacy
+            current_key = prefix + current
+            if legacy_key in state_dict and current_key not in state_dict:
+                state_dict[current_key] = state_dict.pop(legacy_key).reshape(
+                    self.retnorm.low.shape
+                )
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
