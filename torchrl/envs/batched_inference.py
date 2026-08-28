@@ -143,9 +143,7 @@ class FixedBatchedInference:
     def _init_from_batch(self, batch: TensorDictBase) -> None:
         """Allocate pinned staging buffers per bucket size from the first batch."""
         non_tensor_keys = self._non_tensor_keys(batch)
-        tensor_keys = [
-            key for key in batch.keys() if key not in non_tensor_keys
-        ]
+        tensor_keys = [key for key in batch.keys() if key not in non_tensor_keys]
         tensor_template = batch.select(*tensor_keys)[:1]
         for bucket in self.bucket_sizes:
             template = tensor_template.expand(bucket).clone()
@@ -205,9 +203,7 @@ class FixedBatchedInference:
             self._init_from_batch(batch)
 
         non_tensor_keys = self._non_tensor_keys(batch)
-        tensor_keys = [
-            key for key in batch.keys() if key not in non_tensor_keys
-        ]
+        tensor_keys = [key for key in batch.keys() if key not in non_tensor_keys]
 
         bucket = self._pick_bucket(B)
         buf_idx = self._buf_idx[bucket]
