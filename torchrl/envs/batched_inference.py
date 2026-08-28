@@ -9,6 +9,7 @@ from collections.abc import Callable, Sequence
 
 import torch
 from tensordict import TensorDictBase
+from tensordict.tensorclass import NonTensorData, NonTensorStack
 
 
 __all__ = ["FixedBatchedInference"]
@@ -115,12 +116,19 @@ class FixedBatchedInference:
 
         self._initialized = False
 
+    @staticmethod
+    def _non_tensor_keys(batch: TensorDictBase) -> list[str]:
+        return [
+            key
+            for key in batch.keys()
+            if isinstance(batch.get(key), (NonTensorStack, NonTensorData))
+        ]
+
     def _init_from_batch(self, batch: TensorDictBase) -> None:
         """Allocate pinned staging buffers per bucket size from the first batch."""
+        non_tensor_keys = self._non_tensor_keys(batch)
         tensor_keys = [
-            key
-            for key, value in batch.items(True, True)
-            if isinstance(value, torch.Tensor)
+            key for key in batch.keys() if key not in non_tensor_keys
         ]
         tensor_template = batch.select(*tensor_keys)[:1]
         for bucket in self.bucket_sizes:
@@ -178,12 +186,10 @@ class FixedBatchedInference:
         if not self._initialized:
             self._init_from_batch(batch)
 
+        non_tensor_keys = self._non_tensor_keys(batch)
         tensor_keys = [
-            key
-            for key, value in batch.items(True, True)
-            if isinstance(value, torch.Tensor)
+            key for key in batch.keys() if key not in non_tensor_keys
         ]
-        non_tensor_keys = [key for key in batch.keys() if key not in tensor_keys]
 
         bucket = self._pick_bucket(B)
         buf_idx = self._buf_idx[bucket]

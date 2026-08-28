@@ -21,10 +21,17 @@ def _make_policy(in_features: int = 4, out_features: int = 2):
     )
 
 
-def _make_batch(B: int, obs_dim: int = 4, with_env_index: bool = False) -> TensorDict:
+def _make_batch(
+    B: int,
+    obs_dim: int = 4,
+    with_env_index: bool = False,
+    nested: bool = False,
+) -> TensorDict:
     batch = TensorDict({"obs": torch.randn(B, obs_dim)}, batch_size=[B])
     if with_env_index:
         batch.set("env_index", NonTensorStack(*range(B)))
+    if nested:
+        batch.set("state", TensorDict({"hidden": torch.randn(B, 8)}, batch_size=[B]))
     return batch
 
 
@@ -129,6 +136,18 @@ class TestCPUHotPath:
         out = helper(_make_batch(3, with_env_index=True))
 
         assert list(out["env_index"]) == [0, 1, 2]
+
+    def test_nested_tensordict_available_to_policy(self):
+        policy = TensorDictModule(
+            torch.nn.Linear(8, 2),
+            in_keys=[("state", "hidden")],
+            out_keys=["action"],
+        )
+        helper = FixedBatchedInference(policy, "cpu", bucket_sizes=[4])
+
+        out = helper(_make_batch(3, nested=True))
+
+        assert out["action"].shape == torch.Size([3, 2])
 
 
 class TestDoubleBuffer:
