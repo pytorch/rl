@@ -1580,7 +1580,8 @@ class TestValues:
         "gamma_tensor", ["scalar", "tensor", "tensor_single_element"]
     )
     @pytest.mark.parametrize(
-        "lmbda_tensor", ["scalar", "tensor", "tensor_single_element"]
+        "lmbda_tensor",
+        ["scalar", "tensor", "tensor_zero_dim", "tensor_single_element"],
     )
     def test_gae_param_as_tensor(
         self, device, N, dtype, has_done, gamma_tensor, lmbda_tensor
@@ -1609,7 +1610,9 @@ class TestValues:
 
         if lmbda_tensor == "tensor":
             lmbda_vec = torch.full_like(reward, lmbda)
-        elif gamma_tensor == "tensor_single_element":
+        elif lmbda_tensor == "tensor_zero_dim":
+            lmbda_vec = torch.as_tensor(lmbda, device=device)
+        elif lmbda_tensor == "tensor_single_element":
             lmbda_vec = torch.as_tensor([lmbda], device=device)
         else:
             lmbda_vec = lmbda
@@ -1934,7 +1937,9 @@ class TestValues:
     @pytest.mark.parametrize(
         "gamma_tensor", ["scalar", "tensor", "tensor_single_element"]
     )
-    @pytest.mark.parametrize("lmbda_tensor", ["scalar", "tensor_single_element"])
+    @pytest.mark.parametrize(
+        "lmbda_tensor", ["scalar", "tensor_zero_dim", "tensor_single_element"]
+    )
     def test_tdlambda_tensor_gamma_single_element(
         self, device, gamma, lmbda, N, T, F, has_done, gamma_tensor, lmbda_tensor
     ):
@@ -1960,7 +1965,9 @@ class TestValues:
         else:
             gamma_vec = gamma
 
-        if gamma_tensor == "tensor_single_element":
+        if lmbda_tensor == "tensor_zero_dim":
+            lmbda_vec = torch.as_tensor(lmbda, device=device)
+        elif lmbda_tensor == "tensor_single_element":
             lmbda_vec = torch.as_tensor([lmbda], device=device)
         else:
             lmbda_vec = lmbda
