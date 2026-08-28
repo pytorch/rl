@@ -1702,32 +1702,48 @@ class TestPPO(LossModuleTestBase):
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     def test_ppo_advantage_norm(self, loss_class):
-        """advantage_norm must update on the value target in training mode and
-        divide the advantage by the resulting scale (no re-centering)."""
+        """advantage_norm must update once on the freshly computed value target
+        and divide the advantage by the resulting scale (no re-centering)."""
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo()
         actor = self._create_mock_actor()
         value = self._create_mock_value()
 
-        advantage = torch.randn(td.batch_size[0], 1)
-        value_target = 100 * torch.rand(td.batch_size[0], 1)
-        td.set("advantage", advantage)
-        td.set("value_target", value_target)
-
         norm = PercentileValueNorm(shape=1, rate=1.0, min_scale=1e-6)
         loss_fn = loss_class(actor, value, advantage_norm=norm)
-        loss_scaled = loss_fn(td.clone())
 
-        expected_low, expected_high = torch.quantile(
-            value_target, torch.tensor([0.05, 0.95])
+        # Independent probe of the value target the estimator will produce.
+        probe = loss_class(actor, value)
+        td_probe = td.clone()
+        probe.value_estimator(
+            td_probe,
+            params=probe._cached_critic_network_params_detached,
+            target_params=probe.target_critic_network_params,
         )
-        torch.testing.assert_close(norm.low, expected_low.unsqueeze(-1))
-        torch.testing.assert_close(norm.high, expected_high.unsqueeze(-1))
+        expected_low, expected_high = torch.quantile(
+            td_probe.get("value_target").reshape(-1), torch.tensor([0.05, 0.95])
+        )
+        loss_fn(td.clone())
+        torch.testing.assert_close(norm.low, expected_low.reshape(1))
+        torch.testing.assert_close(norm.high, expected_high.reshape(1))
+
+        # A precomputed advantage is scaled by the frozen statistics without
+        # updating them (the fresh loss shares the same norm module).
+        advantage = torch.randn(td.batch_size[0], 1)
+        value_target = 100 * torch.rand(td.batch_size[0], 1)
+        td_pre = td.clone()
+        td_pre.set("advantage", advantage)
+        td_pre.set("value_target", value_target)
+        loss_pre_fn = loss_class(actor, value, advantage_norm=norm)
+        loss_scaled = loss_pre_fn(td_pre)
+        torch.testing.assert_close(norm.low, expected_low.reshape(1))
+        torch.testing.assert_close(norm.high, expected_high.reshape(1))
 
         scale = (expected_high - expected_low).clamp_min(1e-6)
         loss_ref_fn = loss_class(actor, value)
         td_ref = td.clone()
         td_ref.set("advantage", advantage / scale)
+        td_ref.set("value_target", value_target)
         loss_ref = loss_ref_fn(td_ref)
         torch.testing.assert_close(
             loss_scaled["loss_objective"], loss_ref["loss_objective"]
@@ -1736,8 +1752,6 @@ class TestPPO(LossModuleTestBase):
     def test_ppo_advantage_norm_eval_mode_keeps_statistics(self):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo()
-        td.set("advantage", torch.randn(td.batch_size[0], 1))
-        td.set("value_target", 100 * torch.rand(td.batch_size[0], 1))
         norm = PercentileValueNorm(shape=1)
         loss_fn = ClipPPOLoss(
             self._create_mock_actor(), self._create_mock_value(), advantage_norm=norm
@@ -1756,30 +1770,59 @@ class TestPPO(LossModuleTestBase):
                 advantage_norm=PercentileValueNorm(shape=1),
             )
 
-    def test_ppo_advantage_norm_requires_value_target(self):
+    def test_ppo_advantage_norm_precomputed_advantage_skips_update(self):
+        """Repeated forwards over a precomputed rollout must not skew the
+        moving average: the statistics only update when the loss computes the
+        value target itself (or when the user calls update() explicitly)."""
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo()
         td.set("advantage", torch.randn(td.batch_size[0], 1))
+        td.set("value_target", 100 * torch.rand(td.batch_size[0], 1))
+        norm = PercentileValueNorm(shape=1, rate=1.0)
         loss_fn = ClipPPOLoss(
-            self._create_mock_actor(),
-            self._create_mock_value(),
-            advantage_norm=PercentileValueNorm(shape=1),
+            self._create_mock_actor(), self._create_mock_value(), advantage_norm=norm
         )
-        with pytest.raises(KeyError, match="value target"):
-            loss_fn(td)
+        loss_fn(td.clone())
+        loss_fn(td.clone())
+        torch.testing.assert_close(norm.low, torch.zeros(1))
+        torch.testing.assert_close(norm.high, torch.zeros(1))
 
     def test_ppo_advantage_norm_nested_value_target_key(self):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo()
-        td.set("advantage", torch.randn(td.batch_size[0], 1))
         td.set(("nested", "value_target"), 100 * torch.rand(td.batch_size[0], 1))
         norm = PercentileValueNorm(shape=1, rate=1.0)
         loss_fn = ClipPPOLoss(
             self._create_mock_actor(), self._create_mock_value(), advantage_norm=norm
         )
         loss_fn.set_keys(value_target=("nested", "value_target"))
-        loss_fn(td)
+        advantage = torch.randn(td.batch_size[0], 1)
+        scaled = loss_fn._scale_advantage(advantage, td, update=True)
         assert (norm.high != 0).any()
+        torch.testing.assert_close(scaled, advantage / norm.scale())
+
+    def test_ppo_advantage_norm_excludes_masked_rows(self):
+        """Rows marked invalid by ("collector", "mask") (e.g. SliceSampler
+        padding filled with sentinel values) must not pollute the statistics."""
+        torch.manual_seed(self.seed)
+        batch = 16
+        value_target = torch.rand(batch, 1)
+        value_target[-2:] = 1e9
+        mask = torch.ones(batch, 1, dtype=torch.bool)
+        mask[-2:] = False
+        td = TensorDict(
+            {"value_target": value_target, ("collector", "mask"): mask}, [batch]
+        )
+        norm = PercentileValueNorm(shape=1, rate=1.0)
+        loss_fn = ClipPPOLoss(
+            self._create_mock_actor(), self._create_mock_value(), advantage_norm=norm
+        )
+        loss_fn._scale_advantage(torch.randn(batch, 1), td, update=True)
+        expected_low, expected_high = torch.quantile(
+            value_target[:-2].reshape(-1), torch.tensor([0.05, 0.95])
+        )
+        torch.testing.assert_close(norm.low, expected_low.reshape(1))
+        torch.testing.assert_close(norm.high, expected_high.reshape(1))
 
 
 def test_ppo_ess_preserves_feature_shape_for_singleton_batch():
@@ -2663,32 +2706,47 @@ class TestA2C(LossModuleTestBase):
             assert "loss_critic" in loss.keys()
 
     def test_a2c_advantage_norm(self):
-        """advantage_norm must update on the value target in training mode and
-        divide the advantage by the resulting scale."""
+        """advantage_norm must update once on the freshly computed value target
+        and divide the advantage by the resulting scale."""
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c()
         actor = self._create_mock_actor()
         value = self._create_mock_value()
 
-        advantage = torch.randn(*td.batch_size, 1)
-        value_target = 100 * torch.rand(*td.batch_size, 1)
-        td.set("advantage", advantage)
-        td.set("value_target", value_target)
-
         norm = PercentileValueNorm(shape=1, rate=1.0, min_scale=1e-6)
         loss_fn = A2CLoss(actor, value, advantage_norm=norm)
-        loss_scaled = loss_fn(td.clone())
 
-        expected_low, expected_high = torch.quantile(
-            value_target.reshape(-1), torch.tensor([0.05, 0.95])
+        # Independent probe of the value target the estimator will produce.
+        probe = A2CLoss(actor, value)
+        td_probe = td.clone()
+        probe.value_estimator(
+            td_probe,
+            params=probe._cached_detach_critic_network_params,
+            target_params=probe.target_critic_network_params,
         )
-        torch.testing.assert_close(norm.low, expected_low.unsqueeze(-1))
-        torch.testing.assert_close(norm.high, expected_high.unsqueeze(-1))
+        expected_low, expected_high = torch.quantile(
+            td_probe.get("value_target").reshape(-1), torch.tensor([0.05, 0.95])
+        )
+        loss_fn(td.clone())
+        torch.testing.assert_close(norm.low, expected_low.reshape(1))
+        torch.testing.assert_close(norm.high, expected_high.reshape(1))
+
+        # A precomputed advantage is scaled by the frozen statistics without
+        # updating them.
+        advantage = torch.randn(*td.batch_size, 1)
+        value_target = 100 * torch.rand(*td.batch_size, 1)
+        td_pre = td.clone()
+        td_pre.set("advantage", advantage)
+        td_pre.set("value_target", value_target)
+        loss_scaled = A2CLoss(actor, value, advantage_norm=norm)(td_pre)
+        torch.testing.assert_close(norm.low, expected_low.reshape(1))
+        torch.testing.assert_close(norm.high, expected_high.reshape(1))
 
         scale = (expected_high - expected_low).clamp_min(1e-6)
         loss_ref_fn = A2CLoss(actor, value)
         td_ref = td.clone()
         td_ref.set("advantage", advantage / scale)
+        td_ref.set("value_target", value_target)
         loss_ref = loss_ref_fn(td_ref)
         torch.testing.assert_close(
             loss_scaled["loss_objective"], loss_ref["loss_objective"]

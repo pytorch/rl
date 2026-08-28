@@ -34,6 +34,7 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
+    _valid_value_target_rows,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -69,13 +70,18 @@ class A2CLoss(LossModule):
         advantage_norm (ValueNorm, optional): a stateful
             :class:`~torchrl.modules.ValueNorm` used to rescale the advantage,
             e.g. :class:`~torchrl.modules.PercentileValueNorm` for
-            DreamerV3-style return normalization. In training mode, its
-            statistics are updated with the batch value targets once per
-            forward call; the advantage is then divided by
+            DreamerV3-style return normalization. The advantage is divided by
             ``advantage_norm.scale()`` without re-centering (the advantage is
-            already centred by the value baseline). Requires the value target
-            to be available in the input tensordict (it is when the loss
-            computes the advantage itself). Defaults to ``None``.
+            already centred by the value baseline). In training mode, the
+            statistics are updated with the fresh value targets when the loss
+            runs its own value estimator (i.e. when the input tensordict
+            carries no advantage entry), so repeated forwards over the same
+            precomputed rollout do not skew the moving average; rows marked
+            invalid by the validity masks (see
+            :attr:`~torchrl.objectives.LossModule.loss_mask_key`) are excluded
+            from the update. When the advantage is precomputed outside the
+            loss, call ``advantage_norm.update(value_target)`` once per rollout
+            yourself. Defaults to ``None``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -549,18 +555,24 @@ class A2CLoss(LossModule):
         return self.critic_network_params.detach()
 
     def _scale_advantage(
-        self, advantage: torch.Tensor, tensordict: TensorDictBase
+        self,
+        advantage: torch.Tensor,
+        tensordict: TensorDictBase,
+        *,
+        update: bool,
     ) -> torch.Tensor:
-        value_target = tensordict.get(self.tensor_keys.value_target, None)
-        if value_target is None:
-            raise KeyError(
-                f"advantage_norm requires the value target "
-                f"({self.tensor_keys.value_target!r}) in the input tensordict "
-                "to update the return statistics. Let the loss compute the "
-                "advantage with its value estimator, or write the value "
-                "target under that key."
+        if update and self.training:
+            value_target = tensordict.get(self.tensor_keys.value_target, None)
+            if value_target is None:
+                raise KeyError(
+                    f"advantage_norm requires the value target "
+                    f"({self.tensor_keys.value_target!r}) in the input "
+                    "tensordict to update the return statistics; the value "
+                    "estimator is expected to write it."
+                )
+            value_target = _valid_value_target_rows(
+                value_target, tensordict, self._loss_mask_keys()
             )
-        if self.training:
             self.advantage_norm.update(value_target)
         return advantage / self.advantage_norm.scale()
 
@@ -568,6 +580,7 @@ class A2CLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
+        update_norm = advantage is None
         if advantage is None:
             self.value_estimator(
                 tensordict,
@@ -576,7 +589,7 @@ class A2CLoss(LossModule):
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
         if self.advantage_norm is not None:
-            advantage = self._scale_advantage(advantage, tensordict)
+            advantage = self._scale_advantage(advantage, tensordict, update=update_norm)
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss}, batch_size=[])

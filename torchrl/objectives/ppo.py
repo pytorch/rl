@@ -39,6 +39,7 @@ from torchrl.objectives.utils import (
     _maybe_add_or_extend_key,
     _maybe_get_or_select,
     _sum_td_features,
+    _valid_value_target_rows,
     _validate_clip_epsilon,
     dispatch_value_estimator,
     distance_loss,
@@ -177,14 +178,19 @@ class PPOLoss(LossModule):
         advantage_norm (ValueNorm, optional): a stateful
             :class:`~torchrl.modules.ValueNorm` used to rescale the advantage,
             e.g. :class:`~torchrl.modules.PercentileValueNorm` for
-            DreamerV3-style return normalization. In training mode, its
-            statistics are updated with the batch value targets once per
-            forward call; the advantage is then divided by
+            DreamerV3-style return normalization. The advantage is divided by
             ``advantage_norm.scale()`` without re-centering (the advantage is
-            already centred by the value baseline). Requires the value target
-            to be available in the input tensordict (it is when the loss
-            computes the advantage itself). Mutually exclusive with
-            ``normalize_advantage``. Defaults to ``None``.
+            already centred by the value baseline). In training mode, the
+            statistics are updated with the fresh value targets when the loss
+            runs its own value estimator (i.e. when the input tensordict
+            carries no advantage entry), so repeated forwards over the same
+            precomputed rollout do not skew the moving average; rows marked
+            invalid by the validity masks (see
+            :attr:`~torchrl.objectives.LossModule.loss_mask_key`) are excluded
+            from the update. When the advantage is precomputed outside the
+            loss, call ``advantage_norm.update(value_target)`` once per rollout
+            yourself. Mutually exclusive with ``normalize_advantage``.
+            Defaults to ``None``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -960,10 +966,14 @@ class PPOLoss(LossModule):
         return (advantage - loc) / scale
 
     def _maybe_normalize_advantage(
-        self, advantage: torch.Tensor, tensordict: TensorDictBase
+        self,
+        advantage: torch.Tensor,
+        tensordict: TensorDictBase,
+        *,
+        update_norm: bool,
     ) -> torch.Tensor:
         if self.advantage_norm is not None:
-            return self._scale_advantage(advantage, tensordict)
+            return self._scale_advantage(advantage, tensordict, update=update_norm)
         if self.normalize_advantage and advantage.numel() > 1:
             if advantage.numel() > tensordict.batch_size.numel() and not len(
                 self.normalize_advantage_exclude_dims
@@ -978,18 +988,24 @@ class PPOLoss(LossModule):
         return advantage
 
     def _scale_advantage(
-        self, advantage: torch.Tensor, tensordict: TensorDictBase
+        self,
+        advantage: torch.Tensor,
+        tensordict: TensorDictBase,
+        *,
+        update: bool,
     ) -> torch.Tensor:
-        value_target = tensordict.get(self.tensor_keys.value_target, None)
-        if value_target is None:
-            raise KeyError(
-                f"advantage_norm requires the value target "
-                f"({self.tensor_keys.value_target!r}) in the input tensordict "
-                "to update the return statistics. Let the loss compute the "
-                "advantage with its value estimator, or write the value "
-                "target under that key."
+        if update and self.training:
+            value_target = tensordict.get(self.tensor_keys.value_target, None)
+            if value_target is None:
+                raise KeyError(
+                    f"advantage_norm requires the value target "
+                    f"({self.tensor_keys.value_target!r}) in the input "
+                    "tensordict to update the return statistics; the value "
+                    "estimator is expected to write it."
+                )
+            value_target = _valid_value_target_rows(
+                value_target, tensordict, self._loss_mask_keys()
             )
-        if self.training:
             self.advantage_norm.update(value_target)
         return advantage / self.advantage_norm.scale()
 
@@ -997,6 +1013,7 @@ class PPOLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
+        update_norm = advantage is None
         if advantage is None:
             self.value_estimator(
                 tensordict,
@@ -1004,7 +1021,9 @@ class PPOLoss(LossModule):
                 target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
-        advantage = self._maybe_normalize_advantage(advantage, tensordict)
+        advantage = self._maybe_normalize_advantage(
+            advantage, tensordict, update_norm=update_norm
+        )
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -1186,14 +1205,19 @@ class ClipPPOLoss(PPOLoss):
         advantage_norm (ValueNorm, optional): a stateful
             :class:`~torchrl.modules.ValueNorm` used to rescale the advantage,
             e.g. :class:`~torchrl.modules.PercentileValueNorm` for
-            DreamerV3-style return normalization. In training mode, its
-            statistics are updated with the batch value targets once per
-            forward call; the advantage is then divided by
+            DreamerV3-style return normalization. The advantage is divided by
             ``advantage_norm.scale()`` without re-centering (the advantage is
-            already centred by the value baseline). Requires the value target
-            to be available in the input tensordict (it is when the loss
-            computes the advantage itself). Mutually exclusive with
-            ``normalize_advantage``. Defaults to ``None``.
+            already centred by the value baseline). In training mode, the
+            statistics are updated with the fresh value targets when the loss
+            runs its own value estimator (i.e. when the input tensordict
+            carries no advantage entry), so repeated forwards over the same
+            precomputed rollout do not skew the moving average; rows marked
+            invalid by the validity masks (see
+            :attr:`~torchrl.objectives.LossModule.loss_mask_key`) are excluded
+            from the update. When the advantage is precomputed outside the
+            loss, call ``advantage_norm.update(value_target)`` once per rollout
+            yourself. Mutually exclusive with ``normalize_advantage``.
+            Defaults to ``None``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -1421,6 +1445,7 @@ class ClipPPOLoss(PPOLoss):
         advantage = tensordict.get(
             self.tensor_keys.advantage, None, as_padded_tensor=True
         )
+        update_norm = advantage is None
         if advantage is None:
             if self.critic_network is None:
                 raise RuntimeError(
@@ -1432,7 +1457,9 @@ class ClipPPOLoss(PPOLoss):
                 target_params=self.target_critic_network_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
-        advantage = self._maybe_normalize_advantage(advantage, tensordict)
+        advantage = self._maybe_normalize_advantage(
+            advantage, tensordict, update_norm=update_norm
+        )
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -1550,14 +1577,19 @@ class KLPENPPOLoss(PPOLoss):
         advantage_norm (ValueNorm, optional): a stateful
             :class:`~torchrl.modules.ValueNorm` used to rescale the advantage,
             e.g. :class:`~torchrl.modules.PercentileValueNorm` for
-            DreamerV3-style return normalization. In training mode, its
-            statistics are updated with the batch value targets once per
-            forward call; the advantage is then divided by
+            DreamerV3-style return normalization. The advantage is divided by
             ``advantage_norm.scale()`` without re-centering (the advantage is
-            already centred by the value baseline). Requires the value target
-            to be available in the input tensordict (it is when the loss
-            computes the advantage itself). Mutually exclusive with
-            ``normalize_advantage``. Defaults to ``None``.
+            already centred by the value baseline). In training mode, the
+            statistics are updated with the fresh value targets when the loss
+            runs its own value estimator (i.e. when the input tensordict
+            carries no advantage entry), so repeated forwards over the same
+            precomputed rollout do not skew the moving average; rows marked
+            invalid by the validity masks (see
+            :attr:`~torchrl.objectives.LossModule.loss_mask_key`) are excluded
+            from the update. When the advantage is precomputed outside the
+            loss, call ``advantage_norm.update(value_target)`` once per rollout
+            yourself. Mutually exclusive with ``normalize_advantage``.
+            Defaults to ``None``.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, i.e., gradients are propagated to shared
@@ -1767,6 +1799,7 @@ class KLPENPPOLoss(PPOLoss):
                 f"Make sure they are provided to {type(self).__name__}."
             ) from err
         advantage = tensordict_copy.get(self.tensor_keys.advantage, None)
+        update_norm = advantage is None
         if advantage is None:
             self.value_estimator(
                 tensordict_copy,
@@ -1774,7 +1807,9 @@ class KLPENPPOLoss(PPOLoss):
                 target_params=self.target_critic_network_params,
             )
             advantage = tensordict_copy.get(self.tensor_keys.advantage)
-        advantage = self._maybe_normalize_advantage(advantage, tensordict_copy)
+        advantage = self._maybe_normalize_advantage(
+            advantage, tensordict_copy, update_norm=update_norm
+        )
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
