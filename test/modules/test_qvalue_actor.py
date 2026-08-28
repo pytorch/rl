@@ -528,30 +528,25 @@ class TestQValue:
         qvalue_actor(td)
         assert td["action"].shape == torch.Size([12, 1])
 
-    def test_qvalue_actor_strict_shape_true_raises(self):
-        """Test that strict_shape=True raises on shape mismatch."""
+    @pytest.mark.parametrize(
+        "strict_shape_kwargs",
+        [{}, {"strict_shape": True}, {"strict_shape": None}],
+        ids=["default", "true", "legacy-none"],
+    )
+    def test_qvalue_actor_strict_shape_raises(self, strict_shape_kwargs):
+        """Test that the default and strict modes raise on shape mismatch."""
         action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
         module = TensorDictModule(
             module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
         )
         qvalue_actor = QValueActor(
-            module=module, in_keys=["observation"], spec=action_spec, strict_shape=True
+            module=module,
+            in_keys=["observation"],
+            spec=action_spec,
+            **strict_shape_kwargs,
         )
         td = TensorDict({"observation": torch.randn(12, 3)})
         with pytest.raises(RuntimeError, match="does not match expected shape"):
-            qvalue_actor(td)
-
-    def test_qvalue_actor_strict_shape_none_warns(self):
-        """Test that strict_shape=None (default) issues FutureWarning."""
-        action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
-        module = TensorDictModule(
-            module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
-        )
-        qvalue_actor = QValueActor(
-            module=module, in_keys=["observation"], spec=action_spec
-        )
-        td = TensorDict({"observation": torch.randn(12, 3)})
-        with pytest.warns(FutureWarning, match="does not match expected shape"):
             qvalue_actor(td)
 
     def test_qvalue_actor_strict_shape_normal_no_warning(self):
