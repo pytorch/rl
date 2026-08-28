@@ -528,30 +528,25 @@ class TestQValue:
         qvalue_actor(td)
         assert td["action"].shape == torch.Size([12, 1])
 
-    def test_qvalue_actor_strict_shape_true_raises(self):
-        """Test that strict_shape=True raises on shape mismatch."""
+    @pytest.mark.parametrize(
+        "strict_shape_kwargs",
+        [{}, {"strict_shape": True}, {"strict_shape": None}],
+        ids=["default", "true", "legacy-none"],
+    )
+    def test_qvalue_actor_strict_shape_raises(self, strict_shape_kwargs):
+        """Test that the default and strict modes raise on shape mismatch."""
         action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
         module = TensorDictModule(
             module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
         )
         qvalue_actor = QValueActor(
-            module=module, in_keys=["observation"], spec=action_spec, strict_shape=True
+            module=module,
+            in_keys=["observation"],
+            spec=action_spec,
+            **strict_shape_kwargs,
         )
         td = TensorDict({"observation": torch.randn(12, 3)})
         with pytest.raises(RuntimeError, match="does not match expected shape"):
-            qvalue_actor(td)
-
-    def test_qvalue_actor_strict_shape_none_warns(self):
-        """Test that strict_shape=None (default) issues FutureWarning."""
-        action_spec = Categorical(4, shape=torch.Size((1, 1)), dtype=torch.int64)
-        module = TensorDictModule(
-            module=nn.Linear(3, 1), in_keys=("observation",), out_keys=("action_value",)
-        )
-        qvalue_actor = QValueActor(
-            module=module, in_keys=["observation"], spec=action_spec
-        )
-        td = TensorDict({"observation": torch.randn(12, 3)})
-        with pytest.warns(FutureWarning, match="does not match expected shape"):
             qvalue_actor(td)
 
     def test_qvalue_actor_strict_shape_normal_no_warning(self):
@@ -573,6 +568,37 @@ class TestQValue:
             future_warns = [x for x in w if issubclass(x.category, FutureWarning)]
             assert len(future_warns) == 0
         assert td["action"].shape == torch.Size([5, 4])
+
+    def test_qvalue_module_strict_shape_nested_spec(self):
+        """Test that nested spec batch dimensions are not duplicated."""
+        spec = Composite(
+            agents=Composite(
+                action=Categorical(4, shape=(3,)),
+                shape=(3,),
+            )
+        )
+        module = QValueModule(
+            action_value_key=("agents", "action_value"),
+            out_keys=[
+                ("agents", "action"),
+                ("agents", "action_value"),
+                ("agents", "chosen_action_value"),
+            ],
+            spec=spec,
+        )
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"action_value": torch.randn(2, 3, 4)},
+                    [2, 3],
+                )
+            },
+            [2],
+        )
+
+        module(td)
+
+        assert td["agents", "action"].shape == torch.Size([2, 3])
 
 
 @pytest.mark.parametrize("device", get_default_devices())
