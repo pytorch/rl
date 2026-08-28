@@ -106,13 +106,15 @@ class FixedBatchedInference:
         self._num_buffers = 2 if double_buffer else 1
 
         self._staging: dict[int, list[TensorDictBase]] = {}
-        self._events: dict[int, list[torch.cuda.Event | None]] = {}
+        self._copy_events: dict[int, list[torch.cuda.Event | None]] = {}
         self._buf_idx: dict[int, int] = {}
 
         if self.device.type == "cuda":
-            self._stream = stream or torch.cuda.Stream(device=self.device)
+            self._copy_stream = torch.cuda.Stream(device=self.device)
+            self._compute_stream = stream or torch.cuda.Stream(device=self.device)
         else:
-            self._stream = None
+            self._copy_stream = None
+            self._compute_stream = None
 
         self._initialized = False
 
@@ -143,7 +145,7 @@ class FixedBatchedInference:
                     buf = template.clone().pin_memory()
                     ev = torch.cuda.Event()
                     # Pre-record so the first event.synchronize() is a no-op.
-                    ev.record(self._stream)
+                    ev.record(self._copy_stream)
                 else:
                     buf = template.clone()
                     ev = None
@@ -151,7 +153,7 @@ class FixedBatchedInference:
                 events.append(ev)
 
             self._staging[bucket] = buffers
-            self._events[bucket] = events
+            self._copy_events[bucket] = events
             self._buf_idx[bucket] = 0
 
         self._initialized = True
@@ -196,10 +198,10 @@ class FixedBatchedInference:
         bucket = self._pick_bucket(B)
         buf_idx = self._buf_idx[bucket]
         staging = self._staging[bucket][buf_idx]
-        event = self._events[bucket][buf_idx]
+        copy_event = self._copy_events[bucket][buf_idx]
 
-        if event is not None:
-            event.synchronize()
+        if copy_event is not None:
+            copy_event.synchronize()
 
         staging[:B].update_(batch.select(*tensor_keys))
 
@@ -211,12 +213,16 @@ class FixedBatchedInference:
             mask.fill_(False)
             mask[:B] = True
 
-        if self._stream is not None:
-            with torch.cuda.stream(self._stream):
+        if self._copy_stream is not None:
+            with torch.cuda.stream(self._copy_stream):
                 device_batch = staging.to(self.device, non_blocking=True)
-                new_event = torch.cuda.Event()
-                new_event.record(self._stream)
-                self._events[bucket][buf_idx] = new_event
+
+            new_copy_event = torch.cuda.Event()
+            new_copy_event.record(self._copy_stream)
+            self._copy_events[bucket][buf_idx] = new_copy_event
+
+            self._compute_stream.wait_stream(self._copy_stream)
+            with torch.cuda.stream(self._compute_stream):
                 output = self.policy(device_batch)
         else:
             device_batch = staging.to(self.device)
@@ -246,6 +252,6 @@ class FixedBatchedInference:
         loop finishes to free pinned memory promptly.
         """
         self._staging.clear()
-        self._events.clear()
+        self._copy_events.clear()
         self._buf_idx.clear()
         self._initialized = False
