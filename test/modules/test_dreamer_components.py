@@ -7,20 +7,28 @@ from __future__ import annotations
 import argparse
 import copy
 import functools as ft
+import importlib.util
 from unittest import mock
 
 import pytest
 import torch
 from packaging import version
+from pyvers import implement_for
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from torch.nn import functional as F
 from torchrl.data.tensor_specs import Bounded
 from torchrl.modules import SafeModule
+from torchrl.modules.models._dreamer_v3_block_gru_triton import (
+    _has_triton as _has_dreamer_v3_triton,
+)
 from torchrl.modules.models.model_based import (
     _DreamerV3BlockLinear,
     _DreamerV3RMSNorm,
     _straight_through_categorical,
     DreamerActor,
+    DreamerV3BlockGRU,
+    DreamerV3BlockGRUCell,
     DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
@@ -32,6 +40,9 @@ from torchrl.modules.models.model_based import (
     RSSMRolloutV3,
 )
 from torchrl.testing import get_default_devices
+
+
+_has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -405,6 +416,214 @@ class TestDreamerV3Components:
         )
         assert sampled_state.shape == (1, 4)
 
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+    @pytest.mark.parametrize(("num_blocks", "batch", "time"), [(1, 1, 1), (8, 3, 5)])
+    def test_public_block_gru_sequence_forward_parity(
+        self, device, dtype, num_blocks, batch, time
+    ):
+        torch.manual_seed(0)
+        kwargs = {
+            "input_size": 6,
+            "hidden_size": 8,
+            "projection_size": 4,
+            "num_blocks": num_blocks,
+            "num_layers": 2,
+            "activation_class": torch.nn.Tanh if num_blocks == 1 else torch.nn.SiLU,
+            "device": device,
+        }
+        reference = DreamerV3BlockGRU(**kwargs)
+        scan = DreamerV3BlockGRU(**kwargs, recurrent_backend="scan")
+        scan.load_state_dict(reference.state_dict())
+        cell = DreamerV3BlockGRUCell(**kwargs)
+        cell.load_state_dict(reference.cell.state_dict())
+        value = torch.randn(batch, time, 6, device=device, dtype=dtype)
+        initial = torch.randn(batch, 8, device=device, dtype=dtype)
+        is_init = torch.zeros(batch, time, 1, device=device, dtype=torch.bool)
+        if time > 1:
+            is_init[0, 2] = True
+            is_init[-1, 0] = True
+
+        expected, expected_final = reference(value, initial, is_init)
+        actual, actual_final = scan(value, initial, is_init)
+
+        hidden = initial
+        cell_outputs = []
+        for value_t, init_t in zip(value.unbind(1), is_init.unbind(1)):
+            hidden = torch.where(init_t, 0, hidden)
+            hidden = cell(value_t, hidden)
+            cell_outputs.append(hidden)
+        cell_output = torch.stack(cell_outputs, 1)
+
+        tolerance = {"atol": 2e-2, "rtol": 2e-2} if dtype is torch.bfloat16 else {}
+        torch.testing.assert_close(actual, expected, **tolerance)
+        torch.testing.assert_close(actual_final, expected_final, **tolerance)
+        torch.testing.assert_close(cell_output, expected, **tolerance)
+        if time == 1:
+            default_output, default_final = reference(value)
+            zero_output, zero_final = reference(
+                value, torch.zeros_like(initial), torch.zeros_like(is_init)
+            )
+            torch.testing.assert_close(default_output, zero_output, **tolerance)
+            torch.testing.assert_close(default_final, zero_final, **tolerance)
+
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+    @pytest.mark.parametrize("num_blocks", [1, 8])
+    def test_public_block_gru_sequence_gradient_parity(self, device, dtype, num_blocks):
+        torch.manual_seed(1)
+        kwargs = {
+            "input_size": 6,
+            "hidden_size": 8,
+            "projection_size": 4,
+            "num_blocks": num_blocks,
+            "num_layers": 2,
+            "activation_class": torch.nn.Tanh if num_blocks == 1 else torch.nn.SiLU,
+            "device": device,
+        }
+        reference = DreamerV3BlockGRU(**kwargs)
+        scan = DreamerV3BlockGRU(**kwargs, recurrent_backend="scan")
+        scan.load_state_dict(reference.state_dict())
+        value_source = torch.randn(3, 5, 6, device=device, dtype=dtype)
+        hidden_source = torch.randn(3, 8, device=device, dtype=dtype)
+        is_init = torch.tensor(
+            [
+                [False, False, True, False, False],
+                [True, False, False, False, True],
+                [False, False, False, False, False],
+            ],
+            device=device,
+        )
+        output_cotangent = torch.randn(3, 5, 8, device=device, dtype=dtype) / (
+            3 * 5 * 8
+        )
+        hidden_cotangent = torch.randn(3, 8, device=device, dtype=dtype) / (3 * 8)
+
+        def run(module):
+            value = value_source.detach().clone().requires_grad_()
+            hidden = hidden_source.detach().clone().requires_grad_()
+            output, final_hidden = module(value, hidden, is_init)
+            loss = (output * output_cotangent).float().sum() + (
+                final_hidden * hidden_cotangent
+            ).float().sum()
+            loss.backward()
+            return (
+                output.detach(),
+                final_hidden.detach(),
+                value.grad,
+                hidden.grad,
+                {name: parameter.grad for name, parameter in module.named_parameters()},
+            )
+
+        expected = run(reference)
+        actual = run(scan)
+        tolerance = (
+            {"atol": 3e-2, "rtol": 5e-2}
+            if dtype is torch.bfloat16
+            else {"atol": 2e-5, "rtol": 2e-5}
+        )
+        for expected_value, actual_value in zip(expected[:4], actual[:4]):
+            torch.testing.assert_close(actual_value, expected_value, **tolerance)
+        assert actual[4].keys() == expected[4].keys()
+        for name in expected[4]:
+            torch.testing.assert_close(actual[4][name], expected[4][name], **tolerance)
+
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_public_block_gru_scan_compile_recurrent_loss(self):
+        module = DreamerV3BlockGRU(
+            6,
+            8,
+            projection_size=4,
+            num_blocks=2,
+            num_layers=2,
+            recurrent_backend="scan",
+        )
+        compiled = torch.compile(module, fullgraph=True)
+        value = torch.randn(2, 5, 6, requires_grad=True)
+        hidden = torch.randn(2, 8, requires_grad=True)
+        is_init = torch.tensor(
+            [[False, False, True, False, False], [True, False, False, False, True]]
+        )
+
+        output, final_hidden = compiled(value, hidden, is_init)
+        prediction = output[:, :-1, :6]
+        target = value.detach()[:, 1:]
+        loss = (
+            F.smooth_l1_loss(prediction, target) + 0.01 * final_hidden.square().mean()
+        )
+        loss.backward()
+
+        assert value.grad is not None
+        assert hidden.grad is not None
+        assert all(parameter.grad is not None for parameter in module.parameters())
+
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_public_block_gru_scan_double_backward_raises(self):
+        torch.manual_seed(0)
+        module = DreamerV3BlockGRU(
+            6,
+            8,
+            projection_size=4,
+            num_blocks=2,
+            recurrent_backend="scan",
+        )
+        value = torch.randn(2, 5, 6, requires_grad=True)
+        is_init = torch.zeros(2, 5, dtype=torch.bool)
+        output, _ = module(value, torch.zeros(2, 8), is_init)
+        cotangent = torch.randn_like(output).requires_grad_()
+        (grad,) = torch.autograd.grad(
+            output, value, grad_outputs=cotangent, create_graph=True
+        )
+        with pytest.raises(
+            RuntimeError, match="differentiate twice|does not require grad"
+        ):
+            grad.sum().backward()
+
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_public_block_gru_scan_mixed_dtype_promotes(self):
+        torch.manual_seed(0)
+        kwargs = {
+            "input_size": 6,
+            "hidden_size": 8,
+            "projection_size": 4,
+            "num_blocks": 2,
+        }
+        reference = DreamerV3BlockGRU(**kwargs)
+        scan_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(reference.state_dict())
+        value = torch.randn(2, 5, 6, dtype=torch.bfloat16)
+        hidden = torch.randn(2, 8)
+        is_init = torch.zeros(2, 5, dtype=torch.bool)
+        is_init[1, 2] = True
+        expected_output, expected_hidden = reference(value, hidden, is_init)
+        output, final_hidden = scan_module(value, hidden, is_init)
+        assert output.dtype == expected_output.dtype
+        assert final_hidden.dtype == expected_hidden.dtype
+        torch.testing.assert_close(output, expected_output, atol=2e-5, rtol=2e-5)
+        torch.testing.assert_close(final_hidden, expected_hidden, atol=2e-5, rtol=2e-5)
+
     @pytest.mark.parametrize("device", get_default_devices())
     def test_block_gru_action_normalization_and_gradients(self, device):
         prior = RSSMPriorV3(
@@ -587,6 +806,10 @@ class TestDreamerV3Components:
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("unroll", [1, 3, 8])
+    @pytest.mark.skipif(
+        version.parse(torch.__version__) < version.parse("2.6.0"),
+        reason="the higher-order scan backend requires Torch >= 2.6.0",
+    )
     def test_rssm_rollout_higher_order_scan_matches_loop(self, device, unroll):
         scan_rollout = self._make_rollout(device)
         loop_rollout = copy.deepcopy(scan_rollout)
@@ -618,8 +841,17 @@ class TestDreamerV3Components:
                 scan_gradient, loop_gradient, atol=2e-4, rtol=5e-5
             )
 
-    @pytest.mark.parametrize("scope", ["step", "scan"])
+    @implement_for("torch", None, "2.6.0", compilable=True)
+    @pytest.mark.parametrize("scope", ["step"])
     def test_rssm_rollout_compile(self, scope):
+        self._test_rssm_rollout_compile(scope)
+
+    @implement_for("torch", "2.6.0", compilable=True)
+    @pytest.mark.parametrize("scope", ["step", "scan"])
+    def test_rssm_rollout_compile(self, scope):  # noqa: F811
+        self._test_rssm_rollout_compile(scope)
+
+    def _test_rssm_rollout_compile(self, scope):
         rollout = self._make_rollout(torch.device("cpu"))
         data = self._make_rollout_data(torch.device("cpu"))
         rollout.compile_rollout(scope, unroll=3 if scope == "scan" else 1)
@@ -630,6 +862,212 @@ class TestDreamerV3Components:
             + output["next", "prior_logits"].square().mean()
         ).backward()
         assert all(parameter.grad is not None for parameter in rollout.parameters())
+
+
+def test_public_block_gru_triton_errors():
+    with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", False):
+        with pytest.raises(RuntimeError, match="requires Triton"):
+            DreamerV3BlockGRU(6, 8, recurrent_backend="triton")
+
+    class CustomActivation(torch.nn.Module):
+        def forward(self, value):
+            return value.sigmoid()
+
+    with mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", True):
+        with pytest.raises(ValueError, match="supports nn.SiLU, nn.Tanh, and nn.ReLU"):
+            DreamerV3BlockGRU(
+                6,
+                8,
+                projection_size=4,
+                num_blocks=2,
+                activation_class=CustomActivation,
+                recurrent_backend="triton",
+            )
+
+    with (
+        mock.patch("torchrl.modules.models.model_based._has_dreamer_v3_triton", True),
+        mock.patch(
+            "torchrl.modules.models._dreamer_v3_block_gru_triton._has_triton", True
+        ),
+    ):
+        module = DreamerV3BlockGRU(
+            6,
+            8,
+            projection_size=4,
+            num_blocks=2,
+            recurrent_backend="triton",
+        )
+        with pytest.raises(RuntimeError, match="requires CUDA tensors"):
+            module(torch.randn(2, 3, 6))
+        with pytest.raises(
+            ValueError, match="supports torch.float32 and torch.bfloat16"
+        ):
+            module(
+                torch.randn(2, 3, 6, dtype=torch.float64),
+                torch.zeros(2, 8, dtype=torch.float64),
+            )
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+@pytest.mark.parametrize(
+    (
+        "activation_class",
+        "num_blocks",
+        "num_layers",
+        "batch",
+        "time",
+        "dtype",
+        "projection_size",
+    ),
+    [
+        (torch.nn.SiLU, 1, 1, 1, 1, torch.float32, 32),
+        (torch.nn.Tanh, 8, 2, 2, 3, torch.float32, 24),
+        (torch.nn.ReLU, 8, 1, 3, 2, torch.bfloat16, 32),
+        (torch.nn.SiLU, 8, 2, 2, 3, torch.bfloat16, 24),
+        (torch.nn.SiLU, 4, 1, 2, 3, torch.float32, 48),
+    ],
+)
+def test_public_block_gru_triton_gradient_parity(
+    activation_class, num_blocks, num_layers, batch, time, dtype, projection_size
+):
+    torch.manual_seed(0)
+    kwargs = {
+        "input_size": 12,
+        "hidden_size": 32,
+        "projection_size": projection_size,
+        "num_blocks": num_blocks,
+        "num_layers": num_layers,
+        "activation_class": activation_class,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    triton_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    triton_module.load_state_dict(reference.state_dict())
+    value_source = torch.randn(batch, time, 12, device="cuda", dtype=dtype)
+    hidden_source = torch.randn(batch, 32, device="cuda", dtype=dtype)
+    is_init = torch.zeros(batch, time, dtype=torch.bool, device="cuda")
+    if time > 1:
+        is_init[0, 1] = True
+        is_init[-1, 0] = True
+    output_cotangent = torch.randn(batch, time, 32, device="cuda", dtype=dtype) / (
+        batch * time * 32
+    )
+    hidden_cotangent = torch.randn(batch, 32, device="cuda", dtype=dtype) / (batch * 32)
+
+    def run(module):
+        value = value_source.detach().clone().requires_grad_()
+        hidden = hidden_source.detach().clone().requires_grad_()
+        output, final_hidden = module(value, hidden, is_init)
+        loss = (output * output_cotangent).float().sum() + (
+            final_hidden * hidden_cotangent
+        ).float().sum()
+        loss.backward()
+        return (
+            output.detach(),
+            final_hidden.detach(),
+            value.grad,
+            hidden.grad,
+            {name: parameter.grad for name, parameter in module.named_parameters()},
+        )
+
+    expected = run(reference)
+    actual = run(triton_module)
+    tolerance = (
+        {"atol": 4e-2, "rtol": 6e-2}
+        if dtype is torch.bfloat16
+        else {"atol": 3e-4, "rtol": 3e-4}
+    )
+    for expected_value, actual_value in zip(expected[:4], actual[:4]):
+        torch.testing.assert_close(actual_value, expected_value, **tolerance)
+    assert actual[4].keys() == expected[4].keys()
+    for name in expected[4]:
+        torch.testing.assert_close(actual[4][name], expected[4][name], **tolerance)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+def test_public_block_gru_triton_compile_recurrent_loss():
+    torch.manual_seed(1)
+    kwargs = {
+        "input_size": 16,
+        "hidden_size": 32,
+        "projection_size": 32,
+        "num_blocks": 8,
+        "num_layers": 2,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    module.load_state_dict(reference.state_dict())
+    compiled = torch.compile(
+        module, fullgraph=True, dynamic=False, mode="reduce-overhead"
+    )
+    value_source = torch.randn(2, 5, 16, device="cuda", requires_grad=True)
+    hidden_source = torch.randn(2, 32, device="cuda", requires_grad=True)
+    is_init = torch.tensor(
+        [[False, False, True, False, False], [True, False, False, False, True]],
+        device="cuda",
+    )
+
+    def run(candidate, value, hidden):
+        output, final_hidden = candidate(value, hidden, is_init)
+        loss = F.smooth_l1_loss(output[:, :-1, :16], value.detach()[:, 1:])
+        loss = loss + 0.01 * final_hidden.square().mean()
+        loss.backward()
+        return output.detach(), final_hidden.detach()
+
+    expected_value = value_source.detach().clone().requires_grad_()
+    expected_hidden = hidden_source.detach().clone().requires_grad_()
+    expected = run(reference, expected_value, expected_hidden)
+    actual = run(compiled, value_source, hidden_source)
+    torch.testing.assert_close(actual, expected, atol=3e-4, rtol=3e-4)
+    torch.testing.assert_close(
+        value_source.grad, expected_value.grad, atol=3e-4, rtol=3e-4
+    )
+    torch.testing.assert_close(
+        hidden_source.grad, expected_hidden.grad, atol=3e-4, rtol=3e-4
+    )
+    for parameter, expected_parameter in zip(
+        module.parameters(), reference.parameters()
+    ):
+        torch.testing.assert_close(
+            parameter.grad, expected_parameter.grad, atol=3e-4, rtol=3e-4
+        )
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or not _has_dreamer_v3_triton,
+    reason="DreamerV3 Triton backend requires CUDA and Triton 3.3+",
+)
+def test_public_block_gru_triton_mixed_dtype_promotes():
+    torch.manual_seed(2)
+    kwargs = {
+        "input_size": 8,
+        "hidden_size": 16,
+        "projection_size": 12,
+        "num_blocks": 2,
+        "device": "cuda",
+    }
+    reference = DreamerV3BlockGRU(**kwargs)
+    triton_module = DreamerV3BlockGRU(**kwargs, recurrent_backend="triton")
+    triton_module.load_state_dict(reference.state_dict())
+    value = torch.randn(2, 3, 8, device="cuda", dtype=torch.bfloat16)
+    hidden = torch.randn(2, 16, device="cuda")
+    is_init = torch.zeros(2, 3, dtype=torch.bool, device="cuda")
+    expected_output, expected_hidden = reference(value, hidden, is_init)
+    output, final_hidden = triton_module(value, hidden, is_init)
+    assert output.dtype == expected_output.dtype
+    assert final_hidden.dtype == expected_hidden.dtype
+    torch.testing.assert_close(output, expected_output, atol=3e-4, rtol=3e-4)
+    torch.testing.assert_close(final_hidden, expected_hidden, atol=3e-4, rtol=3e-4)
 
 
 if __name__ == "__main__":

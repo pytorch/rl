@@ -20,7 +20,6 @@ from _objectives_common import (
     MARLEnv,
 )
 
-from packaging import version as pack_version
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     composite_lp_aggregate,
@@ -2172,13 +2171,12 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
     )
+    @pytest.mark.skip(reason="make_functional_with_buffers needs to be changed")
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_a2c_diff(self, device, gradient_mode, advantage, composite_action_dist):
-        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
-            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(
             device=device, composite_action_dist=composite_action_dist

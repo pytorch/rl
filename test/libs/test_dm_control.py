@@ -17,7 +17,7 @@ from torchrl.collectors import Collector
 from torchrl.envs import EnvCreator
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.modules import RandomPolicy
 from torchrl.testing import HALFCHEETAH_VERSIONED, PONG_VERSIONED
@@ -260,15 +260,6 @@ if _has_gym:
 )
 @pytest.mark.parametrize("env_lib,env_args,env_kwargs", params)
 def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
-    if (
-        _has_gym
-        and version.parse(gym_backend().__version__) < version.parse("0.26.0")
-        and env_kwargs.get("from_pixels", False)
-        and torch.cuda.device_count() == 0
-    ):
-        raise pytest.skip(
-            "Skipping test as rendering is not supported in tests before gym 0.26."
-        )
     env = env_lib(*env_args, **env_kwargs)
     td = env.rollout(max_steps=5)
     td0 = td[0]
