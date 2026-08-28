@@ -250,7 +250,8 @@ Task-Specific Environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We provide a few task-specific environments, such as :class:`~torchrl.envs.llm.GSM8KEnv` for the GSM8K dataset,
-:class:`~torchrl.envs.llm.IFEvalEnv` for the IFEval dataset, and :class:`~torchrl.envs.llm.MLGymEnv` for MLGym integration.
+:class:`~torchrl.envs.llm.IFEvalEnv` for the IFEval dataset, :class:`~torchrl.envs.llm.MLGymEnv` for MLGym integration,
+and :class:`~torchrl.envs.llm.OpenEnvChatEnv` for OpenEnv agentic execution environments.
 
 These environments wrap a :class:`~torchrl.envs.llm.ChatEnv` and add a :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` transform
 (plus an optional reward parsing transform) in a :class:`~torchrl.envs.transforms.TransformedEnv` class.
@@ -275,6 +276,7 @@ These environments wrap a :class:`~torchrl.envs.llm.ChatEnv` and add a :class:`~
     LLMHashingEnv
     make_mlgym
     MLGymWrapper
+    OpenEnvChatEnv
     GSM8KRewardParser
 
 Transforms
