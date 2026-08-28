@@ -20,21 +20,22 @@ class FixedBatchedInference:
 
     Accepts variable-size observation batches from
     :meth:`~torchrl.envs.AsyncEnvPool.async_step_and_maybe_reset_recv`, pads
-    them to a fixed *bucket* size, and runs the policy via a dedicated CUDA
-    stream with double-buffered pinned-memory staging.  This makes the policy
-    forward pass compatible with :func:`torch.compile` / CUDA graphs (which
+    them to a fixed *bucket* size, and runs the policy via dedicated CUDA
+    streams with double-buffered pinned-memory staging.  This makes the policy
+    forward pass compatible with :func:`torch.compile` and CUDA graphs (which
     require fixed input shapes) while keeping the data-plane copy overlapped
     with the previous GPU forward pass.
 
-    The helper is stateless between episodes; it is safe to reuse across
-    multiple collection loops.
+    The helper retains reusable staging buffers but no episode-specific state,
+    so it is safe to reuse across collection loops.
 
     Args:
         policy (Callable): a callable that maps a batched
             :class:`~tensordict.TensorDictBase` to a batched
             :class:`~tensordict.TensorDictBase` (e.g. a
-            :class:`~tensordict.nn.TensorDictModule`). The caller is responsible
-            for placing module policies on their intended device or devices.
+            :class:`~tensordict.nn.TensorDictModule`). The caller is
+            responsible for placing module policies on their intended device
+            or devices.
         device (torch.device or str): the device used for staged policy inputs
             and CUDA streams. For policies spanning multiple devices, this is
             the device on which the policy expects its input.
@@ -53,33 +54,43 @@ class FixedBatchedInference:
             policy.  Rows corresponding to real observations are ``True``;
             padding rows are ``False``.  The key is stripped from the output
             returned to the caller.
-        stream (torch.cuda.Stream or None): CUDA stream for the async H2D
-            transfer and the policy forward pass.  ``None`` (default) creates
-            a fresh dedicated stream on *device*.  Ignored when *device* is CPU.
+        stream (torch.cuda.Stream or None): CUDA stream to use for the policy
+            forward pass (the *compute* stream).  ``None`` (default) creates a
+            fresh dedicated stream on *device*.  A separate internal copy stream
+            is always created for the async H2D transfer so that H2D and compute
+            can genuinely overlap.  Ignored when *device* is CPU.
+
+    .. note::
+        Non-tensor metadata keys (e.g. ``"env_index"``) are automatically
+        routed around the pinned staging buffer and reattached to the output,
+        so they are always preserved. Nested
+        :class:`~tensordict.TensorDictBase` values are correctly identified as
+        tensor data and included in staging.
 
     .. note::
         Initialisation is *lazy*: pinned staging buffers and CUDA events are
         allocated from the first incoming batch, so no spec information needs
         to be provided up front.
 
-    Example:
-        >>> from functools import partial
+    Examples:
         >>> import torch
-        >>> import torch.nn as nn
+        >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.envs import AsyncEnvPool, GymEnv
-        >>> from torchrl.envs.batched_inference import FixedBatchedInference
+        >>> from torchrl.envs import FixedBatchedInference
         >>> policy = TensorDictModule(
-        ...     nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
-        ... ).to("cuda:0")
+        ...     torch.nn.Linear(4, 2),
+        ...     in_keys=["observation"],
+        ...     out_keys=["action"],
+        ... )
         >>> helper = FixedBatchedInference(
-        ...     policy, device="cuda:0", bucket_sizes=[8, 16, 32, 64]
+        ...     policy, device="cpu", bucket_sizes=[8]
         ... )
-        >>> pool = AsyncEnvPool(
-        ...     [partial(GymEnv, "CartPole-v1")] * 16,
-        ...     backend="multiprocessing",
-        ...     exchange="shm",
+        >>> batch = TensorDict(
+        ...     {"observation": torch.randn(3, 4)}, batch_size=[3]
         ... )
+        >>> result = helper(batch)
+        >>> assert result.batch_size == torch.Size([3])
+        >>> assert result["action"].shape == torch.Size([3, 2])
     """
 
     _MASK_KEY = "valid_mask"

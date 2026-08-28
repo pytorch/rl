@@ -376,6 +376,8 @@ Classes
   thread, and provides methods for asynchronous stepping and resetting of environments using a thread pool executor.
   It is automatically instantiated when `"threading"` is passed as a backend during the
   :class:`~torchrl.envs.AsyncEnvPool` instantiation.
+- :class:`~torchrl.envs.FixedBatchedInference`: Pads variable-size batches from an
+  :class:`~torchrl.envs.AsyncEnvPool` to configured fixed batch sizes for policy inference.
 
 Example
 ~~~~~~~
@@ -413,5 +415,6 @@ Example
     :template: rl_template.rst
 
     AsyncEnvPool
+    FixedBatchedInference
     ProcessorAsyncEnvPool
     ThreadingAsyncEnvPool
