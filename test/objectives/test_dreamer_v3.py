@@ -1600,6 +1600,32 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         torch.testing.assert_close(loss_module.return_low, expected_statistics[0])
         torch.testing.assert_close(loss_module.return_high, expected_statistics[1])
 
+    def test_dreamer_v3_legacy_retnorm_checkpoint_migrates(self, device):
+        """Checkpoints written before the retnorm refactor stored 0-dim
+        ``return_low`` / ``return_high`` buffers; loading them must fill the
+        ``retnorm`` statistics without strict-mode key errors."""
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model_with_log_prob().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            use_reinforce=True,
+        ).to(device)
+        legacy_checkpoint = {
+            key: value.detach().clone()
+            for key, value in loss_module.state_dict().items()
+            if key not in ("retnorm.low", "retnorm.high")
+        }
+        legacy_checkpoint["return_low"] = torch.tensor(-2.5, device=device)
+        legacy_checkpoint["return_high"] = torch.tensor(7.5, device=device)
+        loss_module.load_state_dict(legacy_checkpoint)
+        torch.testing.assert_close(
+            loss_module.retnorm.low, torch.tensor([-2.5], device=device)
+        )
+        torch.testing.assert_close(
+            loss_module.retnorm.high, torch.tensor([7.5], device=device)
+        )
+
     def test_dreamer_v3_value_loss_sync_gamma(self, device):
         """sync_gamma_with_actor_loss must pull gamma from the actor's value estimator."""
         mb_env = self._create_mb_env().to(device)

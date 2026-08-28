@@ -114,7 +114,12 @@ from .tensordict_module.exploration import (
     set_exploration_modules_spec_from_env,
 )
 from .utils import get_env_transforms_from_module, get_primers_from_module
-from .value_norm import PopArtValueNorm, RunningValueNorm, ValueNorm
+from .value_norm import (
+    PercentileValueNorm,
+    PopArtValueNorm,
+    RunningValueNorm,
+    ValueNorm,
+)
 from .value_transforms import (
     ComposeValueTransform,
     IdentityValueTransform,
@@ -207,6 +212,7 @@ __all__ = [
     "Ordinal",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
+    "PercentileValueNorm",
     "PopArtValueNorm",
     "ProbabilisticActor",
     "PUCTScore",
