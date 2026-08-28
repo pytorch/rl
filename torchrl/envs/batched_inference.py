@@ -203,6 +203,15 @@ class FixedBatchedInference:
         if copy_event is not None:
             copy_event.synchronize()
 
+        expected_tensor_keys = set(staging.keys()) - (
+            {self._MASK_KEY} if self.add_valid_mask else set()
+        )
+        if set(tensor_keys) != expected_tensor_keys:
+            raise ValueError(
+                f"Tensor keys changed after staging initialisation: expected "
+                f"{sorted(expected_tensor_keys)}, got {sorted(tensor_keys)}."
+            )
+
         staging[:B].update_(batch.select(*tensor_keys))
 
         if B < bucket:

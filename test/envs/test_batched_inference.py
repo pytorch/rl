@@ -149,6 +149,16 @@ class TestCPUHotPath:
 
         assert out["action"].shape == torch.Size([3, 2])
 
+    def test_changed_keys_raise_instead_of_reusing_stale_values(self):
+        helper = self._make_helper()
+        helper(_make_batch(3))
+        changed_batch = TensorDict(
+            {"unrelated": torch.randn(3, 4)}, batch_size=[3]
+        )
+
+        with pytest.raises(ValueError, match="Tensor keys changed"):
+            helper(changed_batch)
+
 
 class TestDoubleBuffer:
     def test_buf_idx_advances(self):
