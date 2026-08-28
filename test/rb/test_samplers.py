@@ -731,6 +731,27 @@ class TestSamplers:
         assert torch.equal(incremental["index"], rebuilt["index"])
         assert torch.equal(incremental["trajectory"], rebuilt["trajectory"])
 
+    def test_slice_sampler_fragmented_span_guard(self):
+        # A disabled span must be accepted in every equivalent spelling; an
+        # enabled one must be rejected.
+        for span in (False, 0, (0, 0), (False, False)):
+            SliceSampler(
+                slice_len=2,
+                traj_key="trajectory",
+                step_key="step",
+                fragmented=True,
+                span=span,
+            )
+        for span in (True, 1, (0, 1), (True, False)):
+            with pytest.raises(NotImplementedError, match="span"):
+                SliceSampler(
+                    slice_len=2,
+                    traj_key="trajectory",
+                    step_key="step",
+                    fragmented=True,
+                    span=span,
+                )
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)

@@ -377,6 +377,8 @@ class SliceSampler(Sampler):
         span: bool | int | tuple[bool | int, bool | int] = False,
         use_gpu: torch.device | bool = False,
     ):
+        if isinstance(span, (bool, int)):
+            span = (span, span)
         if fragmented:
             if type(self).sample is not SliceSampler.sample:
                 raise NotImplementedError(
@@ -396,7 +398,7 @@ class SliceSampler(Sampler):
                     "The static trajectories argument is not supported with "
                     "fragmented=True; provide traj_key and step_key."
                 )
-            if span:
+            if any(span):
                 raise NotImplementedError("span is not supported with fragmented=True.")
             if compile:
                 raise NotImplementedError(
@@ -443,8 +445,6 @@ class SliceSampler(Sampler):
             )
         )
 
-        if isinstance(span, (bool, int)):
-            span = (span, span)
         self.span = span
 
         if trajectories is not None:
