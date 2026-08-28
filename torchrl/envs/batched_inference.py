@@ -238,7 +238,10 @@ class FixedBatchedInference:
             caller_stream = torch.cuda.current_stream(self.device)
             caller_stream.wait_stream(self._compute_stream)
         else:
-            device_batch = staging.to(self.device)
+            if self.device.type == "cpu":
+                device_batch = staging.clone()
+            else:
+                device_batch = staging.to(self.device)
             output = self.policy(device_batch)
 
         self._buf_idx[bucket] = (buf_idx + 1) % self._num_buffers

@@ -159,6 +159,20 @@ class TestCPUHotPath:
         with pytest.raises(ValueError, match="Tensor keys changed"):
             helper(changed_batch)
 
+    def test_output_does_not_alias_reused_staging(self):
+        policy = TensorDictModule(
+            torch.nn.Identity(), in_keys=["obs"], out_keys=["action"]
+        )
+        helper = FixedBatchedInference(
+            policy, "cpu", bucket_sizes=[4], double_buffer=False
+        )
+        first = helper(TensorDict({"obs": torch.zeros(3, 4)}, batch_size=[3]))
+        expected = first["action"].clone()
+
+        helper(TensorDict({"obs": torch.ones(3, 4)}, batch_size=[3]))
+
+        torch.testing.assert_close(first["action"], expected)
+
 
 class TestDoubleBuffer:
     def test_buf_idx_advances(self):
