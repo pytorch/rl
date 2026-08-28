@@ -7,8 +7,7 @@ TRL Interoperability: Using TorchRL Buffers and HF Reward Models Together
 **Author**: TorchRL contributors
 
 This tutorial demonstrates how to bridge TorchRL and Hugging Face ``trl``
-using the two adapter classes introduced in Workstream 2 of the post-training
-RFC (:ref:`trl_interop_section`):
+using the adapter classes documented in :ref:`trl_interop_section`:
 
 * :class:`~torchrl.modules.llm.TorchRLBufferDataset`: expose replay samples as
   PyTorch or Hugging Face iterable datasets.

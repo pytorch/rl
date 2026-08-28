@@ -527,6 +527,7 @@ collector = Collector(
     total_frames=total_frames,
     split_trajs=False,
     device=device,
+    auto_register_policy_transforms=True,
 )
 
 ######################################################################

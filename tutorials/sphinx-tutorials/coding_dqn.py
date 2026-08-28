@@ -304,6 +304,14 @@ def get_norm_stats():
 # values, pick up the one with the maximum value and write all those results
 # in the input :class:`tensordict.TensorDict`.
 #
+# The network's final dimension contains one value per discrete choice, while
+# the action spec describes the action written to the TensorDict. A categorical
+# spec therefore represents a scalar action, whereas a one-hot spec includes
+# the choice dimension in its shape. :class:`~torchrl.modules.QValueActor`
+# validates that contract through ``strict_shape=True``. Use
+# ``strict_shape="auto"`` when a compatible output should be reshaped, or
+# ``strict_shape=False`` only when another component owns the shape contract.
+#
 
 
 def make_model(dummy_env):
@@ -453,6 +461,7 @@ def get_collector(
         device=device,
         storing_device=device,
         split_trajs=False,
+        auto_register_policy_transforms=True,
         postproc=MultiStep(gamma=gamma, n_steps=5),
         **backend_kwargs,
     )
