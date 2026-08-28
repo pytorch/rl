@@ -15,18 +15,26 @@ World Models and Model-Based RL
 ===============================
 
 Modules for model-based reinforcement learning, including world models and dynamics models.
+For an overview of how the DreamerV3 components fit together, see
+:doc:`DreamerV3 in a nutshell <dreamer_v3>`.
 
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    WorldModel
     WorldModelWrapper
     DreamerActor
     ObsEncoder
     ObsDecoder
     RSSMPosterior
+    RSSMPosteriorV3
     RSSMPrior
+    RSSMPriorV3
     RSSMRollout
+    RSSMRolloutV3
+    SymExpTwoHot
+    DreamerV3MLP
 
 PILCO
 -----

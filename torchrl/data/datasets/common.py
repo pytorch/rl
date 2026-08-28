@@ -70,11 +70,33 @@ class BaseDatasetExperienceReplay(TensorDictReplayBuffer):
 
         The data transform must be unitary (work on a single sample of the dataset).
 
-        Args and Keyword Args are forwarded to :meth:`~tensordict.TensorDictBase.map`.
-
         The dataset can subsequently be deleted using :meth:`delete`.
 
+        Args:
+            fn (Callable[[TensorDictBase], TensorDictBase]): transform to apply to each sample.
+            dim (int, optional): dimension along which the dataset is mapped. Defaults to ``0``.
+            num_workers (int, optional): number of worker processes to use.
+                Defaults to ``None``.
+
         Keyword Args:
+            chunksize (int, optional): chunk size forwarded to
+                :meth:`~tensordict.TensorDictBase.map`.
+            num_chunks (int, optional): number of chunks forwarded to
+                :meth:`~tensordict.TensorDictBase.map`.
+            pool (multiprocessing.Pool, optional): worker pool forwarded to
+                :meth:`~tensordict.TensorDictBase.map`.
+            generator (torch.Generator, optional): random generator forwarded to
+                :meth:`~tensordict.TensorDictBase.map`.
+            max_tasks_per_child (int, optional): maximum number of tasks per child
+                process forwarded to :meth:`~tensordict.TensorDictBase.map`.
+            worker_threads (int, optional): number of threads per worker forwarded to
+                :meth:`~tensordict.TensorDictBase.map`. Defaults to ``1``.
+            index_with_generator (bool, optional): whether to index with the generator
+                when mapping. Defaults to ``False``.
+            pbar (bool, optional): whether to display a progress bar. Defaults to
+                ``False``.
+            mp_start_method (str, optional): multiprocessing start method forwarded to
+                :meth:`~tensordict.TensorDictBase.map`.
             dest (path or equivalent): a path to the location of the new dataset.
             num_frames (int, optional): if provided, only the first `num_frames` will be
                 transformed. This is useful to debug the transform at first.

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from omegaconf import MISSING
-from torchrl.envs.libs.gym import set_gym_backend
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms.transforms import DoubleToFloat
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
@@ -41,6 +41,8 @@ class GymEnvConfig(EnvLibsConfig):
     disable_env_checker: bool | None = None
     render_mode: str | None = None
     num_envs: int = 0
+    num_workers: int = 1
+    double_to_float: bool = False
     backend: str = "gymnasium"
     _target_: str = "torchrl.trainers.algorithms.configs.envs_libs.make_gym_env"
 
@@ -55,7 +57,7 @@ def make_gym_env(
     from_pixels: bool = False,
     double_to_float: bool = False,
     **kwargs,
-):
+) -> GymEnv:
     """Create a Gym/Gymnasium environment.
 
     Args:
@@ -67,8 +69,6 @@ def make_gym_env(
     Returns:
         The created environment instance.
     """
-    from torchrl.envs.libs.gym import GymEnv
-
     if backend is not None:
         with set_gym_backend(backend):
             env = GymEnv(env_name, from_pixels=from_pixels, **kwargs)
@@ -89,7 +89,7 @@ class MOGymEnvConfig(EnvLibsConfig):
     categorical_action_encoding: bool = False
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -114,7 +114,7 @@ class BraxEnvConfig(EnvLibsConfig):
     categorical_action_encoding: bool = False
     cache_clear_frequency: int | None = None
     from_pixels: bool = False
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -127,6 +127,55 @@ class BraxEnvConfig(EnvLibsConfig):
 
 
 @dataclass
+class MujocoPlaygroundEnvConfig(EnvLibsConfig):
+    """Configuration for MujocoPlaygroundEnv environment."""
+
+    env_name: str = MISSING
+    config: object = None
+    config_overrides: dict | None = None
+    agent_mapping: Any = None
+    from_pixels: bool = False
+    frame_skip: int = 1
+    device: str = "cpu"
+    batch_size: list[int] | None = None
+    allow_done_after_reset: bool = False
+    num_workers: int = 1
+    _target_: str = "torchrl.envs.libs.mujoco_playground.MujocoPlaygroundEnv"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for MujocoPlaygroundEnv configuration."""
+        super().__post_init__()
+
+
+@dataclass
+class MJLabEnvConfig(EnvLibsConfig):
+    """Configuration for MJLabEnv environment.
+
+    Hydra configuration for :class:`~torchrl.envs.MJLabEnv`.
+    """
+
+    task_id: str = MISSING
+    cfg: Any = None
+    play: bool = False
+    num_envs: int | None = None
+    from_pixels: bool = False
+    pixels_only: bool = False
+    pixels_key: str = "pixels"
+    pixels_sensor: str | None = None
+    render_mode: str | None = None
+    native_autoreset: bool = False
+    device: str | None = None
+    batch_size: list[int] | None = None
+    allow_done_after_reset: bool = False
+    num_workers: int = 1
+    _target_: str = "torchrl.envs.libs.mjlab.MJLabEnv"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for MJLabEnv configuration."""
+        super().__post_init__()
+
+
+@dataclass
 class DMControlEnvConfig(EnvLibsConfig):
     """Configuration for DMControlEnv environment."""
 
@@ -134,7 +183,7 @@ class DMControlEnvConfig(EnvLibsConfig):
     task_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -152,7 +201,7 @@ class HabitatEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -170,7 +219,7 @@ class IsaacGymEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -188,7 +237,7 @@ class JumanjiEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -206,7 +255,7 @@ class MeltingpotEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -224,7 +273,7 @@ class OpenMLEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -242,7 +291,7 @@ class OpenSpielEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -260,7 +309,7 @@ class PettingZooEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -278,7 +327,7 @@ class RoboHiveEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -296,7 +345,7 @@ class SMACv2EnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -314,7 +363,7 @@ class UnityMLAgentsEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False
@@ -352,7 +401,7 @@ class MultiThreadedEnvConfig(EnvLibsConfig):
     env_name: str = MISSING
     from_pixels: bool = False
     pixels_only: bool = True
-    frame_skip: int | None = None
+    frame_skip: int = 1
     device: str = "cpu"
     batch_size: list[int] | None = None
     allow_done_after_reset: bool = False

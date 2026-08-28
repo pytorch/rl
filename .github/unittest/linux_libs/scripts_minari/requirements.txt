@@ -10,11 +10,11 @@ pytest-error-for-skips
 pytest-asyncio
 expecttest
 pybind11[global]
-pyvers
+pyvers>=0.2.3
 pyyaml
 scipy
 psutil
-hydra-core
+hydra-core<1.4
 minari[gcs,hdf5,hf,create]
 gymnasium>=1.2.0
 ale-py

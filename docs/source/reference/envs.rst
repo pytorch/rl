@@ -57,6 +57,7 @@ Documentation Sections
    envs_api
    envs_vectorized
    envs_transforms
+   macro_primitives
    envs_multiagent
    envs_libraries
    envs_recorders

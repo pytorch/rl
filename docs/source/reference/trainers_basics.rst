@@ -24,12 +24,17 @@ Algorithm-specific trainers
     :toctree: generated/
     :template: rl_template.rst
 
+    OnPolicyTrainer
+    A2CTrainer
     PPOTrainer
+    ReinforceTrainer
     SACTrainer
+    OfflineToOnlineTrainer
     DQNTrainer
     DDPGTrainer
     IQLTrainer
     CQLTrainer
+    TD3Trainer
 
 Builders
 --------

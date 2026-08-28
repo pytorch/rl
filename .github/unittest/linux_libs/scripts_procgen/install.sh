@@ -48,7 +48,7 @@ fi
 
 # Ensure tensordict and torchrl dependencies are installed
 # (since we use --no-deps for tensordict and torchrl)
-uv pip install numpy pyvers packaging cloudpickle
+uv pip install numpy "pyvers>=0.2.3" packaging cloudpickle
 
 # Install build dependencies for torchrl (needed with --no-build-isolation)
 uv pip install setuptools wheel setuptools_scm ninja "pybind11[global]"

@@ -16,7 +16,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update && apt-get install -y --no-install-recommends git wget gcc g++ curl software-properties-common
 apt-get install -y --no-install-recommends libglfw3 libgl1-mesa-glx libosmesa6 libosmesa6-dev libglew-dev libsdl2-dev libsdl2-2.0-0
 apt-get install -y --no-install-recommends libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libegl-dev libx11-dev freeglut3-dev
-apt-get install -y --no-install-recommends librhash0 x11proto-dev cmake
+apt-get install -y --no-install-recommends librhash0 x11proto-dev cmake unar
 
 # Install Python 3.10 (Ubuntu 22.04 has Python 3.10 as default)
 apt-get install -y --no-install-recommends python3 python3-dev python3-venv python3-pip
@@ -74,10 +74,10 @@ export pybind11_DIR
 printf "* Installing tensordict\n"
 if [[ "$RELEASE" == 0 ]]; then
     # Install tensordict dependencies (since we use --no-deps)
-    uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
+    uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
 else
-    uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
+    uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.3,<0.3.0"
     uv pip install --no-deps tensordict
 fi
 
@@ -134,7 +134,7 @@ uv pip install \
     expecttest \
     pyyaml \
     scipy \
-    hydra-core \
+    "hydra-core<1.4" \
     patchelf \
     pyopengl==3.1.0 \
     coverage \
@@ -142,14 +142,28 @@ uv pip install \
 
 # 11. Setup Atari ROMs
 printf "* Setting up Atari ROMs\n"
-if [ ! -d "Roms" ]; then
-    wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz --no-check-certificate
-    tar -xzvf rarlinux-x64-5.7.1.tar.gz
+if ! find Roms -type f -iname '*pong*' -print -quit 2>/dev/null | grep -q .; then
     mkdir -p Roms
-    wget http://www.atarimania.com/roms/Roms.rar
-    ./rar/unrar e Roms.rar ./Roms -y
+    if ! wget --tries=5 --retry-connrefused --waitretry=5 \
+        -O Roms.rar http://www.atarimania.com/roms/Roms.rar; then
+        printf "Failed to download Atari ROM archive\n" >&2
+        exit 1
+    fi
+    if ! unar -f -o Roms Roms.rar; then
+        printf "Failed to extract Atari ROM archive\n" >&2
+        exit 1
+    fi
 fi
-python -m atari_py.import_roms Roms
+if ! python -m atari_py.import_roms Roms; then
+    printf "Failed to import Atari ROMs\n" >&2
+    exit 1
+fi
+python - <<'PY'
+import atari_py
+
+if "pong" not in {game.lower() for game in atari_py.list_games()}:
+    raise RuntimeError("Pong ROM was not imported")
+PY
 
 # 12. Set environment variables
 export MUJOCO_GL=egl
@@ -212,12 +226,16 @@ printf "* Running tests for different gym versions\n"
 # Test gym 0.13 (already installed)
 printf "* Testing gym 0.13\n"
 run_tests "gym==0.13" || true
-uv pip uninstall gym atari-py || true
+# Keep atari-py installed after importing ROMs above. Gym 0.19 still uses the
+# atari-py backend for Pong-v4, and removing it here leaves a stale Atari module
+# without get_game_path on CI.
+uv pip uninstall gym || true
 
 # Test gym 0.19 (broken metadata, needs pip<24.1)
 printf "* Testing gym 0.19\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
-pip install gym==0.19
+pip install 'gym[atari]==0.19'
+python -m atari_py.import_roms Roms
 run_tests "gym==0.19" || true
 pip uninstall -y gym wheel || true
 pip install --upgrade pip setuptools wheel  # restore latest versions
@@ -227,6 +245,7 @@ printf "* Testing gym 0.20\n"
 pip install "pip<24.1" setuptools==65.3.0 wheel==0.38.4
 pip install 'gym[atari]==0.20'
 pip install 'ale-py==0.7.4'
+ale-import-roms Roms
 run_tests "gym==0.20" || true
 pip uninstall -y gym ale-py wheel || true
 pip install --upgrade pip setuptools wheel  # restore latest versions

@@ -22,6 +22,8 @@ from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.modules import RandomPolicy
 from torchrl.testing import HALFCHEETAH_VERSIONED, PONG_VERSIONED
 
+_has_dm_control = importlib.util.find_spec("dm_control") is not None
+
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 IS_OSX = __import__("sys").platform == "darwin"
 
@@ -114,23 +116,16 @@ class TestDMControl:
         assert final_seed0 == final_seed2
         assert_allclose_td(rollout0, rollout2)
 
-    def test_num_workers_returns_lazy_parallel_env(self):
-        """Ensure DMControlEnv with num_workers > 1 returns a lazy ParallelEnv."""
-        # When num_workers > 1, should return ParallelEnv directly (lazy)
+    def test_num_workers_returns_parallel_env(self):
+        """Ensure DMControlEnv workers report metadata directly."""
         env = DMControlEnv("cheetah", "run", num_workers=3)
         try:
             assert isinstance(env, ParallelEnv)
             assert env.num_workers == 3
-            # ParallelEnv should be lazy (not started yet)
-            assert env.is_closed
-
-            # configure_parallel should work before env starts
-            env.configure_parallel(use_buffers=False)
+            assert env._metadata_from_workers
             assert env._use_buffers is False
-
-            # After reset, env is started
-            env.reset()
             assert not env.is_closed
+            env.reset()
             assert env.batch_size == torch.Size([3])
         finally:
             env.close()

@@ -47,7 +47,7 @@ uv_pip_install \
   wheel \
   packaging \
   cloudpickle \
-  pyvers \
+  "pyvers>=0.2.3" \
   numpy \
   ninja \
   "pybind11[global]>=2.13"
@@ -80,5 +80,6 @@ else
 fi
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 pytest -q test/test_setup.py -vv

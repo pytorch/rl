@@ -39,8 +39,8 @@ class submitit_delayed_launcher:
     Args:
         num_jobs (int): the number of collection jobs to be launched.
         framework (str, optional): the framework to use. Can be either ``"distributed"``
-            or ``"rpc"``. ``"distributed"`` requires a :class:`~.DistributedDataCollector`
-            collector whereas ``"rpc"`` requires a :class:`RPCDataCollector`.
+            or ``"rpc"``. ``"distributed"`` requires a :class:`~.DistributedCollector`
+            collector whereas ``"rpc"`` requires a :class:`RPCCollector`.
             Defaults to ``"distributed"``.
         backend (str, optional): torch.distributed backend in case ``framework``
             points to ``"distributed"``. This value must match the one passed to
@@ -60,7 +60,7 @@ class submitit_delayed_launcher:
         ... def main():
         ...     from torchrl.modules.utils.utils import RandomPolicyfrom torchrl.envs.libs.gym import GymEnv
         ...     from torchrl.data import BoundedContinuous
-        ...     collector = DistributedDataCollector(
+        ...     collector = DistributedCollector(
         ...         [EnvCreator(lambda: GymEnv("Pendulum-v1"))] * num_jobs,
         ...         policy=RandomPolicy(BoundedContinuous(-1, 1, shape=(1,))),
         ...         launcher="submitit_delayed",

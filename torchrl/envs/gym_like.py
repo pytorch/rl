@@ -171,6 +171,12 @@ class GymLikeEnv(_EnvWrapper):
     """
 
     _info_dict_reader: list[BaseInfoDictReader]
+    # ``GymLikeEnv._step`` applies the action ``wrapper_frame_skip`` times and
+    # sums the reward, so frame-skipping is implemented natively and the
+    # ``EnvBase`` metaclass must not auto-append a ``FrameSkipTransform``.
+    # Subclasses that override ``_step`` without this loop (e.g.
+    # :class:`~torchrl.envs.JumanjiWrapper`) reset this to ``False``.
+    _has_frame_skip: bool = True
 
     @classmethod
     def __new__(cls, *args, **kwargs):

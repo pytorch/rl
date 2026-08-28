@@ -19,6 +19,7 @@ from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase
 from torchrl.envs.model_based.imagined import ImaginedEnv
 from torchrl.envs.transforms import MeanActionSelector, TransformedEnv
+from torchrl.modules.models.gp import GPWorldModel
 from torchrl.modules.models.rbf_controller import RBFController
 from torchrl.objectives import ExponentialQuadraticCost
 
@@ -542,8 +543,6 @@ class TestMeanActionSelector:
 class TestGPWorldModel:
     @staticmethod
     def _make_dispatch_only_model():
-        from torchrl.modules.models.gp import GPWorldModel
-
         model = GPWorldModel.__new__(GPWorldModel)
         nn.Module.__init__(model)
         model.in_keys = [
@@ -562,16 +561,12 @@ class TestGPWorldModel:
         return model
 
     def test_creation(self):
-        from torchrl.modules.models.gp import GPWorldModel
-
         model = GPWorldModel(obs_dim=4, action_dim=1)
         assert model.obs_dim == 4
         assert model.action_dim == 1
         assert model.state_action_dim == 5
 
     def test_fit_and_deterministic_forward(self):
-        from torchrl.modules.models.gp import GPWorldModel
-
         obs_dim, action_dim = 2, 1
         model = GPWorldModel(obs_dim=obs_dim, action_dim=action_dim)
 
@@ -606,8 +601,6 @@ class TestGPWorldModel:
         assert forward_td[("next", "observation", "var")].shape == (3, obs_dim, obs_dim)
 
     def test_uncertain_forward(self):
-        from torchrl.modules.models.gp import GPWorldModel
-
         obs_dim, action_dim = 2, 1
         model = GPWorldModel(obs_dim=obs_dim, action_dim=action_dim)
 

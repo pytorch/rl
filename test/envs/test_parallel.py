@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import gc
 import os
+import time
+from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -18,7 +21,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.nn import TensorDictModuleBase
-from torch import nn
+from torch import multiprocessing as mp, nn
 
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import Collector, MultiSyncCollector
@@ -30,6 +33,7 @@ from torchrl.envs import (
     EnvCreator,
     ParallelEnv,
     SerialEnv,
+    ToyVLAEnv,
     TransformedEnv,
 )
 from torchrl.envs.batched_envs import _stackable
@@ -55,6 +59,42 @@ from torchrl.testing.mocking_classes import (
 )
 
 
+class _WorkerMetadataToyEnv(ToyVLAEnv):
+    def __init__(
+        self,
+        worker_idx: int,
+        marker_dir: str,
+        *,
+        state_dim: int = 4,
+        fail: bool = False,
+    ) -> None:
+        self._worker_idx = worker_idx
+        self._marker_dir = Path(marker_dir)
+        self._marker_dir.joinpath(f"constructed-{worker_idx}-{os.getpid()}").touch()
+        if fail:
+            raise RuntimeError("intentional worker construction failure")
+        super().__init__(
+            action_dim=2,
+            state_dim=state_dim,
+            instruction=f"instruction-{worker_idx}",
+            seed=worker_idx,
+        )
+
+    def close(self, *, raise_if_closed: bool = True) -> None:
+        self._marker_dir.joinpath(f"closed-{self._worker_idx}-{os.getpid()}").touch()
+        super().close(raise_if_closed=raise_if_closed)
+
+
+class _SlowCloseCountingEnv(CountingEnv):
+    def __init__(self, close_delay: float) -> None:
+        self.close_delay = close_delay
+        super().__init__()
+
+    def close(self, *, raise_if_closed: bool = True) -> None:
+        time.sleep(self.close_delay)
+        super().close(raise_if_closed=raise_if_closed)
+
+
 class TestParallel:
     @pytest.fixture(autouse=True, scope="class")
     def disable_autowrap(self):
@@ -72,6 +112,16 @@ class TestParallel:
         def __init__(self):
             super().__init__()
             self.nested = TestParallel._NestedObject()
+
+    @staticmethod
+    def _batched_count(env):
+        return torch.stack([count.detach().cpu().clone() for count in env.count], 0)
+
+    @staticmethod
+    def _ones_action(env):
+        tensordict = env.full_action_spec.zero()
+        tensordict[env.action_key] = env.action_spec.one()
+        return tensordict
 
     def test_create_env_fn(self, maybe_fork_ParallelEnv):
         def make_env():
@@ -93,6 +143,128 @@ class TestParallel:
                 4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
             )
 
+    def test_metadata_from_workers_uses_live_envs(self, tmp_path):
+        env = ParallelEnv(
+            2,
+            _WorkerMetadataToyEnv,
+            create_env_kwargs=[
+                {"worker_idx": i, "marker_dir": str(tmp_path)} for i in range(2)
+            ],
+            metadata_from_workers=True,
+            use_buffers=False,
+            mp_start_method="spawn",
+        )
+        try:
+            assert not env.is_closed
+            assert env._use_buffers is False
+            constructed = list(tmp_path.glob("constructed-*"))
+            assert len(constructed) == 2
+            assert all(f"-{os.getpid()}" not in path.name for path in constructed)
+            td = env.reset()
+            assert td["language_instruction"][0] == "instruction-0"
+            assert td["language_instruction"][1] == "instruction-1"
+        finally:
+            env.close(raise_if_closed=False)
+        assert len(list(tmp_path.glob("closed-*"))) == 2
+
+    def test_metadata_from_workers_rejects_buffers(self):
+        with pytest.raises(RuntimeError, match="requires use_buffers=False"):
+            ParallelEnv(
+                2,
+                CountingEnv,
+                metadata_from_workers=True,
+                use_buffers=True,
+            )
+
+    def test_metadata_from_workers_rejects_incompatible_schemas(self, tmp_path):
+        with pytest.raises(RuntimeError, match="metadata are incompatible"):
+            ParallelEnv(
+                2,
+                _WorkerMetadataToyEnv,
+                create_env_kwargs=[
+                    {
+                        "worker_idx": 0,
+                        "marker_dir": str(tmp_path),
+                        "state_dim": 4,
+                    },
+                    {
+                        "worker_idx": 1,
+                        "marker_dir": str(tmp_path),
+                        "state_dim": 5,
+                    },
+                ],
+                metadata_from_workers=True,
+                use_buffers=False,
+                mp_start_method="spawn",
+            )
+        assert len(list(tmp_path.glob("closed-*"))) == 2
+
+    def test_metadata_from_workers_reports_construction_failure(self, tmp_path):
+        with pytest.raises(
+            RuntimeError, match="intentional worker construction failure"
+        ):
+            ParallelEnv(
+                2,
+                _WorkerMetadataToyEnv,
+                create_env_kwargs=[
+                    {"worker_idx": 0, "marker_dir": str(tmp_path)},
+                    {"worker_idx": 1, "marker_dir": str(tmp_path), "fail": True},
+                ],
+                metadata_from_workers=True,
+                use_buffers=False,
+                mp_start_method="spawn",
+            )
+        assert len(list(tmp_path.glob("closed-0-*"))) == 1
+
+    def test_metadata_from_workers_shutdown_is_bounded(self):
+        env = ParallelEnv(
+            1,
+            _SlowCloseCountingEnv,
+            create_env_kwargs={"close_delay": 10.0},
+            metadata_from_workers=True,
+            use_buffers=False,
+            mp_start_method="spawn",
+            shutdown_timeout=0.1,
+        )
+        workers = list(env._workers)
+
+        env.close()
+
+        assert all(not worker.is_alive() for worker in workers)
+
+    def test_metadata_from_workers_serial_for_single_fallback(self):
+        env = ParallelEnv(
+            1,
+            CountingEnv,
+            serial_for_single=True,
+            metadata_from_workers=True,
+            use_buffers=False,
+        )
+        try:
+            assert isinstance(env, SerialEnv)
+            env.reset()
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_compact_collector_skips_next_observation_copy(
+        self, maybe_fork_ParallelEnv
+    ):
+        class CompactCollector:
+            _compact_next_keys = (("next", "observation"),)
+
+        env = maybe_fork_ParallelEnv(2, CountingEnv, use_buffers=True)
+        collector = CompactCollector()
+        env.register_collector(collector)
+        try:
+            data = env.rand_action(env.reset())
+            step, post_reset = env.step_and_maybe_reset(data)
+            assert ("next", "observation") not in step.keys(True, True)
+            assert ("next", "reward") in step.keys(True, True)
+            assert "observation" in post_reset.keys()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
     )
@@ -162,6 +334,9 @@ class TestParallel:
                 mp_start_method=start_method,
             )
             assert isinstance(env, ParallelEnv)
+            # serial_for_single must not swallow the start method when the
+            # env stays parallel
+            assert env._mp_start_method == start_method
         finally:
             env.close(raise_if_closed=False)
 
@@ -189,6 +364,128 @@ class TestParallel:
             rollout = env.rollout(3)
             assert rollout.shape[0] == 2
         finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_batched_env_indexing_returns_live_view(
+        self, parallel, use_buffers, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        expected_cls = ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv, use_buffers=use_buffers)
+        try:
+            index_cases = [
+                (2, [2]),
+                (-1, [3]),
+                (slice(1, 3), [1, 2]),
+                (np.array([0, 3]), [0, 3]),
+                (torch.tensor([1, 3]), [1, 3]),
+            ]
+            for item, selected in index_cases:
+                env.reset()
+                indexed_env = env[item]
+                try:
+                    assert isinstance(indexed_env, expected_cls)
+                    assert indexed_env.num_workers == len(selected)
+                    assert indexed_env.batch_size == torch.Size([len(selected)])
+                    if isinstance(item, slice):
+                        indexed_env.check_env_specs()
+                        env.reset()
+
+                    indexed_env.step(self._ones_action(indexed_env))
+
+                    expected = torch.zeros(4, 1, dtype=torch.int32)
+                    expected[selected] = 1
+                    torch.testing.assert_close(self._batched_count(env), expected)
+                    torch.testing.assert_close(
+                        self._batched_count(indexed_env), expected[selected]
+                    )
+                finally:
+                    indexed_env.close(raise_if_closed=False)
+
+                assert not env.is_closed
+
+            env.rand_step()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_indexed_view_close_semantics(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+
+        env = cls(4, CountingEnv)
+        try:
+            env.reset()
+            indexed_env = env[1:]
+            indexed_env.close()
+            assert indexed_env.is_closed
+            assert not env.is_closed
+            env.rand_step()
+            with pytest.raises(RuntimeError, match="closed indexed"):
+                indexed_env.reset()
+        finally:
+            env.close(raise_if_closed=False)
+
+        env = cls(4, CountingEnv)
+        env.reset()
+        indexed_env = env[1:]
+        env.close()
+        assert env.is_closed
+        with pytest.raises(RuntimeError, match="parent environment has been closed"):
+            indexed_env.reset()
+        indexed_env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_indexed_view_keeps_parent_alive(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv)
+        env.reset()
+
+        env = env[:1]
+        try:
+            assert env.num_workers == 1
+            assert env.batch_size == torch.Size([1])
+            env.rand_step()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    @pytest.mark.parametrize(
+        "item", [np.ones(4, dtype=bool), torch.ones(4, dtype=torch.bool)]
+    )
+    def test_batched_env_indexing_rejects_bool_masks(
+        self, parallel, item, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv)
+        try:
+            env.reset()
+            with pytest.raises(NotImplementedError, match="Boolean masks"):
+                env[item]
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_unsupported_worker_writeback_raises(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(2, CountingEnv)
+        source = CountingEnv()
+        try:
+            env.reset()
+            source.reset()
+            with pytest.raises(NotImplementedError, match="snapshot writeback"):
+                env[0] = source
+            env.rand_step()
+            assert not env.is_closed
+        finally:
+            source.close(raise_if_closed=False)
             env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])
@@ -1118,8 +1415,6 @@ class TestConcurrentEnvs:
             self.main_penv(6)
             self.main_penv(9)
         else:
-            from torch import multiprocessing as mp
-
             q = mp.Queue(3)
             ps = []
             try:
@@ -1141,8 +1436,6 @@ class TestConcurrentEnvs:
             self.main_collector(6)
             self.main_collector(9)
         else:
-            from torch import multiprocessing as mp
-
             q = mp.Queue(3)
             ps = []
             try:
@@ -1225,8 +1518,6 @@ class TestLibThreading:
 
 @pytest.mark.skipif(IS_WIN, reason="fork not available on windows 10")
 def test_parallel_another_ctx():
-    from torch import multiprocessing as mp
-
     gc.collect()
 
     try:
@@ -1323,6 +1614,31 @@ def test_single_task_share_individual_td():
 
 
 @set_list_to_stack(True)
+@pytest.mark.parametrize("cls", [SerialEnv, ParallelEnv])
+def test_heterogeneous_non_tensor_workers(cls, maybe_fork_ParallelEnv):
+    # workers with DIFFERENT NonTensor observations (e.g. per-task language
+    # instructions) stack their specs into a Stacked spec: the batched env
+    # must still register the entry as non-tensor and route it through the
+    # non-tensor channel instead of the shared buffers
+    from torchrl.envs import ToyVLAEnv
+
+    if cls is ParallelEnv:
+        cls = maybe_fork_ParallelEnv
+
+    def make(instruction):
+        return lambda: ToyVLAEnv(action_dim=2, state_dim=2, instruction=instruction)
+
+    env = cls(2, [make("pick up the apple"), make("pick up the pear")])
+    try:
+        rollout = env.rollout(3)
+        assert "language_instruction" in env._non_tensor_keys
+        instructions = rollout["language_instruction"]
+        assert instructions[0][0] == "pick up the apple"
+        assert instructions[1][0] == "pick up the pear"
+    finally:
+        env.close(raise_if_closed=False)
+
+
 def test_stackable():
     # Tests the _stackable util
     stack = [TensorDict({"a": 0}, []), TensorDict({"b": 1}, [])]

@@ -201,7 +201,7 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 # tensordict. The data of agents within a group is stacked together. Therefore, by choosing how to group your agents,
 # you can decide which data is stacked/kept as separate entries.
 # The grouping strategy can be specified at construction in environments like VMAS and PettingZoo.
-# For more info on grouping, see :class:`~torchrl.envs.utils.MarlGroupMapType`.
+# For more info on grouping, see :class:`~torchrl.envs.MarlGroupMapType`.
 #
 # In the *simple_tag* environment
 # there are two teams of agents: the chasers (or "adversaries") (red circles) and the evaders (or "agents") (green circles).
@@ -352,7 +352,7 @@ env = TransformedEnv(
 
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -464,10 +464,10 @@ for group, agents in env.group_map.items():
 
 
 ######################################################################
-# **Second**: wrap the :class:`~tensodrdict.nn.TensorDictModule` in a :class:`~torchrl.modules.ProbabilisticActor`
+# **Second**: wrap the :class:`~tensodrdict.nn.TensorDictModule` in a :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
 #
 # We now need to build the TanhDelta distribution.
-# We instruct the :class:`~torchrl.modules.ProbabilisticActor`
+# We instruct the :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
 # class to build a :class:`~torchrl.modules.TanhDelta` out of the policy action
 # parameters. We also provide the minimum and maximum values of this
 # distribution, which we gather from the environment specs.
@@ -623,14 +623,16 @@ for group, _agents in env.group_map.items():
 # Data collector
 # --------------
 #
-# TorchRL provides a set of data collector classes. Briefly, these
-# classes execute three operations: reset an environment, compute an action
+# TorchRL provides :class:`~torchrl.collectors.Collector` as the main data
+# collector construction API. It executes three operations: reset an
+# environment, compute an action
 # using the policy and the latest observation, execute a step in the environment, and repeat
 # the last two steps until the environment signals a stop (or reaches a done
 # state).
 #
-# We will use the simplest possible data collector, which has the same output as an environment rollout,
-# with the only difference that it will auto reset done states until the desired frames are collected.
+# We use its direct default, which has the same output as an environment
+# rollout except that it auto-resets done states until the desired frames are
+# collected. The same constructor can select process or distributed execution.
 #
 # We need to feed it our exploration policies. Furthermore, to run the policies from all groups as if they were one,
 # we put them in a sequence. They will not interfere with each other as each group writes and reads keys in different places.
@@ -655,9 +657,9 @@ collector = Collector(
 # There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
 # data randomly.
 #
-# This buffer uses :class:`~.data.LazyMemmapStorage`, which stores data on disk.
+# This buffer uses :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`, which stores data on disk.
 # This allows to use the disk memory, but can result in slower sampling as it requires data to be cast to the training device.
-# To store your buffer on the GPU, you can use :class:`~.data.LazyTensorStorage`, passing the desired device.
+# To store your buffer on the GPU, you can use :class:`~torchrl.data.replay_buffers.LazyTensorStorage`, passing the desired device.
 # This will result in faster sampling but is subject to the memory constraints of the selected device.
 #
 
@@ -684,7 +686,7 @@ for group, _agents in env.group_map.items():
 # -------------
 #
 # The DDPG loss can be directly imported from TorchRL for convenience using the
-# :class:`~.objectives.DDPGLoss` class. This is the easiest way of utilising DDPG:
+# :class:`~torchrl.objectives.DDPGLoss` class. This is the easiest way of utilising DDPG:
 # it hides away the mathematical operations of DDPG and the control flow that
 # goes with it.
 #

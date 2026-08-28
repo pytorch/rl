@@ -1,0 +1,71 @@
+env:
+  backend: gym
+  name: Pendulum-v1
+  task: null
+  seed: 0
+  device: cpu
+  max_episode_steps: 200
+
+collector:
+  frames_per_batch: 200
+  total_frames: 5000
+  exploration: random  # one of: random, mode
+
+replay_buffer:
+  buffer_size: 10000
+  batch_size: 16
+  seq_len: 16
+  warmup_factor: 2  # collect (warmup_factor * batch_size * seq_len) frames before training
+
+networks:
+  rnn_hidden_dim: 32
+  num_categoricals: 4
+  num_classes: 4
+  unimix: 0.01
+  recurrent_model: block_gru
+  num_blocks: 8
+  dynamics_layers: 1
+  prior_layers: 2
+  posterior_layers: 1
+  norm_eps: 1.0e-4
+  obs_embed_dim: 32
+  num_reward_bins: 255
+  num_value_bins: 255
+  hidden_dim: 64
+  encoder_layers: 3
+  decoder_layers: 3
+  reward_layers: 1
+  actor_layers: 3
+  value_layers: 3
+  policy_min_std: 0.1
+  policy_max_std: 1.0
+
+optimization:
+  lr: 4.0e-5
+  adam_eps: 1.0e-20
+  adaptive_grad_clip: 0.3
+  warmup_steps: 1000
+  updates_per_batch: 8
+  train_ratio: null
+  imagination_horizon: 15
+  continuation_horizon: 333
+  use_reinforce: true
+  return_normalization_rate: 0.01
+  return_normalization_min_scale: 1.0
+  slow_critic_regularization: 1.0
+  slow_critic_tau: 0.02
+  free_bits: 1.0
+  dynamic_loss_weight: 1.0
+  representation_loss_weight: 0.1
+  gamma: 1.0
+  lmbda: 0.95
+
+logger:
+  eval_every: 500
+  eval_episodes: 3
+  output_plot: dreamer_v3_pendulum.png
+  metrics_json: null
+
+hydra:
+  job:
+    chdir: true

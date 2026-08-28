@@ -76,7 +76,7 @@ from torchrl.objectives.dreamer import (
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config_isaac")
+@hydra.main(version_base="1.3", config_path="", config_name="config_isaac")
 def main(cfg: DictConfig):
     # ========================================================================
     # Device setup: sim on cuda:0, training on cuda:1 (or cuda:0 if single GPU)

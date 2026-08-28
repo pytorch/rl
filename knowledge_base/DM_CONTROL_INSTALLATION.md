@@ -72,19 +72,22 @@ multi-GPU machine, all rendering contends on a **single GPU** — even if the
 host has 8 GPUs. This inflates per-worker render time by ~3x (e.g. 17ms serial
 → 54ms with 8 workers sharing one GPU's EGL queue).
 
-**Root cause:** Inside Docker or SLURM containers, the NVIDIA container runtime
-only exposes the GPU(s) assigned to the job to EGL. `eglQueryDevicesEXT()`
-returns 1 device regardless of how many physical GPUs the host has.
-Setting `MUJOCO_EGL_DEVICE_ID` or `EGL_DEVICE_ID` to anything other than 0
-raises:
+**Common root causes:** Inside Docker or SLURM containers, the NVIDIA
+container runtime may expose only a subset of devices to EGL, or a minimal CUDA
+image may omit the NVIDIA graphics userspace libraries entirely. In those
+cases, `eglQueryDevicesEXT()` can return fewer devices than the node has, or
+EGL initialization can fail even though CUDA and `nvidia-smi` work. Setting
+`MUJOCO_EGL_DEVICE_ID` or `EGL_DEVICE_ID` to an unavailable EGL device raises:
 
 ```
 RuntimeError: MUJOCO_EGL_DEVICE_ID must be an integer between 0 and 0 (inclusive), got 1.
 ```
 
-Unsetting `CUDA_VISIBLE_DEVICES` in the worker does **not** help — the
-container isolation happens at the NVIDIA driver/runtime level, below the
-environment variable.
+Unsetting `CUDA_VISIBLE_DEVICES` in the worker does **not** help once the
+container runtime has hidden devices from the driver. Conversely,
+`NVIDIA_DRIVER_CAPABILITIES=compute,utility` by itself does not prove EGL is
+impossible: if matching NVIDIA EGL/GLVND userspace libraries are installed
+inside the container, EGL may still work.
 
 **Note on variable naming:** dm_control uses `MUJOCO_EGL_DEVICE_ID` internally
 (which maps to the same thing as MuJoCo's variable). Historically there was
@@ -98,17 +101,42 @@ for the unification discussion.
 
 **Workarounds:**
 
-1. **Configure container for full GPU access.** If you control the container
+1. **Verify the graphics userspace stack first.** Minimal CUDA containers often
+   omit the EGL/GLVND loader packages and NVIDIA graphics libraries. On
+   Debian/Ubuntu images, install the generic runtime packages:
+
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y libegl-dev libglvnd0 libglx0 libgles2
+   ```
+
+   Then verify the NVIDIA pieces are visible and match the host driver:
+
+   ```bash
+   nvidia-smi --query-gpu=driver_version,name --format=csv,noheader | head
+   ldconfig -p | grep -E 'libEGL_nvidia|libnvidia-eglcore|libGLX_nvidia'
+   ls /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+   ```
+
+   If the NVIDIA libraries are missing, install a matching
+   `libnvidia-gl-<driver-version>` package or provide a matching userspace
+   bundle and point `LD_LIBRARY_PATH` / `ldconfig` at it. The GLVND vendor JSON
+   should point EGL at `libEGL_nvidia.so.0`.
+
+2. **Configure container for full GPU access.** If you control the container
    runtime, set `NVIDIA_VISIBLE_DEVICES=all` and
-   `NVIDIA_DRIVER_CAPABILITIES=all` so EGL can see all GPUs. Then assign
+   include `graphics` in `NVIDIA_DRIVER_CAPABILITIES` (or use `all`) so the
+   driver stack and all intended GPUs are mounted. Then assign
    `MUJOCO_EGL_DEVICE_ID=<worker_idx % num_gpus>` per worker process
    **before** dm_control is imported (the EGL display is created at import
-   time).
+   time). For LIBERO / robosuite environments, prefer passing
+   `render_gpu_device_id=<worker_idx % num_gpus>` to the environment
+   constructor.
 
-2. **Run outside containers.** On bare metal, `eglQueryDevicesEXT()` correctly
+3. **Run outside containers.** On bare metal, `eglQueryDevicesEXT()` correctly
    returns all GPUs (plus the X server display, if any).
 
-3. **Reduce rendering overhead.** If multi-GPU rendering is not possible:
+4. **Reduce rendering overhead.** If multi-GPU rendering is not possible:
    - Lower the rendering resolution (e.g. 64x64 instead of 84x84)
    - Render at a lower frequency than the simulation step (frame-skip)
    - Use state-only observations where possible — the IPC overhead is small

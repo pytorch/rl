@@ -19,7 +19,7 @@ import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from copy import copy
+from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
 from typing import Any
 
@@ -30,6 +30,7 @@ from tensordict import (
     is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
+    NestedKey,
     TensorDict,
     TensorDictBase,
 )
@@ -181,6 +182,7 @@ class Storage:
 
     ndim = 1
     max_size: int
+    supports_conditional_update: bool = False
     _default_checkpointer: StorageCheckpointerBase = StorageCheckpointerBase
     _rng: torch.Generator | None = None
 
@@ -194,6 +196,85 @@ class Storage:
         self.checkpointer = checkpointer
         self._compilable = compilable
         self._attached_entities_list = []
+        self._mutation_revision_value = (
+            torch.zeros((), dtype=torch.int64) if compilable else mp.Value("q", 0)
+        )
+        self._last_cursor_index_value = (
+            torch.full((), -1, dtype=torch.int64) if compilable else mp.Value("q", -1)
+        )
+
+    @property
+    def _mutation_revision(self) -> int | torch.Tensor:
+        """Monotonic storage-content revision shared with spawned processes."""
+        revision = getattr(self, "_mutation_revision_value", None)
+        if not self._compilable:
+            if revision is None:
+                revision = self._mutation_revision_value = mp.Value("q", 0)
+            return revision.value
+        if revision is None:
+            revision = self._mutation_revision_value = torch.zeros(
+                (), dtype=torch.int64
+            )
+        return revision if is_compiling() else int(revision.item())
+
+    def _bump_mutation_revision(self) -> None:
+        """Invalidates process-local metadata derived from storage contents."""
+        revision = getattr(self, "_mutation_revision_value", None)
+        if not self._compilable:
+            if revision is None:
+                revision = self._mutation_revision_value = mp.Value("q", 0)
+            with revision.get_lock():
+                revision.value += 1
+        else:
+            if revision is None:
+                revision = self._mutation_revision_value = torch.zeros(
+                    (), dtype=torch.int64
+                )
+            revision.add_(1)
+
+    @property
+    def _last_cursor_index(self) -> int | torch.Tensor | None:
+        """Last written time coordinate, shared with spawned processes."""
+        cursor = getattr(self, "_last_cursor_index_value", None)
+        if cursor is None:
+            return None
+        if self._compilable:
+            if is_compiling():
+                return cursor
+            cursor = int(cursor.item())
+        else:
+            cursor = cursor.value
+        return None if cursor < 0 else cursor
+
+    def _set_last_cursor(self, cursor: Any) -> None:
+        self._last_cursor = cursor
+        if isinstance(cursor, torch.Tensor):
+            cursor = cursor.reshape(-1)
+            cursor = cursor[-1] if cursor.numel() else -1
+        elif isinstance(cursor, range):
+            cursor = int(cursor[-1]) if len(cursor) else -1
+        elif isinstance(cursor, (tuple, list)):
+            time_cursor = cursor[0]
+            if isinstance(time_cursor, torch.Tensor):
+                time_cursor = time_cursor.reshape(-1)
+                cursor = time_cursor[-1] if time_cursor.numel() else -1
+            else:
+                cursor = int(time_cursor)
+        elif cursor is None:
+            cursor = -1
+        else:
+            cursor = int(cursor)
+        if self._compilable:
+            if isinstance(cursor, torch.Tensor):
+                self._last_cursor_index_value = cursor
+            else:
+                self._last_cursor_index_value.fill_(cursor)
+            return
+        if isinstance(cursor, torch.Tensor):
+            cursor = int(cursor.item())
+        shared_cursor = self._last_cursor_index_value
+        with shared_cursor.get_lock():
+            shared_cursor.value = cursor
 
     @property
     def checkpointer(self):
@@ -250,6 +331,7 @@ class Storage:
 
     def loads(self, path):
         self.checkpointer.loads(self, path)
+        self._bump_mutation_revision()
 
     def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
@@ -349,7 +431,45 @@ class Storage:
     def __getstate__(self):
         state = copy(self.__dict__)
         state["_rng"] = None
+        if get_spawning_popen() is None:
+            revision = self._mutation_revision
+            last_cursor = self._last_cursor_index
+            state.pop("_mutation_revision_value", None)
+            state.pop("_last_cursor_index_value", None)
+            state["mutation_revision__context"] = revision
+            state["last_cursor_index__context"] = last_cursor
         return state
+
+    def __setstate__(self, state):
+        revision = state.pop("mutation_revision__context", None)
+        last_cursor = state.pop("last_cursor_index__context", None)
+        compilable = state.get("_compilable", False)
+        state.setdefault("_compilable", compilable)
+        if revision is not None:
+            if compilable:
+                state["_mutation_revision_value"] = torch.tensor(
+                    revision, dtype=torch.int64
+                )
+            else:
+                state["_mutation_revision_value"] = mp.Value("q", revision)
+        if last_cursor is not None:
+            if compilable:
+                state["_last_cursor_index_value"] = torch.tensor(
+                    last_cursor, dtype=torch.int64
+                )
+            else:
+                state["_last_cursor_index_value"] = mp.Value("q", last_cursor)
+        elif "_last_cursor_index_value" not in state:
+            state["_last_cursor_index_value"] = (
+                torch.full((), -1, dtype=torch.int64)
+                if compilable
+                else mp.Value("q", -1)
+            )
+        if "_mutation_revision_value" not in state:
+            state["_mutation_revision_value"] = (
+                torch.zeros((), dtype=torch.int64) if compilable else mp.Value("q", 0)
+            )
+        self.__dict__.update(state)
 
     def __contains__(self, item):
         return self.contains(item)
@@ -419,6 +539,7 @@ class ListStorage(Storage):
             if isinstance(cursor, slice):
                 data = self._to_device(data)
                 self._set_slice(cursor, data)
+                self._bump_mutation_revision()
                 return
             if isinstance(
                 data,
@@ -456,6 +577,7 @@ class ListStorage(Storage):
                 )
             data = self._to_device(data)
             self._set_item(cursor, data)
+            self._bump_mutation_revision()
 
     def _set_item(self, cursor: int, data: Any) -> None:
         """Set a single item in the storage."""
@@ -512,17 +634,23 @@ class ListStorage(Storage):
         _storage = state_dict["_storage"]
         self._storage = []
         for elt in _storage:
+            # clone to decouple the storage from the caller's tensors (which may
+            # e.g. be mmap-backed views over a checkpoint file)
             if isinstance(elt, torch.Tensor):
-                self._storage.append(elt)
+                self._storage.append(elt.clone())
             elif isinstance(elt, (dict, OrderedDict)):
-                self._storage.append(TensorDict().load_state_dict(elt, strict=False))
+                self._storage.append(
+                    TensorDict().load_state_dict(elt, strict=False).clone()
+                )
             else:
                 raise TypeError(
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
                 )
+        self._bump_mutation_revision()
 
     def _empty(self):
         self._storage = []
+        self._bump_mutation_revision()
 
     def __getstate__(self):
         if get_spawning_popen() is not None:
@@ -708,6 +836,7 @@ class TensorStorage(Storage):
 
     _storage = None
     _default_checkpointer = TensorStorageCheckpointer
+    supports_conditional_update = True
 
     def __init__(
         self,
@@ -902,6 +1031,59 @@ class TensorStorage(Storage):
             )
         )
 
+    def _conditional_patch_leaf(self, key: NestedKey) -> torch.Tensor:
+        storage = getattr(self, "_storage", None)
+        if storage is None or not self.initialized:
+            raise RuntimeError(
+                "Conditional updates require an initialized storage. Write some "
+                "data to the buffer before calling update_if_present."
+            )
+        leaf = None
+        if is_tensor_collection(storage):
+            leaf = storage.get(key, default=None)
+        if leaf is None:
+            raise KeyError(
+                f"Key {key} does not exist in the storage. Conditional patches "
+                "can only target existing tensor fields of a tensordict storage."
+            )
+        return leaf
+
+    def _validate_conditional_patch(
+        self, index: torch.Tensor, patch: dict[NestedKey, torch.Tensor]
+    ) -> dict[NestedKey, torch.Tensor]:
+        n_coords = index.shape[-1] if index.ndim > 1 else 1
+        n_rows = index.shape[0] if index.ndim > 1 else index.numel()
+        normalized = {}
+        for key, value in patch.items():
+            leaf = self._conditional_patch_leaf(key)
+            value = torch.as_tensor(value)
+            if value.dtype != leaf.dtype:
+                raise ValueError(
+                    f"dtype mismatch for patch key {key}: got {value.dtype}, "
+                    f"the storage holds {leaf.dtype}."
+                )
+            feature_shape = leaf.shape[n_coords:]
+            try:
+                value = value.reshape((n_rows, *feature_shape))
+            except RuntimeError:
+                raise ValueError(
+                    f"shape mismatch for patch key {key}: got {tuple(value.shape)}, "
+                    f"expected {n_rows} records with feature shape {tuple(feature_shape)}."
+                )
+            normalized[key] = value.to(leaf.device)
+        return normalized
+
+    def _apply_conditional_patch(
+        self, index: torch.Tensor, patch: dict[NestedKey, torch.Tensor]
+    ) -> None:
+        if index.ndim > 1:
+            coords = tuple(index.unbind(-1))
+        else:
+            coords = (index,)
+        for key, value in patch.items():
+            leaf = self._conditional_patch_leaf(key)
+            leaf[coords] = value
+
     def __getstate__(self):
         state = super().__getstate__()
         if get_spawning_popen() is None:
@@ -951,7 +1133,7 @@ class TensorStorage(Storage):
                 state["_len_value"] = _len_value
             else:
                 state["_len_value"] = len
-        self.__dict__.update(state)
+        Storage.__setstate__(self, state)
 
     def state_dict(self) -> dict[str, Any]:
         _storage = self._storage
@@ -977,7 +1159,9 @@ class TensorStorage(Storage):
             if isinstance(self._storage, torch.Tensor):
                 self._storage.copy_(_storage)
             elif self._storage is None:
-                self._storage = _storage
+                # clone to decouple the storage from the caller's tensor (which
+                # may e.g. be mmap-backed by a checkpoint file)
+                self._storage = _storage.clone()
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
@@ -986,7 +1170,11 @@ class TensorStorage(Storage):
             if is_tensor_collection(self._storage):
                 self._storage.load_state_dict(_storage, strict=False)
             elif self._storage is None:
-                self._storage = TensorDict().load_state_dict(_storage, strict=False)
+                # loading on an empty TensorDict assigns the state-dict tensors
+                # by reference: clone to decouple from the caller's tensors
+                self._storage = (
+                    TensorDict().load_state_dict(_storage, strict=False).clone()
+                )
             else:
                 raise RuntimeError(
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}. If your storage is pytree-based, use the dumps/load API instead."
@@ -997,6 +1185,7 @@ class TensorStorage(Storage):
             )
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
+        self._bump_mutation_revision()
 
     @implement_for("torch", "2.3", compilable=True)
     def _set_tree_map(self, cursor, data, storage):
@@ -1033,7 +1222,7 @@ class TensorStorage(Storage):
         set_cursor: bool = True,
     ):
         if set_cursor:
-            self._last_cursor = cursor
+            self._set_last_cursor(cursor)
 
         if isinstance(data, list):
             # flip list
@@ -1094,6 +1283,7 @@ class TensorStorage(Storage):
                 raise
         else:
             self._set_tree_map(cursor, data, self._storage)
+        self._bump_mutation_revision()
 
     @implement_for("torch", None, "2.0", compilable=True)
     def set(  # noqa: F811
@@ -1104,7 +1294,7 @@ class TensorStorage(Storage):
         set_cursor: bool = True,
     ):
         if set_cursor:
-            self._last_cursor = cursor
+            self._set_last_cursor(cursor)
 
         if isinstance(data, list):
             # flip list
@@ -1178,6 +1368,7 @@ class TensorStorage(Storage):
                 # Provide informative error about key differences
                 self._raise_informative_lock_error(data, e)
             raise
+        self._bump_mutation_revision()
 
     def _wait_for_init(self):
         pass
@@ -1271,6 +1462,7 @@ class TensorStorage(Storage):
         # assuming that the data structure is the same, we don't need to to
         # anything if the cursor is reset to 0
         self._len = 0
+        self._bump_mutation_revision()
 
     def _init(self):
         raise NotImplementedError(
@@ -1540,6 +1732,7 @@ class LazyTensorStorage(TensorStorage):
         )
         temp_memmap_storage._init_standard(data)
         self._storage = temp_memmap_storage._storage
+        self._reconcile_shared_init_device()
         return
 
     def _wait_for_init(self) -> None:
@@ -1547,8 +1740,22 @@ class LazyTensorStorage(TensorStorage):
         self._init_event.wait()
         storage = TensorDict.load_memmap(self._init_directory)
         self._storage = storage
+        self._reconcile_shared_init_device()
         self.initialized = True
         return
+
+    def _reconcile_shared_init_device(self) -> None:
+        # Shared init swaps the backing for a CPU memory-mapped tensordict;
+        # a stale non-cpu self.device would make samplers build indices on
+        # the wrong device (RuntimeError at the first sample).
+        device = self.device
+        if device not in (None, "auto") and torch.device(device).type != "cpu":
+            warnings.warn(
+                f"LazyTensorStorage(shared_init=True) stores data in a CPU "
+                f"memory-mapped tensordict; the requested storage device "
+                f"({device}) cannot be honored and is reset to 'cpu'."
+            )
+        self.device = torch.device("cpu")
 
     # Read blocks
     def get(self, indices: slice) -> TensorDictBase | torch.Tensor | Any:
@@ -1773,6 +1980,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             )
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
+        self._bump_mutation_revision()
 
     def _init(
         self,
@@ -2171,6 +2379,7 @@ class CompressedListStorage(ListStorage):
         """Empty the storage."""
         self._storage = []
         self._metadata = []
+        self._bump_mutation_revision()
 
     def state_dict(self) -> dict[str, Any]:
         """Save the storage state."""
@@ -2181,8 +2390,14 @@ class CompressedListStorage(ListStorage):
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Load the storage state."""
-        self._storage = state_dict["_storage"]
-        self._metadata = state_dict["_metadata"]
+        # clone tensors and copy containers to decouple the storage from the
+        # caller's objects
+        self._storage = [
+            elt.clone() if isinstance(elt, torch.Tensor) else elt
+            for elt in state_dict["_storage"]
+        ]
+        self._metadata = deepcopy(state_dict["_metadata"])
+        self._bump_mutation_revision()
 
     def to_bytestream(self, data_to_bytestream: torch.Tensor | np.array | Any) -> bytes:
         """Convert data to a byte stream."""
@@ -2532,7 +2747,7 @@ class StoreStorage(Storage):
         set_cursor: bool = True,
     ):
         if set_cursor:
-            self._last_cursor = cursor
+            self._set_last_cursor(cursor)
 
         if isinstance(data, list):
             data = _flip_list(data)
@@ -2557,6 +2772,7 @@ class StoreStorage(Storage):
             self._storage["_tensor"][cursor] = data
         else:
             self._storage[cursor] = data
+        self._bump_mutation_revision()
 
     def _get_new_len(self, data, cursor):
         if is_tensor_collection(data) or isinstance(data, torch.Tensor):
@@ -2580,6 +2796,7 @@ class StoreStorage(Storage):
 
     def _empty(self):
         self._len = 0
+        self._bump_mutation_revision()
 
     def state_dict(self) -> dict[str, Any]:
         return {
@@ -2607,6 +2824,7 @@ class StoreStorage(Storage):
                 db=state_dict["_db"],
                 td_id=td_id,
             )
+        self._bump_mutation_revision()
 
     def contains(self, item):
         if isinstance(item, int):

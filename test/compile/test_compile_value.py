@@ -9,6 +9,9 @@ import sys
 
 import pytest
 import torch
+from tensordict.nn import TensorDictModule
+from torch import nn
+from torchrl.objectives.value.advantages import TDLambdaEstimator
 
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -230,11 +233,6 @@ class TestTDLambdaEstimatorCompile:
 
     def test_vectorized_property_returns_true_in_eager_mode(self):
         """Test that TDLambdaEstimator.vectorized returns True in eager mode when set to True."""
-        from tensordict.nn import TensorDictModule
-        from torch import nn
-
-        from torchrl.objectives.value.advantages import TDLambdaEstimator
-
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
@@ -250,11 +248,6 @@ class TestTDLambdaEstimatorCompile:
 
     def test_vectorized_property_returns_false_in_eager_mode_when_set_false(self):
         """Test that TDLambdaEstimator.vectorized returns False in eager mode when set to False."""
-        from tensordict.nn import TensorDictModule
-        from torch import nn
-
-        from torchrl.objectives.value.advantages import TDLambdaEstimator
-
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
@@ -270,11 +263,6 @@ class TestTDLambdaEstimatorCompile:
 
     def test_vectorized_setter_works(self):
         """Test that TDLambdaEstimator.vectorized setter works correctly."""
-        from tensordict.nn import TensorDictModule
-        from torch import nn
-
-        from torchrl.objectives.value.advantages import TDLambdaEstimator
-
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )

@@ -36,6 +36,11 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.utils import _get_reset
 from torchrl.envs.utils import step_mdp
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
 if TYPE_CHECKING:
     pass
 
@@ -479,6 +484,10 @@ class TensorDictPrimer(Transform):
         return observation_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        if input_spec["full_state_spec"] is None:
+            input_spec["full_state_spec"] = Composite(
+                shape=input_spec.shape, device=input_spec.device
+            )
         new_state_spec = self.transform_observation_spec(input_spec["full_state_spec"])
         for action_key in list(input_spec["full_action_spec"].keys(True, True)):
             if action_key in new_state_spec.keys(True, True):
@@ -559,6 +568,11 @@ class TensorDictPrimer(Transform):
         if self.call_before_env_reset:
             return tensordict_reset
         return self._reset_func(tensordict, tensordict_reset)
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.call_before_env_reset:
@@ -933,6 +947,11 @@ class StepCounter(Transform):
                 tensordict_reset.set(truncated_key, truncated)
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
@@ -1153,6 +1172,87 @@ class StepCounter(Transform):
         )
 
 
+class TerminateTransform(Transform):
+    r"""Terminate a rollout when a user-supplied predicate becomes true.
+
+    After each environment step, ``stop(next_tensordict)`` is evaluated and its
+    boolean result is OR-ed into the environment's ``terminated`` (and, by
+    default, ``done``) entries. Combined with
+    ``rollout(..., break_when_any_done=True)`` (the default), this ends the
+    rollout as soon as the goal condition is reached -- without writing a
+    bespoke stepping loop. It is the natural companion of the
+    :meth:`~torchrl.envs.EnvBase.rollout` ``actions`` keyword for scripted,
+    goal-terminated replays.
+
+    Args:
+        stop (callable): a callable taking the post-step (``"next"``)
+            TensorDict and returning a boolean scalar or a boolean tensor
+            broadcastable to the environment's done entries.
+
+    Keyword Args:
+        write_done (bool, optional): if ``True`` (default), also OR the flag
+            into the ``done`` entries so ``break_when_any_done`` halts the
+            rollout. Set to ``False`` to write only ``terminated`` entries.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> from torchrl.envs.transforms import TerminateTransform
+        >>> env = TransformedEnv(  # doctest: +SKIP
+        ...     GymEnv("Pendulum-v1"),
+        ...     TerminateTransform(lambda td: td["observation"][..., 0] > 0.99),
+        ... )
+        >>> rollout = env.rollout(200, break_when_any_done=True)  # doctest: +SKIP
+    """
+
+    def __init__(
+        self,
+        stop: Callable[[TensorDictBase], Any],
+        *,
+        write_done: bool = True,
+    ) -> None:
+        if not callable(stop):
+            raise ValueError("`stop` must be a callable.")
+        super().__init__(in_keys=[], out_keys=[])
+        self.stop = stop
+        self.write_done = write_done
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        flag = self.stop(next_tensordict)
+        if not isinstance(flag, torch.Tensor):
+            flag = torch.as_tensor(flag, device=next_tensordict.device)
+        flag = flag.bool()
+        parent = self.parent
+        done_keys = list(parent.done_keys) if parent is not None else ["done"]
+        for key in done_keys:
+            leaf = key[-1] if isinstance(key, tuple) else key
+            if leaf == "truncated":
+                continue
+            if leaf == "done" and not self.write_done:
+                continue
+            current = next_tensordict.get(key, default=None)
+            if current is None:
+                continue
+            broadcast = flag
+            while broadcast.ndim < current.ndim:
+                broadcast = broadcast.unsqueeze(-1)
+            broadcast = broadcast.expand(current.shape)
+            next_tensordict.set(key, current | broadcast)
+        return next_tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(
+            f"class {type(self)} cannot be executed without a parent environment."
+        )
+
+
 class RandomTruncationTransform(Transform):
     """Randomly truncate episodes to decorrelate synchronized batched envs.
 
@@ -1316,6 +1416,36 @@ class RandomTruncationTransform(Transform):
         reset_mask = tensordict.get("_reset", None)
         if reset_mask is not None:
             mask = reset_mask.view_as(self._horizons).bool()
+            if is_compiling():
+                new_h = torch.randint(
+                    self.min_horizon,
+                    self.max_horizon + 1,
+                    self._horizons.shape,
+                    device=self._horizons.device,
+                )
+                effective_prob = torch.where(
+                    self._first_episode,
+                    torch.full_like(
+                        self._horizons,
+                        self.first_episode_prob,
+                        dtype=torch.get_default_dtype(),
+                    ),
+                    torch.full_like(
+                        self._horizons,
+                        self.prob,
+                        dtype=torch.get_default_dtype(),
+                    ),
+                )
+                keep_full = (
+                    torch.rand(self._horizons.shape, device=self._horizons.device)
+                    > effective_prob
+                )
+                new_h = torch.where(keep_full, self.max_horizon, new_h)
+                self._horizons = torch.where(mask, new_h, self._horizons)
+                self._first_episode = torch.where(
+                    mask, torch.zeros_like(self._first_episode), self._first_episode
+                )
+                return tensordict_reset
             if mask.any():
                 if self.prob == 0.0 and self.first_episode_prob == 0.0:
                     self._horizons[mask] = self.max_horizon
@@ -1342,6 +1472,11 @@ class RandomTruncationTransform(Transform):
                 # First episode is over for these envs
                 self._first_episode[mask] = False
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         full_done_spec = self.parent.output_spec["full_done_spec"]
@@ -1431,6 +1566,7 @@ class InitTracker(Transform):
         return self.parent._filtered_reset_keys
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        native_autoreset = self.parent.__dict__.get("_torchrl_native_autoreset", False)
         for init_key in self.init_keys:
             done_key = _replace_last(init_key, "done")
             if init_key not in next_tensordict.keys(True, True):
@@ -1438,9 +1574,13 @@ class InitTracker(Transform):
                 if device is None:
                     device = torch.device("cpu")
                 shape = self.parent.full_done_spec[done_key].shape
+                if native_autoreset and done_key in next_tensordict.keys(True, True):
+                    init = next_tensordict.get(done_key).clone()
+                else:
+                    init = torch.zeros(shape, device=device, dtype=torch.bool)
                 next_tensordict.set(
                     init_key,
-                    torch.zeros(shape, device=device, dtype=torch.bool),
+                    init,
                 )
         return next_tensordict
 
@@ -2309,6 +2449,11 @@ class TrajCounter(Transform):
             )
             tensordict_reset.set(traj_count_key, episodes)
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase

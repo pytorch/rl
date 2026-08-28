@@ -333,8 +333,8 @@ for batch in collector:
 collector.shutdown()
 
 ###############################################################################
-# For async collection (useful when training takes longer than collecting),
-# see :class:`~torchrl.collectors.MultiAsyncCollector`.
+# For asynchronous collection (useful when training takes longer than
+# collecting), use ``Collector(num_collectors=N, sync=False)``.
 #
 # Replay Buffers
 # --------------
@@ -357,7 +357,7 @@ sample = buffer.sample(32)
 print("Sampled batch:", sample.batch_size)
 
 ###############################################################################
-# The :class:`~torchrl.data.LazyTensorStorage` allocates memory lazily based
+# The :class:`~torchrl.data.replay_buffers.LazyTensorStorage` allocates memory lazily based
 # on the first batch added. For prioritized experience replay (used in DQN
 # variants), use :class:`~torchrl.data.PrioritizedReplayBuffer`:
 

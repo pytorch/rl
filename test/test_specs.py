@@ -3492,6 +3492,26 @@ def test_invalid_indexing(spec_class, idx):
         spec[idx]
 
 
+def test_dynamic_dim_indexing():
+    # a full slice over a dynamic (-1) dimension preserves it; any other
+    # slice is undefined and raises. Integer indexing of the leading dim of
+    # a [B, -1, ...] spec (e.g. unbatching a MultiAction-expanded action
+    # spec) must keep the dynamic dim intact.
+    leaf = Categorical(n=4, shape=(1, 1, 2)).expand(1, -1, 2)
+    assert leaf[0].shape == torch.Size([-1, 2])
+    assert leaf[(0, slice(None))].shape == torch.Size([-1, 2])
+    assert leaf[:, :, 0].shape == torch.Size([1, -1])
+    with pytest.raises(IndexError, match="dynamic"):
+        leaf[(0, slice(1, 2))]
+    # the composite path (used by full_action_spec_unbatched) extends the
+    # index with full slices over the leaf's extra dims
+    comp = Composite(action=Categorical(n=4, shape=(1, 2)), shape=(1,))
+    comp = comp.unsqueeze(1).expand(1, -1)
+    indexed = comp[(0,)]
+    assert indexed.shape == torch.Size([-1])
+    assert indexed["action"].shape == torch.Size([-1, 2])
+
+
 # Bounded, MultiCategorical: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
     "spec_class",

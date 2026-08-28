@@ -8,14 +8,16 @@ from __future__ import annotations
 import pathlib
 import warnings
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from functools import partial
+from typing import Any, Literal
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import optim
 
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -67,11 +69,15 @@ class SACTrainer(Trainer):
         save_trainer_file (str | pathlib.Path, optional): File path for saving trainer state. Defaults to None.
         replay_buffer (ReplayBuffer, optional): Replay buffer for storing and sampling experiences. Defaults to None.
         batch_size (int, optional): Batch size for sampling from replay buffer. Defaults to None.
+        learner_backend (str): Optimization placement, ``"local"`` or ``"ray"``.
+        learner_backend_options (dict, optional): Ray world size and resources.
+        learner_poll_interval (float): Remote replay polling interval.
         enable_logging (bool, optional): Whether to enable metric logging. Defaults to True.
         log_rewards (bool, optional): Whether to log reward statistics. Defaults to True.
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
-        target_net_updater (TargetNetUpdater, optional): Target network updater for soft updates. Defaults to None.
+        target_net_updater (TargetNetUpdater): Target network updater for soft
+            updates.
         done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
         terminated_key (NestedKey, optional): Terminated key used by losses and logging. Defaults to "terminated".
         reward_key (NestedKey, optional): Reward key used by losses and logging. Defaults to "reward".
@@ -84,6 +90,7 @@ class SACTrainer(Trainer):
         >>> from torchrl.collectors import Collector
         >>> from torchrl.objectives import SACLoss
         >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> from torchrl.objectives.utils import SoftUpdate
         >>> from torch import optim
         >>>
         >>> # Set up collector, loss, and replay buffer
@@ -91,6 +98,7 @@ class SACTrainer(Trainer):
         >>> loss_module = SACLoss(actor_network, qvalue_network)
         >>> optimizer = optim.Adam(loss_module.parameters(), lr=3e-4)
         >>> replay_buffer = ReplayBuffer(storage=LazyTensorStorage(100000))
+        >>> target_net_updater = SoftUpdate(loss_module, eps=0.995)
         >>>
         >>> # Create and run trainer
         >>> trainer = SACTrainer(
@@ -101,6 +109,7 @@ class SACTrainer(Trainer):
         ...     loss_module=loss_module,
         ...     optimizer=optimizer,
         ...     replay_buffer=replay_buffer,
+        ...     target_net_updater=target_net_updater,
         ... )
         >>> trainer.train()
 
@@ -128,8 +137,14 @@ class SACTrainer(Trainer):
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         replay_buffer: ReplayBuffer | None = None,
         batch_size: int | None = None,
+        learner_backend: Literal["local", "ray"] = "local",
+        learner_backend_options: dict[str, Any] | None = None,
+        learner_poll_interval: float = 0.05,
         enable_logging: bool = True,
         log_rewards: bool = True,
         log_actions: bool = True,
@@ -151,6 +166,13 @@ class SACTrainer(Trainer):
             UserWarning,
             stacklevel=2,
         )
+        if target_net_updater is None:
+            raise ValueError("SACTrainer requires a target_net_updater.")
+        if learner_backend == "ray" and async_collection and enable_logging:
+            raise ValueError(
+                "SACTrainer cannot run batch logging hooks with asynchronous "
+                "collection and learner_backend='ray'; set enable_logging=False."
+            )
         # try to get the action spec
         self._pass_action_spec_from_collector_to_loss(collector, loss_module)
 
@@ -161,6 +183,12 @@ class SACTrainer(Trainer):
             optim_steps_per_batch=optim_steps_per_batch,
             loss_module=loss_module,
             optimizer=optimizer,
+            replay_buffer=replay_buffer,
+            target_net_updater=target_net_updater,
+            batch_size=batch_size,
+            learner_backend=learner_backend,
+            learner_backend_options=learner_backend_options,
+            learner_poll_interval=learner_poll_interval,
             logger=logger,
             clip_grad_norm=clip_grad_norm,
             clip_norm=clip_norm,
@@ -169,6 +197,9 @@ class SACTrainer(Trainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
+            checkpoint_rotation=checkpoint_rotation,
+            checkpoint_metadata=checkpoint_metadata,
             async_collection=async_collection,
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
@@ -178,7 +209,7 @@ class SACTrainer(Trainer):
 
         # Note: SAC can use any sampler type, unlike PPO which requires SamplerWithoutReplacement
 
-        if replay_buffer is not None:
+        if replay_buffer is not None and learner_backend == "local":
             rb_trainer = ReplayBufferTrainer(
                 replay_buffer,
                 batch_size=None,
@@ -191,15 +222,18 @@ class SACTrainer(Trainer):
                 self.register_op("pre_epoch", rb_trainer.extend)
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
-        self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
+        self.target_net_updater = target_net_updater
+        if learner_backend == "local":
+            self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
-        policy_weights_getter = partial(
-            TensorDict.from_module, self.loss_module.actor_network
-        )
-        update_weights = UpdateWeights(
-            self.collector, 1, policy_weights_getter=policy_weights_getter
-        )
-        self.register_op("post_steps", update_weights)
+        if learner_backend == "local":
+            policy_weights_getter = partial(
+                TensorDict.from_module, self.loss_module.actor_network
+            )
+            update_weights = UpdateWeights(
+                self.collector, 1, policy_weights_getter=policy_weights_getter
+            )
+            self.register_op("post_steps", update_weights)
 
         # Store logging configuration
         self.enable_logging = enable_logging

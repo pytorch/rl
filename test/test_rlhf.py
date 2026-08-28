@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import zipfile
 from copy import deepcopy
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -21,6 +23,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModule
+from torchrl._utils import print_directory_tree
 from torchrl.data.llm import TensorDictTokenizer
 from torchrl.data.llm.dataset import (
     _has_datasets,
@@ -68,8 +71,6 @@ def tldr_batch_dir(tmp_path_factory):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
         yield dest / Path(dataset_path).stem
-    from torchrl._utils import print_directory_tree
-
     print_directory_tree(dest)
 
 
@@ -398,27 +399,196 @@ def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, 
     assert loss.shape == torch.Size([])
 
 
+def _mock_reward_model_transformers(
+    monkeypatch,
+    *,
+    tokenizer=None,
+    tokenizer_error=None,
+    config_pad_token_id=7,
+    config_eos_token_id=8,
+):
+    from torchrl.modules.models import llm as llm_module
+
+    calls = {}
+
+    class Config:
+        n_embd = 4
+        pad_token_id = config_pad_token_id
+        eos_token_id = config_eos_token_id
+
+    class FakeModel:
+        config = Config()
+        transformer = torch.nn.Identity()
+
+    class FakeGPT2LMHeadModel:
+        config_class = Config
+
+        def __init__(self, config):
+            self.config = config
+            self.transformer = torch.nn.Identity()
+
+        @classmethod
+        def from_pretrained(cls, model_path, return_dict=False):
+            calls["model_path"] = model_path
+            calls["return_dict"] = return_dict
+            return FakeModel()
+
+    class FakeAutoTokenizer:
+        @classmethod
+        def from_pretrained(cls, model_path):
+            calls["tokenizer_path"] = model_path
+            if tokenizer_error is not None:
+                raise tokenizer_error
+            return tokenizer
+
+    fake_transformers = ModuleType("transformers")
+    fake_transformers.GPT2LMHeadModel = FakeGPT2LMHeadModel
+    fake_transformers.AutoTokenizer = FakeAutoTokenizer
+
+    monkeypatch.setattr(llm_module, "_has_transformers", True)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    return calls
+
+
+def test_reward_model_uses_explicit_pad_token_id(monkeypatch):
+    calls = _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=123, eos_token_id=456)
+    )
+
+    reward_model = GPT2RewardModel("custom-model", pad_token_id=321)
+
+    assert reward_model.pad_id == 321
+    assert calls["model_path"] == "custom-model"
+    assert "tokenizer_path" not in calls
+
+
+def test_reward_model_uses_tokenizer_from_model_path(monkeypatch):
+    calls = _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=123, eos_token_id=456)
+    )
+
+    reward_model = GPT2RewardModel("custom-model")
+
+    assert reward_model.pad_id == 123
+    assert calls["model_path"] == "custom-model"
+    assert calls["return_dict"] is False
+    assert calls["tokenizer_path"] == "custom-model"
+
+
+def test_reward_model_falls_back_to_tokenizer_eos_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=None, eos_token_id=456)
+    )
+
+    reward_model = GPT2RewardModel("custom-model")
+
+    assert reward_model.pad_id == 456
+
+
+def test_reward_model_falls_back_to_config_pad_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch,
+        tokenizer_error=OSError("missing tokenizer"),
+        config_pad_token_id=789,
+    )
+
+    reward_model = GPT2RewardModel("custom-model")
+
+    assert reward_model.pad_id == 789
+
+
+def test_compute_reward_loss_uses_model_pad_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=0, eos_token_id=456)
+    )
+    reward_model = GPT2RewardModel("custom-model")
+
+    chosen_batch = SimpleNamespace(
+        input_ids=torch.tensor([[1, 2, 3, 0, 0]]),
+        rewards=torch.tensor([[0.0, 0.0, 0.0, 0.0, -100.0]]),
+    )
+    rejected_batch = SimpleNamespace(
+        input_ids=torch.tensor([[1, 2, 4, 5, 0]]),
+        rewards=torch.tensor([[0.0, 0.0, 0.0, 0.0, 100.0]]),
+    )
+
+    loss = reward_model.compute_reward_loss(chosen_batch, rejected_batch)
+
+    expected = -F.logsigmoid(torch.zeros(2)).mean()
+    torch.testing.assert_close(loss, expected)
+
+
 def test_compute_reward_loss_identical_sequences():
     """Non-regression test for https://github.com/pytorch/rl/issues/3520."""
-    from types import SimpleNamespace
-
     seq_len = 6
     pad_token_id = 50256
     input_ids = torch.tensor([[1, 2, 3, 4, 5, pad_token_id]])
 
     chosen_batch = SimpleNamespace(
         input_ids=input_ids,
-        rewards=torch.randn(1, seq_len),
+        rewards=torch.randn(1, seq_len, requires_grad=True),
     )
     rejected_batch = SimpleNamespace(
         input_ids=input_ids.clone(),
-        rewards=torch.randn(1, seq_len),
+        rewards=torch.randn(1, seq_len, requires_grad=True),
     )
     loss = GPT2RewardModel.compute_reward_loss(
         chosen_batch, rejected_batch, pad_token_id=pad_token_id
     )
     assert loss.shape == torch.Size([])
     assert loss.item() == 0.0
+    loss.backward()
+    torch.testing.assert_close(
+        chosen_batch.rewards.grad, torch.zeros_like(chosen_batch.rewards)
+    )
+    torch.testing.assert_close(
+        rejected_batch.rewards.grad, torch.zeros_like(rejected_batch.rewards)
+    )
+
+
+def test_compute_reward_loss_normalizes_by_non_identical_sequences():
+    pad_token_id = 50256
+    chosen_ids = torch.tensor(
+        [
+            [1, 2, 3, 4, pad_token_id],
+            [1, 2, 9, 4, pad_token_id],
+        ]
+    )
+    rejected_ids = torch.tensor(
+        [
+            [1, 2, 3, 4, pad_token_id],
+            [1, 2, 3, 4, pad_token_id],
+        ]
+    )
+    chosen_rewards = torch.tensor(
+        [
+            [0.0, 0.0, 10.0, 10.0, 0.0],
+            [0.0, 0.0, 2.0, 2.0, 0.0],
+        ],
+        requires_grad=True,
+    )
+    rejected_rewards = torch.tensor(
+        [
+            [0.0, 0.0, -10.0, -10.0, 0.0],
+            [0.0, 0.0, 1.0, 1.0, 0.0],
+        ],
+        requires_grad=True,
+    )
+    chosen_batch = SimpleNamespace(input_ids=chosen_ids, rewards=chosen_rewards)
+    rejected_batch = SimpleNamespace(input_ids=rejected_ids, rewards=rejected_rewards)
+
+    loss = GPT2RewardModel.compute_reward_loss(
+        chosen_batch, rejected_batch, pad_token_id=pad_token_id
+    )
+    expected_loss = -F.logsigmoid(chosen_rewards[1, 2:4] - rejected_rewards[1, 2:4])
+    torch.testing.assert_close(loss, expected_loss.mean())
+    loss.backward()
+    torch.testing.assert_close(
+        chosen_rewards.grad[0], torch.zeros_like(chosen_rewards[0])
+    )
+    torch.testing.assert_close(
+        rejected_rewards.grad[0], torch.zeros_like(rejected_rewards[0])
+    )
 
 
 @pytest.mark.skipif(

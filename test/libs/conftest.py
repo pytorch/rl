@@ -12,7 +12,7 @@ import pytest
 import torch
 from packaging import version
 
-from torchrl.envs.libs.gym import _has_gym, gym_backend, set_gym_backend
+from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),
@@ -51,20 +51,7 @@ _has_minari = importlib.util.find_spec("minari") is not None
 
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
-_has_isaaclab = importlib.util.find_spec("isaaclab") is not None
-
 _has_gym_regular = importlib.util.find_spec("gym") is not None
-if _has_gymnasium:
-    set_gym_backend("gymnasium").set()
-    import gymnasium
-
-    assert gym_backend() is gymnasium
-elif _has_gym:
-    set_gym_backend("gym").set()
-    import gym
-
-    assert gym_backend() is gym
-
 _has_meltingpot = importlib.util.find_spec("meltingpot") is not None
 
 _has_minigrid = importlib.util.find_spec("minigrid") is not None
@@ -73,7 +60,21 @@ _has_procgen = importlib.util.find_spec("procgen") is not None
 
 
 @pytest.fixture(scope="session", autouse=True)
-def maybe_init_minigrid():
+def _setup_gym_backend():
+    if _has_gymnasium:
+        set_gym_backend("gymnasium").set()
+        import gymnasium
+
+        assert gym_backend() is gymnasium
+    elif _has_gym_regular:
+        set_gym_backend("gym").set()
+        import gym
+
+        assert gym_backend() is gym
+
+
+@pytest.fixture(scope="session", autouse=True)
+def maybe_init_minigrid(_setup_gym_backend):
     if _has_minigrid and _has_gymnasium:
         import minigrid
 

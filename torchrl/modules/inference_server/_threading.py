@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import Future
 
 from tensordict.base import TensorDictBase
@@ -26,6 +27,7 @@ class ThreadingTransport(InferenceTransport):
     def __init__(self):
         self._queue: list[TensorDictBase] = []
         self._futures: list[Future] = []
+        self._submitted_at: list[float] = []
         self._cond = threading.Condition(threading.Lock())
 
     def submit(self, td: TensorDictBase) -> Future[TensorDictBase]:
@@ -34,18 +36,28 @@ class ThreadingTransport(InferenceTransport):
         with self._cond:
             self._queue.append(td)
             self._futures.append(fut)
+            self._submitted_at.append(time.monotonic())
             self._cond.notify()
         return fut
 
     def drain(self, max_items: int) -> tuple[list[TensorDictBase], list[Future]]:
         """Dequeue up to *max_items* pending requests."""
+        items, futs, _submitted_at = self.drain_with_timing(max_items)
+        return items, futs
+
+    def drain_with_timing(
+        self, max_items: int
+    ) -> tuple[list[TensorDictBase], list[Future], list[float]]:
+        """Dequeue requests with actor-side submission timestamps."""
         with self._cond:
             n = min(len(self._queue), max_items)
             items = self._queue[:n]
             futs = self._futures[:n]
+            submitted_at = self._submitted_at[:n]
             del self._queue[:n]
             del self._futures[:n]
-        return items, futs
+            del self._submitted_at[:n]
+        return items, futs, submitted_at
 
     def wait_for_work(self, timeout: float) -> None:
         """Block until at least one request is enqueued or *timeout* elapses."""

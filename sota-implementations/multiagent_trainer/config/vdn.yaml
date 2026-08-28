@@ -1,0 +1,24 @@
+defaults:
+  - qmix
+  - network@networks.vdn_mixer_network: vdn_mixer
+  - _self_
+
+networks:
+  vdn_mixer_network:
+    n_agents: ${env.n_agents}
+    device: ${train.device}
+
+models:
+  mixer_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_module
+    module: ${networks.vdn_mixer_network}
+    in_keys:
+      - [agents, chosen_action_value]
+    out_keys:
+      - chosen_action_value
+
+logger:
+  exp_name: vdn_vmas_${env.scenario_name}
+
+trainer:
+  mixing_strategy: vdn

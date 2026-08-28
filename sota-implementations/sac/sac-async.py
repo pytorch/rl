@@ -55,7 +55,7 @@ torch.set_float32_matmul_precision("high")
 tensordict.nn.functional_modules._exclude_td_from_pytree().set()
 
 
-@hydra.main(version_base="1.1", config_path="", config_name="config-async")
+@hydra.main(version_base="1.3", config_path="", config_name="config-async")
 def main(cfg: DictConfig):  # noqa: F821
     device = (
         torch.device(cfg.network.device)

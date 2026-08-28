@@ -148,6 +148,22 @@ class TestCQL(LossModuleTestBase):
         )
         self.reset_parameters_recursive_test(loss_fn)
 
+    def test_cql_actor_uses_joint_sample_log_prob(self, monkeypatch):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_cql()
+        loss_fn = CQLLoss(
+            actor_network=self._create_mock_actor(),
+            qvalue_network=self._create_mock_qvalue(),
+        )
+
+        def fail_log_prob(*args, **kwargs):
+            raise AssertionError("CQL inverse-scored a freshly sampled TanhNormal")
+
+        monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
+        actor_loss, metadata = loss_fn.actor_loss(td)
+        assert actor_loss.isfinite().all()
+        assert metadata[loss_fn.tensor_keys.log_prob].isfinite().all()
+
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, True))
     @pytest.mark.parametrize("max_q_backup", [True, False])
@@ -182,7 +198,11 @@ class TestCQL(LossModuleTestBase):
             delay_qvalue=delay_qvalue,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -361,7 +381,11 @@ class TestCQL(LossModuleTestBase):
             deactivate_vmap=False,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -389,7 +413,11 @@ class TestCQL(LossModuleTestBase):
             deactivate_vmap=True,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -845,7 +873,11 @@ class TestDiscreteCQL(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DiscreteCQLLoss(actor, loss_function="l2", delay_value=delay_value)
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return

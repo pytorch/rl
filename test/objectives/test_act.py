@@ -9,7 +9,10 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
+from torchrl.data.vla import ACTION_CHUNK_KEY
+from torchrl.envs.transforms import ActionChunkTransform
 from torchrl.modules.models import ACTModel
+from torchrl.modules.models.act import _sinusoidal_pos_enc
 from torchrl.objectives import ACTLoss
 
 
@@ -39,7 +42,7 @@ def _make_batch(
     return TensorDict(
         {
             "observation": torch.randn(batch_size, obs_dim),
-            "action_chunk": torch.randn(batch_size, chunk_size, action_dim),
+            ACTION_CHUNK_KEY: torch.randn(batch_size, chunk_size, action_dim),
         },
         batch_size=[batch_size],
     )
@@ -179,8 +182,6 @@ class TestACTModel:
         torch.testing.assert_close(a_src, a_dst)
 
     def test_sinusoidal_pos_enc_rejects_odd_dim(self):
-        from torchrl.modules.models.act import _sinusoidal_pos_enc
-
         with pytest.raises(ValueError, match="even"):
             _sinusoidal_pos_enc(4, 7)
 
@@ -262,7 +263,7 @@ class TestACTLoss:
         actor = _make_actor()
         loss_fn = ACTLoss(actor)
         assert "observation" in loss_fn.in_keys
-        assert "action_chunk" in loss_fn.in_keys
+        assert ACTION_CHUNK_KEY in loss_fn.in_keys
 
     def test_out_keys(self):
         actor = _make_actor()
@@ -332,7 +333,7 @@ class TestACTLoss:
         td = TensorDict(
             {
                 "observation": torch.randn(*batch_shape, OBS_DIM),
-                "action_chunk": torch.randn(*batch_shape, CHUNK_SIZE, ACTION_DIM),
+                ACTION_CHUNK_KEY: torch.randn(*batch_shape, CHUNK_SIZE, ACTION_DIM),
             },
             batch_size=list(batch_shape),
         )
@@ -340,6 +341,21 @@ class TestACTLoss:
         assert loss_td["loss_act"].shape == torch.Size(batch_shape)
         assert loss_td["loss_reconstruction"].shape == torch.Size(batch_shape)
         assert loss_td["loss_kl"].shape == torch.Size(batch_shape)
+
+    def test_action_chunk_transform_default_key(self):
+        actor = _make_actor()
+        loss_fn = ACTLoss(actor)
+        td = TensorDict(
+            {
+                "observation": torch.randn(4, CHUNK_SIZE, OBS_DIM),
+                "action": torch.randn(4, CHUNK_SIZE, ACTION_DIM),
+            },
+            batch_size=[4, CHUNK_SIZE],
+        )
+        td = ActionChunkTransform(CHUNK_SIZE)(td)
+        td = td[:, 0].clone()
+        loss_td = loss_fn(td)
+        assert loss_td["loss_act"].isfinite()
 
     def test_reset_parameters_recursive(self):
         actor = _make_actor()

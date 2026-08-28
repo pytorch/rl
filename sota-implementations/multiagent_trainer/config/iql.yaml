@@ -1,0 +1,35 @@
+defaults:
+  - qmix
+  - loss@iql_loss: dqn
+  - target_net_updater@iql_target_net_updater: hard
+  - _self_
+
+iql_loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  double_dqn: false
+  action_space: categorical
+  reward_key: [agents, reward]
+  done_key: [agents, done]
+  terminated_key: [agents, terminated]
+  action_key: [agents, action]
+  action_value_key: [agents, action_value]
+  value_key: [agents, chosen_action_value]
+
+iql_target_net_updater:
+  value_network_update_interval: 100
+
+loss: ${iql_loss}
+
+target_net_updater: ${iql_target_net_updater}
+
+logger:
+  exp_name: iql_vmas_${env.scenario_name}
+
+trainer:
+  mixing_strategy: iql
+  reward_key: [agents, reward]
+  episode_reward_key: [agents, episode_reward]
+  done_key: [agents, done]
+  terminated_key: [agents, terminated]

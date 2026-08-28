@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 from omegaconf import MISSING
-from tensordict import NestedKey
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
@@ -66,8 +65,8 @@ class EarlyStoppingConfig(HookConfig):
         ... )
     """
 
-    monitor: NestedKey = "r_evaluation"
-    mode: Literal["min", "max"] = "max"
+    monitor: Any = "r_evaluation"
+    mode: str = "max"
     min_delta: float = 0.0
     patience: int = 100_000
     wait_for: int = 1_000_000

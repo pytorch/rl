@@ -83,6 +83,15 @@ class InferenceTransport(abc.ABC):
         """
         ...
 
+    def _set_peer_alive(self, alive_event) -> None:  # noqa: B027
+        """Attach a liveness flag consulted by blocking client waits.
+
+        Process-backed servers pass an event that is cleared when the server
+        process exits so that clients raise instead of blocking forever on a
+        reply that will never come. Transports whose clients cannot outlive
+        their server ignore the flag (the default).
+        """
+
     def client(self) -> InferenceClient:  # noqa: F821
         """Return an actor-side :class:`InferenceClient` bound to this transport."""
         from torchrl.modules.inference_server._server import InferenceClient

@@ -19,5 +19,5 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy==1.9.1
-    - hydra-core
+    - hydra-core<1.4
     - ninja

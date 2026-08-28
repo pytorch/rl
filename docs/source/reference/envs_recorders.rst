@@ -21,17 +21,20 @@ Recording videos
 Several backends offer the possibility of recording rendered images from the environment.
 If the pixels are already part of the environment output (e.g. Atari or other game simulators), a
 :class:`~torchrl.record.VideoRecorder` can be appended to the environment. This environment transform takes as input
-a logger capable of recording videos (e.g. :class:`~torchrl.record.loggers.CSVLogger`, :class:`~torchrl.record.loggers.WandbLogger`
+a logger capable of recording videos (e.g. :class:`~torchrl.record.loggers.csv.CSVLogger`, :class:`~torchrl.record.loggers.wandb.WandbLogger`
 or :class:`~torchrl.record.loggers.TensorBoardLogger`) as well as a tag indicating where the video should be saved.
-For instance, to save mp4 videos on disk, one can use :class:`~torchrl.record.loggers.CSVLogger` with a `video_format="mp4"`
+For instance, to save mp4 videos on disk, one can use :class:`~torchrl.record.loggers.csv.CSVLogger` with a `video_format="mp4"`
 argument.
 
 The :class:`~torchrl.record.VideoRecorder` transform can handle batched images and automatically detects numpy or PyTorch
-formatted images (WHC or CWH).
+formatted images (WHC or CWH). It reads the root ``"pixels"`` key by default,
+turns vector-environment frames into one synchronized grid per environment
+step, and automatically obtains a restricted client when passed a logger
+service owner.
 
     >>> logger = CSVLogger("dummy-exp", video_format="mp4")
     >>> env = GymEnv("ALE/Pong-v5")
-    >>> env = env.append_transform(VideoRecorder(logger, tag="rendered", in_keys=["pixels"]))
+    >>> env = env.append_transform(VideoRecorder(logger, tag="rendered"))
     >>> env.rollout(10)
     >>> env.transform.dump()  # Save the video and clear cache
 

@@ -28,6 +28,7 @@ from torchrl._utils import implement_for, logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
+from .vllm_plugin import FP32_OVERRIDES_ENV_VAR
 
 
 _has_vllm = True
@@ -134,11 +135,17 @@ class _AsyncLLMEngine:
         engine_args (AsyncEngineArgs): Arguments for creating the AsyncLLMEngine instances.
         bundle_indices (list[int], optional): Bundle indices for the engine.
         enable_prefix_caching (bool, optional): Whether to enable prefix caching.
+            ``None`` (default) leaves ``engine_args.enable_prefix_caching``
+            untouched.
 
-            .. warning::
-                enable_prefix_caching is set to False by default, which is recommended if prompt log probs are needed.
-                Set it to True if prompt log probs are not needed.
-                See `this issue <https://github.com/vllm-project/vllm/issues/8268>`_ for more details.
+            .. note::
+                Prefix caching used to be discouraged with online weight
+                updates because cached KV prefixes are keyed by prompt content,
+                not by the weights that produced them. Caches are now reset
+                automatically after each weight update (see
+                :meth:`reset_prefix_cache`), and truncated prompt log-probs
+                from cached prefixes are zero-padded by the vLLM wrapper, so
+                enabling it for online RL is supported.
     """
 
     def __init__(
@@ -146,7 +153,7 @@ class _AsyncLLMEngine:
         *,
         engine_args: AsyncEngineArgs,
         bundle_indices: list[int] | None = None,
-        enable_prefix_caching: bool = False,
+        enable_prefix_caching: bool | None = None,
     ):
         if not _has_vllm:
             raise ImportError(
@@ -159,7 +166,8 @@ class _AsyncLLMEngine:
         if bundle_indices is not None:
             os.environ["VLLM_RAY_BUNDLE_INDICES"] = ",".join(map(str, bundle_indices))
 
-        engine_args.enable_prefix_caching = enable_prefix_caching
+        if enable_prefix_caching is not None:
+            engine_args.enable_prefix_caching = enable_prefix_caching
 
         # Enable native weight transfer support (vLLM 0.17+)
         engine_args.weight_transfer_config = WeightTransferConfig(backend="nccl")
@@ -217,6 +225,7 @@ class _AsyncLLMEngine:
             prompt_token_ids: Alternative to prompts - token IDs for generation.
             use_tqdm: Whether to show progress bar (not used in async engine).
             lora_request: LoRA request for adapter-based generation.
+            prompt_adapter_request: prompt adapter request forwarded to vLLM.
             guided_options_request: Guided decoding options.
             timeout_seconds: Timeout for generation in seconds.
 
@@ -440,7 +449,16 @@ class _AsyncLLMEngine:
         Args:
             update_request: WeightTransferUpdateRequest (or dict) for the engine.
         """
-        return await self.engine.update_weights(update_request)
+        start_weight_update = getattr(self.engine, "start_weight_update", None)
+        finish_weight_update = getattr(self.engine, "finish_weight_update", None)
+        if start_weight_update is None:
+            return await self.engine.update_weights(update_request)
+        await start_weight_update(is_checkpoint_format=True)
+        try:
+            return await self.engine.update_weights(update_request)
+        finally:
+            if finish_weight_update is not None:
+                await finish_weight_update()
 
     def get_world_size(self):
         """Get the world size (TP * DP) for this engine instance."""
@@ -463,6 +481,21 @@ class _AsyncLLMEngine:
         if tags is None:
             tags = ["scheduling"]
         return await self.engine.wake_up(tags=tags)
+
+    async def reset_prefix_cache(self) -> bool | None:
+        """Invalidate cached KV prefixes (stale after an online weight update).
+
+        Returns:
+            Whether the cache was fully reset, when reported by vLLM. ``False``
+            means some cached blocks are still held by in-flight requests.
+        """
+        try:
+            # Also reset KV-connector-backed entries: vLLM defaults
+            # reset_connector=False, which only clears the local cache.
+            return await self.engine.reset_prefix_cache(reset_connector=True)
+        except TypeError:
+            # Older vLLM without the reset_connector kwarg.
+            return await self.engine.reset_prefix_cache()
 
 
 def _gpus_per_replica(engine_args: AsyncEngineArgs) -> int:
@@ -494,12 +527,17 @@ class AsyncVLLM(RLvLLMEngine):
         engine_args (AsyncEngineArgs): Configuration for the vLLM engines.
         num_replicas (int, optional): Number of engine replicas to create. Defaults to 1.
         actor_class (optional): Custom Ray actor class. Defaults to the internal actor implementation.
-        enable_prefix_caching (bool, optional): Whether to enable prefix caching. Defaults to False.
+        enable_prefix_caching (bool, optional): Whether to enable prefix caching.
+            ``None`` (default) respects ``engine_args.enable_prefix_caching`` when it
+            is set, and falls back to ``False`` otherwise.
 
-            .. warning::
-                enable_prefix_caching is set to False by default, which is recommended if prompt log probs are needed.
-                Set it to True if prompt log probs are not needed.
-                See `this issue <https://github.com/vllm-project/vllm/issues/8268>`_ for more details.
+            .. note::
+                Prefix caching used to be discouraged with online weight updates
+                because cached KV prefixes are keyed by prompt content, not by the
+                weights that produced them. Caches are now reset automatically after
+                each weight update (see :meth:`reset_prefix_cache`), and truncated
+                prompt log-probs from cached prefixes are zero-padded by the vLLM
+                wrapper, so enabling it for online RL is supported.
 
     Example:
         >>> from torchrl.modules.llm import AsyncVLLM
@@ -558,7 +596,8 @@ class AsyncVLLM(RLvLLMEngine):
 
         **Performance Considerations**
 
-        - Prefix caching is enabled by default for better performance with repeated prompts
+        - Prefix caching is disabled by default (conservative); when enabled, caches are
+          reset automatically after each weight update
         - Tensor parallelism is supported for large models that don't fit on single GPUs
         - Multiple replicas allow concurrent processing of different requests
         - Native vLLM batching is used within each replica for optimal throughput
@@ -575,7 +614,7 @@ class AsyncVLLM(RLvLLMEngine):
         engine_args: AsyncEngineArgs,
         num_replicas: int = 1,
         actor_class=None,
-        enable_prefix_caching: bool = False,
+        enable_prefix_caching: bool | None = None,
     ):
         if not _has_vllm:
             raise ImportError(
@@ -583,8 +622,13 @@ class AsyncVLLM(RLvLLMEngine):
             )
         # Lazily import ray only when constructing the actor class to avoid global import
 
-        # Enable prefix caching by default for better performance
-        engine_args.enable_prefix_caching = enable_prefix_caching
+        if enable_prefix_caching is not None:
+            # Explicit request wins over whatever engine_args carries.
+            engine_args.enable_prefix_caching = enable_prefix_caching
+        elif getattr(engine_args, "enable_prefix_caching", None) is None:
+            # vLLM defaults None -> True; keep TorchRL's conservative default
+            # (prefix caches go stale across online weight updates).
+            engine_args.enable_prefix_caching = False
 
         self.engine_args = engine_args
         self.num_replicas = num_replicas
@@ -1037,6 +1081,26 @@ class AsyncVLLM(RLvLLMEngine):
             futures.append(actor_collective_rpc.remote(method, timeout, args, kwargs))
         return futures
 
+    def reset_prefix_cache(self) -> None:
+        """Reset the KV prefix cache on all replicas.
+
+        Called automatically after each weight update: cached prefixes are
+        keyed by prompt content, not by the weights that produced them, so
+        they are stale once new weights are loaded. This is a no-op when
+        prefix caching is disabled.
+        """
+        if not getattr(self.engine_args, "enable_prefix_caching", False):
+            return
+        ray = _get_ray()
+        torchrl_logger.info("Resetting prefix caches...")
+        results = ray.get([actor.reset_prefix_cache.remote() for actor in self.actors])
+        if any(result is False for result in results):
+            torchrl_logger.warning(
+                "reset_prefix_cache could not fully clear the prefix cache on "
+                "some replicas (in-flight requests may still hold KV blocks); "
+                "stale prefixes may persist until those requests complete."
+            )
+
     def shutdown(self):
         """Shutdown all actors and clean up resources."""
         torchrl_logger.info(
@@ -1252,6 +1316,10 @@ class AsyncVLLM(RLvLLMEngine):
 
         # Step 3: Wait for all actors to finish receiving
         ray.get(refs)
+
+        # Invalidate prefix caches before resuming scheduling: cached prefixes
+        # are keyed by prompt content and are stale now that weights changed.
+        self.reset_prefix_cache()
 
         # Wake up vLLM engines after weight update
         torchrl_logger.info("Waking up vLLM engines after weight update...")
@@ -1919,10 +1987,13 @@ def make_async_vllm_engine(
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
         enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             This can help with numerical stability for certain models. Requires model-specific support in
-            torchrl.modules.llm.backends._models.
+            torchrl.modules.llm.backends.vllm._models.
         tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
         data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
         pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
+        enable_prefix_caching (bool, optional): Whether to enable vLLM prefix
+            caching. Defaults to ``False`` to avoid reusing prompt KV caches
+            across online weight updates.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1954,6 +2025,9 @@ def make_async_vllm_engine(
     # Set FP32 output environment variable if requested
     if enable_fp32_output:
         os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        # Opt the engine + its child vLLM processes into torchrl's FP32 model
+        # overrides (the general-plugin no-ops without this).
+        os.environ[FP32_OVERRIDES_ENV_VAR] = "1"
         torchrl_logger.info(
             "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
             "This will use FP32 for the final output layer if the model supports it."
@@ -1988,9 +2062,11 @@ def make_async_vllm_engine(
     if pipeline_parallel_size is None:
         pipeline_parallel_size = 1
 
-    # Create engine args
-    # Don't explicitly set enable_prefix_caching to avoid conflicts
-    kwargs.setdefault("enable_prefix_caching", True)
+    # Prefix caches are keyed by prompt content, not by the model weights that
+    # produced their KV entries. TorchRL resets the cache after each weight
+    # update (AsyncVLLM.reset_prefix_cache), so opting in is safe for online
+    # RL, but stay conservative unless the caller explicitly opts in.
+    kwargs.setdefault("enable_prefix_caching", False)
 
     # Set compilation flag - this controls whether vLLM will compile the model for better performance
     # Disabled by default in GRPO since it can cause issues during training

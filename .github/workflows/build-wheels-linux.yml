@@ -81,6 +81,7 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
+      python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
       # For workflow_dispatch: convert boolean to enable/disable string
       # For workflow_call: use the string input directly
       # Default: build Linux CUDA wheels now that prioritized replay has CUDA kernels.

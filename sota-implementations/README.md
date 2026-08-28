@@ -11,13 +11,14 @@ We provide examples to train the following algorithms:
 - [Impala](impala/)
 - [PPO](../sota-implementations/ppo/)
 - [REDQ](redq/redq.py)
+- [RND (PPO + Random Network Distillation)](rnd/rnd_mujoco.py)
 - [SAC](sac/sac.py)
 - [TD3](../sota-implementations/td3/td3.py)
 - [Various multiagent examples](multiagent/)
 
 To run these examples, make sure you have installed hydra:
 ```
-pip install hydra-core
+pip install --upgrade "hydra-core>=1.3,<1.4"
 ```
 
 Scripts can be run from the directory of interest using:

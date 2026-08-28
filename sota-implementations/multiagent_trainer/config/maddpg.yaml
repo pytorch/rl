@@ -193,3 +193,7 @@ trainer:
   action_key: [agents, action]
   observation_key: [agents, observation]
   async_collection: false
+
+hydra:
+  job:
+    chdir: true
