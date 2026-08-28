@@ -16,10 +16,15 @@ need to know whether the update runs on one device, under sharded training, or
 on a remote training process.
 
 :class:`~torchrl.trainers.LocalLearner` is the single-process reference
-implementation. Its :meth:`~torchrl.trainers.Learner.get_weights` output is
-accepted as-is by :class:`~torchrl.weight_update.WeightSyncScheme`, so a
-``Learner`` composes with the existing weight-sync path without changes on
-either side.
+implementation. :class:`~torchrl.trainers.FSDP2Learner` shards the same model
+with :func:`torch.distributed._composable.fsdp.fully_shard` and reuses
+:meth:`~torchrl.trainers.Learner.update` unchanged -- FSDP2's sharding is
+transparent to the training step; only construction (the caller wraps the
+model before handing it to the learner) and :meth:`~torchrl.trainers.Learner.get_weights`
+(which gathers sharded parameters into plain tensors) differ. Either
+learner's :meth:`~torchrl.trainers.Learner.get_weights` output is accepted
+as-is by :class:`~torchrl.weight_update.WeightSyncScheme`, so a ``Learner``
+composes with the existing weight-sync path without changes on either side.
 
 .. autosummary::
     :toctree: generated/
@@ -28,3 +33,4 @@ either side.
     Learner
     LearnerCapabilities
     LocalLearner
+    FSDP2Learner

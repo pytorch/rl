@@ -5,9 +5,11 @@
 from __future__ import annotations
 
 from torchrl.trainers.learners.common import Learner, LearnerCapabilities
+from torchrl.trainers.learners.fsdp2 import FSDP2Learner
 from torchrl.trainers.learners.local import LocalLearner
 
 __all__ = [
+    "FSDP2Learner",
     "Learner",
     "LearnerCapabilities",
     "LocalLearner",
