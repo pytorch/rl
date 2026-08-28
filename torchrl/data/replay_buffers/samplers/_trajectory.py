@@ -20,7 +20,7 @@ class _FragmentedTrajectoryIndex:
         self.trajectory_key = trajectory_key
         self.step_key = step_key
         self._trajectory_positions: dict[int, dict[int, int]] | None = None
-        self._slot_records: list[tuple[int, int] | None] | None = None
+        self._slot_records: dict[int, tuple[int, int]] | None = None
         self._device: torch.device | None = None
         self._runs: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         self._pending_indices: list[torch.Tensor] = []
@@ -113,9 +113,10 @@ class _FragmentedTrajectoryIndex:
         storage_length = len(storage)
         index = torch.arange(storage_length, dtype=torch.long)
         slots, trajectories, steps, device = self._read_records(storage, index)
-        capacity = int(storage.max_size)
         trajectory_positions: dict[int, dict[int, int]] = defaultdict(dict)
-        slot_records: list[tuple[int, int] | None] = [None] * capacity
+        # Keyed by slot: list storages default to an unbounded max_size, so
+        # bookkeeping cannot be sized by capacity.
+        slot_records: dict[int, tuple[int, int]] = {}
         for position, trajectory, step in zip(slots, trajectories, steps):
             trajectory = int(trajectory)
             step = int(step)
@@ -179,7 +180,7 @@ class _FragmentedTrajectoryIndex:
         trajectories, steps = zip(*records.values())
 
         for slot in slots:
-            record = self._slot_records[slot]
+            record = self._slot_records.pop(slot, None)
             if record is None:
                 continue
             trajectory, step = record
@@ -188,7 +189,6 @@ class _FragmentedTrajectoryIndex:
                 del positions[step]
             if not positions:
                 del self._trajectory_positions[trajectory]
-            self._slot_records[slot] = None
 
         new_records = []
         seen = set()

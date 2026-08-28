@@ -566,6 +566,33 @@ class TestSamplers:
         sample = rb.sample().reshape(8, 2)
         assert torch.equal(sample["step"], torch.tensor([2, 3]).expand(8, 2))
 
+    def test_slice_sampler_fragmented_unbounded_lazy_stack_storage(self):
+        # List-backed storages default to an unbounded max_size; the index
+        # bookkeeping must not be sized by capacity.
+        rb = TensorDictReplayBuffer(
+            storage=LazyStackStorage(),
+            sampler=SliceSampler(
+                slice_len=2,
+                traj_key="trajectory",
+                step_key="step",
+                fragmented=True,
+            ),
+            batch_size=8,
+        )
+        rb.extend(
+            TensorDict(
+                {
+                    "trajectory": torch.arange(2).repeat(3),
+                    "step": torch.arange(3).repeat_interleave(2),
+                },
+                batch_size=[6],
+            )
+        )
+
+        sample = rb.sample().reshape(4, 2)
+        assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
+        assert (sample["step"][:, 1:] == sample["step"][:, :-1] + 1).all()
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)
