@@ -479,6 +479,9 @@ class TensorStorage(Storage):
         for key, value in patch.items():
             leaf = self._conditional_patch_leaf(key)
             leaf[coords] = value
+        # Caches derived from storage contents (boundary caches, the
+        # fragmented trajectory index) key their validity on the revision.
+        self._bump_mutation_revision()
 
     def __getstate__(self):
         state = super().__getstate__()
