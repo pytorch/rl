@@ -6,243 +6,145 @@ from __future__ import annotations
 
 import contextlib
 import functools
+from typing import Any
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
+from torchrl.objectives.common import LossModule
 from torchrl.trainers.learners.common import (
     _clone_tensors,
     Learner,
     LearnerCapabilities,
 )
+from torchrl.trainers.trainers import OptimizationStepper
 
 
 @functools.cache
 def _dist_state_dict():
-    """Return ``torch.distributed.checkpoint.state_dict``, imported on demand.
-
-    Deliberately lazy rather than a module-top import guarded by
-    ``importlib.util.find_spec``: this is a *torch submodule* whose presence
-    depends on the local torch build, and ``find_spec`` on a dotted name
-    eagerly imports the parent packages (and raises, rather than returning
-    ``None``, when a parent is missing). Importing it on first use keeps
-    ``import torchrl`` free of ``torch.distributed.checkpoint``.
-    """
     from torch.distributed.checkpoint import state_dict
 
     return state_dict
 
 
 class FSDP2Learner(Learner):
-    """A :class:`~torchrl.trainers.learners.Learner` for FSDP2-sharded models.
+    """FSDP2 placement backend for :class:`~torchrl.trainers.Learner`.
 
-    Accepts a model that the caller has already wrapped with
-    :func:`torch.distributed._composable.fsdp.fully_shard` (typically
-    per-submodule, then on the root module), and an optimizer built on that
-    (sharded) model's parameters. ``fully_shard`` must be applied *before* the
-    optimizer is constructed, so the optimizer holds the sharded
-    (:class:`~torch.distributed.tensor.DTensor`) parameters rather than the
-    original ones.
-
-    :meth:`~torchrl.trainers.learners.Learner.update` is inherited unchanged
-    from :class:`~torchrl.trainers.learners.Learner`: FSDP2's sharding is
-    transparent to the training step (forward/backward/optimizer-step all
-    dispatch through ``DTensor`` the same way they would through a regular
-    tensor). Only two things differ from
-    :class:`~torchrl.trainers.learners.LocalLearner`: how the model arrives
-    (already sharded, by the caller) and how :meth:`get_weights` reports it.
-
-    :meth:`get_weights` reassembles the sharded parameters into plain tensors
-    with
-    :func:`torch.distributed.checkpoint.state_dict.get_model_state_dict`, so
-    the returned tensordict holds regular tensors and is consumable by
-    :meth:`~torchrl.weight_update.WeightSyncScheme.send` exactly like
-    :class:`~torchrl.trainers.learners.LocalLearner`'s, with no changes needed
-    on the receiving (inference) side. This gather is the seam between
-    sharded training and (typically replicated) inference, and is the one
-    place sharding is not transparent.
-
-    .. warning::
-        With the default ``cpu_offload=True``, :meth:`get_weights` returns the
-        full weights **on rank 0 only**; every other rank gets an *empty*
-        tensordict. That is deliberate -- gathering the full model onto every
-        rank replicates it in every rank's memory for no benefit and does not
-        scale -- but it means ``scheme.send(learner.get_weights())`` called
-        unconditionally on all ranks sends nothing from the non-zero ones.
-        Either send from rank 0 only, or pass ``cpu_offload=False`` to gather
-        full copies everywhere.
+    The caller applies :func:`torch.distributed._composable.fsdp.fully_shard`
+    before constructing the optimizer and stepper. ``FSDP2Learner`` then uses
+    the same ``OptimizationStepper`` contract as ``Trainer`` and
+    ``LocalLearner``; it only adds FSDP gradient-sync control, full-weight
+    gathering, and distributed checkpoint translation.
 
     Args:
-        model (torch.nn.Module): a model already wrapped with ``fully_shard``.
-        optimizer (torch.optim.Optimizer): an optimizer constructed on
-            ``model``'s (already-sharded) parameters.
-
-    Keyword Args:
-        clip_grad_norm (float, optional): as in
-            :class:`~torchrl.trainers.learners.LocalLearner`. Gradient-norm
-            clipping dispatches through ``DTensor`` transparently. Defaults to
-            ``None``.
-        grad_accum_steps (int, optional): as in
-            :class:`~torchrl.trainers.learners.LocalLearner`. Defaults to
-            ``1``.
+        model (torch.nn.Module): Model already wrapped with ``fully_shard``.
+        loss_module (LossModule): Loss evaluated by :meth:`update`.
+        optimization_stepper (OptimizationStepper): Optimizer-owning stepper.
 
     .. warning::
-        ``FSDP2Learner`` does not itself decide what to shard, at what
-        granularity, or on what device mesh -- those are model-specific
-        choices that belong in the caller's model-construction code, exactly
-        as they would with bare ``fully_shard``. This keeps
-        ``FSDP2Learner`` a thin adapter rather than a second place those
-        decisions are made.
+        With ``cpu_offload=True``, :meth:`get_weights` returns full weights on
+        rank 0 and an empty TensorDict on other ranks.
 
     Examples:
         >>> import torch
         >>> import torch.distributed as dist
+        >>> from tensordict import TensorDict
         >>> from torch import nn
         >>> from torch.distributed._composable.fsdp import fully_shard
         >>> from torch.distributed.device_mesh import init_device_mesh
-        >>> from tensordict import TensorDict
         >>> from torchrl.objectives.common import LossModule
-        >>> from torchrl.trainers.learners import FSDP2Learner
-        >>>
+        >>> from torchrl.trainers import FSDP2Learner, MixedPrecisionOptimizationStepper
         >>> dist.init_process_group(backend="gloo", rank=0, world_size=1)
-        >>> mesh = init_device_mesh("cpu", (1,))
-        >>> model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 1))
-        >>> for layer in model:
-        ...     fully_shard(layer, mesh=mesh)
-        >>> fully_shard(model, mesh=mesh)
-        >>> optimizer = torch.optim.Adam(model.parameters())
-        >>>
+        >>> model = nn.Linear(4, 1)
+        >>> fully_shard(model, mesh=init_device_mesh("cpu", (1,)))
         >>> class ToyLoss(LossModule):
+        ...     def __init__(self, model):
+        ...         super().__init__()
+        ...         self.model = model
         ...     def forward(self, batch):
-        ...         pred = self.actor(batch["x"])
-        ...         return TensorDict({"loss_mse": (pred - batch["y"]).pow(2).mean()})
-        >>> loss_module = ToyLoss()
-        >>> loss_module.actor = model
-        >>>
-        >>> learner = FSDP2Learner(model, optimizer)
+        ...         prediction = self.model(batch["x"])
+        ...         return TensorDict({"loss_mse": (prediction - batch["y"]).pow(2).mean()})
+        >>> loss_module = ToyLoss(model)
+        >>> stepper = MixedPrecisionOptimizationStepper(
+        ...     torch.optim.Adam(loss_module.parameters())
+        ... )
+        >>> learner = FSDP2Learner(model, loss_module, stepper)
         >>> batch = TensorDict({"x": torch.randn(8, 4), "y": torch.randn(8, 1)}, [8])
-        >>> out = learner.update(batch, loss_module)
-        >>> weights = learner.get_weights()  # gathered, plain tensors
+        >>> learner.update(batch)["loss_mse"].ndim
+        0
         >>> dist.destroy_process_group()
     """
 
     def __init__(
         self,
         model: nn.Module,
-        optimizer: torch.optim.Optimizer,
-        *,
-        clip_grad_norm: float | None = None,
-        grad_accum_steps: int = 1,
-    ) -> None:
+        loss_module: LossModule,
+        optimization_stepper: OptimizationStepper,
+    ):
         try:
             _dist_state_dict()
         except ImportError as err:
             raise RuntimeError(
-                "FSDP2Learner requires torch.distributed.checkpoint.state_dict, "
-                "which is not available in this torch build."
+                "FSDP2Learner requires torch.distributed.checkpoint.state_dict."
             ) from err
-        super().__init__()
-        self.model = model
-        self.optimizer = optimizer
-        self.clip_grad_norm = clip_grad_norm
-        if grad_accum_steps < 1:
-            raise ValueError(f"grad_accum_steps must be >= 1, got {grad_accum_steps}.")
-        self.grad_accum_steps = grad_accum_steps
-        self._accum_step = 0
+        super().__init__(model, loss_module, optimization_stepper)
         self.capabilities = LearnerCapabilities(sharded=True, remote=False)
 
     def get_weights(self, *, cpu_offload: bool = True) -> TensorDictBase:
-        """Reassemble the sharded model into a plain-tensor tensordict.
-
-        Keyword Args:
-            cpu_offload (bool, optional): if ``True`` (the default), the
-                gathered weights are returned **only on rank 0** (every other
-                rank gets an empty tensordict) and moved to CPU, avoiding an
-                all-rank replication of the full model -- see the class-level
-                warning. Set to ``False`` to gather full device-resident copies
-                onto every rank instead.
-        """
+        """Gather a detached plain-tensor snapshot of the sharded model."""
         dsd = _dist_state_dict()
         options = dsd.StateDictOptions(full_state_dict=True, cpu_offload=cpu_offload)
         state_dict = dsd.get_model_state_dict(self.model, options=options)
-        return TensorDict(state_dict).unflatten_keys(".")
+        return TensorDict(state_dict).unflatten_keys(".").detach().clone()
 
     @contextlib.contextmanager
     def _extras_hidden_from_optimizer(self):
-        """Temporarily remove non-model parameters from the optimizer.
-
-        ``torch.distributed.checkpoint.state_dict`` maps optimizer state to
-        model FQNs, so a loss-owned parameter with no FQN makes
-        ``get_state_dict``/``set_state_dict`` fail with a bare ``KeyError``.
-        The extras (values and optimizer state) are carried in the checkpoint
-        explicitly instead -- they are plain unsharded tensors, so DCP has
-        nothing to reshard anyway.
-        """
+        """Hide non-model parameters from DCP and carry them explicitly."""
         extras = self._extra_optimized_parameters()
-        extra_ids = {id(p) for p in extras}
+        extra_ids = {id(parameter) for parameter in extras}
         saved_groups = [group["params"] for group in self.optimizer.param_groups]
         saved_state = {
-            p: self.optimizer.state.pop(p) for p in extras if p in self.optimizer.state
+            parameter: self.optimizer.state.pop(parameter)
+            for parameter in extras
+            if parameter in self.optimizer.state
         }
         for group in self.optimizer.param_groups:
-            group["params"] = [p for p in group["params"] if id(p) not in extra_ids]
+            group["params"] = [
+                parameter
+                for parameter in group["params"]
+                if id(parameter) not in extra_ids
+            ]
         try:
             yield extras, saved_state
         finally:
-            for group, params in zip(self.optimizer.param_groups, saved_groups):
-                group["params"] = params
+            for group, parameters in zip(self.optimizer.param_groups, saved_groups):
+                group["params"] = parameters
             self.optimizer.state.update(saved_state)
 
-    def checkpoint(self) -> dict:
-        """DTensor-aware checkpoint: gathers model + optimizer state to rank 0.
+    def checkpoint(self) -> dict[str, Any]:
+        """Gather model and optimizer state while preserving stepper state."""
+        stepper_state = _clone_tensors(self.optimization_stepper.state_dict())
+        stepper_state.pop("optimizer", None)
 
-        Overrides :meth:`~torchrl.trainers.learners.Learner.checkpoint`, whose
-        plain (non-distributed) ``state_dict()`` calls would return raw,
-        per-rank ``DTensor`` shards rather than a portable checkpoint.
-
-        Like the base implementation, the returned tensors are independent
-        clones. ``get_state_dict`` does *not* guarantee that: with
-        ``cpu_offload=True`` it only copies when the shards are off-CPU, so on a
-        CPU mesh (or a single-rank one) the "gathered" tensors alias the live
-        shards, and training on would silently mutate the checkpoint.
-
-        Optimized parameters living outside ``model`` (loss-owned, unsharded
-        by construction) cannot be described by
-        ``torch.distributed.checkpoint.state_dict``; their values and
-        optimizer state are carried explicitly under ``"extra_params"`` and
-        ``"extra_optim_state"``.
-        """
         dsd = _dist_state_dict()
         options = dsd.StateDictOptions(full_state_dict=True, cpu_offload=True)
         with self._extras_hidden_from_optimizer() as (extras, extra_state):
-            model_state_dict, optim_state_dict = dsd.get_state_dict(
+            model_state, optimizer_state = dsd.get_state_dict(
                 self.model, self.optimizer, options=options
             )
-            return {
-                "model": _clone_tensors(model_state_dict),
-                "optimizer": _clone_tensors(optim_state_dict),
-                "extra_params": [p.detach().clone() for p in extras],
-                "extra_optim_state": [
-                    _clone_tensors(extra_state.get(p, {})) for p in extras
-                ],
-                "accum_step": self._accum_step,
-            }
+        return {
+            "model": _clone_tensors(model_state),
+            "optimizer": _clone_tensors(optimizer_state),
+            "optimization_stepper": stepper_state,
+            "extra_params": [parameter.detach().clone() for parameter in extras],
+            "extra_optim_state": [
+                _clone_tensors(extra_state.get(parameter, {})) for parameter in extras
+            ],
+        }
 
-    def load_checkpoint(self, checkpoint: dict) -> None:
-        """Restore a checkpoint produced by :meth:`checkpoint`.
-
-        ``broadcast_from_rank0=True`` lets rank 0 hold the full checkpoint
-        (as produced by :meth:`checkpoint`) while every rank reshards it
-        according to its local shards -- the counterpart of the
-        ``cpu_offload``-gathered save. Optimized parameters living outside
-        ``model`` (``"extra_params"``, unsharded by construction) follow the
-        same rank-0-authoritative contract: they are restored from the local
-        checkpoint where present, then broadcast from rank 0.
-
-        Args:
-            checkpoint (dict): as returned by :meth:`checkpoint`.
-        """
+    def load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
+        """Restore and reshard a checkpoint produced by :meth:`checkpoint`."""
         dsd = _dist_state_dict()
         options = dsd.StateDictOptions(full_state_dict=True, broadcast_from_rank0=True)
         with self._extras_hidden_from_optimizer() as (extras, _):
@@ -253,21 +155,23 @@ class FSDP2Learner(Learner):
                 optim_state_dict=checkpoint["optimizer"],
                 options=options,
             )
+
         if not extras or checkpoint.get("extra_params"):
             self._restore_extra_params(checkpoint)
-            for param, state in zip(
+            for parameter, state in zip(
                 extras, checkpoint.get("extra_optim_state", [{}] * len(extras))
             ):
                 if state:
-                    self.optimizer.state[param] = _clone_tensors(state)
-        if (
-            extras
-            and torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-        ):
-            for param in extras:
-                torch.distributed.broadcast(param.data, src=0)
-                for value in self.optimizer.state.get(param, {}).values():
+                    self.optimizer.state[parameter] = _clone_tensors(state)
+        if extras and torch.distributed.is_initialized():
+            for parameter in extras:
+                torch.distributed.broadcast(parameter.data, src=0)
+                for value in self.optimizer.state.get(parameter, {}).values():
                     if isinstance(value, torch.Tensor):
                         torch.distributed.broadcast(value, src=0)
-        self._restore_accum_step(checkpoint.get("accum_step", 0))
+
+        stepper_state = {
+            "optimizer": self.optimizer.state_dict(),
+            **checkpoint["optimization_stepper"],
+        }
+        self.optimization_stepper.load_state_dict(stepper_state)
