@@ -593,6 +593,28 @@ class TestSamplers:
         assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
         assert (sample["step"][:, 1:] == sample["step"][:, :-1] + 1).all()
 
+    def test_slice_sampler_state_from_older_version(self):
+        # Samplers pickled before the fragmented attributes existed must keep
+        # working: their __dict__ lacks fragmented/step_key/_fragmented_index.
+        state = SliceSampler(slice_len=2, traj_key="trajectory").__getstate__()
+        for key in ("fragmented", "step_key", "_fragmented_index"):
+            state.pop(key)
+        legacy = SliceSampler.__new__(SliceSampler)
+        legacy.__dict__.update(state)
+
+        repr(legacy)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(4), sampler=legacy, batch_size=4
+        )
+        rb.extend(
+            TensorDict(
+                {"trajectory": torch.tensor([0, 0, 1, 1])},
+                batch_size=[4],
+            )
+        )
+        sample = rb.sample().reshape(2, 2)
+        assert (sample["trajectory"] == sample["trajectory"][:, :1]).all()
+
     @pytest.mark.parametrize("sampler", [SliceSampler, SliceSamplerWithoutReplacement])
     def test_slice_sampler_at_capacity(self, sampler):
         torch.manual_seed(0)

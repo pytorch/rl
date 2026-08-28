@@ -351,6 +351,12 @@ class SliceSampler(Sampler):
     # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
     _batch_size_multiplier: int | None = 1
 
+    # Class-level defaults keep samplers pickled by earlier torchrl versions
+    # (whose __dict__ lacks these attributes) working after an upgrade.
+    fragmented: bool = False
+    step_key: NestedKey | None = "step_count"
+    _fragmented_index: _FragmentedTrajectoryIndex | None = None
+
     def __init__(
         self,
         *,
