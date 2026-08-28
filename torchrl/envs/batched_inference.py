@@ -133,6 +133,8 @@ class FixedBatchedInference:
         tensor_template = batch.select(*tensor_keys)[:1]
         for bucket in self.bucket_sizes:
             template = tensor_template.expand(bucket).clone()
+            if self.add_valid_mask:
+                template.set(self._MASK_KEY, torch.zeros(bucket, dtype=torch.bool))
 
             buffers: list[TensorDictBase] = []
             events: list = []
@@ -205,9 +207,9 @@ class FixedBatchedInference:
             staging[B:].zero_()
 
         if self.add_valid_mask:
-            mask = torch.zeros(bucket, dtype=torch.bool)
+            mask = staging.get(self._MASK_KEY)
+            mask.fill_(False)
             mask[:B] = True
-            staging.set(self._MASK_KEY, mask, inplace=False)
 
         if self._stream is not None:
             with torch.cuda.stream(self._stream):
