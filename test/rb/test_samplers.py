@@ -2365,7 +2365,9 @@ class TestGeometricTrajectoryWindowSampler:
         def rebuild_is_forbidden(*args, **kwargs):
             raise AssertionError("a tracked write must not rebuild the full index")
 
-        monkeypatch.setattr(sampler, "_full_rebuild", rebuild_is_forbidden)
+        monkeypatch.setattr(
+            sampler._trajectory_index, "_full_rebuild", rebuild_is_forbidden
+        )
         rb.add(
             TensorDict(
                 {
@@ -2379,7 +2381,9 @@ class TestGeometricTrajectoryWindowSampler:
         )
         sample = rb.sample()
         assert sample.shape == (8, 4)
-        assert sampler._cache_revision == rb.storage._mutation_revision
+        assert (
+            sampler._trajectory_index._cache_revision == rb.storage._mutation_revision
+        )
 
     @pytest.mark.parametrize("device", get_default_devices())
     def test_sampling_state_stays_on_storage_device(self, device):
@@ -2399,8 +2403,8 @@ class TestGeometricTrajectoryWindowSampler:
         rb.extend(self._make_interleaved_data([8]).to(device))
         sample = rb.sample()
         assert sample.device == torch.device(device)
-        assert sampler._previous.device == torch.device(device)
-        assert sampler._following.device == torch.device(device)
+        assert sampler._trajectory_index.previous.device == torch.device(device)
+        assert sampler._trajectory_index.following.device == torch.device(device)
         assert sampler._max_future_by_slot.device == torch.device(device)
 
     def test_compiled_sampling_kernel_fullgraph(self):

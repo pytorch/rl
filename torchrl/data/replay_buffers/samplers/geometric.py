@@ -4,19 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
-from tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict import TensorDict
 from tensordict.utils import NestedKey
 
 from torchrl.data.replay_buffers.storages import Storage
 
+from ._trajectory import _FragmentedTrajectoryIndex
 from .base import Sampler
-
 
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
@@ -153,141 +152,28 @@ class GeometricTrajectoryWindowSampler(Sampler):
         self.trajectory_key = trajectory_key
         self.step_key = step_key
         self.compile = bool(compile)
-        self._trajectory_positions: dict[int, dict[int, int]] | None = None
-        self._slot_records: list[tuple[int, int] | None] | None = None
+        self._trajectory_index = _FragmentedTrajectoryIndex(trajectory_key, step_key)
         self._anchor_slots: set[int] | None = None
-        self._previous: torch.Tensor | None = None
-        self._following: torch.Tensor | None = None
         self._max_future_by_slot: torch.Tensor | None = None
-        self._pending_indices: list[torch.Tensor] = []
-        self._pending_revisions: list[int] = []
-        self._pending_storage_id: int | None = None
-        self._cache_storage_id: int | None = None
-        self._cache_revision: int | None = None
         self._sample_index = self._sample_kernel
         if self.compile:
             kwargs = compile if isinstance(compile, dict) else {}
             self._sample_index = torch.compile(self._sample_kernel, **kwargs)
 
-    def _validate_metadata(
-        self, data: TensorDictBase, index: torch.Tensor
-    ) -> tuple[list[int], list[int], list[int], torch.device]:
-        expected = index.numel()
-        trajectory = data.get(self.trajectory_key)
-        step = data.get(self.step_key)
-        for key, value in (
-            (self.trajectory_key, trajectory),
-            (self.step_key, step),
-        ):
-            if not isinstance(value, torch.Tensor):
-                raise TypeError(
-                    f"key={key!r} must contain a tensor, got {type(value).__name__}."
-                )
-            value = value.reshape(expected, -1)
-            if value.shape[1] != 1:
-                raise RuntimeError(
-                    f"Expected scalar values under key={key!r}, got shape "
-                    f"{tuple(value.shape)}."
-                )
-            if (
-                value.dtype == torch.bool
-                or torch.is_floating_point(value)
-                or torch.is_complex(value)
-            ):
-                raise TypeError(
-                    f"key={key!r} must contain integer values, got dtype={value.dtype}."
-                )
-        trajectory = trajectory.reshape(expected, -1)[:, 0]
-        step = step.reshape(expected, -1)[:, 0]
-        metadata = torch.stack(
-            (
-                index.to(device=step.device, dtype=torch.long),
-                trajectory.to(device=step.device, dtype=torch.long),
-                step.to(torch.long),
-            ),
-            dim=-1,
-        ).cpu()
-        slots, trajectories, steps = metadata.unbind(-1)
-        return slots.tolist(), trajectories.tolist(), steps.tolist(), step.device
-
-    @staticmethod
-    def _storage_device(storage: Storage) -> torch.device | None:
-        device = getattr(storage, "device", None)
-        if device is None or device == "auto":
-            return None
-        return torch.device(device)
-
-    def _read_records(
-        self, storage: Storage, index: torch.Tensor
-    ) -> tuple[list[int], list[int], list[int], torch.device]:
-        storage_device = self._storage_device(storage)
-        if storage_device is not None and index.device != storage_device:
-            index = index.to(storage_device)
-        lookup_index = index.clamp(0, len(storage) - 1)
-        data = storage.get(lookup_index)
-        if not is_tensor_collection(data):
-            raise TypeError(
-                f"{type(self).__name__} requires a single-dimensional storage "
-                "whose slices return a tensor collection, such as "
-                "LazyTensorStorage or LazyStackStorage."
-            )
-        return self._validate_metadata(data, index)
-
     def _clear_index(self) -> None:
-        self._trajectory_positions = None
-        self._slot_records = None
+        self._trajectory_index.clear()
         self._anchor_slots = None
-        self._previous = None
-        self._following = None
         self._max_future_by_slot = None
-        self._pending_indices.clear()
-        self._pending_revisions.clear()
-        self._pending_storage_id = None
-        self._cache_storage_id = None
-        self._cache_revision = None
 
-    def _full_rebuild(self, storage: Storage, revision: int) -> None:
-        if storage.ndim > 1:
-            raise NotImplementedError(
-                f"{type(self).__name__} only supports single-dimensional storages, "
-                f"got storage.ndim={storage.ndim}."
-            )
-        storage_length = len(storage)
-        index = torch.arange(storage_length, dtype=torch.long)
-        slots, trajectories, steps, device = self._read_records(storage, index)
-        capacity = int(storage.max_size)
-        trajectory_positions: dict[int, dict[int, int]] = defaultdict(dict)
-        slot_records: list[tuple[int, int] | None] = [None] * capacity
-        for position, trajectory, step in zip(slots, trajectories, steps):
-            trajectory = int(trajectory)
-            step = int(step)
-            if step < 0:
-                raise ValueError(
-                    f"Step numbers must be non-negative, got {step} under "
-                    f"step_key={self.step_key!r}."
-                )
-            positions = trajectory_positions[trajectory]
-            if step in positions:
-                raise RuntimeError(
-                    "Found duplicate records for trajectory "
-                    f"{trajectory!r} at step {step}. Trajectory-step pairs must "
-                    "be unique in the live storage."
-                )
-            positions[step] = position
-            slot_records[position] = (trajectory, step)
-
-        previous = [-1] * capacity
-        following = [-1] * capacity
+    def _rebuild_window_metadata(self) -> None:
+        trajectory_positions = self._trajectory_index.trajectory_positions
+        capacity = self._trajectory_index.following.numel()
         max_future_by_slot = [-1] * capacity
         anchor_slots = set()
         for positions in trajectory_positions.values():
             sorted_steps = sorted(positions)
             run_start = 0
             for run_end, step in enumerate(sorted_steps):
-                position = positions[step]
-                if run_end > 0 and step == sorted_steps[run_end - 1] + 1:
-                    previous[position] = positions[sorted_steps[run_end - 1]]
-                    following[positions[sorted_steps[run_end - 1]]] = position
                 is_run_end = (
                     run_end == len(sorted_steps) - 1
                     or sorted_steps[run_end + 1] != step + 1
@@ -306,114 +192,26 @@ class GeometricTrajectoryWindowSampler(Sampler):
                     anchor_slots.add(anchor_position)
                 run_start = run_end + 1
 
-        self._slot_records = slot_records
-        self._trajectory_positions = dict(trajectory_positions)
         self._anchor_slots = anchor_slots
-        self._previous = torch.tensor(previous, dtype=torch.long, device=device)
-        self._following = torch.tensor(following, dtype=torch.long, device=device)
         self._max_future_by_slot = torch.tensor(
-            max_future_by_slot, dtype=torch.long, device=device
+            max_future_by_slot,
+            dtype=torch.long,
+            device=self._trajectory_index.following.device,
         )
-        self._pending_indices.clear()
-        self._pending_revisions.clear()
-        self._pending_storage_id = None
-        self._cache_storage_id = id(storage)
-        self._cache_revision = revision
 
-    def _consume_pending(self) -> torch.Tensor:
-        if len(self._pending_indices) == 1:
-            index = self._pending_indices[0]
-        elif all(
-            item.device == self._pending_indices[0].device
-            for item in self._pending_indices
-        ):
-            index = torch.cat(self._pending_indices)
-        else:
-            index = torch.cat([item.cpu() for item in self._pending_indices])
-        index = index.reshape(-1)
-        self._pending_indices.clear()
-        self._pending_revisions.clear()
-        self._pending_storage_id = None
-        return index
-
-    def _apply_pending(self, storage: Storage, revision: int) -> None:
-        index = self._consume_pending()
-        storage_length = len(storage)
-        if not index.numel():
-            self._cache_revision = revision
-            return
-        slots, trajectories, steps, _ = self._read_records(storage, index)
-        records = {
-            slot: (trajectory, step)
-            for slot, trajectory, step in zip(slots, trajectories, steps)
-            if 0 <= slot < storage_length
-        }
-        slots = list(records)
-        if not slots:
-            self._cache_revision = revision
-            return
-        trajectories, steps = zip(*records.values())
-
-        affected: dict[int, set[int]] = defaultdict(set)
-        removed_slots = set(slots)
-        for slot in slots:
-            record = self._slot_records[slot]
-            if record is None:
-                continue
-            trajectory, step = record
-            positions = self._trajectory_positions[trajectory]
-            if positions.get(step) == slot:
-                del positions[step]
-            if not positions:
-                del self._trajectory_positions[trajectory]
-            affected[trajectory].add(step)
-            self._slot_records[slot] = None
-            self._anchor_slots.discard(slot)
-
-        new_records = []
-        seen = set()
-        for slot, trajectory, step in zip(slots, trajectories, steps):
-            trajectory = int(trajectory)
-            step = int(step)
-            if step < 0:
-                raise ValueError(
-                    f"Step numbers must be non-negative, got {step} under "
-                    f"step_key={self.step_key!r}."
-                )
-            record = (trajectory, step)
-            positions = self._trajectory_positions.get(trajectory)
-            if record in seen or (positions is not None and step in positions):
-                raise RuntimeError(
-                    "Found duplicate records for trajectory "
-                    f"{trajectory!r} at step {step}. Trajectory-step pairs must "
-                    "be unique in the live storage."
-                )
-            seen.add(record)
-            new_records.append((slot, trajectory, step))
-
-        for slot, trajectory, step in new_records:
-            self._trajectory_positions.setdefault(trajectory, {})[step] = slot
-            self._slot_records[slot] = (trajectory, step)
-            affected[trajectory].add(step)
-
-        previous_updates = {slot: -1 for slot in removed_slots}
-        following_updates = {slot: -1 for slot in removed_slots}
+    def _apply_window_update(
+        self, affected: dict[int, set[int]], removed_slots: set[int]
+    ) -> None:
         future_updates = {slot: -1 for slot in removed_slots}
+        for slot in removed_slots:
+            self._anchor_slots.discard(slot)
         for trajectory, changed_steps in affected.items():
-            positions = self._trajectory_positions.get(trajectory, {})
-            link_steps = set()
+            positions = self._trajectory_index.trajectory_positions.get(trajectory, {})
             metadata_steps = set()
             for step in changed_steps:
-                link_steps.update(range(max(0, step - 1), step + 2))
                 metadata_steps.update(
                     range(max(0, step - self.max_future), step + self.history + 1)
                 )
-            for step in link_steps:
-                slot = positions.get(step)
-                if slot is None:
-                    continue
-                previous_updates[slot] = positions.get(step - 1, -1)
-                following_updates[slot] = positions.get(step + 1, -1)
             for step in metadata_steps:
                 slot = positions.get(step)
                 if slot is None:
@@ -435,46 +233,22 @@ class GeometricTrajectoryWindowSampler(Sampler):
                     future_updates[slot] = -1
                     self._anchor_slots.discard(slot)
 
-        packed_updates = []
-        update_slices = []
-        for values in (
-            previous_updates,
-            following_updates,
-            future_updates,
-        ):
-            start = len(packed_updates)
-            packed_updates.extend(values.items())
-            update_slices.append(slice(start, len(packed_updates)))
-        updates = torch.tensor(
-            packed_updates, dtype=torch.long, device=self._previous.device
-        )
-        for target, update_slice in zip(
-            (self._previous, self._following, self._max_future_by_slot),
-            update_slices,
-        ):
-            target_updates = updates[update_slice]
-            target[target_updates[:, 0]] = target_updates[:, 1]
-        self._cache_revision = revision
+        if future_updates:
+            updates = torch.tensor(
+                list(future_updates.items()),
+                dtype=torch.long,
+                device=self._max_future_by_slot.device,
+            )
+            self._max_future_by_slot[updates[:, 0]] = updates[:, 1]
 
     def _maybe_refresh_index(self, storage: Storage) -> None:
-        revision = int(storage._mutation_revision)
-        if self._trajectory_positions is None or self._cache_storage_id != id(storage):
-            self._full_rebuild(storage, revision)
+        update = self._trajectory_index.refresh(storage)
+        if update is None:
             return
-        if self._pending_indices and self._pending_storage_id == id(storage):
-            changed_revisions = {
-                pending_revision
-                for pending_revision in self._pending_revisions
-                if pending_revision > self._cache_revision
-            }
-            expected_revisions = set(range(self._cache_revision + 1, revision + 1))
-            if changed_revisions == expected_revisions:
-                self._apply_pending(storage, revision)
-            else:
-                self._full_rebuild(storage, revision)
-            return
-        if self._cache_revision != revision:
-            self._full_rebuild(storage, revision)
+        if update.full_rebuild or self._max_future_by_slot is None:
+            self._rebuild_window_metadata()
+        else:
+            self._apply_window_update(update.affected, update.removed_slots)
 
     def _sample_kernel(
         self,
@@ -533,8 +307,8 @@ class GeometricTrajectoryWindowSampler(Sampler):
             )
         index, validity, future_offset, anchor_index = self._sample_index(
             self._max_future_by_slot,
-            self._previous,
-            self._following,
+            self._trajectory_index.previous,
+            self._trajectory_index.following,
             batch_size,
         )
         info = {
@@ -553,17 +327,7 @@ class GeometricTrajectoryWindowSampler(Sampler):
     def mark_update(
         self, index: int | torch.Tensor, *, storage: Storage | None = None
     ) -> None:
-        if storage is None:
-            self._clear_index()
-            return
-        storage_id = id(storage)
-        if self._pending_storage_id not in (None, storage_id):
-            self._clear_index()
-        self._pending_storage_id = storage_id
-        self._pending_indices.append(
-            torch.as_tensor(index, dtype=torch.long).detach().reshape(-1)
-        )
-        self._pending_revisions.append(int(storage._mutation_revision))
+        self._trajectory_index.mark_update(index, storage=storage)
 
     def _empty(self) -> None:
         self._clear_index()
@@ -584,17 +348,8 @@ class GeometricTrajectoryWindowSampler(Sampler):
 
     def __getstate__(self):
         state = super().__getstate__()
-        state["_trajectory_positions"] = None
-        state["_slot_records"] = None
         state["_anchor_slots"] = None
-        state["_previous"] = None
-        state["_following"] = None
         state["_max_future_by_slot"] = None
-        state["_pending_indices"] = []
-        state["_pending_revisions"] = []
-        state["_pending_storage_id"] = None
-        state["_cache_storage_id"] = None
-        state["_cache_revision"] = None
         return state
 
     def __repr__(self) -> str:
