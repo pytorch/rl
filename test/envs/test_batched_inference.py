@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from unittest import mock
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -51,6 +53,16 @@ class TestConstruction:
     def test_bucket_sizes_sorted(self):
         helper = FixedBatchedInference(_make_policy(), "cpu", bucket_sizes=[64, 8, 32])
         assert helper.bucket_sizes == [8, 32, 64]
+
+    def test_policy_placement_is_left_to_caller(self):
+        policy = _make_policy()
+        with mock.patch.object(
+            policy,
+            "to",
+            side_effect=AssertionError("policy placement must not be changed"),
+        ):
+            helper = FixedBatchedInference(policy, "cpu")
+        assert helper.policy is policy
 
 
 class TestBucketSelection:

@@ -33,8 +33,11 @@ class FixedBatchedInference:
         policy (Callable): a callable that maps a batched
             :class:`~tensordict.TensorDictBase` to a batched
             :class:`~tensordict.TensorDictBase` (e.g. a
-            :class:`~tensordict.nn.TensorDictModule`).
-        device (torch.device or str): the device on which the policy runs.
+            :class:`~tensordict.nn.TensorDictModule`). The caller is responsible
+            for placing module policies on their intended device or devices.
+        device (torch.device or str): the device used for staged policy inputs
+            and CUDA streams. For policies spanning multiple devices, this is
+            the device on which the policy expects its input.
 
     Keyword Args:
         bucket_sizes (sequence of int): ascending list of batch sizes that the
@@ -68,7 +71,7 @@ class FixedBatchedInference:
         >>> from torchrl.envs.batched_inference import FixedBatchedInference
         >>> policy = TensorDictModule(
         ...     nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
-        ... )
+        ... ).to("cuda:0")
         >>> helper = FixedBatchedInference(
         ...     policy, device="cuda:0", bucket_sizes=[8, 16, 32, 64]
         ... )
