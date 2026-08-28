@@ -20,7 +20,7 @@ Plots ``dreamer_v3_pendulum.png`` with two curves: (a) average eval reward,
 
 Usage::
 
-    python sota-implementations/dreamer_v3/dreamer_v3.py \\
+    python sota-implementations/dreamer_v3/train.py \\
         collector.total_frames=5000 logger.eval_every=500
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import get_available_device, logger as torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer, Unbounded
 from torchrl.data.replay_buffers.samplers import SliceSampler
@@ -57,7 +57,7 @@ from torchrl.envs.transforms import (
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DreamerV3MLP, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.model_based_v3 import (
+from torchrl.modules.models.model_based import (
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,
@@ -66,6 +66,7 @@ from torchrl.objectives import (
     DreamerV3ActorLoss,
     DreamerV3ModelLoss,
     DreamerV3ValueLoss,
+    symexp,
     symlog,
 )
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
@@ -108,7 +109,7 @@ def adaptive_grad_clip_(parameters, clip: float, minimum: float = 1e-3) -> None:
         parameter.grad.mul_(scale)
 
 
-def make_env(cfg: DictConfig, seed: int = 0):
+def make_env(cfg: DictConfig, seed: int = 0) -> TransformedEnv:
     if cfg.env.backend == "gym":
         base_env = GymEnv(cfg.env.name, device="cpu")
     elif cfg.env.backend == "dm_control":
@@ -146,6 +147,13 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     """
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
 
+    observation_encoder = DreamerV3MLP(
+        in_features=obs_dim,
+        out_features=cfg.networks.obs_embed_dim,
+        depth=cfg.networks.encoder_layers,
+        num_cells=cfg.networks.hidden_dim,
+        norm_eps=cfg.networks.norm_eps,
+    )
     encoder = TensorDictSequential(
         TensorDictModule(
             symlog,
@@ -153,13 +161,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
             out_keys=[("next", "symlog_observation")],
         ),
         TensorDictModule(
-            DreamerV3MLP(
-                in_features=obs_dim,
-                out_features=cfg.networks.obs_embed_dim,
-                depth=cfg.networks.encoder_layers,
-                num_cells=cfg.networks.hidden_dim,
-                norm_eps=cfg.networks.norm_eps,
-            ),
+            observation_encoder,
             in_keys=[("next", "symlog_observation")],
             out_keys=[("next", "encoded_latents")],
         ),
@@ -167,7 +169,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
 
     prior_net = RSSMPriorV3(
         action_shape=torch.Size([action_dim]),
-        hidden_dim=cfg.networks.rnn_hidden_dim,
+        hidden_dim=cfg.networks.hidden_dim,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
@@ -190,7 +192,7 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     )
 
     posterior_net = RSSMPosteriorV3(
-        hidden_dim=cfg.networks.rnn_hidden_dim,
+        hidden_dim=cfg.networks.hidden_dim,
         num_categoricals=cfg.networks.num_categoricals,
         num_classes=cfg.networks.num_classes,
         rnn_hidden_dim=cfg.networks.rnn_hidden_dim,
@@ -208,16 +210,23 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
 
     rollout = RSSMRolloutV3(rssm_prior, rssm_posterior)
 
-    decoder = TensorDictModule(
-        DreamerV3MLP(
-            in_features=state_dim + cfg.networks.rnn_hidden_dim,
-            out_features=obs_dim,
-            depth=cfg.networks.decoder_layers,
-            num_cells=cfg.networks.hidden_dim,
-            norm_eps=cfg.networks.norm_eps,
+    decoder = TensorDictSequential(
+        TensorDictModule(
+            DreamerV3MLP(
+                in_features=state_dim + cfg.networks.rnn_hidden_dim,
+                out_features=obs_dim,
+                depth=cfg.networks.decoder_layers,
+                num_cells=cfg.networks.hidden_dim,
+                norm_eps=cfg.networks.norm_eps,
+            ),
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reco_symlog_observation")],
         ),
-        in_keys=[("next", "state"), ("next", "belief")],
-        out_keys=[("next", "reco_pixels")],
+        TensorDictModule(
+            symexp,
+            in_keys=[("next", "reco_symlog_observation")],
+            out_keys=[("next", "reco_pixels")],
+        ),
     )
 
     reward_net = DreamerV3MLP(
@@ -258,7 +267,15 @@ def build_world_model(*, cfg: DictConfig, obs_dim: int, action_dim: int):
     world_model = TensorDictSequential(
         encoder, rollout, decoder, reward_head, continuation_head
     )
-    return world_model, prior_net, reward_net, reward_decoder, continuation_net
+    return (
+        world_model,
+        observation_encoder,
+        prior_net,
+        posterior_net,
+        reward_net,
+        reward_decoder,
+        continuation_net,
+    )
 
 
 def build_imagination_model(*, prior_net, reward_net, reward_decoder):
@@ -332,6 +349,33 @@ def build_actor(*, cfg: DictConfig, action_dim: int):
     return actor_model
 
 
+def build_real_actor(*, observation_encoder, posterior_net, prior_net, actor_model):
+    """Build the observation-conditioned recurrent policy used in real envs."""
+    return TensorDictSequential(
+        TensorDictModule(
+            symlog,
+            in_keys=["observation"],
+            out_keys=["symlog_observation"],
+        ),
+        TensorDictModule(
+            observation_encoder,
+            in_keys=["symlog_observation"],
+            out_keys=["encoded_latents"],
+        ),
+        TensorDictModule(
+            posterior_net,
+            in_keys=["belief", "encoded_latents"],
+            out_keys=["_", "state"],
+        ),
+        actor_model,
+        TensorDictModule(
+            prior_net,
+            in_keys=["state", "belief", "action"],
+            out_keys=["_", "_", ("next", "belief")],
+        ),
+    )
+
+
 def build_value(*, cfg: DictConfig):
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
     value_model = TensorDictSequential(
@@ -366,7 +410,7 @@ def build_value(*, cfg: DictConfig):
     return value_model
 
 
-def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
+def build_mb_env(*, cfg: DictConfig, real_env, imagination_model, device: torch.device):
     """Imagination env backed by the trained prior and reward head."""
     state_dim = cfg.networks.num_categoricals * cfg.networks.num_classes
     primer_env = TransformedEnv(
@@ -382,6 +426,7 @@ def build_mb_env(*, cfg: DictConfig, real_env, imagination_model):
         world_model=imagination_model,
         prior_shape=torch.Size([state_dim]),
         belief_shape=torch.Size([cfg.networks.rnn_hidden_dim]),
+        device=device,
     )
     mb_env.set_specs_from_env(primer_env)
     with torch.no_grad():
@@ -400,6 +445,7 @@ def eval_episode_reward(
                 max_steps=max_episode_steps,
                 policy=actor,
                 break_when_any_done=True,
+                auto_cast_to_device=True,
             )
             totals.append(td.get(("next", "reward")).sum())
     return torch.stack(totals).mean()
@@ -409,6 +455,11 @@ def eval_episode_reward(
 def main(cfg: DictConfig):
     torch.manual_seed(cfg.env.seed)
 
+    device = (
+        torch.device(cfg.optimization.device)
+        if cfg.optimization.device
+        else get_available_device()
+    )
     real_env = make_env(cfg, cfg.env.seed)
     obs_dim = real_env.observation_spec["observation"].shape[0]
     action_dim = real_env.action_spec.shape[0]
@@ -416,23 +467,35 @@ def main(cfg: DictConfig):
 
     (
         world_model,
+        observation_encoder,
         prior_net,
+        posterior_net,
         reward_net,
         reward_decoder,
         continuation_net,
     ) = build_world_model(cfg=cfg, obs_dim=obs_dim, action_dim=action_dim)
+    world_model = world_model.to(device)
     imagination_model = build_imagination_model(
         prior_net=prior_net,
         reward_net=reward_net,
         reward_decoder=reward_decoder,
+    ).to(device)
+    continuation_model = build_continuation_model(continuation_net=continuation_net).to(
+        device
     )
-    continuation_model = build_continuation_model(continuation_net=continuation_net)
-    actor_model = build_actor(cfg=cfg, action_dim=action_dim)
-    value_model = build_value(cfg=cfg)
+    actor_model = build_actor(cfg=cfg, action_dim=action_dim).to(device)
+    real_actor = build_real_actor(
+        observation_encoder=observation_encoder,
+        posterior_net=posterior_net,
+        prior_net=prior_net,
+        actor_model=actor_model,
+    )
+    value_model = build_value(cfg=cfg).to(device)
     mb_env = build_mb_env(
         cfg=cfg,
         real_env=make_env(cfg, cfg.env.seed + 1),
         imagination_model=imagination_model,
+        device=device,
     )
 
     model_loss = DreamerV3ModelLoss(
@@ -445,8 +508,8 @@ def main(cfg: DictConfig):
         unimix=cfg.networks.unimix,
         lambda_continue=1.0,
         continue_target_scale=1 - 1 / cfg.optimization.continuation_horizon,
-        global_average=True,  # state-based obs, not (C, H, W) pixels
-    )
+        global_average=False,
+    ).to(device)
     model_loss.set_keys(pixels="observation")
     actor_loss = DreamerV3ActorLoss(
         actor_model,
@@ -463,13 +526,14 @@ def main(cfg: DictConfig):
         gamma=cfg.optimization.gamma,
         lmbda=cfg.optimization.lmbda,
     )
+    actor_loss.to(device)
     value_loss = DreamerV3ValueLoss(
         value_model,
         value_loss="two_hot",
         num_value_bins=cfg.networks.num_value_bins,
         actor_loss=actor_loss,
         slow_critic_regularization=cfg.optimization.slow_critic_regularization,
-    )
+    ).to(device)
     value_target_updater = SoftUpdate(value_loss, tau=cfg.optimization.slow_critic_tau)
 
     optimizer_kwargs = {
@@ -501,13 +565,15 @@ def main(cfg: DictConfig):
 
     collector = Collector(
         explore_env,
-        actor_model,
+        real_actor,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=cfg.env.device,
+        policy_device=device,
+        env_device="cpu",
+        storing_device="cpu",
         exploration_type=ExplorationType.RANDOM
         if cfg.collector.exploration == "random"
-        else ExplorationType.MODE,
+        else ExplorationType.DETERMINISTIC,
     )
 
     rb = ReplayBuffer(
@@ -522,13 +588,8 @@ def main(cfg: DictConfig):
     env_step = 0
     history_steps: list[int] = []
     history_eval: list[torch.Tensor] = []
-    loss_hist: dict[str, list[torch.Tensor]] = {
-        "kl": [],
-        "reco": [],
-        "reward": [],
-        "actor": [],
-        "value": [],
-    }
+    loss_history: list[torch.Tensor] = []
+    record_loss_history = bool(cfg.logger.output_plot and _has_matplotlib)
     next_eval = 0
 
     eval_env = TransformedEnv(
@@ -559,15 +620,26 @@ def main(cfg: DictConfig):
         )
 
     for data in collector:
-        rb.extend(data.reshape(-1))
+        replay_data = data.select(
+            "action",
+            "is_init",
+            ("next", "observation"),
+            ("next", "reward"),
+            ("next", "terminated"),
+            ("collector", "traj_ids"),
+        )
+        rb.extend(replay_data.reshape(-1))
         env_step += data.numel()
 
         if len(rb) < warmup:
             continue
 
-        for _ in range(updates_per_batch):
-            sample = rb.sample().reshape(
-                cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len
+        batch_losses = torch.empty(updates_per_batch, 4, device=device)
+        for update_index in range(updates_per_batch):
+            sample = (
+                rb.sample()
+                .reshape(cfg.replay_buffer.batch_size, cfg.replay_buffer.seq_len)
+                .to(device)
             )
 
             sample.set(
@@ -576,6 +648,7 @@ def main(cfg: DictConfig):
                     cfg.replay_buffer.batch_size,
                     cfg.replay_buffer.seq_len,
                     state_dim,
+                    device=sample.device,
                 ),
             )
             sample.set(
@@ -584,6 +657,7 @@ def main(cfg: DictConfig):
                     cfg.replay_buffer.batch_size,
                     cfg.replay_buffer.seq_len,
                     cfg.networks.rnn_hidden_dim,
+                    device=sample.device,
                 ),
             )
 
@@ -620,7 +694,7 @@ def main(cfg: DictConfig):
             opt_actor.zero_grad(set_to_none=True)
             a_td["loss_actor"].backward()
             adaptive_grad_clip_(
-                actor_loss.parameters(), cfg.optimization.adaptive_grad_clip
+                actor_model.parameters(), cfg.optimization.adaptive_grad_clip
             )
             opt_actor.step()
             schedulers[1].step()
@@ -635,16 +709,24 @@ def main(cfg: DictConfig):
             schedulers[2].step()
             value_target_updater.step()
 
-            loss_hist["kl"].append(model_kl.detach())
-            loss_hist["reco"].append(m_td["loss_model_reco"].detach())
-            loss_hist["reward"].append(m_td["loss_model_reward"].detach())
-            loss_hist["actor"].append(a_td["loss_actor"].detach())
-            loss_hist["value"].append(v_td["loss_value"].detach())
+            batch_losses[update_index] = torch.stack(
+                (
+                    model_kl.detach().reshape(()),
+                    m_td["loss_model_reco"].detach().reshape(()),
+                    m_td["loss_model_reward"].detach().reshape(()),
+                    a_td["loss_actor"].detach().reshape(()),
+                )
+            )
+
+        if record_loss_history:
+            batch_losses = batch_losses.cpu()
+            loss_history.append(batch_losses)
 
         if env_step >= next_eval:
+            latest_losses = batch_losses[-1].cpu()
             r = eval_episode_reward(
                 eval_env,
-                actor_model,
+                real_actor,
                 cfg.logger.eval_episodes,
                 cfg.env.max_episode_steps,
             )
@@ -654,10 +736,10 @@ def main(cfg: DictConfig):
                 "[env_step=%5d] eval_reward=%+.2f kl=%.3f reco=%.3f reward=%.3f actor=%.3f",
                 env_step,
                 r.item(),
-                loss_hist["kl"][-1].item(),
-                loss_hist["reco"][-1].item(),
-                loss_hist["reward"][-1].item(),
-                loss_hist["actor"][-1].item(),
+                latest_losses[0].item(),
+                latest_losses[1].item(),
+                latest_losses[2].item(),
+                latest_losses[3].item(),
             )
             next_eval = env_step + cfg.logger.eval_every
 
@@ -666,15 +748,10 @@ def main(cfg: DictConfig):
 
         eval_steps = history_steps
         eval_rewards = torch.stack(history_eval).cpu().numpy() if history_eval else []
-        kl_vals = torch.stack(loss_hist["kl"]).cpu().numpy() if loss_hist["kl"] else []
-        reco_vals = (
-            torch.stack(loss_hist["reco"]).cpu().numpy() if loss_hist["reco"] else []
-        )
-        reward_vals = (
-            torch.stack(loss_hist["reward"]).cpu().numpy()
-            if loss_hist["reward"]
-            else []
-        )
+        loss_curves = torch.cat(loss_history).numpy() if loss_history else None
+        kl_vals = loss_curves[:, 0] if loss_curves is not None else []
+        reco_vals = loss_curves[:, 1] if loss_curves is not None else []
+        reward_vals = loss_curves[:, 2] if loss_curves is not None else []
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
         axes[0].plot(eval_steps, eval_rewards, marker="o")

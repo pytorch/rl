@@ -4,8 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import sys
+
 from torchrl.modules.tensordict_module.common import DistributionalDQNnet
 
+from . import model_based
 from .act import ACTModel
 from .batchrenorm import BatchRenorm1d
 from .cross_group_critic import CrossCriticGroupSpec, CrossGroupCritic
@@ -22,16 +25,16 @@ from .gp import GPWorldModel
 from .llm import GPT2RewardModel
 from .model_based import (
     DreamerActor,
+    DreamerV3BlockGRU,
+    DreamerV3BlockGRUCell,
+    DreamerV3MLP,
     ObsDecoder,
     ObsEncoder,
     RSSMPosterior,
-    RSSMPrior,
-    RSSMRollout,
-)
-from .model_based_v3 import (
-    DreamerV3MLP,
     RSSMPosteriorV3,
+    RSSMPrior,
     RSSMPriorV3,
+    RSSMRollout,
     RSSMRolloutV3,
     SymExpTwoHot,
 )
@@ -59,6 +62,12 @@ from .multiagent import (
 from .rbf_controller import RBFController
 from .utils import Squeeze2dLayer, SqueezeLayer
 
+
+# Preserve the module paths shipped in TorchRL 0.13 without keeping duplicate
+# compatibility files. New code should import from ``model_based``.
+sys.modules[f"{__name__}.dreamer_v3"] = model_based
+sys.modules[f"{__name__}.model_based_v3"] = model_based
+
 __all__ = [
     "ACTModel",
     "BatchRenorm1d",
@@ -76,6 +85,8 @@ __all__ = [
     "DecisionTransformer",
     "DistributionalDQNnet",
     "DreamerActor",
+    "DreamerV3BlockGRU",
+    "DreamerV3BlockGRUCell",
     "DreamerV3MLP",
     "DTActor",
     "DuelingCnnDQNet",

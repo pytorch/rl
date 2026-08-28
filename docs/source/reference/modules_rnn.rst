@@ -80,6 +80,52 @@ model shape and deployment target are known. ``"pad"`` is the safest baseline,
 ``"scan"`` is the compile-friendly baseline, and ``"triton"`` is the
 performance-oriented CUDA backend.
 
+Optimized GRU scan backward
+---------------------------
+
+For :class:`GRUModule`, selecting ``recurrent_backend="scan"`` also selects a
+specialized first-order backward pass when ``recurrent_recompute="none"``
+(the default). The input projection is evaluated over the flattened
+batch-time dimensions, the reverse scan carries only the hidden-state
+gradient, and input and parameter gradients are reduced outside the recurrent
+loop. This avoids carrying the ordinary autograd graph through every timestep
+while preserving the same module parameters and recurrent-state semantics.
+
+No separate optimization flag is required:
+
+.. code-block:: python
+
+    gru = GRUModule(
+        input_size=4,
+        hidden_size=64,
+        recurrent_backend="scan",
+        in_keys=["observation", "recurrent_state", "is_init"],
+        out_keys=["features", ("next", "recurrent_state")],
+    )
+
+The optimized backward supports ordinary first-order training, including
+autocast BF16 inputs with FP32 parameters. It intentionally does not support
+double backward or :mod:`torch.func` transforms such as ``jacrev``, ``vmap``,
+and ``grad``. Set ``recurrent_recompute="full"`` to use the checkpointed
+reference loop when lower saved-activation memory is more important than the
+specialized backward.
+
+Backend performance depends on the device, batch size, rollout horizon, and
+hidden width. From a TorchRL source checkout, use the
+`recurrent backward benchmark
+<https://github.com/pytorch/rl/blob/main/benchmarks/bench_rnn_backward.py>`_
+to compare the available implementations on the target hardware:
+
+.. code-block:: bash
+
+    python benchmarks/bench_rnn_backward.py --rnn gru \
+        --backends cudnn,scan,triton \
+        --batches 256,1024 --seq-lens 64,512 --hiddens 128,512 \
+        --warmup 10 --iters 30
+
+The benchmark reports synchronized forward, backward, and total times plus
+peak allocated CUDA memory for every requested shape.
+
 Triton precision controls
 -------------------------
 

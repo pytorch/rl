@@ -619,9 +619,12 @@ class TestVecNormV2:
         [
             pytest.param(
                 "cuda",
-                marks=pytest.mark.skipif(
-                    not torch.cuda.is_available(), reason="CUDA not available"
-                ),
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="CUDA not available"
+                    ),
+                ],
             ),
             pytest.param(
                 "mps",
@@ -680,9 +683,12 @@ class TestVecNormV2:
         [
             pytest.param(
                 "cuda",
-                marks=pytest.mark.skipif(
-                    not torch.cuda.is_available(), reason="CUDA not available"
-                ),
+                marks=[
+                    pytest.mark.gpu,
+                    pytest.mark.skipif(
+                        not torch.cuda.is_available(), reason="CUDA not available"
+                    ),
+                ],
             ),
             pytest.param(
                 "mps",

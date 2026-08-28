@@ -430,7 +430,7 @@ CUDA wheel from the PyTorch wheel index that matches your PyTorch CUDA runtime
 (replace `cu128` with the CUDA build you use):
 
 ```bash
-pip install "torchrl==0.13.0+cu128" --extra-index-url https://download.pytorch.org/whl/cu128
+pip install "torchrl==0.14.0+cu128" --extra-index-url https://download.pytorch.org/whl/cu128
 ```
 
 The CUDA wheel is optional: if you do not need CUDA prioritized replay buffers,

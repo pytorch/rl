@@ -31,8 +31,8 @@ from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
 from torchrl.modules import SafeSequential, SymExpTwoHot, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
-from torchrl.modules.models.model_based import DreamerActor
-from torchrl.modules.models.model_based_v3 import (
+from torchrl.modules.models.model_based import (
+    DreamerActor,
     RSSMPosteriorV3,
     RSSMPriorV3,
     RSSMRolloutV3,
@@ -46,6 +46,7 @@ from torchrl.objectives import (
 from torchrl.objectives.dreamer_v3 import (
     _default_bins,
     _match_trailing_dim,
+    _replay_value_target,
     categorical_kl_balanced,
     categorical_kl_terms,
     symexp,
@@ -441,6 +442,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
                 assert not torch.isnan(p.grad).any(), f"NaN grad in {name}"
                 assert not torch.isinf(p.grad).any(), f"Inf grad in {name}"
 
+    def test_dreamer_v3_model_loss_sums_only_event_dims(self, device):
+        batch_size, event_size = (2, 3), 4
+        target = torch.ones(*batch_size, event_size, device=device)
+        logits = torch.zeros(
+            *batch_size, self.num_cats, self.num_classes, device=device
+        )
+        tensordict = TensorDict(
+            {
+                "next": {
+                    "pixels": target,
+                    "reco_pixels": torch.zeros_like(target),
+                    "prior_logits": logits,
+                    "posterior_logits": logits.clone(),
+                    "reward": torch.zeros(*batch_size, 1, device=device),
+                }
+            },
+            batch_size,
+        )
+        world_model = TensorDictModule(
+            torch.zeros_like,
+            in_keys=[("next", "true_reward")],
+            out_keys=[("next", "reward")],
+        )
+        loss_td, _ = DreamerV3ModelLoss(
+            world_model, reward_two_hot=False, free_bits=0.0, global_average=False
+        )(tensordict)
+        expected = event_size * symlog(torch.tensor(1.0, device=device)).square()
+        torch.testing.assert_close(loss_td["loss_model_reco"].squeeze(), expected)
+
     @pytest.mark.parametrize("free_bits", [0.0, 0.5])
     def test_dreamer_v3_kl_balanced_gradients(self, device, free_bits):
         """Both prior_logits and posterior_logits must receive gradients (KL balancing).
@@ -562,6 +592,18 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         }
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
+    @pytest.mark.parametrize("detach_output", [True, False])
+    def test_dreamer_v3_model_loss_detach_output(self, device, detach_output):
+        world_model = self._create_world_model().to(device)
+        loss_module = DreamerV3ModelLoss(
+            world_model,
+            num_reward_bins=self.num_reward_bins,
+            detach_output=detach_output,
+        )
+        _, features = loss_module(self._create_world_model_data().to(device))
+        posterior = features["next", "posterior_logits"]
+        assert posterior.requires_grad is not detach_output
+
     # ------------------------------------------------------------------ #
     # Actor loss tests
     # ------------------------------------------------------------------ #
@@ -602,8 +644,9 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     def test_dreamer_v3_continuation_lambda_and_weights(self, device):
         class _ConstantContinuation(nn.Module):
             def forward(self_, state, belief):
-                return torch.full_like(state[..., :1], 0.5)
+                return state[..., :1] * 0 + 0.5
 
+        actor_model = self._create_actor_model_with_log_prob().to(device)
         continuation_model = TensorDictModule(
             _ConstantContinuation(),
             in_keys=["state", "belief"],
@@ -611,12 +654,15 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         ).to(device)
         value_model = self._create_value_model().to(device)
         loss_module = DreamerV3ActorLoss(
-            self._create_actor_model().to(device),
+            actor_model,
             value_model,
             self._create_mb_env().to(device),
             continuation_model=continuation_model,
             imagination_horizon=3,
             discount_loss=True,
+            entropy_bonus=0.0,
+            use_reinforce=True,
+            return_normalization=False,
         )
         loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=1.0, lmbda=0.5)
 
@@ -628,8 +674,11 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             torch.tensor([[[6.375], [11.5], [18.0]]], device=device),
         )
 
-        _, fake_data = loss_module(self._create_actor_data().to(device).reshape(-1))
-        expected_weight = torch.tensor([1.0, 0.5, 0.25], device=device)
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        # The initial state is weighted by its own continuation probability.
+        expected_weight = torch.tensor([0.5, 0.25, 0.125], device=device)
         torch.testing.assert_close(
             fake_data["discount_weight"][0, :, 0], expected_weight
         )
@@ -637,6 +686,23 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             fake_data["next", "continuation"],
             torch.full_like(fake_data["next", "continuation"], 0.5),
         )
+        assert not fake_data["discount_weight"].requires_grad
+        actor_parameters = tuple(actor_model.parameters())
+        actual_gradients = torch.autograd.grad(
+            loss_td["loss_actor"], actor_parameters, retain_graph=True
+        )
+
+        actor_inputs = fake_data.select(*actor_model.in_keys, strict=False).detach()
+        distribution = actor_model.get_dist(actor_inputs)
+        log_prob = distribution.log_prob(fake_data["action"].detach())
+        log_prob = _match_trailing_dim(log_prob, fake_data["lambda_target"])
+        baseline_td = fake_data.select(*value_model.in_keys, strict=False)
+        value_model(baseline_td)
+        advantage = (fake_data["lambda_target"] - baseline_td["state_value"]).detach()
+        expected_loss = -(fake_data["discount_weight"] * log_prob * advantage).mean()
+        expected_gradients = torch.autograd.grad(expected_loss, actor_parameters)
+        for actual, expected in zip(actual_gradients, expected_gradients):
+            torch.testing.assert_close(actual, expected)
 
         value_loss = DreamerV3ValueLoss(
             value_model,
@@ -649,18 +715,91 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
     # Value loss tests
     # ------------------------------------------------------------------ #
 
+    @pytest.mark.parametrize("compiled", [False, True])
+    def test_dreamer_v3_replay_value_target(self, device, compiled):
+        reward = torch.tensor([[0.0, 1.0, 2.0, 3.0]], device=device)
+        bootstrap = torch.tensor([[10.0, 20.0, 30.0, 40.0]], device=device)
+        done = torch.zeros_like(reward, dtype=torch.bool)
+        terminated = torch.zeros_like(done)
+
+        target_fn = _replay_value_target
+        if compiled:
+            target_fn = torch.compile(target_fn, backend="eager", fullgraph=True)
+        target = target_fn(
+            reward,
+            done,
+            terminated,
+            bootstrap,
+            horizon=2.0,
+            lmbda=0.5,
+        )
+        torch.testing.assert_close(
+            target, torch.tensor([[9.8125, 15.25, 23.0]], device=device)
+        )
+
+    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
+    def test_dreamer_v3_replay_value_loss_nested_keys(self, device, reduction):
+        batch, time_steps = 2, 4
+        state = torch.randn(
+            batch,
+            time_steps,
+            self.state_dim,
+            device=device,
+            requires_grad=True,
+        )
+        replay = TensorDict(
+            {
+                "state": state,
+                "belief": torch.randn(
+                    batch, time_steps, self.rnn_hidden_dim, device=device
+                ),
+                "first_return": torch.randn(batch, time_steps, device=device),
+                "next": {
+                    "replay": {
+                        "reward": torch.randn(batch, time_steps, device=device),
+                        "done": torch.zeros(
+                            batch, time_steps, dtype=torch.bool, device=device
+                        ),
+                        "terminated": torch.zeros(
+                            batch, time_steps, dtype=torch.bool, device=device
+                        ),
+                    }
+                },
+            },
+            [batch, time_steps],
+        )
+        value_loss = DreamerV3ValueLoss(
+            self._create_value_model().to(device), reduction=reduction
+        ).to(device)
+        value_loss.set_keys(
+            reward=("replay", "reward"),
+            done=("replay", "done"),
+            terminated=("replay", "terminated"),
+            bootstrap="first_return",
+        )
+
+        loss = value_loss.replay_value_loss(replay)["loss_replay_value"]
+        expected_shape = (batch, time_steps - 1) if reduction == "none" else ()
+        assert loss.shape == expected_shape
+        loss.sum().backward()
+        assert state.grad is not None and state.grad.abs().sum() > 0
+
     @pytest.mark.parametrize("discount_loss", [True, False])
-    def test_dreamer_v3_value_loss_symlog_mse(self, device, discount_loss):
+    @pytest.mark.parametrize("reduction", ["none", "mean", "sum"])
+    def test_dreamer_v3_value_loss_symlog_mse(self, device, discount_loss, reduction):
         tensordict = self._create_value_data().to(device)
         value_model = self._create_value_model(out_features=1).to(device)
         loss_module = DreamerV3ValueLoss(
             value_model,
             value_loss="symlog_mse",
             discount_loss=discount_loss,
+            reduction=reduction,
         )
         loss_td, _ = loss_module(tensordict)
         assert "loss_value" in loss_td.keys()
-        loss_td["loss_value"].backward()
+        expected_shape = tensordict.batch_size if reduction == "none" else ()
+        assert loss_td["loss_value"].shape == expected_shape
+        loss_td["loss_value"].sum().backward()
         grad_total = sum(
             p.grad.pow(2).sum().item()
             for p in loss_module.parameters()
@@ -800,14 +939,20 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
 
         repo_root = Path(__file__).parents[2]
         example = runpy.run_path(
-            repo_root / "sota-implementations/dreamer_v3/dreamer_v3.py",
+            repo_root / "sota-implementations/dreamer_v3/train.py",
             run_name="dreamer_v3_test",
         )
         cfg = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
         cfg.networks.num_reward_bins = self.num_reward_bins
-        (world_model, prior, reward_head, reward_decoder, continuation_head,) = example[
-            "build_world_model"
-        ](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
+        (
+            world_model,
+            observation_encoder,
+            prior,
+            posterior,
+            reward_head,
+            reward_decoder,
+            continuation_head,
+        ) = example["build_world_model"](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
         imagination_model = example["build_imagination_model"](
             prior_net=prior,
             reward_net=reward_head,
@@ -816,7 +961,21 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         continuation_model = example["build_continuation_model"](
             continuation_net=continuation_head
         ).to(device)
+        actor_model = example["build_actor"](cfg=cfg, action_dim=self.action_dim).to(
+            device
+        )
+        real_actor = example["build_real_actor"](
+            observation_encoder=observation_encoder,
+            posterior_net=posterior,
+            prior_net=prior,
+            actor_model=actor_model,
+        ).to(device)
         world_model = world_model.to(device)
+        assert (
+            prior.rnn_to_prior_projector[0].out_features
+            == posterior.obs_rnn_to_post_projector[0].out_features
+            == cfg.networks.hidden_dim
+        )
         observation = torch.tensor(
             [[[0.0, 1.0, -3.0], [2.0, -1.0, 0.5]]], device=device
         )
@@ -829,9 +988,13 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             },
             [1, 2],
         )
-        world_model(world_input)
+        world_input = world_model(world_input)
         torch.testing.assert_close(
             world_input["next", "symlog_observation"], symlog(observation)
+        )
+        torch.testing.assert_close(
+            symlog(world_input["next", "reco_pixels"]),
+            world_input["next", "reco_symlog_observation"],
         )
         shared_parameters = tuple(prior.parameters()) + tuple(reward_head.parameters())
         world_parameters = tuple(world_model.parameters())
@@ -848,6 +1011,23 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             )
             for parameter in continuation_head.parameters()
         )
+
+        observation = torch.tensor(
+            [[0.25, -0.75, 1.5]], device=device, requires_grad=True
+        )
+        real_input = TensorDict(
+            {
+                "observation": observation,
+                "belief": torch.zeros(1, cfg.networks.rnn_hidden_dim, device=device),
+            },
+            [1],
+        )
+        real_actor(real_input)
+        observation_gradient = torch.autograd.grad(
+            real_input["loc"].sum(), observation
+        )[0]
+        assert observation_gradient.abs().sum() > 0
+        assert ("next", "belief") in real_input.keys(include_nested=True)
 
         reward_td = TensorDict(
             {
@@ -1135,6 +1315,19 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         ):
             torch.testing.assert_close(out_a[key][:, 2:], out_b[key][:, 2:])
 
+        td_c = td_a.clone()
+        td_d = td_a.clone()
+        td_c["action"][:, 2].zero_()
+        td_d["action"][:, 2].fill_(1.0)
+        torch.manual_seed(0)
+        out_c = rollout(td_c)
+        torch.manual_seed(0)
+        out_d = rollout(td_d)
+        torch.testing.assert_close(
+            out_c["next", "prior_logits"][:, 2],
+            out_d["next", "prior_logits"][:, 2],
+        )
+
     # ------------------------------------------------------------------ #
     # Coverage for previously untested branches
     # ------------------------------------------------------------------ #
@@ -1294,7 +1487,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         log_prob = _match_trailing_dim(
             fake_data["action_log_prob"], fake_data["lambda_target"]
         )
-        expected = -(log_prob * advantage / 10.0).sum((-2, -1)).mean()
+        expected = -(log_prob * advantage / 10.0).mean()
         torch.testing.assert_close(loss_td["loss_actor"], expected)
         torch.testing.assert_close(
             loss_td["return_scale"], torch.tensor(10.0, device=device)

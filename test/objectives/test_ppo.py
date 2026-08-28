@@ -20,7 +20,6 @@ from _objectives_common import (
     MARLEnv,
 )
 
-from packaging import version as pack_version
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     composite_lp_aggregate,
@@ -1322,6 +1321,10 @@ class TestPPO(LossModuleTestBase):
         value = self._create_mock_value()
         advantage = GAE(gamma=0.9, lmbda=0.9, value_network=value)
         advantage(td)
+        with torch.no_grad():
+            current_log_prob = actor.get_dist(td).log_prob(td["action"])
+        td["action_log_prob"] = current_log_prob - torch.tensor(1.25).log()
+        td["advantage"] = torch.ones_like(td["advantage"])
 
         loss_sym = ClipPPOLoss(actor, value, clip_epsilon=0.2)
         loss_asym = ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.28))
@@ -1343,8 +1346,11 @@ class TestPPO(LossModuleTestBase):
         torch.manual_seed(self.seed)
         out_eq = loss_eq(td.clone())
         torch.testing.assert_close(out_sym["loss_objective"], out_eq["loss_objective"])
-        # the asymmetric loss runs end-to-end
-        loss_asym(td.clone())
+        out_asym = loss_asym(td.clone())
+        torch.testing.assert_close(out_sym["loss_objective"], torch.tensor(-1.2))
+        torch.testing.assert_close(out_asym["loss_objective"], torch.tensor(-1.25))
+        torch.testing.assert_close(out_sym["clip_fraction"], torch.tensor(1.0))
+        torch.testing.assert_close(out_asym["clip_fraction"], torch.tensor(0.0))
 
         # both buffer flavors accept scheduled scalar assignment
         loss_sym.clip_epsilon = 0.1
@@ -2165,13 +2171,12 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
     )
+    @pytest.mark.skip(reason="make_functional_with_buffers needs to be changed")
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("composite_action_dist", [True, False])
     def test_a2c_diff(self, device, gradient_mode, advantage, composite_action_dist):
-        if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
-            raise pytest.skip("make_functional_with_buffers needs to be changed")
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_a2c(
             device=device, composite_action_dist=composite_action_dist

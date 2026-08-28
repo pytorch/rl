@@ -1764,8 +1764,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
+        use_cuda_streams = self.return_same_td and not self.no_cuda_sync
         if (
-            not self.no_cuda_sync
+            use_cuda_streams
             and self.storing_device
             and self.storing_device.type == "cuda"
         ):
@@ -1773,7 +1774,7 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
             event = stream.record_event()
             streams = [stream]
             events = [event]
-        elif not self.no_cuda_sync and self.storing_device is None:
+        elif use_cuda_streams and self.storing_device is None:
             streams = []
             events = []
             # this way of checking cuda is robust to lazy stacks with mismatching shapes
@@ -2102,7 +2103,9 @@ class Collector(BaseCollector, metaclass=_CollectorMeta):
                     with _maybe_record_function("Collector.policy"):
                         policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
-                        policy_output = policy_output.clone()
+                        policy_output = policy_output.select(
+                            *self._policy_output_keys, strict=False
+                        ).clone()
                     if self._carrier is not policy_output:
                         # ad-hoc update carrier
                         self._carrier.update(

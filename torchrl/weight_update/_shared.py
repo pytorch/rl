@@ -70,6 +70,14 @@ class SharedMemTransport:
 
     Both CPU and CUDA tensors maintain shared references when sent through mp.Queue.
 
+    .. note::
+        Sharing CUDA tensors relies on CUDA IPC, which is only available on
+        native Linux (not Windows or WSL2), and backends such as MPS cannot be
+        shared across processes at all. On those platforms the schemes stage
+        the weights through CPU shared memory instead (see
+        :meth:`SharedMemWeightSyncScheme._get_params_map`), and each worker
+        moves them back to its own device.
+
     """
 
     def __init__(self):
@@ -513,7 +521,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
     ):
         """Get the params_map for init_on_sender()."""
         # Import _cast locally to avoid circular imports
-        from torchrl.collectors.utils import _cast
+        from torchrl.collectors.utils import (
+            _cast,
+            _unshareable_devices,
+            _warn_cpu_staging,
+        )
 
         if params_map is not None:
             # Sanity check: params_map must be a dict[int, TensorDictBase]
@@ -576,6 +588,7 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                     else:
                         # Distinct factories - create per-worker weights directly
                         params_map = {}
+                        staged_devices = []
                         for worker_idx, factory in enumerate(factories):
                             if factory is not None:
                                 worker_model = factory()
@@ -586,12 +599,19 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                                     _cast, worker_weights
                                 )
                                 # Move to appropriate device
+                                device = None
                                 if devices and worker_idx < len(devices):
                                     device = devices[worker_idx]
-                                    if device is not None:
-                                        worker_weights = worker_weights.to(device)
+                                offending = _unshareable_devices(device, worker_weights)
+                                if offending:
+                                    staged_devices.extend(offending)
+                                    worker_weights = worker_weights.to("cpu")
+                                elif device is not None:
+                                    worker_weights = worker_weights.to(device)
                                 worker_weights = worker_weights.share_memory_()
                                 params_map[worker_idx] = worker_weights
+                        if staged_devices:
+                            _warn_cpu_staging(staged_devices)
                         # Set per_worker_weights flag on the scheme
                         self.per_worker_weights = True
                         return params_map
@@ -631,8 +651,17 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
             # Create device map with proper Parameter handling using _cast
             # _cast ensures Parameters stay as Parameters (with requires_grad=False)
             device_map = {}
+            staged_weights = None
+            staged_devices = []
             for d in devices_set:
-                if d != weights_device:
+                offending = _unshareable_devices(d, weights)
+                if offending:
+                    if staged_weights is None:
+                        staged_weights = weights.to("cpu").apply(_cast, weights)
+                        staged_weights.share_memory_()
+                    staged_devices.extend(offending)
+                    device_map[d] = staged_weights
+                elif d != weights_device:
                     # Move to device and apply _cast to preserve Parameter/Buffer types
                     weights_on_device = weights.to(d)
                     weights_on_device = weights_on_device.apply(_cast, weights)
@@ -640,6 +669,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                 else:
                     # Already on correct device, just apply _cast
                     device_map[d] = weights.apply(_cast, weights)
+            if staged_devices:
+                _warn_cpu_staging(staged_devices)
 
             # Create the map
             params_map = {

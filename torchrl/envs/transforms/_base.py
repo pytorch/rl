@@ -930,10 +930,14 @@ class Transform(nn.Module):
 
 class _TEnvPostInit(_EnvPostInit):
     def __call__(self, *args, **kwargs):
+        spec_locked = kwargs.pop("spec_locked", True)
         compile_kwargs = _pop_compile_kwargs(kwargs)
         instance: EnvBase = super(_EnvPostInit, self).__call__(*args, **kwargs)
         # we skip the materialization of the specs, because this can't be done with lazy
-        # transforms such as ObservationNorm.
+        # transforms such as ObservationNorm. The lock is only intent at this point:
+        # set_spec_lock_ records the flag, and _make_output_spec / _make_input_spec
+        # apply the real lock once the specs exist.
+        instance.set_spec_lock_(spec_locked)
         return _maybe_compile_env(instance, compile_kwargs)
 
 
@@ -1251,6 +1255,8 @@ but got an object of type {type(transform)}."""
             if output_spec is not None:
                 return output_spec
         output_spec = self._make_output_spec()
+        if self.is_spec_locked:
+            output_spec.lock_(recurse=True)
         return output_spec
 
     @_maybe_unlock
@@ -1272,6 +1278,8 @@ but got an object of type {type(transform)}."""
             if input_spec is not None:
                 return input_spec
         input_spec = self._make_input_spec()
+        if self.is_spec_locked:
+            input_spec.lock_(recurse=True)
         return input_spec
 
     @_maybe_unlock

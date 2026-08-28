@@ -67,6 +67,7 @@ from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 from torchrl.collectors.distributed.rpc import RPCCollector
 
 from torchrl.collectors.utils import (
+    _device_shareable_across_processes,
     _make_policy_factory,
     _maybe_normalize_replay_buffer_tensordict_device,
     _traj_chunk_ends_done,
@@ -191,6 +192,119 @@ def test_weight_sync_scheme_from_backend_forwards_kwargs():
 def test_weight_sync_scheme_from_backend_rejects_unknown():
     with pytest.raises(ValueError, match="Unsupported weight-sync backend"):
         WeightSyncScheme.from_backend("unknown")
+
+
+class TestWeightSyncCPUStaging:
+    """Weights on devices without cross-process sharing support (CUDA on
+    Windows/WSL2, MPS anywhere) must be staged through CPU shared memory,
+    otherwise they are silently received as zeros and can corrupt the
+    sender's memory (https://github.com/pytorch/rl/issues/3985)."""
+
+    def test_cpu_and_meta_always_shareable(self):
+        assert _device_shareable_across_processes(torch.device("cpu"))
+        assert _device_shareable_across_processes(torch.device("meta"))
+
+    def test_mps_never_shareable(self):
+        assert not _device_shareable_across_processes(torch.device("mps"))
+
+    @pytest.mark.parametrize(
+        "scheme_cls", [SharedMemWeightSyncScheme, MultiProcessWeightSyncScheme]
+    )
+    def test_params_map_stages_cuda_weights_without_ipc(self, monkeypatch, scheme_cls):
+        import torchrl.collectors.utils as collector_utils
+
+        monkeypatch.setattr(
+            collector_utils, "_platform_supports_cuda_ipc", lambda: False
+        )
+        model = nn.Linear(2, 1)
+        scheme = scheme_cls()
+        with pytest.warns(UserWarning, match="staged through CPU shared memory"):
+            params_map = scheme._get_params_map(
+                model=model,
+                devices=[torch.device("cuda:0"), torch.device("cuda:0")],
+            )
+        assert params_map[0] is params_map[1]
+        for weights in params_map.values():
+            assert weights.is_shared()
+            for tensor in weights.values(True, True):
+                assert tensor.device.type == "cpu"
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_params_map_keeps_cuda_weights_with_ipc(self, monkeypatch):
+        import torchrl.collectors.utils as collector_utils
+
+        monkeypatch.setattr(
+            collector_utils, "_platform_supports_cuda_ipc", lambda: True
+        )
+        model = nn.Linear(2, 1)
+        scheme = SharedMemWeightSyncScheme()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            params_map = scheme._get_params_map(
+                model=model, devices=[torch.device("cuda:0")]
+            )
+        for tensor in params_map[0].values(True, True):
+            assert tensor.device.type == "cuda"
+
+    def test_params_map_cpu_weights_unchanged(self):
+        model = nn.Linear(2, 1)
+        scheme = SharedMemWeightSyncScheme()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            params_map = scheme._get_params_map(
+                model=model, devices=[torch.device("cpu")]
+            )
+        for tensor in params_map[0].values(True, True):
+            assert tensor.device.type == "cpu"
+
+    def _run_staged_multicollector(self, device):
+        """Collect on a device without cross-process sharing support and assert
+        the #3985 regression stays fixed: the parent policy is not mutated and
+        the workers act with the parent's weights (a worker that received zero
+        or garbage weights would emit near-zero actions instead of ~bias)."""
+        env_maker = ContinuousActionVecMockEnv
+        policy = TensorDictModule(
+            nn.LazyLinear(7), in_keys=["observation"], out_keys=["action"]
+        )
+        env = env_maker()
+        policy(env.reset())
+        with torch.no_grad():
+            policy.module.bias.fill_(1000.0)
+        policy = policy.to(device)
+        weights_before = TensorDict.from_module(policy).data.cpu().clone()
+        with pytest.warns(UserWarning, match="staged through CPU shared memory"):
+            collector = MultiSyncCollector(
+                [env_maker, env_maker],
+                policy=policy,
+                frames_per_batch=16,
+                total_frames=32,
+                policy_device=device,
+                storing_device="cpu",
+                env_device="cpu",
+            )
+        try:
+            for data in collector:
+                assert data.numel() == 16
+                assert (data["action"] > 500.0).all()
+                break
+            weights_after = TensorDict.from_module(policy).data
+            assert_allclose_td(weights_before, weights_after.cpu())
+        finally:
+            collector.shutdown()
+            del collector
+
+    @pytest.mark.skipif(
+        not torch.backends.mps.is_available(), reason="needs an MPS device"
+    )
+    def test_multicollector_mps_policy(self):
+        self._run_staged_multicollector(torch.device("mps"))
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(sys.platform != "win32", reason="needs Windows")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_multicollector_windows_cuda_policy(self):
+        self._run_staged_multicollector(torch.device("cuda:0"))
 
 
 def test_ray_weight_sync_copy_preserves_config_and_resets_runtime():
@@ -3298,8 +3412,10 @@ class TestCollectorDevices:
                 no_cuda_sync=no_cuda_sync,
             )
             assert collector.env.device == torch.device(env_device)
+            caller_stream = torch.cuda.current_stream()
             i = 0
             for d in collector:
+                assert torch.cuda.current_stream() == caller_stream
                 for _d in d.unbind(0):
                     u = _d["observation"].unique()
                     assert u.numel() == 1, i

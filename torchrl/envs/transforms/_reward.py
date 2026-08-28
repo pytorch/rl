@@ -860,15 +860,15 @@ class SignTransform(Transform):
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         for key in self.in_keys:
             if key in self.parent.reward_keys:
-                spec = self.parent.output_spec["full_reward_spec"][key]
-                self.parent.output_spec["full_reward_spec"][key] = Bounded(
+                spec = reward_spec[key]
+                reward_spec[key] = Bounded(
                     shape=spec.shape,
                     device=spec.device,
                     dtype=spec.dtype,
                     high=1.0,
                     low=-1.0,
                 )
-        return self.parent.output_spec["full_reward_spec"]
+        return reward_spec
 
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase

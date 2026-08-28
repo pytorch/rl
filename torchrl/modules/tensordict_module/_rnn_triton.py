@@ -36,13 +36,13 @@ Limitations of this prototype:
 """
 from __future__ import annotations
 
-import importlib.metadata
 import os
 
 import torch
 import torch.nn.functional as F
-from packaging import version
+from torch.autograd.function import once_differentiable
 
+from torchrl._utils import _triton_version_at_least
 from torchrl.modules.tensordict_module._rnn_precision import (
     _maybe_enable_tf32,
     _resolve_precision,
@@ -50,26 +50,13 @@ from torchrl.modules.tensordict_module._rnn_precision import (
     RecurrentMatmulPrecisionUserMode,
 )
 
+# The kernels rely on Triton's libdevice ``tanh`` and on a backward path that
+# uses ``tl.atomic_add`` with a 2-D mask, which older Triton compilers reject.
+# Older installations fall back transparently to the ``scan`` / ``pad``
+# backends.
+_TRITON_MIN_VERSION = "2.2"
 
-def _check_triton_available() -> bool:
-    """True if the installed Triton exposes everything this module needs.
-
-    The backend's kernels rely on Triton's libdevice ``tanh`` and on a backward
-    path that uses ``tl.atomic_add`` with a 2-D mask, which older Triton
-    compilers reject. The version is read from package metadata rather than
-    probing libdevice via ``find_spec`` because older Triton builds lack the
-    ``triton.language.extra`` parent and that probe would raise
-    ``ModuleNotFoundError`` at torchrl import time. Older
-    installations fall back transparently to the ``scan`` / ``pad`` backends.
-    """
-    try:
-        triton_version = importlib.metadata.version("triton")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    return version.parse(triton_version) >= version.parse("2.2")
-
-
-_has_triton = _check_triton_available()
+_has_triton = _triton_version_at_least(_TRITON_MIN_VERSION)
 
 if _has_triton:
     import triton
@@ -1250,35 +1237,38 @@ if _has_triton:
 
             h_prev = hidden_p[:, 0].contiguous()
             h_next = torch.empty_like(h_prev)
-            for t in range(T):
-                _gru_fwd_step_tiled_h_kernel[grid](
-                    gates_x,
-                    hidden_p,
-                    h_prev,
-                    w_r_t,
-                    w_z_t,
-                    w_n_t,
-                    b_hh_p,
-                    is_init,
-                    out,
-                    save_r,
-                    save_z,
-                    save_n,
-                    save_gh_n,
-                    h_next,
-                    B,
-                    T,
-                    H=H_pad,
-                    t=t,
-                    BLOCK_B=_FWD_TILED_BLOCK_B,
-                    BLOCK_H=_FWD_TILED_BLOCK_H,
-                    BLOCK_K=_FWD_TILED_BLOCK_K,
-                    INPUT_PRECISION=input_precision,
-                    SAVE_GATES=save_gates,
-                    num_warps=_FWD_TILED_NUM_WARPS,
-                    num_stages=1,
-                )
-                h_prev, h_next = h_next, h_prev
+            # Triton launches on the current CUDA context; pin it to the input
+            # tensors' device so non-default devices are safe.
+            with torch.cuda.device(gates_x.device):
+                for t in range(T):
+                    _gru_fwd_step_tiled_h_kernel[grid](
+                        gates_x,
+                        hidden_p,
+                        h_prev,
+                        w_r_t,
+                        w_z_t,
+                        w_n_t,
+                        b_hh_p,
+                        is_init,
+                        out,
+                        save_r,
+                        save_z,
+                        save_n,
+                        save_gh_n,
+                        h_next,
+                        B,
+                        T,
+                        H=H_pad,
+                        t=t,
+                        BLOCK_B=_FWD_TILED_BLOCK_B,
+                        BLOCK_H=_FWD_TILED_BLOCK_H,
+                        BLOCK_K=_FWD_TILED_BLOCK_K,
+                        INPUT_PRECISION=input_precision,
+                        SAVE_GATES=save_gates,
+                        num_warps=_FWD_TILED_NUM_WARPS,
+                        num_stages=1,
+                    )
+                    h_prev, h_next = h_next, h_prev
             return h_prev
 
         h_final = torch.empty(B, H_pad, dtype=out.dtype, device=out.device)
@@ -1286,26 +1276,27 @@ if _has_triton:
         def grid(meta):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
-        _gru_fwd_kernel[grid](
-            gates_x,
-            hidden_p,
-            w_r_t,
-            w_z_t,
-            w_n_t,
-            b_hh_p,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            h_final,
-            B,
-            T,
-            H=H_pad,
-            SAVE_GATES=save_gates,
-            INPUT_PRECISION=input_precision,
-        )
+        with torch.cuda.device(gates_x.device):
+            _gru_fwd_kernel[grid](
+                gates_x,
+                hidden_p,
+                w_r_t,
+                w_z_t,
+                w_n_t,
+                b_hh_p,
+                is_init,
+                out,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                h_final,
+                B,
+                T,
+                H=H_pad,
+                SAVE_GATES=save_gates,
+                INPUT_PRECISION=input_precision,
+            )
         return h_final
 
     def _lstm_fwd_launch(
@@ -1348,42 +1339,44 @@ if _has_triton:
             c_prev = cell_p[:, 0].contiguous()
             h_next = torch.empty_like(h_prev)
             c_next = torch.empty_like(c_prev)
-            for t in range(T):
-                _lstm_fwd_step_tiled_h_kernel[grid](
-                    gates_x,
-                    hidden_p,
-                    cell_p,
-                    h_prev,
-                    c_prev,
-                    w_i_t,
-                    w_f_t,
-                    w_g_t,
-                    w_o_t,
-                    b_hh_p,
-                    is_init,
-                    out,
-                    c_out,
-                    save_i,
-                    save_f,
-                    save_g,
-                    save_o,
-                    save_tanhc,
-                    h_next,
-                    c_next,
-                    B,
-                    T,
-                    H=H_pad,
-                    t=t,
-                    BLOCK_B=_FWD_TILED_BLOCK_B,
-                    BLOCK_H=_FWD_TILED_BLOCK_H,
-                    BLOCK_K=_FWD_TILED_BLOCK_K,
-                    INPUT_PRECISION=input_precision,
-                    SAVE_GATES=save_gates,
-                    num_warps=_FWD_TILED_NUM_WARPS,
-                    num_stages=1,
-                )
-                h_prev, h_next = h_next, h_prev
-                c_prev, c_next = c_next, c_prev
+            # See _gru_fwd_launch for why the launch pins the CUDA context.
+            with torch.cuda.device(gates_x.device):
+                for t in range(T):
+                    _lstm_fwd_step_tiled_h_kernel[grid](
+                        gates_x,
+                        hidden_p,
+                        cell_p,
+                        h_prev,
+                        c_prev,
+                        w_i_t,
+                        w_f_t,
+                        w_g_t,
+                        w_o_t,
+                        b_hh_p,
+                        is_init,
+                        out,
+                        c_out,
+                        save_i,
+                        save_f,
+                        save_g,
+                        save_o,
+                        save_tanhc,
+                        h_next,
+                        c_next,
+                        B,
+                        T,
+                        H=H_pad,
+                        t=t,
+                        BLOCK_B=_FWD_TILED_BLOCK_B,
+                        BLOCK_H=_FWD_TILED_BLOCK_H,
+                        BLOCK_K=_FWD_TILED_BLOCK_K,
+                        INPUT_PRECISION=input_precision,
+                        SAVE_GATES=save_gates,
+                        num_warps=_FWD_TILED_NUM_WARPS,
+                        num_stages=1,
+                    )
+                    h_prev, h_next = h_next, h_prev
+                    c_prev, c_next = c_next, c_prev
             return h_prev, c_prev
 
         h_final = torch.empty(B, H_pad, dtype=out.dtype, device=out.device)
@@ -1392,31 +1385,32 @@ if _has_triton:
         def grid(meta):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
-        _lstm_fwd_kernel[grid](
-            gates_x,
-            hidden_p,
-            cell_p,
-            w_i_t,
-            w_f_t,
-            w_g_t,
-            w_o_t,
-            b_hh_p,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            h_final,
-            c_final,
-            B,
-            T,
-            H=H_pad,
-            SAVE_GATES=save_gates,
-            INPUT_PRECISION=input_precision,
-        )
+        with torch.cuda.device(gates_x.device):
+            _lstm_fwd_kernel[grid](
+                gates_x,
+                hidden_p,
+                cell_p,
+                w_i_t,
+                w_f_t,
+                w_g_t,
+                w_o_t,
+                b_hh_p,
+                is_init,
+                out,
+                c_out,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                h_final,
+                c_final,
+                B,
+                T,
+                H=H_pad,
+                SAVE_GATES=save_gates,
+                INPUT_PRECISION=input_precision,
+            )
         return h_final, c_final
 
 
@@ -1633,6 +1627,7 @@ class _GRUFn(torch.autograd.Function):
         return _unpad_last(out, H, H_pad), _unpad_last(h_final, H, H_pad)
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, dout, dh_final):
         B, T, I_in, H, H_pad = ctx.shapes
         input_precision = ctx.input_precision
@@ -1713,27 +1708,29 @@ class _GRUFn(torch.autograd.Function):
         def grid(meta):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
-        _gru_bwd_kernel[grid](
-            hidden_p,
-            w_r,
-            w_z,
-            w_n,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            dout_p,
-            dh_final_p,
-            dgates_x,
-            dgates_h,
-            dhidden_p,
-            B,
-            T,
-            H=H_pad,
-            INPUT_PRECISION=input_precision,
-        )
+        # See _gru_fwd_launch for why the launch pins the CUDA context.
+        with torch.cuda.device(hidden_p.device):
+            _gru_bwd_kernel[grid](
+                hidden_p,
+                w_r,
+                w_z,
+                w_n,
+                is_init,
+                out,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                dout_p,
+                dh_final_p,
+                dgates_x,
+                dgates_h,
+                dhidden_p,
+                B,
+                T,
+                H=H_pad,
+                INPUT_PRECISION=input_precision,
+            )
 
         # h_prev[b, t] for the dW_hh computation.
         h_prev_all = torch.empty_like(out)
@@ -1919,6 +1916,7 @@ class _LSTMFn(torch.autograd.Function):
         )
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, dout, dc_out, dh_final, dc_final):
         B, T, I_in, H, H_pad = ctx.shapes
         input_precision = ctx.input_precision
@@ -2020,34 +2018,36 @@ class _LSTMFn(torch.autograd.Function):
         def grid(meta):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
-        _lstm_bwd_kernel[grid](
-            hidden_p,
-            cell_p,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            dout_p,
-            dc_out_p,
-            dh_final_p,
-            dc_final_p,
-            dgates_x,
-            dgates_h,
-            dhidden_p,
-            dcell_p,
-            B,
-            T,
-            H=H_pad,
-            INPUT_PRECISION=input_precision,
-        )
+        # See _gru_fwd_launch for why the launch pins the CUDA context.
+        with torch.cuda.device(hidden_p.device):
+            _lstm_bwd_kernel[grid](
+                hidden_p,
+                cell_p,
+                w_i,
+                w_f,
+                w_g,
+                w_o,
+                is_init,
+                out,
+                c_out,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                dout_p,
+                dc_out_p,
+                dh_final_p,
+                dc_final_p,
+                dgates_x,
+                dgates_h,
+                dhidden_p,
+                dcell_p,
+                B,
+                T,
+                H=H_pad,
+                INPUT_PRECISION=input_precision,
+            )
 
         h_prev_all = torch.empty_like(out)
         h_prev_all[:, 0] = hidden_p[:, 0]

@@ -34,6 +34,8 @@ For an overview of how the DreamerV3 components fit together, see
     RSSMRollout
     RSSMRolloutV3
     SymExpTwoHot
+    DreamerV3BlockGRUCell
+    DreamerV3BlockGRU
     DreamerV3MLP
 
 PILCO

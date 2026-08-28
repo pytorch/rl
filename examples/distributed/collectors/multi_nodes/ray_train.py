@@ -146,11 +146,9 @@ if __name__ == "__main__":
     loss_module = ClipPPOLoss(
         actor=policy_module,
         critic_network=value_module,
-        advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
-        entropy_coeff=entropy_eps,  # these keys match by default but we set this for completeness
-        value_target_key=advantage_module.value_target_key,
+        entropy_coeff=entropy_eps,
         critic_coeff=1.0,
         loss_critic_type="smooth_l1",
     )
@@ -201,7 +199,7 @@ if __name__ == "__main__":
         stepcount_str = f"step count (max): {logs['step_count'][-1]}"
         logs["lr"].append(optim.param_groups[0]["lr"])
         lr_str = f"lr policy: {logs['lr'][-1]: 4.4f}"
-        with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+        with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
             logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextvars
-import importlib.metadata
 import importlib.util
 import typing
 from collections.abc import Iterable
@@ -14,18 +13,19 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as _torch_checkpoint
-from packaging import version
 
 from tensordict import TensorDict, TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, NestedKey, set_lazy_legacy
 from torch import nn, Tensor
+from torch.autograd.function import once_differentiable
 from torch.nn.modules.rnn import RNNCellBase
 
 from torchrl._utils import (
     _ContextManager,
     _DecoratorContextManager,
+    _triton_version_at_least,
     implement_for,
     is_compiling,
 )
@@ -77,24 +77,11 @@ def _maybe_warm_scan_backward(device: torch.device | str | int | None) -> None:
         ensure_scan_backward(device)
 
 
-def _check_triton_available() -> bool:
-    """True if Triton is installed and exposes the API the kernels need.
-
-    Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
-    The backend requires ``triton.language.extra.libdevice`` which is only
-    available from Triton 2.2 onwards. Older Triton builds fall back to the
-    scan / pad backends. The version is read from package metadata to avoid
-    eagerly importing Triton (or its missing ``triton.language.extra`` parent)
-    at torchrl import time.
-    """
-    try:
-        triton_version = importlib.metadata.version("triton")
-    except importlib.metadata.PackageNotFoundError:
-        return False
-    return version.parse(triton_version) >= version.parse("2.2")
-
-
-_has_triton = _check_triton_available()
+# Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
+# The backend requires ``triton.language.extra.libdevice`` which is only
+# available from Triton 2.2 onwards. Older Triton builds fall back to the
+# scan / pad backends.
+_has_triton = _triton_version_at_least("2.2")
 
 
 def _canonical_stride(shape: typing.Sequence[int]) -> tuple[int, ...]:
@@ -151,6 +138,170 @@ def _gru_cell_from_gate_params(
     newgate = (i_n + (resetgate * h_n)).tanh()
 
     return newgate + inputgate * (hx - newgate)
+
+
+class _GRUScanFunction(torch.autograd.Function):
+    """GRU sequence with a hidden-gradient-only reverse scan.
+
+    The input projection and all shared-parameter gradient reductions run over
+    the flattened batch-time dimensions. Only the recurrent hidden-state
+    derivative remains inside the reverse scan.
+
+    ``torch.func`` transforms (``jacrev``, ``vmap``, ``grad``) are not
+    supported: this Function uses the ctx-style ``forward``, which PyTorch
+    rejects with its standard ``setup_context`` error before the recurrence
+    runs. The backward is marked ``once_differentiable`` because it consumes
+    gate states saved without autograd history.
+    """
+
+    @staticmethod
+    def forward(ctx, x, initial, reset_hidden, is_init, w_ih, w_hh, b_ih, b_hh):
+        time, batch, _ = x.shape
+        hidden_size = initial.shape[-1]
+        gate_chunks = (hidden_size, hidden_size, hidden_size)
+        gates_x = F.linear(x.flatten(0, 1), w_ih, b_ih).view(
+            time, batch, 3 * hidden_size
+        )
+
+        def step(carry, inputs):
+            gates_x_t, reset_hidden_t, init_t = inputs
+            h_previous = torch.where(init_t.unsqueeze(-1), reset_hidden_t, carry)
+            gates_h = F.linear(h_previous, w_hh, b_hh)
+            i_r, i_z, i_n = gates_x_t.split(gate_chunks, -1)
+            h_r, h_z, h_n = gates_h.split(gate_chunks, -1)
+            resetgate = (i_r + h_r).sigmoid()
+            updategate = (i_z + h_z).sigmoid()
+            newgate = (i_n + resetgate * h_n).tanh()
+            hidden = newgate + updategate * (h_previous - newgate)
+            return hidden, (
+                hidden.clone(),
+                resetgate,
+                updategate,
+                newgate,
+                h_n,
+            )
+
+        _, (hidden, resetgate, updategate, newgate, h_n) = _scan(
+            step, initial, (gates_x, reset_hidden, is_init), dim=0
+        )
+        ctx.hidden_size = hidden_size
+        ctx.save_for_backward(
+            x,
+            initial,
+            reset_hidden,
+            is_init,
+            w_ih,
+            w_hh,
+            hidden,
+            resetgate,
+            updategate,
+            newgate,
+            h_n,
+        )
+        return hidden
+
+    @staticmethod
+    @once_differentiable
+    def backward(ctx, grad_hidden):
+        (
+            x,
+            initial,
+            reset_hidden,
+            is_init,
+            w_ih,
+            w_hh,
+            hidden,
+            resetgate,
+            updategate,
+            newgate,
+            h_n,
+        ) = ctx.saved_tensors
+        hidden_size = ctx.hidden_size
+        time, batch, input_size = x.shape
+
+        # The forward may have run under autocast with fp32 parameters, so the
+        # weights are cast to the gradient dtype before the backward linears.
+        gate_dtype = torch.promote_types(grad_hidden.dtype, resetgate.dtype)
+        w_hh_t = w_hh.t().to(gate_dtype)
+
+        previous_hidden = torch.cat((initial.unsqueeze(0), hidden[:-1]), 0)
+        previous_hidden = torch.where(
+            is_init.unsqueeze(-1), reset_hidden, previous_hidden
+        )
+
+        def reverse_step(d_hidden_next, inputs):
+            (
+                d_hidden_t,
+                previous_hidden_t,
+                resetgate_t,
+                updategate_t,
+                newgate_t,
+                h_n_t,
+                init_t,
+            ) = inputs
+            d_hidden = d_hidden_t + d_hidden_next
+            d_newgate = d_hidden * (1 - updategate_t)
+            d_updategate = d_hidden * (previous_hidden_t - newgate_t)
+            d_previous_direct = d_hidden * updategate_t
+
+            d_newgate_pre = d_newgate * (1 - newgate_t.square())
+            d_h_n = d_newgate_pre * resetgate_t
+            d_updategate_pre = d_updategate * updategate_t * (1 - updategate_t)
+            d_resetgate_pre = d_newgate_pre * h_n_t * resetgate_t * (1 - resetgate_t)
+            d_gates_x = torch.cat(
+                (d_resetgate_pre, d_updategate_pre, d_newgate_pre), -1
+            )
+            d_gates_h = torch.cat((d_resetgate_pre, d_updategate_pre, d_h_n), -1)
+            d_previous = d_previous_direct + F.linear(d_gates_h, w_hh_t)
+            d_hidden_next = torch.where(
+                init_t.unsqueeze(-1), torch.zeros_like(d_previous), d_previous
+            )
+            return d_hidden_next, (d_gates_x, d_gates_h, d_previous)
+
+        reversed_inputs = tuple(
+            value.flip(0)
+            for value in (
+                grad_hidden,
+                previous_hidden,
+                resetgate,
+                updategate,
+                newgate,
+                h_n,
+                is_init,
+            )
+        )
+        d_initial, (d_gates_x, d_gates_h, d_previous) = _scan(
+            reverse_step,
+            torch.zeros_like(initial),
+            reversed_inputs,
+            dim=0,
+        )
+        d_gates_x = d_gates_x.flip(0)
+        d_gates_h = d_gates_h.flip(0)
+        d_previous = d_previous.flip(0)
+
+        d_gates_x_flat = d_gates_x.reshape(time * batch, 3 * hidden_size)
+        d_gates_h_flat = d_gates_h.reshape(time * batch, 3 * hidden_size)
+        x_flat = x.reshape(time * batch, input_size)
+        previous_hidden_flat = previous_hidden.reshape(time * batch, hidden_size)
+        d_x = F.linear(d_gates_x_flat, w_ih.t().to(d_gates_x_flat.dtype)).view_as(x)
+        d_w_ih = d_gates_x_flat.t() @ x_flat
+        d_w_hh = d_gates_h_flat.t() @ previous_hidden_flat
+        d_b_ih = d_gates_x_flat.sum(0)
+        d_b_hh = d_gates_h_flat.sum(0)
+        d_reset_hidden = torch.where(
+            is_init.unsqueeze(-1), d_previous, torch.zeros_like(d_previous)
+        )
+        return (
+            d_x,
+            d_initial,
+            d_reset_hidden,
+            None,
+            d_w_ih,
+            d_w_hh,
+            d_b_ih,
+            d_b_hh,
+        )
 
 
 @implement_for("torch", None, "2.6.0", compilable=True)
@@ -962,7 +1113,7 @@ class LSTMModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.lstm).to_module(lstm)
+        from_module(self.lstm).to_module(lstm, preserve_module_state=False)
         self.lstm = lstm
         return self
 
@@ -988,7 +1139,7 @@ class LSTMModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.lstm).to_module(lstm)
+        from_module(self.lstm).to_module(lstm, preserve_module_state=False)
         self.lstm = lstm
         return self
 
@@ -2415,7 +2566,7 @@ class GRUModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.gru).to_module(gru)
+        from_module(self.gru).to_module(gru, preserve_module_state=False)
         self.gru = gru
         return self
 
@@ -2440,7 +2591,7 @@ class GRUModule(ModuleBase):
         )
         from tensordict import from_module
 
-        from_module(self.gru).to_module(gru)
+        from_module(self.gru).to_module(gru, preserve_module_state=False)
         self.gru = gru
         return self
 
@@ -2858,73 +3009,58 @@ class GRUModule(ModuleBase):
             )
 
         recompute = self.recurrent_recompute == "full"
-        # Split the packed GRU gate parameters outside the scan body. This keeps
-        # the scan step from producing intermediate tensors whose width is the
-        # composite symbolic expression ``3 * hidden_size`` and avoids the
-        # chunk/split-on-activations path in scan's compiled backward. Each gate
-        # clone is an independent allocation, preserving the existing scan
-        # input-aliasing workaround for cuDNN-flattened RNN parameters while
-        # keeping gradients connected to the packed parameters.
         hidden_size = self.gru.hidden_size
-        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
-        for layer in range(self.gru.num_layers):
-            weights = self.gru._all_weights[layer]
-            weight_ihs.append(
-                _split_gru_gate_param(getattr(self.gru, weights[0]), hidden_size)
-            )
-            weight_hhs.append(
-                _split_gru_gate_param(getattr(self.gru, weights[1]), hidden_size)
-            )
-            bias_ihs.append(
-                _split_gru_gate_param(
-                    getattr(self.gru, weights[2]) if self.gru.bias else None,
-                    hidden_size,
-                )
-            )
-            bias_hhs.append(
-                _split_gru_gate_param(
-                    getattr(self.gru, weights[3]) if self.gru.bias else None,
-                    hidden_size,
-                )
-            )
-
         input = _canonical_contiguous(input.transpose(0, 1))
         is_init = _canonical_contiguous(is_init.transpose(0, 1))
         reset_hidden = _canonical_contiguous(hidden_in.permute(1, 2, 0, 3))
         num_layers = self.gru.num_layers
 
-        def step(carry, inputs):
-            h_layers = carry
-            x_t, init_t, reset_hidden_t = inputs
-            init_t = init_t.unsqueeze(0).unsqueeze(-1)
-            h_layers = torch.where(init_t, reset_hidden_t, h_layers)
-            h_unbound = h_layers.unbind(0)
-            new_h = []
-            for layer in range(num_layers):
-                h_new = _gru_cell_from_gate_params(
-                    x_t,
-                    h_unbound[layer],
-                    weight_ihs[layer],
-                    bias_ihs[layer],
-                    weight_hhs[layer],
-                    bias_hhs[layer],
-                )
-                new_h.append(h_new)
-                x_t = h_new
-            # torch.stack allocates a fresh tensor, so the carry needs no
-            # extra clone. The per-step output is derived from the carry
-            # via transpose+flatten (view-style at the HOP tracer level
-            # even though it copies at runtime) — clone it and x_t to
-            # break the carry/output aliasing scan would otherwise flag.
-            new_h = torch.stack(new_h, 0)
-            hidden_out = new_h.transpose(0, 1).flatten(1).clone()
-            return new_h, (x_t.clone(), hidden_out)
-
-        def step_unpacked(h_layers, x_t, init_t, reset_hidden_t):
-            new_h, (out_t, hidden_out) = step(h_layers, (x_t, init_t, reset_hidden_t))
-            return new_h, out_t, hidden_out
-
         if recompute:
+            # Split the packed parameters outside the checkpointed loop. Each
+            # gate clone remains connected to the packed parameter while
+            # breaking cuDNN's shared flat-storage aliases.
+            weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+            for layer in range(num_layers):
+                weights = self.gru._all_weights[layer]
+                weight_ihs.append(
+                    _split_gru_gate_param(getattr(self.gru, weights[0]), hidden_size)
+                )
+                weight_hhs.append(
+                    _split_gru_gate_param(getattr(self.gru, weights[1]), hidden_size)
+                )
+                bias_ihs.append(
+                    _split_gru_gate_param(
+                        getattr(self.gru, weights[2]) if self.gru.bias else None,
+                        hidden_size,
+                    )
+                )
+                bias_hhs.append(
+                    _split_gru_gate_param(
+                        getattr(self.gru, weights[3]) if self.gru.bias else None,
+                        hidden_size,
+                    )
+                )
+
+            def step_unpacked(h_layers, x_t, init_t, reset_hidden_t):
+                init_t = init_t.unsqueeze(0).unsqueeze(-1)
+                h_layers = torch.where(init_t, reset_hidden_t, h_layers)
+                h_unbound = h_layers.unbind(0)
+                new_h = []
+                for layer in range(num_layers):
+                    h_new = _gru_cell_from_gate_params(
+                        x_t,
+                        h_unbound[layer],
+                        weight_ihs[layer],
+                        bias_ihs[layer],
+                        weight_hhs[layer],
+                        bias_hhs[layer],
+                    )
+                    new_h.append(h_new)
+                    x_t = h_new
+                new_h = torch.stack(new_h, 0)
+                hidden_out = new_h.transpose(0, 1).flatten(1)
+                return new_h, x_t, hidden_out
+
             h_carry = initial_hidden
             outputs_list: list[torch.Tensor] = []
             hidden_list: list[torch.Tensor] = []
@@ -2943,9 +3079,35 @@ class GRUModule(ModuleBase):
             outputs = torch.stack(outputs_list, 0)
             hidden_steps = torch.stack(hidden_list, 0)
         else:
-            _, (outputs, hidden_steps) = _scan(
-                step, initial_hidden, (input, is_init, reset_hidden), dim=0
-            )
+            layer_input = input
+            hidden_layers = []
+            for layer in range(num_layers):
+                weights = self.gru._all_weights[layer]
+                # cuDNN may flatten every layer into shared storage. Independent
+                # clones keep scan's input aliasing rules satisfied while
+                # preserving gradients to the original packed parameters.
+                w_ih = getattr(self.gru, weights[0]).clone()
+                w_hh = getattr(self.gru, weights[1]).clone()
+                if self.gru.bias:
+                    b_ih = getattr(self.gru, weights[2]).clone()
+                    b_hh = getattr(self.gru, weights[3]).clone()
+                else:
+                    b_ih = layer_input.new_zeros(3 * hidden_size)
+                    b_hh = layer_input.new_zeros(3 * hidden_size)
+                layer_hidden = _GRUScanFunction.apply(
+                    layer_input,
+                    initial_hidden[layer],
+                    reset_hidden[:, layer],
+                    is_init,
+                    w_ih,
+                    w_hh,
+                    b_ih,
+                    b_hh,
+                )
+                hidden_layers.append(layer_hidden)
+                layer_input = layer_hidden
+            outputs = layer_input
+            hidden_steps = torch.stack(hidden_layers, -2).flatten(-2)
         outputs = outputs.transpose(0, 1)
         hidden_steps = hidden_steps.unflatten(
             -1, (self.gru.num_layers, self.gru.hidden_size)

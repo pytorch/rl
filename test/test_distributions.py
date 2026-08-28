@@ -14,6 +14,7 @@ from functools import partial
 import pytest
 import torch
 import torch.nn.functional as F
+from pyvers import implement_for
 
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import (
@@ -38,10 +39,7 @@ from torchrl.modules.distributions import (
     MaskedOneHotCategorical,
     TanhDelta,
 )
-from torchrl.modules.distributions.continuous import (
-    SafeTanhTransform,
-    TORCH_VERSION_PRE_2_6,
-)
+from torchrl.modules.distributions.continuous import SafeTanhTransform
 from torchrl.modules.distributions.discrete import (
     _generate_ordinal_logits,
     LLMMaskedCategorical,
@@ -177,18 +175,37 @@ class TestTanhNormal:
             lp = d.log_prob(a)
             assert torch.isfinite(lp).all()
 
+    @implement_for("torch", None, "2.6.0", compilable=True)
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
+    @pytest.mark.parametrize("safe_tanh", [False, True])
+    @pytest.mark.parametrize("compiled", [False])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_tanhnormal_rsample_and_log_prob(
+        self, dtype, low, high, safe_tanh, compiled, device
+    ):
+        self._test_tanhnormal_rsample_and_log_prob(
+            dtype, low, high, safe_tanh, compiled, device
+        )
+
+    @implement_for("torch", "2.6.0", compilable=True)
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
     @pytest.mark.parametrize("low, high", [(-1.0, 1.0), (-2.0, 3.0)])
     @pytest.mark.parametrize("safe_tanh", [False, True])
     @pytest.mark.parametrize("compiled", [False, True])
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_tanhnormal_rsample_and_log_prob(
+    def test_tanhnormal_rsample_and_log_prob(  # noqa: F811
+        self, dtype, low, high, safe_tanh, compiled, device
+    ):
+        self._test_tanhnormal_rsample_and_log_prob(
+            dtype, low, high, safe_tanh, compiled, device
+        )
+
+    def _test_tanhnormal_rsample_and_log_prob(
         self, dtype, low, high, safe_tanh, compiled, device
     ):
         if compiled and sys.version_info >= (3, 14):
             pytest.skip("torch.compile requires Python < 3.14")
-        if compiled and safe_tanh and TORCH_VERSION_PRE_2_6:
-            pytest.skip("safe_tanh compilation requires torch 2.6+")
 
         magnitude = 20.0 if dtype is torch.float32 else 40.0
         loc = torch.tensor(
@@ -542,6 +559,30 @@ class TestIndependentNormal:
 
 
 class TestTruncatedNormal:
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.float64])
+    @pytest.mark.parametrize("tensor_bounds", [False, True])
+    def test_truncnormal_rsample_dtype(self, device, dtype, tensor_bounds):
+        torch.manual_seed(0)
+        loc = torch.zeros(3, device=device, dtype=dtype, requires_grad=True)
+        scale = torch.ones(3, device=device, dtype=dtype, requires_grad=True)
+        if tensor_bounds:
+            low = torch.full_like(loc, -1)
+            high = torch.full_like(loc, 1)
+        else:
+            low = -1.0
+            high = 1.0
+
+        dist = TruncatedNormal(loc, scale, low=low, high=high)
+        sample = dist.rsample((4,))
+
+        assert sample.dtype == dtype
+        assert sample.isfinite().all()
+        sample.sum().backward()
+        for grad in (loc.grad, scale.grad):
+            assert grad is not None and grad.dtype == dtype
+            assert grad.isfinite().all()
+
     @pytest.mark.parametrize(
         "min", [-torch.ones(3), -1, 3 * torch.tensor([-1.0, -2.0, -0.5]), -0.1]
     )
@@ -881,6 +922,16 @@ class TestMaskedCategorical:
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
 
+    def test_sparse_mode_uses_original_indices(self) -> None:
+        logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
+        indices = torch.tensor([[0, 2], [1, 3]])
+        dist = MaskedCategorical(logits=logits, indices=indices)
+        expected = torch.tensor([2, 1])
+
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        assert torch.isfinite(dist.log_prob(dist.mode)).all()
+
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     @pytest.mark.parametrize("sparse", [False, True])
     @pytest.mark.parametrize("ndim", [2, 1, 3])
@@ -1136,6 +1187,16 @@ class TestMaskedOneHotCategorical:
         samples = dist.sample([num_samples]).argmax(-1)
         sample_probs = torch.bincount(samples) / num_samples
         torch.testing.assert_close(sample_probs, ref_probs, rtol=1e-5, atol=1e-2)
+
+    def test_sparse_mode_uses_original_indices(self) -> None:
+        logits = torch.tensor([[0.0, 1.0, 10.0, 2.0], [0.0, 9.0, 1.0, 8.0]])
+        indices = torch.tensor([[0, 2], [1, 3]])
+        dist = MaskedOneHotCategorical(logits=logits, indices=indices)
+        expected = F.one_hot(torch.tensor([2, 1]), num_classes=4)
+
+        torch.testing.assert_close(dist.mode, expected)
+        torch.testing.assert_close(dist.deterministic_sample, expected)
+        assert torch.isfinite(dist.log_prob(dist.mode)).all()
 
     @pytest.mark.parametrize("neg_inf", [-1e20, float("-inf")])
     def test_sample_sparse(self, neg_inf: float) -> None:

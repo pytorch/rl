@@ -19,14 +19,14 @@ import pytest
 import torch
 
 from _envs_common import _has_ale, _has_gym, mp_ctx
-from packaging import version
+from pyvers import implement_for
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.tensorclass import TensorClass
 from torch import nn
 
 from torchrl.data.tensor_specs import Binary, Composite, NonTensor, Unbounded
 from torchrl.envs import EnvBase, ParallelEnv, SerialEnv
-from torchrl.envs.libs.gym import gym_backend, GymEnv
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import StepCounter, Transform, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
 from torchrl.modules import Actor
@@ -701,17 +701,35 @@ class TestEnvBase:
 
 
 class TestRollout:
-    @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
+    @implement_for("gym", None, "0.19", compilable=True)
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
     @pytest.mark.parametrize("frame_skip", [1, 4])
     def test_rollout(self, env_name, frame_skip, seed=0):
+        self._test_rollout(env_name, frame_skip, seed)
+
+    @implement_for("gym", "0.19", compilable=True)
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED, PONG_VERSIONED])
+    @pytest.mark.parametrize("frame_skip", [1, 4])
+    def test_rollout(self, env_name, frame_skip, seed=0):  # noqa: F811
+        self._test_rollout(env_name, frame_skip, seed)
+
+    @implement_for("gymnasium", compilable=True)
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            pytest.param(
+                env_name, marks=pytest.mark.skipif(not _has_gym, reason="no gym")
+            )
+            for env_name in (PENDULUM_VERSIONED, PONG_VERSIONED)
+        ],
+    )
+    @pytest.mark.parametrize("frame_skip", [1, 4])
+    def test_rollout(self, env_name, frame_skip, seed=0):  # noqa: F811
+        self._test_rollout(env_name, frame_skip, seed)
+
+    def _test_rollout(self, env_name, frame_skip, seed):
         if env_name is PONG_VERSIONED and not _has_ale:
             pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
-        if env_name is PONG_VERSIONED and version.parse(
-            gym_backend().__version__
-        ) < version.parse("0.19"):
-            # Then 100 steps in pong are not sufficient to detect a difference
-            pytest.skip("can't detect difference in gym rollout with this gym version.")
 
         env_name = env_name()
         env = GymEnv(env_name, frame_skip=frame_skip)
