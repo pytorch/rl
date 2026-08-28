@@ -384,7 +384,7 @@ class CraftGroundEnv(CraftGroundWrapper):
         self,
         *,
         initial_env_config: InitialEnvironmentConfig | None = None,
-        mc_version: Literal["1.21", "26.2"] = "1.21",
+        mc_version: Literal["1.21"] = "1.21",
         port: int = 8000,
         action_space_version=None,
         env_path: str | None = None,
