@@ -76,9 +76,12 @@ class SliceSampler(Sampler):
             trajectory into separate sampleable runs. This mode currently supports
             single-dimensional TensorDict-backed storages and sampling with
             replacement. Trajectory ids and step numbers must be scalar integer
-            tensors, and every live trajectory-step pair must be unique. Defaults
-            to ``False``. The ``span`` and ``compile`` options are not currently
-            supported in fragmented mode.
+            tensors, and every live trajectory-step pair must be unique:
+            reusing trajectory ids (for instance a recreated collector
+            restarting ``("collector", "traj_ids")`` at zero while episodes
+            from a previous run are still stored) raises an error at sampling
+            time. Defaults to ``False``. The ``span`` and ``compile`` options
+            are not currently supported in fragmented mode.
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
             To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
             or when this signal is readily available. Must be used with ``cache_values=True``

@@ -35,6 +35,18 @@ class _FragmentedTrajectoryIndex:
         self._cache_storage_ref: weakref.ref | None = None
         self._cache_revision: int | None = None
 
+    def _duplicate_error(self, trajectory: int, step: int) -> RuntimeError:
+        return RuntimeError(
+            f"Found duplicate records for trajectory {trajectory!r} at step "
+            f"{step} (traj_key={self.trajectory_key!r}, "
+            f"step_key={self.step_key!r}). Trajectory-step pairs must be "
+            "unique in the live storage. This commonly happens when "
+            "trajectory ids are reused, e.g. a recreated collector restarts "
+            "its traj_ids at 0 while episodes from a previous run are still "
+            "stored. Use a trajectory key whose ids stay unique across the "
+            "buffer lifetime, or empty the buffer before reusing ids."
+        )
+
     @staticmethod
     def _storage_device(storage: Storage) -> torch.device | None:
         device = getattr(storage, "device", None)
@@ -151,11 +163,7 @@ class _FragmentedTrajectoryIndex:
                 )
             positions = trajectory_positions[trajectory]
             if step in positions:
-                raise RuntimeError(
-                    "Found duplicate records for trajectory "
-                    f"{trajectory!r} at step {step}. Trajectory-step pairs must "
-                    "be unique in the live storage."
-                )
+                raise self._duplicate_error(trajectory, step)
             positions[step] = position
 
         # The read index is arange(storage_length), so the metadata rows are
@@ -242,11 +250,7 @@ class _FragmentedTrajectoryIndex:
                 record = (trajectory, step)
                 positions = self._trajectory_positions.get(trajectory)
                 if record in seen or (positions is not None and step in positions):
-                    raise RuntimeError(
-                        "Found duplicate records for trajectory "
-                        f"{trajectory!r} at step {step}. Trajectory-step pairs must "
-                        "be unique in the live storage."
-                    )
+                    raise self._duplicate_error(trajectory, step)
                 seen.add(record)
                 new_records.append((slot, trajectory, step))
 
