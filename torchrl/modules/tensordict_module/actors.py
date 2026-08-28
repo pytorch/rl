@@ -667,7 +667,12 @@ class QValueModule(TensorDictModuleBase):
             else None
         )
         if action_spec is not None and self.strict_shape is not False:
-            composite_batch_ndim = len(self.spec.shape)
+            action_key = unravel_key(action_key)
+            if isinstance(action_key, tuple):
+                action_spec_parent = self.spec[action_key[:-1]]
+            else:
+                action_spec_parent = self.spec
+            composite_batch_ndim = len(action_spec_parent.shape)
             per_sample_shape = action_spec.shape[composite_batch_ndim:]
             batch_shape = action_values.shape[:-1]
             target_shape = torch.Size(list(batch_shape) + list(per_sample_shape))

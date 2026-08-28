@@ -569,6 +569,37 @@ class TestQValue:
             assert len(future_warns) == 0
         assert td["action"].shape == torch.Size([5, 4])
 
+    def test_qvalue_module_strict_shape_nested_spec(self):
+        """Test that nested spec batch dimensions are not duplicated."""
+        spec = Composite(
+            agents=Composite(
+                action=Categorical(4, shape=(3,)),
+                shape=(3,),
+            )
+        )
+        module = QValueModule(
+            action_value_key=("agents", "action_value"),
+            out_keys=[
+                ("agents", "action"),
+                ("agents", "action_value"),
+                ("agents", "chosen_action_value"),
+            ],
+            spec=spec,
+        )
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"action_value": torch.randn(2, 3, 4)},
+                    [2, 3],
+                )
+            },
+            [2],
+        )
+
+        module(td)
+
+        assert td["agents", "action"].shape == torch.Size([2, 3])
+
 
 @pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy(device):

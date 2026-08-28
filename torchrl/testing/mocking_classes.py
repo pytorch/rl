@@ -848,8 +848,10 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
                 shape=batch_size,
             )
         if action_spec is None:
-            action_spec_cls = Categorical if categorical_action_encoding else OneHot
-            action_spec = action_spec_cls(7, shape=(*batch_size, 7))
+            if categorical_action_encoding:
+                action_spec = Categorical(7, shape=batch_size)
+            else:
+                action_spec = OneHot(7, shape=(*batch_size, 7))
         if state_spec is None:
             state_spec = Composite(
                 {
