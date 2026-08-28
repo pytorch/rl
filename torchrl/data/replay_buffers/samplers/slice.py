@@ -82,6 +82,16 @@ class SliceSampler(Sampler):
             from a previous run are still stored) raises an error at sampling
             time. Defaults to ``False``. The ``span`` and ``compile`` options
             are not currently supported in fragmented mode.
+
+            .. warning:: The fragmented index tracks storage writes through
+                the storage's mutation revision. Buffers shared at process
+                spawn time keep that counter shared, so writes from other
+                processes are detected. A buffer transferred by plain
+                pickling (queues, cloudpickle, ``torch.save``) receives a
+                snapshot of the counter instead: writes made by another
+                process afterwards are not detected, even when the storage
+                data itself is shared (e.g. memory-mapped storages), and the
+                sampler keeps serving the transfer-time layout.
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
             To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
             or when this signal is readily available. Must be used with ``cache_values=True``
