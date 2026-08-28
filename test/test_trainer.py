@@ -2469,7 +2469,9 @@ class TestGRPOTrainer:
 
     def test_rejects_loss_outputs_without_an_optimization_objective(self):
         model = nn.Linear(1, 1)
-        stepper = MixedPrecisionOptimizationStepper(torch.optim.SGD(model.parameters(), lr=0.1))
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.1)
+        )
         trainer = Trainer(
             collector=MockingCollector(),
             total_frames=1,

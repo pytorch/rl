@@ -371,9 +371,7 @@ class MixedPrecisionOptimizationStepper(OptimizationStepper):
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.clip_norm = clip_norm
         if device_type is None:
-            params = [
-                p for group in optimizer.param_groups for p in group["params"]
-            ]
+            params = [p for group in optimizer.param_groups for p in group["params"]]
             device_type = params[0].device.type if params else "cpu"
         self.device_type = device_type
 
