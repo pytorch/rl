@@ -1650,6 +1650,21 @@ class TestLossConfigs:
         assert cfg._target_ == "torchrl.objectives.value.GAE"
         assert cfg.value_chunk_dim == 1
 
+    def test_gae_config_nested_value_transform(self):
+        from hydra.utils import instantiate
+        from torchrl.modules import SymLogValueTransform
+        from torchrl.trainers.algorithms.configs.objectives import GAEConfig
+
+        gae = instantiate(
+            GAEConfig(
+                gamma=0.99,
+                lmbda=0.95,
+                value_network=None,
+                value_transform={"_target_": "torchrl.modules.SymLogValueTransform"},
+            ),
+        )
+        assert isinstance(gae.value_transform, SymLogValueTransform)
+
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
@@ -1675,6 +1690,7 @@ class TestLossConfigs:
             actor_network=actor_network,
             critic_network=critic_network,
             loss_type=loss_type,
+            value_transform={"_target_": "torchrl.modules.SymLogValueTransform"},
         )
         assert (
             cfg._target_
@@ -1683,6 +1699,7 @@ class TestLossConfigs:
 
         loss = instantiate(cfg)
         assert isinstance(loss, PPOLoss)
+        assert loss.value_transform.__class__.__name__ == "SymLogValueTransform"
         if loss_type == "clip":
             assert isinstance(loss, ClipPPOLoss)
         elif loss_type == "kl":

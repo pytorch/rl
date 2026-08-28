@@ -9,13 +9,15 @@ MARL env (VMAS / PettingZoo). They follow the layout pattern from
 ``test/test_cost.py::TestQMixer`` — per-agent observations under
 ``("agents", "observation")`` and team-shared reward / done at the root.
 """
+
 from __future__ import annotations
+
+from copy import deepcopy
 
 import pytest
 import torch
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
-
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torchrl.modules import (
     MultiAgentMLP,
     PopArtValueNorm,
@@ -24,10 +26,10 @@ from torchrl.modules import (
     ValueNorm,
 )
 from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
+from torchrl.modules.value_transforms import SymLogValueTransform
 from torchrl.objectives import IPPOLoss, MAPPOLoss
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import GAE, MultiAgentGAE
-
 
 # --------------------------------------------------------------------------
 # helpers
@@ -118,6 +120,41 @@ def _attach_action_and_logprob(td: TensorDict, actor: ProbabilisticActor, loss):
 
 
 class TestMultiAgentGAE:
+    def test_value_transform_returns_raw_per_agent_targets(self):
+        transform = SymLogValueTransform()
+        raw_critic = _make_critic()
+        transformed_critic = TensorDictSequential(
+            deepcopy(raw_critic),
+            TensorDictModule(
+                transform,
+                in_keys=[("agents", "state_value")],
+                out_keys=[("agents", "state_value")],
+            ),
+        )
+        raw_gae = MultiAgentGAE(gamma=0.99, lmbda=0.95, value_network=raw_critic)
+        transformed_gae = MultiAgentGAE(
+            gamma=0.99,
+            lmbda=0.95,
+            value_network=transformed_critic,
+            value_transform=transform,
+        )
+        raw_gae.set_keys(value=("agents", "state_value"))
+        transformed_gae.set_keys(value=("agents", "state_value"))
+        td = _make_data()
+        td[("next", "reward")].mul_(100.0)
+
+        expected = raw_gae(td.clone())
+        result = transformed_gae(td.clone())
+        torch.testing.assert_close(
+            result["advantage"], expected["advantage"], atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            result["value_target"],
+            expected["value_target"],
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
     def test_team_reward_broadcast(self):
         n_agents = 3
         critic = _make_critic(n_agents=n_agents)
@@ -238,6 +275,16 @@ class TestRunningValueNorm:
 
 
 class TestMAPPOLoss:
+    @pytest.mark.parametrize("loss_cls", [MAPPOLoss, IPPOLoss])
+    def test_value_transform_rejects_value_norm(self, loss_cls):
+        with pytest.raises(ValueError, match="Choose one critic scaling strategy"):
+            loss_cls(
+                _make_actor(),
+                _make_critic(centralized=loss_cls is MAPPOLoss),
+                value_norm=RunningValueNorm(shape=1),
+                value_transform=SymLogValueTransform(),
+            )
+
     def test_forward_shapes_and_backward(self):
         actor = _make_actor()
         critic = _make_critic(centralized=True)

@@ -19,7 +19,6 @@ from _objectives_common import (
     FUNCTORCH_ERR,
     LossModuleTestBase,
 )
-
 from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from tensordict.nn import (
     CompositeDistribution,
@@ -32,7 +31,6 @@ from tensordict.nn import (
 )
 from tensordict.nn.distributions.composite import _add_suffix
 from torch import nn
-
 from torchrl._utils import rl_warnings
 from torchrl.data import (
     Bounded,
@@ -51,11 +49,14 @@ from torchrl.modules.tensordict_module.actors import (
     ProbabilisticActor,
     ValueOperator,
 )
+from torchrl.modules.value_transforms import (
+    SignedHyperbolicValueTransform,
+    SymLogValueTransform,
+)
 from torchrl.objectives import CrossQLoss, DiscreteSACLoss, SACLoss
 from torchrl.objectives.deprecated import DoubleREDQLoss_deprecated, REDQLoss_deprecated
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.utils import SoftUpdate, ValueEstimators
-
 from torchrl.testing import (  # noqa
     call_value_nets as _call_value_nets,
     dtype_fixture,
@@ -63,6 +64,10 @@ from torchrl.testing import (  # noqa
     get_default_devices,
     PENDULUM_VERSIONED,
 )
+
+
+def _constant_priority(prediction, target):
+    return torch.full_like(prediction, 0.25)
 
 
 @pytest.mark.skipif(
@@ -130,6 +135,7 @@ class TestSAC(LossModuleTestBase):
         observation_key="observation",
         action_key="action",
         out_keys=None,
+        value_transform=None,
     ):
         class ValueClass(nn.Module):
             def __init__(self):
@@ -139,7 +145,10 @@ class TestSAC(LossModuleTestBase):
             def forward(self, obs, act):
                 if isinstance(act, TensorDictBase):
                     act = act.get("action1")
-                return self.linear(torch.cat([obs, act], -1))
+                value = self.linear(torch.cat([obs, act], -1))
+                if value_transform is not None:
+                    value = value_transform(value)
+                return value
 
         module = ValueClass()
         qvalue = ValueOperator(
@@ -157,8 +166,12 @@ class TestSAC(LossModuleTestBase):
         device="cpu",
         observation_key="observation",
         out_keys=None,
+        value_transform=None,
     ):
-        module = nn.Linear(obs_dim, 1)
+        if value_transform is None:
+            module = nn.Linear(obs_dim, 1)
+        else:
+            module = nn.Sequential(nn.Linear(obs_dim, 1), value_transform)
         value = ValueOperator(
             module=module,
             in_keys=[observation_key],
@@ -351,6 +364,104 @@ class TestSAC(LossModuleTestBase):
         )
         self.reset_parameters_recursive_test(loss_fn)
 
+    @pytest.mark.parametrize(
+        "transform_cls", [SymLogValueTransform, SignedHyperbolicValueTransform]
+    )
+    def test_sac_value_transform_preserves_raw_entropy_units(
+        self, version, transform_cls
+    ):
+        transform = transform_cls()
+        torch.manual_seed(self.seed)
+        raw_actor = self._create_mock_actor()
+        raw_qvalue = self._create_mock_qvalue()
+        raw_value = self._create_mock_value() if version == 1 else None
+        torch.manual_seed(self.seed)
+        transformed_actor = self._create_mock_actor()
+        transformed_qvalue = self._create_mock_qvalue(value_transform=transform)
+        transformed_value = (
+            self._create_mock_value(value_transform=transform) if version == 1 else None
+        )
+        td = self._create_mock_data_sac()
+        td[("next", "reward")][::2] = 100.0
+        td[("next", "reward")][1::2] = -100.0
+
+        torch.manual_seed(self.seed)
+        raw_loss = SACLoss(
+            raw_actor,
+            raw_qvalue,
+            raw_value,
+            loss_function="l2",
+        )
+        torch.manual_seed(self.seed)
+        transformed_loss = SACLoss(
+            transformed_actor,
+            transformed_qvalue,
+            transformed_value,
+            loss_function="l2",
+            value_transform=transform,
+        )
+
+        torch.manual_seed(self.seed)
+        raw_actor_loss, raw_actor_metadata = raw_loss.actor_loss(td.clone())
+        torch.manual_seed(self.seed)
+        (
+            transformed_actor_loss,
+            transformed_actor_metadata,
+        ) = transformed_loss.actor_loss(td.clone())
+        torch.testing.assert_close(
+            transformed_actor_loss, raw_actor_loss, atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_close(
+            transformed_actor_metadata["log_prob"], raw_actor_metadata["log_prob"]
+        )
+
+        if version == 1:
+            raw_target = raw_loss.value_estimator.value_estimate(
+                td, target_params=raw_loss._cached_target_params_actor_value
+            )
+            transformed_target = transformed_loss.value_estimator.value_estimate(
+                td,
+                target_params=transformed_loss._cached_target_params_actor_value,
+            )
+        else:
+            torch.manual_seed(self.seed)
+            raw_target = raw_loss._compute_target_v2(td)
+            torch.manual_seed(self.seed)
+            transformed_target = transformed_loss._compute_target_v2(td)
+        torch.testing.assert_close(transformed_target, raw_target, atol=1e-4, rtol=1e-4)
+
+        torch.manual_seed(self.seed)
+        transformed_out = transformed_loss(td.clone())
+        sum(
+            value for key, value in transformed_out.items() if key.startswith("loss_")
+        ).backward()
+        assert all(
+            parameter.grad is None or torch.isfinite(parameter.grad).all()
+            for parameter in transformed_loss.parameters()
+        )
+
+    def test_sac_priority_function(self, version):
+        transform = SymLogValueTransform()
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue(value_transform=transform)
+        value = (
+            self._create_mock_value(value_transform=transform) if version == 1 else None
+        )
+        loss = SACLoss(
+            actor,
+            qvalue,
+            value,
+            value_transform=transform,
+            priority_function=_constant_priority,
+        )
+        td = self._create_mock_data_sac()
+
+        loss(td)
+
+        torch.testing.assert_close(
+            td["td_error"], torch.full_like(td["td_error"], 0.25)
+        )
+
     def test_sac_list_qvalue_networks(self, version):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac()
@@ -367,9 +478,13 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=2,
         )
-        with pytest.warns(
-            UserWarning, match="No target network updater has been associated"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning, match="No target network updater has been associated"
+            )
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
         assert "loss_qvalue" in loss.keys()
 
@@ -456,9 +571,14 @@ class TestSAC(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            _check_td_steady(td),
+            (
+                pytest.warns(UserWarning, match="No target network updater")
+                if rl_warnings()
+                else contextlib.nullcontext()
+            ),
+        ):
             loss = loss_fn(td)
 
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -637,9 +757,14 @@ class TestSAC(LossModuleTestBase):
 
         tdc = td.clone()
         torch.manual_seed(0)
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            _check_td_steady(td),
+            (
+                pytest.warns(UserWarning, match="No target network updater")
+                if rl_warnings()
+                else contextlib.nullcontext()
+            ),
+        ):
             loss_vmap = loss_fn_vmap(td)
         td = tdc
         torch.manual_seed(0)
@@ -665,13 +790,22 @@ class TestSAC(LossModuleTestBase):
             loss_fn_no_vmap.make_value_estimator(td_est)
 
         torch.manual_seed(0)
-        with pytest.raises(
-            NotImplementedError,
-            match="This implementation is not supported for torch<2.7",
-        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
-            with _check_td_steady(td), pytest.warns(
-                UserWarning, match="No target network updater"
-            ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.raises(
+                NotImplementedError,
+                match="This implementation is not supported for torch<2.7",
+            )
+            if torch.__version__ < "2.7"
+            else contextlib.nullcontext()
+        ):
+            with (
+                _check_td_steady(td),
+                (
+                    pytest.warns(UserWarning, match="No target network updater")
+                    if rl_warnings()
+                    else contextlib.nullcontext()
+                ),
+            ):
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
 
@@ -767,9 +901,11 @@ class TestSAC(LossModuleTestBase):
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
             assert loss_fn.tensor_keys.priority in td.keys()
@@ -909,10 +1045,14 @@ class TestSAC(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with pytest.warns(
-            UserWarning,
-            match="No target network updater has been associated with this loss module",
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             with _check_td_steady(ms_td):
                 loss_ms = loss_fn(ms_td)
             assert loss_fn.tensor_keys.priority in ms_td.keys()
@@ -1145,9 +1285,11 @@ class TestSAC(LossModuleTestBase):
         # setting the seed for each loss so that drawing the random samples from value network
         # leads to same numbers for both runs
         torch.manual_seed(self.seed)
-        with pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss_val = loss(**kwargs)
 
         torch.manual_seed(self.seed)
@@ -1306,9 +1448,11 @@ class TestSAC(LossModuleTestBase):
             raise AssertionError("SAC inverse-scored a freshly sampled TanhNormal")
 
         monkeypatch.setattr(TanhNormal, "log_prob", fail_log_prob)
-        with pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             result = loss(td)
         assert result.isfinite().all()
 
@@ -1725,9 +1869,14 @@ class TestDiscreteSAC(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            _check_td_steady(td),
+            (
+                pytest.warns(UserWarning, match="No target network updater")
+                if rl_warnings()
+                else contextlib.nullcontext()
+            ),
+        ):
             loss = loss_fn(td)
 
         assert loss_fn.tensor_keys.priority in td.keys()
@@ -1849,9 +1998,14 @@ class TestDiscreteSAC(LossModuleTestBase):
             loss_fn_vmap.make_value_estimator(td_est)
 
         tdc = td.clone()
-        with _check_td_steady(td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            _check_td_steady(td),
+            (
+                pytest.warns(UserWarning, match="No target network updater")
+                if rl_warnings()
+                else contextlib.nullcontext()
+            ),
+        ):
             torch.manual_seed(1)
             loss_vmap = loss_fn_vmap(td)
         td = tdc
@@ -1880,13 +2034,22 @@ class TestDiscreteSAC(LossModuleTestBase):
         if td_est is not None:
             loss_fn_no_vmap.make_value_estimator(td_est)
 
-        with pytest.raises(
-            NotImplementedError,
-            match="This implementation is not supported for torch<2.7",
-        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
-            with _check_td_steady(td), pytest.warns(
-                UserWarning, match="No target network updater"
-            ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.raises(
+                NotImplementedError,
+                match="This implementation is not supported for torch<2.7",
+            )
+            if torch.__version__ < "2.7"
+            else contextlib.nullcontext()
+        ):
+            with (
+                _check_td_steady(td),
+                (
+                    pytest.warns(UserWarning, match="No target network updater")
+                    if rl_warnings()
+                    else contextlib.nullcontext()
+                ),
+            ):
                 torch.manual_seed(1)
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
@@ -2003,9 +2166,14 @@ class TestDiscreteSAC(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with _check_td_steady(ms_td), pytest.warns(
-            UserWarning, match="No target network updater"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            _check_td_steady(ms_td),
+            (
+                pytest.warns(UserWarning, match="No target network updater")
+                if rl_warnings()
+                else contextlib.nullcontext()
+            ),
+        ):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -2186,9 +2354,11 @@ class TestDiscreteSAC(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        with pytest.warns(
-            UserWarning, match="No target network updater has been"
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss_val = loss(**kwargs)
             loss_val_td = loss(td)
 
@@ -2664,10 +2834,14 @@ class TestCrossQ(LossModuleTestBase):
         if td_est is not None:
             loss_fn_no_vmap.make_value_estimator(td_est)
 
-        with pytest.raises(
-            NotImplementedError,
-            match="This implementation is not supported for torch<2.7",
-        ) if torch.__version__ < "2.7" else contextlib.nullcontext():
+        with (
+            pytest.raises(
+                NotImplementedError,
+                match="This implementation is not supported for torch<2.7",
+            )
+            if torch.__version__ < "2.7"
+            else contextlib.nullcontext()
+        ):
             with _check_td_steady(td):
                 torch.manual_seed(1)
                 loss_no_vmap = loss_fn_no_vmap(td)
@@ -3515,10 +3689,14 @@ class TestREDQ(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        with pytest.warns(
-            UserWarning,
-            match="No target network updater has been associated with this loss module",
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
             # check that losses are independent
@@ -3603,10 +3781,14 @@ class TestREDQ(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        with pytest.warns(
-            UserWarning,
-            match="No target network updater has been associated with this loss module",
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
         SoftUpdate(loss_fn, eps=0.5)
@@ -4032,10 +4214,14 @@ class TestREDQ(LossModuleTestBase):
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
         torch.manual_seed(self.seed)
-        with pytest.warns(
-            UserWarning,
-            match="No target network updater has been associated with this loss module",
-        ) if rl_warnings() else contextlib.nullcontext():
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if rl_warnings()
+            else contextlib.nullcontext()
+        ):
             loss_val = loss(**kwargs)
             torch.manual_seed(self.seed)
             loss_val_td = loss(td)

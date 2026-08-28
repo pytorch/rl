@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -12,8 +13,8 @@ import torch
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey, unravel_key
-
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
+from torchrl.modules.value_transforms import ValueTransform
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
@@ -31,6 +32,15 @@ class DDPGLoss(LossModule):
         actor_network (TensorDictModule): a policy operator.
         value_network (TensorDictModule): a Q value operator.
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        value_transform (ValueTransform, optional): invertible transform used by
+            the critic prediction space. Bellman targets and actor objectives
+            remain in raw value space. Defaults to ``None``. See also
+            :class:`~torchrl.modules.ValueOperator` and
+            :class:`~torchrl.objectives.value.ValueEstimatorBase`.
+        priority_function (Callable[[Tensor, Tensor], Tensor], optional): a
+            callable that receives the critic prediction and Bellman target in
+            prediction space and returns their per-element replay priority.
+            Defaults to the squared residual used by DDPG.
         delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
             data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
@@ -196,6 +206,9 @@ class DDPGLoss(LossModule):
         value_network: TensorDictModule,
         *,
         loss_function: str = "l2",
+        value_transform: ValueTransform | None = None,
+        priority_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | None = None,
         delay_actor: bool = False,
         delay_value: bool = True,
         gamma: float | None = None,
@@ -207,6 +220,8 @@ class DDPGLoss(LossModule):
         if reduction is None:
             reduction = "mean"
         super().__init__()
+        self._set_value_transform(value_transform)
+        self._set_priority_function(priority_function)
         self.use_prioritized_weights = use_prioritized_weights
         self.delay_actor = delay_actor
         self.delay_value = delay_value
@@ -331,7 +346,8 @@ class DDPGLoss(LossModule):
             self.value_network, preserve_module_state=False
         ):
             td_copy = self.value_network(td_copy)
-        loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
+        value = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
+        loss_actor = -self._inverse_value_transform(value)
         metadata = {}
         loss_actor = self._reduce_loss(
             loss_actor, tensordict=tensordict, weights=weights
@@ -357,18 +373,28 @@ class DDPGLoss(LossModule):
             self.value_network, preserve_module_state=False
         ):
             self.value_network(td_copy)
-        pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
+        pred_value_transformed = td_copy.get(
+            self.tensor_keys.state_action_value
+        ).squeeze(-1)
+        pred_value = self._inverse_value_transform(pred_value_transformed)
 
         target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self._cached_target_params
         ).squeeze(-1)
+        target_value_transformed = self._transform_value(target_value)
 
-        # td_error = pred_val - target_value
         loss_value = distance_loss(
-            pred_val, target_value, loss_function=self.loss_function
+            pred_value_transformed,
+            target_value_transformed,
+            loss_function=self.loss_function,
         )
 
-        td_error = (pred_val - target_value).pow(2)
+        if self.priority_function is None:
+            td_error = (pred_value_transformed - target_value_transformed).pow(2)
+        else:
+            td_error = self.priority_function(
+                pred_value_transformed, target_value_transformed
+            )
         td_error = td_error.detach()
         if tensordict.device is not None:
             td_error = td_error.to(tensordict.device)
@@ -380,10 +406,10 @@ class DDPGLoss(LossModule):
         with torch.no_grad():
             metadata = {
                 "td_error": td_error,
-                "pred_value": pred_val,
+                "pred_value": pred_value,
                 "target_value": target_value,
                 "target_value_max": target_value.max(),
-                "pred_value_max": pred_val.max(),
+                "pred_value_max": pred_value.max(),
             }
         loss_value = self._reduce_loss(
             loss_value, tensordict=tensordict, weights=weights
