@@ -224,6 +224,9 @@ class FixedBatchedInference:
             self._compute_stream.wait_stream(self._copy_stream)
             with torch.cuda.stream(self._compute_stream):
                 output = self.policy(device_batch)
+
+            caller_stream = torch.cuda.current_stream(self.device)
+            caller_stream.wait_stream(self._compute_stream)
         else:
             device_batch = staging.to(self.device)
             output = self.policy(device_batch)
