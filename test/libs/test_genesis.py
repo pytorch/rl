@@ -9,6 +9,7 @@ import argparse
 import pytest
 import torch
 
+from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.genesis import _has_genesis, GenesisEnv, GenesisWrapper
 from torchrl.envs.utils import check_env_specs
 
@@ -165,6 +166,17 @@ class TestGenesis:
             env.close()
         except Exception as e:
             pytest.skip(f"Genesis franka_reach not available: {e}")
+
+    def test_num_workers_uses_worker_metadata(self):
+        env = GenesisEnv("franka_reach", num_workers=2)
+        try:
+            assert isinstance(env, ParallelEnv)
+            assert env._metadata_from_workers
+            assert env._use_buffers is False
+            assert not env.is_closed
+            assert env.reset().batch_size == torch.Size([2])
+        finally:
+            env.close()
 
 
 if __name__ == "__main__":

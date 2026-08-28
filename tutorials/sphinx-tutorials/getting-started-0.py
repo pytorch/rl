@@ -127,7 +127,7 @@ print(stepped_data)
 #
 # The last bit of information you need to run a rollout in the environment is
 # how to bring that ``"next"`` entry at the root to perform the next step.
-# TorchRL provides a dedicated :func:`~torchrl.envs.utils.step_mdp` function
+# TorchRL provides a dedicated :func:`~torchrl.envs.step_mdp` function
 # that does just that: it filters out the information you won't need and
 # delivers a data structure corresponding to your observation after a step in
 # the Markov Decision Process, or MDP.
@@ -226,7 +226,7 @@ print(rollout["next", "truncated"])
 #
 # - The :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` method that packs
 #   together :meth:`~torchrl.envs.EnvBase.step`,
-#   :func:`~torchrl.envs.utils.step_mdp` and
+#   :func:`~torchrl.envs.step_mdp` and
 #   :meth:`~torchrl.envs.EnvBase.reset`.
 # - Some environments like :class:`~torchrl.envs.GymEnv` support rendering
 #   through the ``from_pixels`` argument. Check the class docstrings to know

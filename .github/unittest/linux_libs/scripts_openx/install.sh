@@ -29,20 +29,26 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with cu128"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip3 install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --no-deps
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U --no-deps
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu -U
+      pip3 install torch --index-url https://download.pytorch.org/whl/cpu -U
+      pip3 install torchvision --index-url https://download.pytorch.org/whl/cpu -U --no-deps
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128 -U
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu128 -U
+      pip3 install torchvision --index-url https://download.pytorch.org/whl/cu128 -U --no-deps
   fi
 else
   printf "Failed to install pytorch"
   exit 1
 fi
+
+pip3 install pillow
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
@@ -55,7 +61,7 @@ fi
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"

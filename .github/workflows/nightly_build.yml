@@ -69,8 +69,9 @@ jobs:
           python -mpip install build wheel
           ./build_nightly.sh
           find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-      # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
-      # pretend that they're manylinux1 compliant so we do the same.
+      # PyPI rejects the plain linux_x86_64 platform tag. pytorch/pytorch
+      # binaries are manylinux_2_17 compliant but pretend to be manylinux1
+      # compliant, so we do the same.
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
@@ -148,6 +149,7 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -m torch.utils.collect_env
           bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly nightly
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
@@ -158,8 +160,14 @@ jobs:
     if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-unix
     runs-on: ${{ matrix.os[1] }}
-    continue-on-error: true
+    # No continue-on-error here: a failed PyPI upload must turn the run red.
+    # Silent upload failures kept the workflow green while torchrl-nightly
+    # went stale on PyPI for months.
     strategy:
+      # Without continue-on-error, one failed upload would otherwise fail-fast
+      # cancel every sibling upload; each platform/python must report its own
+      # result.
+      fail-fast: false
       matrix:
         os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
         python_version: [
@@ -186,6 +194,10 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "${PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not set; skipping PyPI upload."
+            exit 0
+          fi
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -mpip install twine
           python -m twine upload \
@@ -302,6 +314,7 @@ jobs:
           mkdir test-reports
           python -m torch.utils.collect_env
           bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly nightly
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
@@ -311,9 +324,13 @@ jobs:
     # Don't run on forked repos.
     if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-windows
-    continue-on-error: true
+    # No continue-on-error here: a failed PyPI upload must turn the run red.
     runs-on: windows-latest
     strategy:
+      # Without continue-on-error, one failed upload would otherwise fail-fast
+      # cancel every sibling upload; each platform/python must report its own
+      # result.
+      fail-fast: false
       matrix:
         python_version: [
           ["3.10", "3.10.3"],
@@ -335,6 +352,10 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "${PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not set; skipping PyPI upload."
+            exit 0
+          fi
           python -mpip install twine
           python -m twine upload \
               --username __token__ \

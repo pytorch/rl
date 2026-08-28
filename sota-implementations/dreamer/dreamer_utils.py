@@ -22,7 +22,7 @@ from tensordict.nn import (
 )
 from torchrl import logger as torchrl_logger
 from torchrl._utils import set_profiling_enabled
-from torchrl.collectors import MultiCollector
+from torchrl.collectors import Collector
 
 from torchrl.data import (
     Bounded,
@@ -553,7 +553,7 @@ def make_environments(cfg, parallel_envs=1, logger=None):
     """Make environments for training and evaluation.
 
     Returns:
-        train_env_factory: A callable that creates a training environment (for MultiCollector)
+        train_env_factory: A callable that creates a training environment.
         eval_env: The evaluation environment instance
     """
 
@@ -898,7 +898,7 @@ def make_collector(
             Can also be a PolicyVersion instance for custom versioning.
 
     Returns:
-        MultiCollector in async mode with multiple worker processes
+        The process-backed collector in async mode with multiple workers.
 
     Device allocation:
         - If training on CUDA with multiple GPUs: collectors use cuda:1, cuda:2, etc.
@@ -925,8 +925,9 @@ def make_collector(
         if compile_cfg.cudagraphs:
             cudagraph_policy = True
 
-    collector = MultiCollector(
-        create_env_fn=[train_env_factory] * num_collectors,
+    collector = Collector(
+        create_env_fn=train_env_factory,
+        num_collectors=num_collectors,
         policy=actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=-1,  # Run indefinitely until async_shutdown() is called

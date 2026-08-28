@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import tensordict.utils
@@ -57,11 +57,10 @@ class CSVExperiment:
         - `"pt"`: uses :func:`~torch.save` to save the video tensor);
         - `"memmap"`: saved the file as memory-mapped array (reading this file will require
           the dtype and shape to be known at read time);
-        - `"mp4"`: saves the file as an `.mp4` file. For torchvision < 0.22, this uses
-          :func:`~torchvision.io.write_video`; for torchvision >= 0.22, this uses
-          :class:`~torchcodec.encoders.VideoEncoder` since ``write_video`` was deprecated and
-          later removed. Any ``kwargs`` passed to ``add_video`` will be transmitted to the
-          underlying writer. These include ``video_codec``, ``options``
+        - `"mp4"`: saves the file as an `.mp4` file using
+          :class:`~torchcodec.encoders.VideoEncoder`. Any ``kwargs``
+          passed to ``add_video`` will be transmitted to the underlying
+          writer. These include ``video_codec``, ``options``
           (a dict, e.g. ``{"crf": "23", "preset": "medium"}``), and others.
           See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
 
@@ -132,6 +131,8 @@ class CSVExperiment:
 class CSVLogger(Logger):
     """A minimal-dependency CSV logger.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.CSVLoggerConfig`.
+
     Args:
         exp_name (str): The name of the experiment.
         log_dir (str or Path, optional): where the experiment should be saved.
@@ -139,7 +140,7 @@ class CSVLogger(Logger):
         video_format (str, optional): how videos should be saved when calling :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video`. Must be one of
             ``"pt"`` (video saved as a `video_<tag>_<step>.pt` file with torch.save),
             ``"memmap"`` (video saved as a `video_<tag>_<step>.memmap` file with :class:`~tensordict.MemoryMappedTensor`),
-            ``"mp4"`` (video saved as a `video_<tag>_<step>.mp4` file, requires torchvision to be installed).
+            ``"mp4"`` (video saved as a `video_<tag>_<step>.mp4` file, requires torchcodec to be installed).
             Defaults to ``"pt"``.
         video_fps (int, optional): the video frames-per-seconds if `video_format="mp4"`. Defaults to 30.
 
@@ -167,6 +168,19 @@ class CSVLogger(Logger):
         return CSVExperiment(
             log_dir, video_format=self.video_format, video_fps=self.video_fps
         )
+
+    def _checkpoint_state(self) -> dict[str, object]:
+        return {
+            "scalars": dict(self.experiment.scalars),
+            "videos_counter": dict(self.experiment.videos_counter),
+            "text_counter": dict(self.experiment.text_counter),
+        }
+
+    def _load_checkpoint_state(self, state_dict: Mapping[str, object]) -> None:
+        for name in ("scalars", "videos_counter", "text_counter"):
+            target = getattr(self.experiment, name)
+            target.clear()
+            target.update(state_dict.get(name, {}))
 
     def log_scalar(self, name: str, value: float, step: int | None = None) -> None:
         """Logs a scalar value to the tensorboard.

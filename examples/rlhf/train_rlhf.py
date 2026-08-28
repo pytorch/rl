@@ -29,7 +29,7 @@ from utils import (
 )
 
 
-@hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
+@hydra.main(version_base="1.3", config_path="config", config_name="train_rlhf")
 def main(cfg):
 
     # ============ Retrieve config ============ #

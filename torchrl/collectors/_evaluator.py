@@ -68,6 +68,7 @@ Typical usage -- **Ray backend**::
     result = evaluator.poll()
     evaluator.shutdown()
 """
+
 from __future__ import annotations
 
 import abc
@@ -76,17 +77,17 @@ import logging
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import torch
 import torch.nn as nn
-
 from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.weight_update import MultiProcessWeightSyncScheme, WeightStrategy
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -130,13 +131,11 @@ class Evaluator:
       Requires *env* to be a callable and *policy_factory* to be provided.
 
     **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a
-    previous evaluation is still running either raises immediately
-    (``busy_policy="error"``; default) or queues the new request
-    (``busy_policy="queue"``). Use :attr:`pending` to conditionally skip
-    trigger calls::
-
-        if not evaluator.pending:
-            evaluator.trigger_eval(weights, step=step)
+    previous evaluation is still running skips the new request by default
+    (``busy_policy="skip"``), raises immediately
+    (``busy_policy="error"``), or queues the new request
+    (``busy_policy="queue"``). :meth:`trigger_eval` returns ``True`` when a
+    request was accepted and ``False`` when it was skipped.
 
     **Callback thread-safety**: when ``on_result`` is provided, it is
     invoked from the evaluator's async coordination thread after the
@@ -156,6 +155,37 @@ class Evaluator:
     :class:`~torchrl.envs.transforms.RewardSum` transform to the eval
     env so that per-episode returns are tracked.  Without it, the
     evaluator falls back to summing raw rewards over each trajectory.
+
+    **Eval video logging**: when the eval env contains a
+    :class:`~torchrl.record.VideoRecorder`, each evaluation ends with a
+    ``dump(step=...)`` on the env transforms of the collector that ran
+    the rollout (disable with ``dump_video=False``).  The recorder must
+    be attached to the *outermost* env: recorders nested inside the
+    worker envs of a :class:`~torchrl.envs.SerialEnv` /
+    :class:`~torchrl.envs.ParallelEnv` are not reached by the dump and
+    would accumulate frames indefinitely.  With ``backend="process"``
+    the recorder lives inside the collector worker, so build it in the
+    env factory around a picklable logger client such as
+    :meth:`ProcessLogger.client()
+    <torchrl.record.loggers.process.ProcessLogger.client>`::
+
+        from torchrl.record import VideoRecorder
+        from torchrl.record.loggers import CSVLogger, ProcessLogger
+
+        logger = ProcessLogger(CSVLogger, exp_name="run", log_dir="logs")
+        video_client = logger.client()
+
+        def make_eval_env():
+            env = make_env()
+            env.append_transform(VideoRecorder(video_client, tag="eval/video"))
+            return env
+
+        evaluator = Evaluator(
+            make_eval_env,
+            policy_factory=make_eval_policy,
+            max_steps=1000,
+            backend="process",
+        )
 
     Args:
         env: An :class:`~torchrl.envs.EnvBase` instance **or** a callable
@@ -202,17 +232,18 @@ class Evaluator:
         metrics_fn: Optional ``(TensorDictBase) -> dict[str, float]``
             called on every trajectory batch to extract custom metrics.
         dump_video (bool): Call ``dump()`` on :class:`VideoRecorder`
-            transforms after each evaluation (thread backend only).
+            transforms after each evaluation. Process-backed collectors invoke
+            the transform in their worker and can use a service-backed logger.
             Default: ``True``.
         on_result: Optional ``(TensorDictBase) -> None`` invoked after each
             completed evaluation. The callback receives a flat tensordict
             with the same prefixed metric names returned by
             :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.
         busy_policy (str): Behaviour when :meth:`trigger_eval` is called
-            while another async evaluation is still pending. ``"error"``
-            raises immediately (default; recommended). ``"queue"`` enqueues
-            the new request and runs it when the current evaluation
-            finishes.
+            while another async evaluation is still pending. ``"skip"``
+            returns ``False`` without scheduling a new request (default).
+            ``"error"`` raises immediately. ``"queue"`` enqueues the new
+            request and runs it when the current evaluation finishes.
 
             .. warning::
                 With ``busy_policy="queue"``, each queued request stores a
@@ -275,7 +306,7 @@ class Evaluator:
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None = None,
         dump_video: bool = True,
         on_result: Callable[[TensorDictBase], None] | None = None,
-        busy_policy: str = "error",
+        busy_policy: str = "skip",
         # Backend selection
         backend: str = "thread",
         # Ray-specific
@@ -291,9 +322,10 @@ class Evaluator:
         self._on_result = on_result
         self._step_counter = 0
         self._dump_video = dump_video
-        if busy_policy not in {"error", "queue"}:
+        if busy_policy not in {"skip", "error", "queue"}:
             raise ValueError(
-                f"Unknown busy_policy {busy_policy!r}. Choose 'error' or 'queue'."
+                f"Unknown busy_policy {busy_policy!r}. Choose 'skip', 'error' "
+                "or 'queue'."
             )
         self._busy_policy = busy_policy
         self._async_lock = threading.Lock()
@@ -312,6 +344,9 @@ class Evaluator:
             # process.  This eliminates custom process management and
             # uses the weight_sync_schemes infrastructure for weight
             # transfer.
+            auto_process_weight_sync = (
+                backend == "process" and weight_sync_schemes is None
+            )
             use_multi_collector = (
                 backend == "process" or weight_sync_schemes is not None
             )
@@ -347,6 +382,7 @@ class Evaluator:
                 metrics_fn=metrics_fn,
                 weight_sync_schemes=weight_sync_schemes,
                 use_multi_collector=use_multi_collector,
+                auto_process_weight_sync=auto_process_weight_sync,
                 init_fn=init_fn,
             )
         elif backend == "ray":
@@ -414,27 +450,34 @@ class Evaluator:
         step: int | None = None,
         *,
         weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
-    ) -> None:
+    ) -> bool:
         """Start an async evaluation.
 
         Args:
             weights: Policy weights to load.  See :meth:`evaluate`.
             step: Logging step.  See :meth:`evaluate`.
             weights_dict: Multi-model weights dict.  See :meth:`evaluate`.
+
+        Returns:
+            ``True`` if an evaluation request was scheduled, ``False`` if it
+            was skipped because another request was pending and
+            ``busy_policy="skip"``.
         """
         prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
         with self._async_lock:
-            if self._busy_policy == "error" and (
-                self._backend.pending or self._async_requests
-            ):
+            busy = self._backend.pending or self._async_requests
+            if self._busy_policy == "error" and busy:
                 raise RuntimeError(
                     "Evaluation already pending. Wait for completion or set "
-                    "busy_policy='queue'."
+                    "busy_policy='skip' or busy_policy='queue'."
                 )
+            if self._busy_policy == "skip" and busy:
+                return False
             self._async_requests.append((prepared, step))
             self._async_trigger.set()
         self._ensure_async_thread()
+        return True
 
     def poll(self, timeout: float = 0) -> dict[str, Any] | None:
         """Return the latest evaluation result if ready, else ``None``.
@@ -482,6 +525,40 @@ class Evaluator:
         if self._async_thread is not None and self._async_thread.is_alive():
             self._async_thread.join(timeout=timeout)
         self._backend.shutdown(timeout)
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return evaluator progress when no asynchronous work is pending."""
+        with self._async_lock:
+            if self._backend.pending or self._async_requests or self._ready_results:
+                raise RuntimeError(
+                    "Evaluator checkpointing requires no pending, queued, or unread "
+                    "evaluation results."
+                )
+            state: dict[str, Any] = {"step_counter": self._step_counter}
+            backend_state_dict = getattr(self._backend, "state_dict", None)
+            if callable(backend_state_dict):
+                state["backend"] = backend_state_dict()
+            return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore evaluator progress when no asynchronous work is pending."""
+        with self._async_lock:
+            if self._backend.pending or self._async_requests or self._ready_results:
+                raise RuntimeError(
+                    "Evaluator state cannot be restored while evaluation work is "
+                    "pending, queued, or unread."
+                )
+            self._step_counter = state_dict.get("step_counter", 0)
+            if "backend" in state_dict:
+                backend_load_state_dict = getattr(
+                    self._backend, "load_state_dict", None
+                )
+                if not callable(backend_load_state_dict):
+                    raise RuntimeError(
+                        "Checkpoint contains evaluator backend state, but this backend "
+                        "cannot restore it."
+                    )
+                backend_load_state_dict(state_dict["backend"])
 
     def __del__(self):
         try:
@@ -696,28 +773,45 @@ def _extract_metrics_from_trajectories(
     done_keys: NestedKey,
     metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
     eval_time: float | None = None,
+    on_missing_traj_info: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Extract evaluation metrics from a trajectory batch produced by a collector.
 
-    *traj_batch* has shape ``(num_trajectories, max_traj_len)`` with a
-    ``("collector", "mask")`` boolean field marking valid timesteps.
+    *traj_batch* can be padded with a ``("collector", "mask")`` boolean field
+    or flat (``traj_format="cat"``) with ``("collector", "traj_ids")``.
+    When neither field is present the whole batch is treated as a single
+    trajectory and *on_missing_traj_info* (if provided) is invoked so the
+    caller can warn about potentially wrong episode metrics.
     """
-    mask = traj_batch.get(("collector", "mask"))  # [N, T]
-    num_trajectories = traj_batch.shape[0]
-
     episode_rewards = []
     episode_lengths = []
     total_frames = 0
 
-    ep_reward_td = traj_batch.get(_EPISODE_REWARD_KEY, None)
-    step_count_td = traj_batch.get(("next", "step_count"), None)
-    reward_td = traj_batch.get(reward_keys, None)
+    mask = traj_batch.get(("collector", "mask"), None)
+    if mask is not None:
+        trajectories = []
+        for i in range(traj_batch.shape[0]):
+            traj_mask = mask[i]
+            if traj_mask.ndim > 1:
+                traj_mask = traj_mask.squeeze(-1)
+            valid_len = int(traj_mask.sum().item())
+            if valid_len:
+                trajectories.append(traj_batch[i, :valid_len])
+    else:
+        traj_ids = traj_batch.get(("collector", "traj_ids"), None)
+        if traj_ids is None:
+            if on_missing_traj_info is not None:
+                on_missing_traj_info()
+            trajectories = [traj_batch]
+        else:
+            traj_ids = traj_ids.reshape(-1)
+            trajectories = [
+                traj_batch[traj_ids == traj_id]
+                for traj_id in traj_ids.unique(sorted=True)
+            ]
 
-    for i in range(num_trajectories):
-        traj_mask = mask[i]  # [T]
-        if traj_mask.ndim > 1:
-            traj_mask = traj_mask.squeeze(-1)
-        valid_len = traj_mask.sum().item()
+    for trajectory in trajectories:
+        valid_len = trajectory.shape[0]
         if valid_len == 0:
             continue
         total_frames += int(valid_len)
@@ -725,21 +819,25 @@ def _extract_metrics_from_trajectories(
         # Last valid index
         last_idx = int(valid_len) - 1
 
+        ep_reward_td = trajectory.get(_EPISODE_REWARD_KEY, None)
+        step_count_td = trajectory.get(("next", "step_count"), None)
+        reward_td = trajectory.get(reward_keys, None)
+
         if ep_reward_td is not None:
             # Prefer episode_reward from RewardSum (cumulative return)
-            r = ep_reward_td[i, last_idx]
+            r = ep_reward_td[last_idx]
             if r.ndim > 0:
                 r = r.squeeze(-1)
             episode_rewards.append(r.item())
         elif reward_td is not None:
             # Fallback: sum raw rewards over valid trajectory steps
-            valid_rewards = reward_td[i, : int(valid_len)]
+            valid_rewards = reward_td
             if valid_rewards.ndim > 1:
                 valid_rewards = valid_rewards.squeeze(-1)
             episode_rewards.append(valid_rewards.sum().item())
 
         if step_count_td is not None:
-            ep_len = step_count_td[i, last_idx]
+            ep_len = step_count_td[last_idx]
             if ep_len.ndim > 0:
                 ep_len = ep_len.squeeze(-1)
             episode_lengths.append(ep_len.item())
@@ -905,6 +1003,7 @@ class _ThreadEvalBackend(_EvalBackend):
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None,
         weight_sync_schemes: dict[str, Any] | None = None,
         use_multi_collector: bool = False,
+        auto_process_weight_sync: bool = False,
         init_fn: Callable[[], None] | None = None,
     ) -> None:
         if policy is not None and policy_factory is not None:
@@ -916,6 +1015,7 @@ class _ThreadEvalBackend(_EvalBackend):
             weight_sync_schemes is not None
         )
         self._weight_sync_schemes = weight_sync_schemes
+        self._auto_process_weight_sync = auto_process_weight_sync
         self._init_fn = init_fn
 
         env_is_callable = callable(env) and not isinstance(env, EnvBase)
@@ -973,6 +1073,7 @@ class _ThreadEvalBackend(_EvalBackend):
         # Collector (created lazily)
         self._collector = None
         self._collector_iter = None  # persistent iterator for multi-collector
+        self._warned_missing_traj_info = False
 
         # Threading state
         self._lock = threading.Lock()
@@ -991,7 +1092,6 @@ class _ThreadEvalBackend(_EvalBackend):
     def run_sync(
         self, weights_dict: dict[str, TensorDictBase] | None, step: int
     ) -> dict[str, Any]:
-        self._ensure_collector()
         metrics = self._run_eval(weights_dict)
         metrics["_step"] = step
         return metrics
@@ -1072,7 +1172,6 @@ class _ThreadEvalBackend(_EvalBackend):
         self._thread.start()
 
     def _eval_loop(self) -> None:
-        self._ensure_collector()
         while not self._shutdown_flag:
             self._eval_ready.wait(timeout=1.0)
             if self._shutdown_flag:
@@ -1087,7 +1186,16 @@ class _ThreadEvalBackend(_EvalBackend):
                 continue
 
             weights_dict, step = request
-            metrics = self._run_eval(weights_dict)
+            try:
+                metrics = self._run_eval(weights_dict)
+            except ValueError as err:
+                if self._shutdown_flag and "Queue" in str(err) and "closed" in str(err):
+                    logger.debug(
+                        "Suppressing expected evaluator shutdown queue error",
+                        exc_info=True,
+                    )
+                    break
+                raise
             metrics["_step"] = step
             with self._lock:
                 self._result = metrics
@@ -1140,10 +1248,22 @@ class _ThreadEvalBackend(_EvalBackend):
                 **kwargs,
             )
 
+    def _enable_process_weight_sync(self) -> None:
+        """Install the default process scheme before the first weight update."""
+        if not self._auto_process_weight_sync or self._weight_sync_schemes is not None:
+            return
+        if self._collector is not None:
+            self._collector.shutdown()
+            self._collector = None
+            self._collector_iter = None
+        self._weight_sync_schemes = {"policy": MultiProcessWeightSyncScheme()}
+
     def _run_eval(
         self, weights_dict: dict[str, TensorDictBase] | None
     ) -> dict[str, Any]:
         """Run evaluation using the internal collector."""
+        if weights_dict:
+            self._enable_process_weight_sync()
         self._ensure_collector()
 
         if weights_dict:
@@ -1151,15 +1271,18 @@ class _ThreadEvalBackend(_EvalBackend):
                 # Multi-process: use scheme-based sync via the collector
                 self._collector.update_policy_weights_(weights_dict=weights_dict)
             else:
-                # Same process: apply weights directly
+                # Same process: copy weights into the registered parameters and
+                # buffers. Calling TensorDict.to_module() with plain tensors would
+                # replace nn.Parameters with tensors and make state_dict() empty.
+                strategy = WeightStrategy(extract_as="tensordict")
                 for model_id, w in weights_dict.items():
                     if model_id == "policy":
-                        w.to(self._device).to_module(self._policy)
+                        strategy.apply_weights(self._policy, w.to(self._device))
                     else:
                         from torchrl.weight_update.utils import _resolve_model
 
                         target = _resolve_model(self._collector, model_id)
-                        w.to(self._device).to_module(target)
+                        strategy.apply_weights(target, w.to(self._device))
 
         if not self._use_multi_collector and isinstance(self._policy, nn.Module):
             self._policy.eval()
@@ -1187,24 +1310,40 @@ class _ThreadEvalBackend(_EvalBackend):
             self._done_keys,
             self._metrics_fn,
             eval_time=time.perf_counter() - eval_start,
+            on_missing_traj_info=self._warn_missing_traj_info,
+        )
+
+    def _warn_missing_traj_info(self) -> None:
+        """Warn (once per instance) that trajectory boundaries are unknown."""
+        if self._warned_missing_traj_info:
+            return
+        self._warned_missing_traj_info = True
+        torchrl_logger.warning(
+            "Evaluator: the collected batch carries neither ('collector', 'mask') "
+            "nor ('collector', 'traj_ids'); treating the whole batch as a single "
+            "trajectory. Episode metrics (reward, episode_length, num_episodes) "
+            "may be wrong if the batch actually contains several trajectories."
         )
 
     def dump_video(self, step: int | None = None) -> None:
         """Dump accumulated video frames from VideoRecorder transforms.
 
-        Called on the caller thread so that logger writes are thread-safe.
+        Process-backed evaluator collectors dispatch ``Compose.dump`` to the
+        worker that owns the environment. Same-process evaluators dump the
+        collector's own env: the collector may wrap the user env (e.g. to add
+        a ``StepCounter``), cloning its transforms, so the recorder that
+        accumulated frames is the collector-side one, not the transform of
+        the env handed to the evaluator.
         """
-        if self._env is None or not hasattr(self._env, "transform"):
+        if self._collector is None:
             return
-        transform = self._env.transform
-        try:
-            transforms = iter(transform)
-        except TypeError:
-            # Single transform, not Compose — wrap in a list
-            transforms = [transform]
-        for t in transforms:
-            if hasattr(t, "dump"):
-                t.dump(step=step)
+        if self._use_multi_collector:
+            self._collector.map_fn(
+                "_dump_env_transform",
+                list_of_kwargs=[{"step": step}] * self._collector.num_workers,
+            )
+            return
+        self._collector._dump_env_transform(step=step)
 
 
 # ======================================================================
@@ -1243,9 +1382,9 @@ class _RayEvalBackend(_EvalBackend):
             env_maker=env_maker,
             policy_maker=policy_factory,
             num_gpus=num_gpus,
-            reward_keys=reward_keys
-            if isinstance(reward_keys, tuple)
-            else (reward_keys,),
+            reward_keys=(
+                reward_keys if isinstance(reward_keys, tuple) else (reward_keys,)
+            ),
             **ray_kwargs,
         )
         self._max_steps = max_steps

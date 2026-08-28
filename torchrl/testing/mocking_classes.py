@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import random
 import string
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,7 +27,7 @@ from torchrl.data import (
     Unbounded,
 )
 from torchrl.data.utils import consolidate_spec
-from torchrl.envs import Transform
+from torchrl.envs import Transform, VecNormV2
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 from torchrl.envs.utils import (
@@ -516,6 +517,15 @@ class StateLessCountingEnv(EnvBase):
 class DiscreteActionVecMockEnv(_MockEnv):
     """Mock env with vector observations and discrete (one-hot/categorical) actions."""
 
+    # Observation keys read/written by _reset and _step. Class-level defaults
+    # (overridden by the Conv subclasses) rather than assignments in __new__:
+    # mutating them per-instantiation made explicit-spec instances depend on
+    # which class was constructed first in the process (broke under
+    # pytest-xdist test-order shuffling), and unconditional assignment in the
+    # parent stomped the keys selected by Conv subclasses delegating here.
+    out_key = "observation"
+    _out_key = "observation_orig"
+
     @classmethod
     def __new__(
         cls,
@@ -532,7 +542,6 @@ class DiscreteActionVecMockEnv(_MockEnv):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
         if observation_spec is None:
-            cls.out_key = "observation"
             observation_spec = Composite(
                 observation=Unbounded(shape=torch.Size([*batch_size, size])),
                 observation_orig=Unbounded(shape=torch.Size([*batch_size, size])),
@@ -553,7 +562,6 @@ class DiscreteActionVecMockEnv(_MockEnv):
             )
 
         if state_spec is None:
-            cls._out_key = "observation_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["observation"],
@@ -623,6 +631,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
     """Mock env with vector observations and continuous (bounded) actions."""
 
     adapt_dtype: bool = True
+    # See DiscreteActionVecMockEnv for why these are class-level defaults.
+    out_key = "observation"
+    _out_key = "observation_orig"
 
     @classmethod
     def __new__(
@@ -639,7 +650,6 @@ class ContinuousActionVecMockEnv(_MockEnv):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
         if observation_spec is None:
-            cls.out_key = "observation"
             observation_spec = Composite(
                 observation=Unbounded(shape=torch.Size([*batch_size, size])),
                 observation_orig=Unbounded(shape=torch.Size([*batch_size, size])),
@@ -660,7 +670,6 @@ class ContinuousActionVecMockEnv(_MockEnv):
             done_spec = Categorical(2, dtype=torch.bool, shape=(*batch_size, 1))
 
         if state_spec is None:
-            cls._out_key = "observation_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["observation"],
@@ -760,6 +769,9 @@ class DiscreteActionVecPolicy(TensorDictModuleBase):
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
     """Mock env with image-like observations and discrete (one-hot) actions."""
 
+    out_key = "pixels"
+    _out_key = "pixels_orig"
+
     @classmethod
     def __new__(
         cls,
@@ -774,7 +786,6 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
-            cls.out_key = "pixels"
             observation_spec = Composite(
                 pixels=Unbounded(shape=torch.Size([*batch_size, 1, 7, 7])),
                 pixels_orig=Unbounded(shape=torch.Size([*batch_size, 1, 7, 7])),
@@ -788,7 +799,6 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             done_spec = Categorical(2, dtype=torch.bool, shape=(*batch_size, 1))
 
         if state_spec is None:
-            cls._out_key = "pixels_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["pixels_orig"].clone(),
@@ -832,7 +842,6 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
-            cls.out_key = "pixels"
             observation_spec = Composite(
                 pixels=Unbounded(shape=torch.Size([*batch_size, 7, 7, 3])),
                 pixels_orig=Unbounded(shape=torch.Size([*batch_size, 7, 7, 3])),
@@ -842,7 +851,6 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
             action_spec_cls = Categorical if categorical_action_encoding else OneHot
             action_spec = action_spec_cls(7, shape=(*batch_size, 7))
         if state_spec is None:
-            cls._out_key = "pixels_orig"
             state_spec = Composite(
                 {
                     cls._out_key: observation_spec["pixels_orig"],
@@ -876,6 +884,9 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
     """Mock env with image-like observations and continuous (bounded) actions."""
 
+    out_key = "pixels"
+    _out_key = "pixels_orig"
+
     @classmethod
     def __new__(
         cls,
@@ -893,7 +904,6 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         if pixel_shape is None:
             pixel_shape = [1, 7, 7]
         if observation_spec is None:
-            cls.out_key = "pixels"
             observation_spec = Composite(
                 pixels=Unbounded(shape=torch.Size([*batch_size, *pixel_shape])),
                 pixels_orig=Unbounded(shape=torch.Size([*batch_size, *pixel_shape])),
@@ -907,7 +917,6 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         if done_spec is None:
             done_spec = Categorical(2, dtype=torch.bool, shape=(*batch_size, 1))
         if state_spec is None:
-            cls._out_key = "pixels_orig"
             state_spec = Composite(
                 {cls._out_key: observation_spec["pixels"]}, shape=batch_size
             )
@@ -948,7 +957,6 @@ class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
-            cls.out_key = "pixels"
             observation_spec = Composite(
                 pixels=Unbounded(shape=torch.Size([*batch_size, 7, 7, 3])),
                 pixels_orig=Unbounded(shape=torch.Size([*batch_size, 7, 7, 3])),
@@ -1050,6 +1058,74 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
             device=self.device,
         )
         return td
+
+
+class AddPixelsTransform(Transform):
+    """Add a constant ``3 x 8 x 8`` uint8 pixel observation.
+
+    The transform preserves the input batch shape, making it useful for tests
+    that need inexpensive image observations without a rendering dependency.
+
+    Examples:
+        >>> transform = AddPixelsTransform()
+        >>> tensordict = transform._call(TensorDict({}, batch_size=[2]))
+        >>> tensordict["pixels"].shape
+        torch.Size([2, 3, 8, 8])
+    """
+
+    def __init__(self) -> None:
+        super().__init__(in_keys=[], out_keys=["pixels"])
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        next_tensordict.set(
+            "pixels",
+            torch.zeros(
+                (*next_tensordict.batch_size, 3, 8, 8),
+                dtype=torch.uint8,
+                device=next_tensordict.device,
+            ),
+        )
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
+    def transform_observation_spec(self, observation_spec: Composite) -> Composite:
+        observation_spec["pixels"] = Unbounded(
+            shape=(*observation_spec.shape, 3, 8, 8),
+            dtype=torch.uint8,
+            device=observation_spec.device,
+        )
+        return observation_spec
+
+
+class CountingVecNormV2(VecNormV2):
+    """A :class:`~torchrl.envs.VecNormV2` that counts step and reset calls.
+
+    Examples:
+        >>> transform = CountingVecNormV2(in_keys=["observation"])
+        >>> transform.step_calls, transform.reset_calls
+        (0, 0)
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.step_calls = 0
+        self.reset_calls = 0
+        super().__init__(*args, **kwargs)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        self.step_calls += 1
+        return super()._step(tensordict, next_tensordict)
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        self.reset_calls += 1
+        return super()._reset(tensordict, tensordict_reset)
 
 
 class ActionObsMergeLinear(nn.Module):

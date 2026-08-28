@@ -280,6 +280,12 @@ class vLLMUpdater(WeightUpdaterBase, metaclass=vLLMUpdaterMeta):
         torchrl_logger.debug("done broadcasting")
         torch.cuda.synchronize()
 
+        # Invalidate prefix caches: cached prefixes are keyed by prompt content
+        # and are stale now that weights changed. Guarded for older actors that
+        # do not expose the method.
+        if hasattr(model_ref, "reset_prefix_cache"):
+            ray.get(model_ref.reset_prefix_cache.remote())
+
     def _get_server_weights(self) -> TensorDictBase | None:
         """Not used - weights must be passed directly via policy."""
         return None

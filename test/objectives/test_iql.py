@@ -303,14 +303,18 @@ class TestIQL(LossModuleTestBase):
 
         loss_fn = IQLLoss(
             actor_network=actor,
-            qvalue_network=qvalue,
+            qvalue_network=[qvalue] if num_qvalue == 1 else qvalue,
             value_network=value,
             num_qvalue_nets=num_qvalue,
             temperature=temperature,
             expectile=expectile,
             loss_function="l2",
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -385,6 +389,11 @@ class TestIQL(LossModuleTestBase):
                         include_nested=True, leaves_only=True
                     )
                 )
+                if num_qvalue == 1:
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in qvalue.parameters()
+                    )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
@@ -408,7 +417,7 @@ class TestIQL(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
-    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("num_qvalue", [1, 2])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.1])
     @pytest.mark.parametrize("expectile", [0.1])
@@ -439,7 +448,11 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
             deactivate_vmap=False,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -463,7 +476,11 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
             deactivate_vmap=True,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -481,7 +498,7 @@ class TestIQL(LossModuleTestBase):
                 loss_no_vmap = loss_fn_no_vmap(td)
             assert_allclose_td(loss_vmap, loss_no_vmap)
 
-    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("num_qvalue", [1, 2])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.0])
     @pytest.mark.parametrize("expectile", [0.1])
@@ -508,6 +525,10 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
         )
         sd = loss_fn.state_dict()
+        if num_qvalue == 1:
+            for key, tensor in list(sd.items()):
+                if key.removeprefix("target_").startswith("qvalue_network_params."):
+                    sd[key] = tensor.unsqueeze(0)
         loss_fn2 = IQLLoss(
             actor_network=actor,
             qvalue_network=qvalue,
@@ -1206,7 +1227,11 @@ class TestDiscreteIQL(LossModuleTestBase):
             loss_function="l2",
             action_space="one-hot",
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1281,6 +1306,11 @@ class TestDiscreteIQL(LossModuleTestBase):
                         include_nested=True, leaves_only=True
                     )
                 )
+                if num_qvalue == 1:
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in qvalue.parameters()
+                    )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
@@ -1304,7 +1334,7 @@ class TestDiscreteIQL(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
-    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("num_qvalue", [1, 2])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("temperature", [0.0])
     @pytest.mark.parametrize("expectile", [0.1])

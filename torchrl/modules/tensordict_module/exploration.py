@@ -789,8 +789,8 @@ class RandomPolicy:
 
         Lazy initialization — let the collector fill in the spec from the env:
 
-        >>> from torchrl.collectors import SyncDataCollector
-        >>> collector = SyncDataCollector(env, RandomPolicy(), ...)  # doctest: +SKIP
+        >>> from torchrl.collectors import Collector
+        >>> collector = Collector(env, RandomPolicy(), ...)  # doctest: +SKIP
     """
 
     def __init__(

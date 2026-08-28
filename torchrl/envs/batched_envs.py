@@ -9,12 +9,14 @@ import functools
 import gc
 import os
 import time
+import traceback
 import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
+from inspect import getattr_static
 from multiprocessing import connection
 from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
@@ -37,12 +39,13 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _get_default_mp_start_method,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     logger as torchrl_logger,
     rl_warnings,
     timeit,
     VERBOSE,
 )
-from torchrl.data.tensor_specs import Composite, NonTensor
+from torchrl.data.tensor_specs import Composite, NonTensor, Stacked
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 
@@ -111,7 +114,20 @@ def _has_float64_leaf(spec) -> bool:
 
 def _check_start(fun):
     def decorated_fun(self: BatchedEnvBase, *args, **kwargs):
-        if self.is_closed:
+        if not getattr(self, "_owns_workers", True):
+            parent_env = self.__dict__.get("_parent_env")
+            if self.is_closed:
+                raise RuntimeError(
+                    "Cannot use a closed indexed batched environment view. "
+                    "Create a new view from the parent environment instead."
+                )
+            if parent_env is None or parent_env.is_closed:
+                self.is_closed = True
+                raise RuntimeError(
+                    "Cannot use an indexed batched environment view after its "
+                    "parent environment has been closed."
+                )
+        elif self.is_closed:
             self._create_td()
             self._start_workers()
         else:
@@ -120,6 +136,40 @@ def _check_start(fun):
         return fun(self, *args, **kwargs)
 
     return decorated_fun
+
+
+def _normalize_batched_env_index(item: Any, num_workers: int) -> list[int]:
+    if isinstance(item, bool):
+        raise NotImplementedError("Boolean masks are not supported for batched envs.")
+    if isinstance(item, int):
+        item = item + num_workers if item < 0 else item
+        if item < 0 or item >= num_workers:
+            raise IndexError(f"index {item} is out of bounds for {num_workers} envs.")
+        return [item]
+    if isinstance(item, slice):
+        indices = list(range(num_workers))[item]
+        if not indices:
+            raise IndexError("Empty batched env indexing is not supported.")
+        return indices
+
+    index = torch.as_tensor(item)
+    if index.dtype == torch.bool:
+        raise NotImplementedError("Boolean masks are not supported for batched envs.")
+    if index.ndim == 0:
+        return _normalize_batched_env_index(int(index.item()), num_workers)
+    if index.ndim != 1:
+        raise IndexError(
+            f"Batched env indices must be scalar or 1D, got shape {index.shape}."
+        )
+    if index.numel() == 0:
+        raise IndexError("Empty batched env indexing is not supported.")
+    index = index.to(dtype=torch.long)
+    index = torch.where(index < 0, index + num_workers, index)
+    out_of_bounds = (index < 0) | (index >= num_workers)
+    if bool(out_of_bounds.any()):
+        bad = int(index[out_of_bounds][0].item())
+        raise IndexError(f"index {bad} is out of bounds for {num_workers} envs.")
+    return index.tolist()
 
 
 class _dispatch_caller_parallel:
@@ -203,18 +253,25 @@ class _PEnvMeta(_EnvPostInit):
         serial_for_single = kwargs.pop("serial_for_single", False)
         if serial_for_single:
             num_workers = kwargs.get("num_workers")
-            # Remove start method from kwargs
-            kwargs.pop("mp_start_method", None)
             if num_workers is None:
                 num_workers = args[0]
             if num_workers == 1:
-                # We still use a serial to keep the shape unchanged
+                # We still use a serial to keep the shape unchanged.
+                # SerialEnv constructs its envs in-process, so ParallelEnv-only
+                # kwargs are dropped rather than forwarded (they would raise).
+                kwargs.pop("mp_start_method", None)
+                kwargs.pop("metadata_from_workers", None)
                 return SerialEnv(*args, **kwargs)
 
         # Wrap lambda functions with EnvCreator so they can be pickled for
         # multiprocessing with the spawn start method. Lambda functions cannot
         # be serialized with standard pickle, but EnvCreator uses cloudpickle.
         auto_wrap_envs = kwargs.pop("auto_wrap_envs", True)
+        if kwargs.get("metadata_from_workers", False):
+            # The worker path wraps callables with CloudpickleWrapper directly.
+            # EnvCreator would eagerly construct a shadow env in the parent,
+            # defeating worker-originated metadata.
+            auto_wrap_envs = False
 
         def _warn_lambda():
             if rl_warnings():
@@ -323,9 +380,31 @@ class BatchedEnvBase(EnvBase):
             one of the environment has dynamic specs.
 
               .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
+
+              .. note:: MPS tensors cannot be placed in shared memory. If the environment
+                specs have leaves on an MPS device, :class:`~torchrl.envs.ParallelEnv`
+                defaults to ``use_buffers=False`` (with a warning) and the data exchanged
+                between processes is staged on CPU. Passing ``use_buffers=True`` in that
+                case raises a ``RuntimeError``.
+        metadata_from_workers (bool, optional): if ``True``, each worker constructs
+            its environment and sends its metadata to the parent during startup. This
+            avoids constructing temporary environments in the parent process. The mode
+            is only supported by :class:`~torchrl.envs.ParallelEnv`, starts its workers
+            eagerly, and currently requires ``use_buffers=False``. All workers must
+            report the same tensor schema: specs and example tensors may only differ
+            in non-tensor payload values (such as language instructions). In this
+            mode workers are also closed one at a time at shutdown to bound teardown
+            resource spikes. Defaults to ``False``.
         daemon (bool, optional): whether the processes should be daemonized.
             This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
             Defaults to ``False``.
+        shutdown_timeout (float, optional): grace period in seconds granted to
+            workers to exit cleanly when the environment is closed. Workers that
+            are still alive after this window are terminated, then killed.
+            Increase it for environments whose ``close()`` legitimately takes
+            long (e.g. flushing recorders or tearing down native renderers).
+            This is only applicable to parallel environments such as
+            :class:`~torchrl.envs.ParallelEnv`. Defaults to ``10.0``.
         auto_wrap_envs (bool, optional): if ``True`` (default), lambda functions passed as
             ``create_env_fn`` will be automatically wrapped in an :class:`~torchrl.envs.EnvCreator`
             to enable pickling for multiprocessing with the ``spawn`` start method.
@@ -428,6 +507,8 @@ class BatchedEnvBase(EnvBase):
     """
 
     _verbose: bool = VERBOSE
+    # Worker metadata contains the final key layout, including transforms.
+    auto_complete_done_specs = False
     _excluded_wrapped_keys = [
         "is_closed",
         "parent_channels",
@@ -454,18 +535,37 @@ class BatchedEnvBase(EnvBase):
         non_blocking: bool = False,
         mp_start_method: str | None = None,
         use_buffers: bool | None = None,
+        metadata_from_workers: bool = False,
         consolidate: bool = True,
         daemon: bool = False,
+        shutdown_timeout: float = 10.0,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
         self.is_closed = True
+        self._owns_workers = True
+        self.__dict__["_parent_env"] = None
+        self._worker_indices = list(range(num_workers))
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self._cache_in_keys = None
         self._use_buffers = use_buffers
+        self._metadata_from_workers = metadata_from_workers
         self.consolidate = consolidate
         self.daemon = daemon
+        self.shutdown_timeout = float(shutdown_timeout)
+
+        if metadata_from_workers:
+            if not isinstance(self, ParallelEnv):
+                raise TypeError(
+                    "metadata_from_workers=True is only supported by ParallelEnv."
+                )
+            if use_buffers:
+                raise RuntimeError(
+                    "metadata_from_workers=True currently requires use_buffers=False "
+                    "because shared buffers must be allocated before workers start."
+                )
+            self._use_buffers = False
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -515,15 +615,17 @@ class BatchedEnvBase(EnvBase):
         self._seeds = None
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
-        # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
         self._properties_set = False
-        self._get_metadata(create_env_fn, create_env_kwargs)
         self._non_blocking = non_blocking
         if mp_start_method is not None and not isinstance(self, ParallelEnv):
             raise TypeError(
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
             )
         self._mp_start_method = mp_start_method
+        if metadata_from_workers:
+            self._start_workers()
+        else:
+            self._get_metadata(create_env_fn, create_env_kwargs)
 
     is_spec_locked = EnvBase.is_spec_locked
 
@@ -538,6 +640,7 @@ class BatchedEnvBase(EnvBase):
         num_sub_threads: int | None = None,
         non_blocking: bool | None = None,
         daemon: bool | None = None,
+        shutdown_timeout: float | None = None,
     ) -> BatchedEnvBase:
         """Configure parallel execution parameters before the environment starts.
 
@@ -558,6 +661,8 @@ class BatchedEnvBase(EnvBase):
             non_blocking (bool, optional): if ``True``, device moves will be done using
                 the ``non_blocking=True`` option.
             daemon (bool, optional): whether the processes should be daemonized.
+            shutdown_timeout (float, optional): grace period in seconds granted to
+                workers to exit cleanly at shutdown before they are terminated.
 
         Returns:
             self: Returns self for method chaining.
@@ -578,6 +683,7 @@ class BatchedEnvBase(EnvBase):
             )
         if use_buffers is not None:
             self._use_buffers = use_buffers
+            self._check_mps_use_buffers()
         if shared_memory is not None:
             self._share_memory = shared_memory
         if memmap is not None:
@@ -592,6 +698,8 @@ class BatchedEnvBase(EnvBase):
             self._non_blocking = non_blocking
         if daemon is not None:
             self.daemon = daemon
+        if shutdown_timeout is not None:
+            self.shutdown_timeout = float(shutdown_timeout)
         return self
 
     def select_and_clone(self, name, tensor, selected_keys=None):
@@ -603,6 +711,93 @@ class BatchedEnvBase(EnvBase):
                     tensor, self.device, non_blocking=self.non_blocking
                 )
             return tensor.clone()
+
+    def _indexed_snapshot_sources(
+        self,
+        source: EnvBase | Sequence[EnvBase],
+        expected: int,
+    ) -> list[EnvBase]:
+        if isinstance(source, BatchedEnvBase):
+            if not isinstance(source, SerialEnv):
+                raise NotImplementedError(
+                    "Writing back from a ParallelEnv source is not supported; "
+                    "use an EnvBase snapshot or a SerialEnv source instead."
+                )
+            if source.is_closed:
+                source._create_td()
+                source._start_workers()
+            sources = list(source._envs)
+        elif isinstance(source, EnvBase):
+            sources = [source]
+        elif isinstance(source, Sequence):
+            sources = list(source)
+        else:
+            raise TypeError(
+                f"Expected an EnvBase or sequence of EnvBase sources, got "
+                f"{type(source).__name__}."
+            )
+        if len(sources) != expected:
+            raise ValueError(
+                "The source count does not match the indexed "
+                f"destination: got {len(sources)} and expected {expected}."
+            )
+        if not all(isinstance(env, EnvBase) for env in sources):
+            raise TypeError("All indexed sources must be EnvBase instances.")
+        return sources
+
+    def _select_indices(
+        self, sequence: Sequence[Any], indices: Sequence[int]
+    ) -> list[Any]:
+        return [sequence[index] for index in indices]
+
+    def _select_batched_metadata(self, indices: Sequence[int]):
+        if self._single_task:
+            return self.meta_data[list(indices)]
+        return [self.meta_data[index] for index in indices]
+
+    def _make_batched_view(self, indices: Sequence[int]) -> BatchedEnvBase:
+        view = type(self).__new__(type(self))
+        view.__dict__.update(self.__dict__.copy())
+        indices = list(indices)
+        view._owns_workers = False
+        view.__dict__["_parent_env"] = self.__dict__.get("_parent_env") or self
+        parent_worker_indices = getattr(
+            self, "_worker_indices", range(self.num_workers)
+        )
+        view._worker_indices = [parent_worker_indices[index] for index in indices]
+        view.num_workers = len(indices)
+        view.create_env_fn = self._select_indices(self.create_env_fn, indices)
+        view.create_env_kwargs = self._select_indices(self.create_env_kwargs, indices)
+        view.meta_data = self._select_batched_metadata(indices)
+        if self._seeds is not None:
+            view._seeds = self._select_indices(self._seeds, indices)
+        view._cache_in_keys = None
+        view.__dict__["_sync_m2w_value"] = None
+        view.__dict__["_sync_w2m_value"] = None
+        view.__dict__["_input_spec"] = None
+        view.__dict__["_output_spec"] = None
+        view._properties_set = False
+        view._set_properties()
+        if not self.is_closed and self._use_buffers:
+            view.shared_tensordicts = self._select_indices(
+                self.shared_tensordicts, indices
+            )
+            view.shared_tensordict_parent = LazyStackedTensorDict(
+                *view.shared_tensordicts
+            )
+            view._cache_shared_keys = set(
+                view.shared_tensordict_parent.keys(True, True)
+            )
+            view._shared_tensordict_parent_next = view.shared_tensordict_parent.get(
+                "next"
+            )
+            view._shared_tensordict_parent_root = view.shared_tensordict_parent.exclude(
+                "next", *view.reset_keys
+            )
+        non_tensor_cache = self.__dict__.get("_non_tensor_cache", None)
+        if non_tensor_cache is not None:
+            view._non_tensor_cache = non_tensor_cache[indices]
+        return view
 
     @property
     def non_blocking(self):
@@ -713,17 +908,79 @@ class BatchedEnvBase(EnvBase):
     def _has_dynamic_specs(self):
         return not self._use_buffers
 
+    @staticmethod
+    def _validate_worker_env(env) -> None:
+        """Check that each transform on a worker env is batched-env compatible.
+
+        Walks ``env.transform`` and invokes
+        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`
+        on each entry. Transforms that should not live inside a batched-env
+        worker raise here so the user gets immediate feedback rather than
+        silently-wrong runtime behavior.
+        """
+        if getattr_static(env, "transform", None) is None:
+            transform = None
+        else:
+            transform = getattr(env, "transform", None)
+        if transform is not None:
+            transform._check_batched_worker_compat()
+
+    def _check_mps_use_buffers(self) -> None:
+        """Prevents the use of shared buffers when the sub-env data lives on MPS.
+
+        MPS storages cannot be placed in shared memory nor pickled through
+        multiprocessing pipes, so :class:`~torchrl.envs.ParallelEnv` must run
+        with ``use_buffers=False`` and stage the inter-process data on CPU.
+        """
+        if not self._has_mps_leaves or not isinstance(self, ParallelEnv):
+            return
+        if self._use_buffers:
+            raise RuntimeError(
+                "use_buffers=True is incompatible with environments whose specs have "
+                "leaves on an MPS device, because MPS tensors cannot be placed in shared "
+                "memory. Pass use_buffers=False or move the environments to CPU."
+            )
+        if self._use_buffers is None:
+            warn(
+                "The environment specs have leaves on an MPS device, which cannot be placed "
+                "in shared memory. use_buffers will default to False and the data will be "
+                "passed between processes through CPU memory. To silence this warning, pass "
+                "use_buffers=False to the ParallelEnv constructor."
+            )
+            self._use_buffers = False
+
     def _get_metadata(
         self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
             meta_data: EnvMetaData = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
+                create_env_fn[0],
+                create_env_kwargs[0],
+                env_validator=self._validate_worker_env,
             )
+        else:
+            meta_data = [
+                get_env_metadata(
+                    create_env_fn[i],
+                    create_env_kwargs[i],
+                    env_validator=self._validate_worker_env,
+                ).clone()
+                for i in range(len(create_env_fn))
+            ]
+        self._set_metadata(meta_data)
+
+    def _set_metadata(self, meta_data: EnvMetaData | list[EnvMetaData]) -> None:
+        if self._single_task:
+            if isinstance(meta_data, list):
+                raise TypeError("Expected one metadata object for a homogeneous env.")
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
+            self._has_mps_leaves = any(
+                device.type == "mps" for device in meta_data.device_map.values()
+            )
+            self._check_mps_use_buffers()
             if self._use_buffers is not False:
                 _use_buffers = not self.meta_data.has_dynamic_specs
                 if self._use_buffers and not _use_buffers:
@@ -735,12 +992,9 @@ class BatchedEnvBase(EnvBase):
             if self.share_individual_td is None:
                 self.share_individual_td = False
         else:
-            n_tasks = len(create_env_fn)
-            self.meta_data: list[EnvMetaData] = []
-            for i in range(n_tasks):
-                self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
-                )
+            if not isinstance(meta_data, list):
+                raise TypeError("Expected a metadata list for heterogeneous envs.")
+            self.meta_data = meta_data
             if self.share_individual_td is not True:
                 share_individual_td = not _stackable(
                     *[meta_data.tensordict for meta_data in self.meta_data]
@@ -751,17 +1005,82 @@ class BatchedEnvBase(EnvBase):
                         "be True to accommodate non-stackable tensors."
                     )
                 self.share_individual_td = share_individual_td
-            _use_buffers = all(
-                not metadata.has_dynamic_specs for metadata in self.meta_data
+            self._has_mps_leaves = any(
+                device.type == "mps"
+                for metadata in self.meta_data
+                for device in metadata.device_map.values()
             )
-            if self._use_buffers and not _use_buffers:
-                warn(
-                    "A value of use_buffers=True was passed but this is incompatible "
-                    "with the list of environments provided. Turning use_buffers to False."
+            self._check_mps_use_buffers()
+            if self._use_buffers is not False:
+                _use_buffers = all(
+                    not metadata.has_dynamic_specs for metadata in self.meta_data
                 )
-            self._use_buffers = _use_buffers
+                if self._use_buffers and not _use_buffers:
+                    warn(
+                        "A value of use_buffers=True was passed but this is incompatible "
+                        "with the list of environments provided. Turning use_buffers to False."
+                    )
+                self._use_buffers = _use_buffers
 
         self._set_properties()
+
+    @staticmethod
+    def _worker_metadata_schema(meta_data: EnvMetaData) -> tuple:
+        """Return metadata fields that determine safe batched communication.
+
+        Non-tensor payload values are intentionally excluded: workers may expose
+        different strings (for example, language instructions) while retaining an
+        identical tensor schema.
+        """
+        spec_schema = tuple(
+            (
+                key,
+                type(spec),
+                torch.Size(spec.shape),
+                getattr(spec, "dtype", None),
+                getattr(spec, "device", None),
+            )
+            for key, spec in meta_data.specs.items(True, True)
+        )
+        tensordict_schema = []
+        for key, value in meta_data.tensordict.items(True, True):
+            if isinstance(value, torch.Tensor):
+                value_schema = (
+                    type(value),
+                    torch.Size(value.shape),
+                    value.dtype,
+                    value.device,
+                )
+            else:
+                value_schema = (type(value), getattr(value, "shape", None))
+            tensordict_schema.append((key, value_schema))
+        return (
+            meta_data.batch_size,
+            meta_data.device,
+            meta_data.batch_locked,
+            meta_data.supports_set_state,
+            tuple(meta_data.device_map.items()),
+            spec_schema,
+            tuple(tensordict_schema),
+        )
+
+    def _set_worker_metadata(self, metadata: list[EnvMetaData]) -> None:
+        if len(metadata) != self.num_workers:
+            raise RuntimeError(
+                "ParallelEnv received metadata from "
+                f"{len(metadata)} workers, expected {self.num_workers}."
+            )
+        reference_schema = self._worker_metadata_schema(metadata[0])
+        for worker_idx, worker_metadata in enumerate(metadata[1:], 1):
+            if self._worker_metadata_schema(worker_metadata) != reference_schema:
+                raise RuntimeError(
+                    "ParallelEnv worker metadata are incompatible: "
+                    f"worker {worker_idx} has a different tensor schema from worker 0."
+                )
+        if self._single_task:
+            self._set_metadata(metadata[0])
+        else:
+            self._set_metadata(metadata)
 
     def update_kwargs(self, kwargs: dict | list[dict]) -> None:
         """Updates the kwargs of each environment given a dictionary or a list of dictionaries.
@@ -789,6 +1108,18 @@ class BatchedEnvBase(EnvBase):
                 )
             )
         return self._cache_in_keys
+
+    @property
+    def _supports_set_state(self) -> bool:
+        # Derived from the wrapped sub-envs' metadata: a deterministic reset is
+        # only supported if every sub-env supports it (the kwarg broadcasts to
+        # all workers).
+        meta_data = getattr(self, "meta_data", None)
+        if meta_data is None:
+            return False
+        if isinstance(meta_data, (list, tuple)):
+            return all(md.supports_set_state for md in meta_data)
+        return meta_data.supports_set_state
 
     def _set_properties(self):
 
@@ -950,7 +1281,14 @@ class BatchedEnvBase(EnvBase):
                 "batched environment base tensordict has the wrong shape"
             )
 
-        # Non-tensor keys
+        # Non-tensor keys. Heterogeneous workers (e.g. different language
+        # instructions) stack NonTensor leaves into a Stacked spec, so the
+        # check must look through the stack as well.
+        def _is_non_tensor(spec) -> bool:
+            if isinstance(spec, NonTensor):
+                return True
+            return isinstance(spec, Stacked) and isinstance(spec._specs[0], NonTensor)
+
         non_tensor_keys = []
         for spec in (
             self.full_action_spec,
@@ -960,9 +1298,10 @@ class BatchedEnvBase(EnvBase):
             self.full_done_spec,
         ):
             for key, _spec in spec.items(True, True):
-                if isinstance(_spec, NonTensor):
+                if _is_non_tensor(_spec):
                     non_tensor_keys.append(key)
         self._non_tensor_keys = non_tensor_keys
+        self._non_tensor_cache = None
 
         if self._single_task:
             self._env_input_keys = sorted(
@@ -1098,6 +1437,32 @@ class BatchedEnvBase(EnvBase):
             "next", *self.reset_keys
         )
 
+    def _update_non_tensor_cache(self, non_tensor_tds, workers_range=None):
+        if not self._non_tensor_keys:
+            return None
+        root_non_tensor = non_tensor_tds.select(*self._non_tensor_keys, strict=False)
+        if workers_range is None:
+            self._non_tensor_cache = root_non_tensor
+            return root_non_tensor
+        workers = list(workers_range)
+        if workers == list(range(self.num_workers)):
+            self._non_tensor_cache = root_non_tensor
+            return root_non_tensor
+        if self._non_tensor_cache is None:
+            raise RuntimeError(
+                "Cannot preserve NonTensor values for non-updated workers before "
+                "a full reset or step."
+            )
+        worker_to_offset = {worker: offset for offset, worker in enumerate(workers)}
+        rows = []
+        for i in range(self.num_workers):
+            if i in worker_to_offset:
+                rows.append(root_non_tensor[worker_to_offset[i]])
+            else:
+                rows.append(self._non_tensor_cache[i])
+        self._non_tensor_cache = LazyStackedTensorDict(*rows)
+        return root_non_tensor
+
     def _start_workers(self) -> None:
         """Starts the various envs."""
         raise NotImplementedError
@@ -1124,14 +1489,17 @@ class BatchedEnvBase(EnvBase):
         self.__dict__["_output_spec"] = None
         self._properties_set = False
 
-        self._shutdown_workers()
-        self.is_closed = True
-        import torchrl
+        if self._owns_workers:
+            self._shutdown_workers()
+            import torchrl
 
-        num_threads = min(
-            torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
-        )
-        torch.set_num_threads(num_threads)
+            num_threads = min(
+                torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
+            )
+            torch.set_num_threads(num_threads)
+        else:
+            self.__dict__["_parent_env"] = None
+        self.is_closed = True
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -1246,6 +1614,7 @@ class SerialEnv(BatchedEnvBase):
         return seed
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
         if kwargs is not list_of_kwargs[0] and kwargs:
@@ -1364,6 +1733,7 @@ class SerialEnv(BatchedEnvBase):
         return out
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._step")
     def _step(
         self,
         tensordict: TensorDict,
@@ -1483,6 +1853,26 @@ class SerialEnv(BatchedEnvBase):
             return result
 
         return out
+
+    @_check_start
+    def __getitem__(self, item: Any) -> EnvBase:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        view = self._make_batched_view(indices)
+        view._envs = [self._envs[index] for index in indices]
+        return view
+
+    @_check_start
+    def __setitem__(self, item: Any, source: EnvBase | Sequence[EnvBase]) -> None:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        sources = self._indexed_snapshot_sources(source, len(indices))
+        for index, source_env in zip(indices, sources):
+            try:
+                self._envs[index][slice(None)] = source_env
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                raise NotImplementedError(
+                    f"Env workers of type {type(self._envs[index]).__name__} do "
+                    "not support snapshot writeback."
+                ) from err
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -1679,7 +2069,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
     def _start_workers(self) -> None:
         import torchrl
 
-        self._timeout = 10.0
+        initial_num_threads = torch.get_num_threads()
+        # getattr: envs unpickled from older versions lack the attribute
+        self._timeout = getattr(self, "shutdown_timeout", 10.0)
         self.BATCHED_PIPE_TIMEOUT = torchrl._utils.BATCHED_PIPE_TIMEOUT
 
         num_threads = max(
@@ -1756,7 +2148,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                         "child_pipe": child_pipe,
                         "env_fun": env_fun,
                         "env_fun_kwargs": self.create_env_kwargs[idx],
-                        "has_lazy_inputs": self.has_lazy_inputs,
+                        "has_lazy_inputs": self.__dict__.get("has_lazy_inputs", False),
                         "num_threads": num_sub_threads,
                         "non_blocking": self.non_blocking,
                         "filter_warnings": self._filter_warnings_subprocess(),
@@ -1776,6 +2168,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     kwargs[idx].update(
                         {
                             "consolidate": self.consolidate,
+                            "metadata_from_worker": self._metadata_from_workers,
                         }
                     )
                 process = proc_fun(target=func, kwargs=kwargs[idx])
@@ -1785,15 +2178,102 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 self.parent_channels.append(parent_pipe)
                 self._workers.append(process)
 
-        for parent_pipe in self.parent_channels:
-            # use msg as sync point
-            parent_pipe.recv()
+        try:
+            if self._metadata_from_workers:
+                metadata = self._receive_worker_metadata()
+                self._set_worker_metadata(metadata)
+            else:
+                for parent_pipe in self.parent_channels:
+                    # use msg as sync point
+                    parent_pipe.recv()
 
-        # send shared tensordict to workers
-        for channel in self.parent_channels:
-            channel.send(("init", None))
+            for channel in self.parent_channels:
+                channel.send(("init", None))
+        except Exception:
+            self._cleanup_failed_worker_startup()
+            torch.set_num_threads(initial_num_threads)
+            raise
+
         self.is_closed = False
         self.set_spec_lock_()
+
+    def _receive_worker_metadata(self) -> list[EnvMetaData]:
+        metadata = [None] * self.num_workers
+        pending = {
+            channel: worker_idx
+            for worker_idx, channel in enumerate(self.parent_channels)
+        }
+        deadline = time.monotonic() + self.BATCHED_PIPE_TIMEOUT
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    "ParallelEnv timed out while waiting for worker metadata. "
+                    "Increase BATCHED_PIPE_TIMEOUT if environment construction "
+                    "legitimately takes longer."
+                )
+            ready = connection_wait(list(pending), timeout=remaining)
+            if not ready:
+                continue
+            for channel in ready:
+                worker_idx = pending.pop(channel)
+                try:
+                    message, payload = channel.recv()
+                except EOFError as err:
+                    raise RuntimeError(
+                        f"ParallelEnv worker {worker_idx} exited before sending metadata."
+                    ) from err
+                if message == "metadata_error":
+                    raise RuntimeError(
+                        f"ParallelEnv worker {worker_idx} failed during metadata "
+                        f"construction:\n{payload}"
+                    )
+                if message != "metadata" or not isinstance(payload, EnvMetaData):
+                    raise RuntimeError(
+                        f"ParallelEnv worker {worker_idx} sent an invalid metadata "
+                        f"message: {message!r}."
+                    )
+                metadata[worker_idx] = payload
+        return metadata
+
+    def _cleanup_failed_worker_startup(self) -> None:
+        for channel, process in zip(self.parent_channels, self._workers):
+            if process.is_alive():
+                try:
+                    channel.send(("close", None))
+                except (EOFError, OSError):
+                    pass
+        deadline = time.monotonic() + self._timeout
+        for event, process in zip(self._events, self._workers):
+            if process.is_alive():
+                event.wait(max(0.0, deadline - time.monotonic()))
+        join_deadline = time.monotonic() + min(self._timeout, 2.0)
+        for process in self._workers:
+            process.join(timeout=max(0.0, join_deadline - time.monotonic()))
+        self._terminate_and_join_workers(self._workers, timeout=min(self._timeout, 2.0))
+        for channel in self.parent_channels:
+            channel.close()
+        self.parent_channels = []
+        self._workers = []
+        self._events = None
+        self.event = None
+        self.is_closed = True
+
+    @staticmethod
+    def _terminate_and_join_workers(workers: list[mp.Process], timeout: float) -> None:
+        for process in workers:
+            if process.is_alive():
+                process.terminate()
+        deadline = time.monotonic() + timeout
+        for process in workers:
+            process.join(timeout=max(0.0, deadline - time.monotonic()))
+        for process in workers:
+            if process.is_alive():
+                process.kill()
+        deadline = time.monotonic() + 1.0
+        for process in workers:
+            if process.is_alive():
+                process.join(timeout=max(0.0, deadline - time.monotonic()))
 
     def _filter_warnings_subprocess(self) -> bool:
         from torchrl import filter_warnings_subprocess
@@ -1839,6 +2319,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             workers_range = range(self.num_workers)
 
+        if self._has_mps_leaves:
+            # MPS storages cannot be pickled through mp pipes: stage the data
+            # on CPU before sending it (the workers cast it back to their device)
+            tensordict = tensordict.to("cpu")
         if self.consolidate:
             try:
                 td = tensordict.consolidate(
@@ -1899,8 +2383,27 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             return result
         return out
 
+    def _get_collector_next_keys_to_exclude(self) -> tuple:
+        """Return keys that the registered collector will discard immediately."""
+        collector_ref = self._collector
+        if collector_ref is None or (collector := collector_ref()) is None:
+            return ()
+        cache = self.__dict__.get("_collector_next_keys_to_exclude")
+        if cache is not None and cache[0] is collector_ref:
+            return cache[1]
+        keys = []
+        for key in getattr(collector, "_compact_next_keys", ()):
+            if not isinstance(key, tuple) or not key or key[0] != "next":
+                continue
+            key = key[1:]
+            keys.append(key[0] if len(key) == 1 else key)
+        keys = tuple(keys)
+        self.__dict__["_collector_next_keys_to_exclude"] = (collector_ref, keys)
+        return keys
+
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
@@ -1993,6 +2496,11 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
+        next_keys_to_exclude = self._get_collector_next_keys_to_exclude()
+        if next_keys_to_exclude:
+            # The post-reset root still carries these values for the next policy
+            # call. Avoid copying only the duplicate values in the step output.
+            next_td = next_td.exclude(*next_keys_to_exclude)
         device = self.device
         shared_device = shared_tensordict_parent.device
         if shared_device == device:
@@ -2038,11 +2546,17 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         tensordict.set("next", next_td)
         if self._non_tensor_keys:
             non_tensor_tds = LazyStackedTensorDict(*non_tensor_tds)
+            root_non_tensor_tds = self._update_non_tensor_cache(
+                non_tensor_tds,
+                workers_range if partial_steps is not None else None,
+            )
             tensordict.update(
                 non_tensor_tds,
                 keys_to_update=[("next", key) for key in self._non_tensor_keys],
             )
-            tensordict_.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
+            tensordict_.update(
+                root_non_tensor_tds, keys_to_update=self._non_tensor_keys
+            )
 
         if partial_steps is not None:
             result = tensordict.new_zeros(tensordict_save.shape)
@@ -2104,17 +2618,18 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         # Spin-poll shared memory done flags (no syscalls on the fast path).
         if self._use_buffers:
             done_flags = self._shm_done_flags
+            worker_indices = self._worker_indices
             n_spins = 0
             while True:
                 all_done = True
                 for i in workers_range:
-                    if not done_flags[i]:
+                    if not done_flags[worker_indices[i]]:
                         all_done = False
                         break
                 if all_done:
                     # Clear flags for next round
                     for i in workers_range:
-                        done_flags[i] = 0
+                        done_flags[worker_indices[i]] = 0
                     return
 
                 n_spins += 1
@@ -2126,7 +2641,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                             f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
                         )
                     for wi in workers_range:
-                        if not done_flags[wi] and not self._workers[wi].is_alive():
+                        if (
+                            not done_flags[worker_indices[wi]]
+                            and not self._workers[wi].is_alive()
+                        ):
                             try:
                                 self._shutdown_workers()
                             finally:
@@ -2179,6 +2697,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             workers_range = range(self.num_workers)
 
+        if self._has_mps_leaves:
+            # MPS storages cannot be pickled through mp pipes: stage the data
+            # on CPU before sending it (the workers cast it back to their device)
+            tensordict = tensordict.to("cpu")
         if self.consolidate:
             try:
                 data = tensordict.consolidate(
@@ -2188,20 +2710,36 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     inplace=False,
                     num_threads=1,
                 )
+            except RuntimeError as err:
+                if "self.stride(-1) must be 1" not in str(err):
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+                data = [
+                    local_data.contiguous().consolidate(
+                        share_memory=False,
+                        inplace=False,
+                        num_threads=1,
+                    )
+                    for local_data in tensordict.unbind(0)
+                ]
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
         else:
             data = tensordict
 
-        for i, local_data in zip(workers_range, data.unbind(0)):
+        data_iter = data if isinstance(data, list) else data.unbind(0)
+        for i, local_data in zip(workers_range, data_iter):
             env_device = (
                 self.meta_data[i].device
                 if isinstance(self.meta_data, list)
                 else self.meta_data.device
             )
-            if data.device != env_device:
+            if local_data.device != env_device:
                 if env_device is None:
                     local_data.clear_device_()
+                elif env_device.type == "mps":
+                    # MPS data cannot be sent through the pipe: the worker casts
+                    # the data back to the env device upon reception.
+                    pass
                 else:
                     local_data = local_data.to(env_device)
             self.parent_channels[i].send(("step", local_data))
@@ -2249,6 +2787,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self._use_buffers:
             return self._step_no_buffers(tensordict)
@@ -2373,10 +2912,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             device=device,
         )
         if self._non_tensor_keys:
-            out.update(
-                LazyStackedTensorDict(*non_tensor_tds),
-                keys_to_update=self._non_tensor_keys,
+            non_tensor_tds = LazyStackedTensorDict(*non_tensor_tds)
+            self._update_non_tensor_cache(
+                non_tensor_tds,
+                workers_range if partial_steps is not None else None,
             )
+            out.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
         if next_td_passthrough is not None:
             out.update(next_td_passthrough)
 
@@ -2415,6 +2956,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
+            if self._has_mps_leaves:
+                # MPS storages cannot be pickled through mp pipes: stage the data
+                # on CPU before sending it (the workers cast it back to their device)
+                tensordict = tensordict.to("cpu")
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
@@ -2459,6 +3004,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
 
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
@@ -2564,9 +3110,41 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         )
         if self._non_tensor_keys:
             workers, nontensor = zip(*workers_nontensor)
-            out[torch.tensor(workers)] = LazyStackedTensorDict(*nontensor).select(
+            reset_stack = LazyStackedTensorDict(*nontensor).select(
                 *self._non_tensor_keys
             )
+            if len(workers) == self.num_workers:
+                # full reset: every worker has a freshly reset value, so the
+                # fancy-index assignment creates the (absent) NonTensor keys.
+                out[torch.tensor(workers)] = reset_stack
+                self._non_tensor_cache = reset_stack
+            else:
+                # partial reset: ``out`` has no NonTensor leaves (NonTensor is
+                # not shared-memory backed, so ``named_apply`` over the shared
+                # parent skips it), and a NonTensor key cannot be created by a
+                # *partial* fancy-index assignment. Build the full-width
+                # NonTensor explicitly -- reset workers take the fresh values,
+                # the others keep their last cached current value (correct,
+                # since they are not being reset).
+                worker_to_offset = {w: o for o, w in enumerate(workers)}
+                rows = []
+                for i in range(self.num_workers):
+                    if i in worker_to_offset:
+                        rows.append(reset_stack[worker_to_offset[i]])
+                    elif self._non_tensor_cache is not None:
+                        rows.append(self._non_tensor_cache[i])
+                    else:
+                        non_tensor = tensordict[i].select(
+                            *self._non_tensor_keys, strict=False
+                        )
+                        if non_tensor.is_empty():
+                            raise RuntimeError(
+                                "Cannot preserve NonTensor values for non-reset "
+                                "workers before a full reset or step."
+                            )
+                        rows.append(non_tensor)
+                self._non_tensor_cache = LazyStackedTensorDict(*rows)
+                out.update(self._non_tensor_cache)
         self._sync_w2m()
         return out
 
@@ -2577,34 +3155,46 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                 raise RuntimeError(
                     "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
                 )
-            for i, channel in enumerate(self.parent_channels):
-                if self._verbose:
-                    torchrl_logger.info(f"closing {i}")
-                channel.send(("close", None))
-            # Wait on mp.Event (not _wait_for_workers) because the "close"
-            # handler doesn't send data on the pipe — it just closes it — and
-            # connection_wait does not reliably detect socketpair closure
-            # on all platforms (macOS with forked workers).
-            for i in range(self.num_workers):
-                self._events[i].wait(self._timeout)
-                self._events[i].clear()
+            if self._metadata_from_workers:
+                # Expensive native environments may retain renderer resources
+                # until process teardown. Reap each process before asking the
+                # next one to close to avoid a second resource spike.
+                worker_groups = [
+                    (worker_idx,) for worker_idx in range(self.num_workers)
+                ]
+            else:
+                worker_groups = [range(self.num_workers)]
+            for worker_indices in worker_groups:
+                for worker_idx in worker_indices:
+                    if self._verbose:
+                        torchrl_logger.info(f"closing {worker_idx}")
+                    self.parent_channels[worker_idx].send(("close", None))
+                # Wait on mp.Event (not _wait_for_workers) because the "close"
+                # handler doesn't send data on the pipe — it just closes it — and
+                # connection_wait does not reliably detect socketpair closure
+                # on all platforms (macOS with forked workers).
+                for worker_idx in worker_indices:
+                    self._events[worker_idx].wait(self._timeout)
+                    self._events[worker_idx].clear()
+                    self.parent_channels[worker_idx].close()
+                processes = [self._workers[worker_idx] for worker_idx in worker_indices]
+                exit_deadline = time.monotonic() + self._timeout
+                while (
+                    any(process.is_alive() for process in processes)
+                    and time.monotonic() < exit_deadline
+                ):
+                    time.sleep(0.01)
+                self._terminate_and_join_workers(
+                    processes, timeout=min(self._timeout, 2.0)
+                )
             if self._use_buffers:
                 del self.shared_tensordicts, self.shared_tensordict_parent
-
+        finally:
             for channel in self.parent_channels:
                 channel.close()
-            start_time = time.time()
-            while (
-                any(proc.is_alive() for proc in self._workers)
-                and (time.time() - start_time) < self._timeout
-            ):
-                time.sleep(0.01)
-            for proc in self._workers:
-                proc.join()
-        finally:
-            for proc in self._workers:
-                if proc.is_alive():
-                    proc.terminate()
+            self._terminate_and_join_workers(
+                self._workers, timeout=min(self._timeout, 2.0)
+            )
         del self._workers
         del self.parent_channels
         self._cuda_events = None
@@ -2659,6 +3249,32 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             except AttributeError:
                 raise AttributeError(
                     f"attribute {attr} not found in " f"{self._dummy_env_str}"
+                )
+
+    @_check_start
+    def __getitem__(self, item: Any) -> EnvBase:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        view = self._make_batched_view(indices)
+        view.parent_channels = [self.parent_channels[index] for index in indices]
+        view._workers = [self._workers[index] for index in indices]
+        view._events = [self._events[index] for index in indices]
+        return view
+
+    @_check_start
+    def __setitem__(self, item: Any, source: EnvBase | Sequence[EnvBase]) -> None:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        sources = self._indexed_snapshot_sources(source, len(indices))
+        for index, source_env in zip(indices, sources):
+            self.parent_channels[index].send(("set_env_snapshot", source_env))
+
+        for index in indices:
+            msg, result = self.parent_channels[index].recv()
+            if msg == "set_env_snapshot_error":
+                raise NotImplementedError(result)
+            if msg != "set_env_snapshot_done":
+                raise RuntimeError(
+                    f"Expected 'set_env_snapshot_done' from worker {index}, "
+                    f"got {msg!r}."
                 )
 
     def to(self, device: DEVICE_TYPING):
@@ -2951,6 +3567,23 @@ def _run_worker_pipe_shared_mem(
 
             del td, root_next_td
 
+        elif cmd == "set_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before setting an env snapshot")
+            try:
+                env[slice(None)] = data
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                child_pipe.send(
+                    (
+                        "set_env_snapshot_error",
+                        f"Env workers of type {type(env).__name__} do not support "
+                        f"snapshot writeback: {err}",
+                    )
+                )
+            else:
+                child_pipe.send(("set_env_snapshot_done", None))
+            _signal_done()
+
         elif cmd == "close":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -3033,6 +3666,7 @@ def _run_worker_pipe_direct(
     num_threads: int | None = None,  # for fork start method
     consolidate: bool = True,
     filter_warnings: bool = False,
+    metadata_from_worker: bool = False,
 ) -> None:
     # Handle warning filtering (moved from _ProcessNoWarn)
     if filter_warnings:
@@ -3042,14 +3676,34 @@ def _run_worker_pipe_direct(
 
     parent_pipe.close()
     pid = os.getpid()
-    if not isinstance(env_fun, EnvBase):
-        env = env_fun(**env_fun_kwargs)
-    else:
-        if env_fun_kwargs:
-            raise RuntimeError(
-                "env_fun_kwargs must be empty if an environment is passed to a process."
-            )
-        env = env_fun
+    env = None
+    try:
+        if not isinstance(env_fun, EnvBase):
+            env = env_fun(**env_fun_kwargs)
+        else:
+            if env_fun_kwargs:
+                raise RuntimeError(
+                    "env_fun_kwargs must be empty if an environment is passed to a process."
+                )
+            env = env_fun
+        if metadata_from_worker:
+            BatchedEnvBase._validate_worker_env(env)
+            child_pipe.send(("metadata", EnvMetaData.metadata_from_env(env)))
+    except Exception:
+        if not metadata_from_worker:
+            raise
+        try:
+            child_pipe.send(("metadata_error", traceback.format_exc()))
+        except (EOFError, OSError):
+            pass
+        if env is not None:
+            try:
+                env.close()
+            except Exception:
+                pass
+        mp_event.set()
+        child_pipe.close()
+        return
     del env_fun
     for spec in env.output_spec.values(True, True):
         if spec.device is not None and spec.device.type == "cuda":
@@ -3066,6 +3720,20 @@ def _run_worker_pipe_direct(
         event = torch.cuda.Event()
     else:
         event = None
+    # MPS storages cannot be pickled through pipes, so when the env specs have
+    # leaves on MPS the data sent to the parent is staged on CPU and the data
+    # received from the parent is cast back to the env device.
+    for spec in env.output_spec.values(True, True):
+        if spec.device is not None and spec.device.type == "mps":
+            has_mps = True
+            break
+    else:
+        for spec in env.input_spec.values(True, True):
+            if spec.device is not None and spec.device.type == "mps":
+                has_mps = True
+                break
+        else:
+            has_mps = False
 
     i = -1
     import torchrl
@@ -3074,7 +3742,8 @@ def _run_worker_pipe_direct(
 
     initialized = False
 
-    child_pipe.send("started")
+    if not metadata_from_worker:
+        child_pipe.send("started")
     while True:
         try:
             if child_pipe.poll(_timeout):
@@ -3116,6 +3785,9 @@ def _run_worker_pipe_direct(
                 data._fast_apply(
                     lambda x: x.clone() if x.device.type == "cuda" else x, out=data
                 )
+                if has_mps and env.device is not None and data.device != env.device:
+                    # the parent sent CPU-staged data: cast it back to the env device
+                    data = _td_to_device_mps_safe(data, env.device)
             cur_td = env.reset(
                 tensordict=data,
                 **reset_kwargs,
@@ -3123,6 +3795,10 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
+            if has_mps:
+                # MPS storages cannot be pickled through mp pipes: stage the data
+                # on CPU before sending it (the parent casts it back to its device)
+                cur_td = cur_td.to("cpu")
             if consolidate:
                 try:
                     cur_td = cur_td.consolidate(
@@ -3145,10 +3821,17 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
+            if has_mps and env.device is not None and data.device != env.device:
+                # the parent sent CPU-staged data: cast it back to the env device
+                data = _td_to_device_mps_safe(data, env.device)
             next_td = env._step(data)
             if event is not None:
                 event.record()
                 event.synchronize()
+            if has_mps:
+                # MPS storages cannot be pickled through mp pipes: stage the data
+                # on CPU before sending it (the parent casts it back to its device)
+                next_td = next_td.to("cpu")
             if consolidate:
                 try:
                     next_td = next_td.consolidate(
@@ -3176,18 +3859,39 @@ def _run_worker_pipe_direct(
             data._fast_apply(
                 lambda x: x.clone() if x.device.type == "cuda" else x, out=data
             )
+            if has_mps and env.device is not None and data.device != env.device:
+                # the parent sent CPU-staged data: cast it back to the env device
+                data = _td_to_device_mps_safe(data, env.device)
             td, root_next_td = env.step_and_maybe_reset(data)
 
             if event is not None:
                 event.record()
                 event.synchronize()
+            if has_mps:
+                td = td.to("cpu")
+                root_next_td = root_next_td.to("cpu")
             child_pipe.send((td, root_next_td))
             mp_event.set()
             del td, root_next_td
 
-        elif cmd == "close":
+        elif cmd == "set_env_snapshot":
             if not initialized:
-                raise RuntimeError("call 'init' before closing")
+                raise RuntimeError("call 'init' before setting an env snapshot")
+            try:
+                env[slice(None)] = data
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                child_pipe.send(
+                    (
+                        "set_env_snapshot_error",
+                        f"Env workers of type {type(env).__name__} do not support "
+                        f"snapshot writeback: {err}",
+                    )
+                )
+            else:
+                child_pipe.send(("set_env_snapshot_done", None))
+            mp_event.set()
+
+        elif cmd == "close":
             env.close()
             mp_event.set()
             child_pipe.close()

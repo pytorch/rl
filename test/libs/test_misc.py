@@ -11,9 +11,13 @@ from unittest import mock
 
 import pytest
 import torch
-from tensordict import is_tensor_collection, LazyStackedTensorDict
+import torch.nn as nn
+from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.collectors.distributed import RayEvalWorker
+from torchrl.envs import GymEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.procgen import ProcgenEnv, ProcgenWrapper
@@ -25,6 +29,8 @@ from torchrl.envs.libs.unity_mlagents import (
 )
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType
 from torchrl.testing import retry
+
+_has_mlagents_envs = importlib.util.find_spec("mlagents_envs") is not None
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
@@ -79,8 +85,7 @@ class TestRoboHive:
 
 # List of OpenSpiel games to test
 # TODO: Some of the games in `OpenSpielWrapper.available_envs` raise errors for
-# a few different reasons, mostly because we do not support chance nodes yet. So
-# we cannot run tests on all of them yet.
+# a few different reasons, so we cannot run tests on all of them yet.
 _openspiel_games = [
     # ----------------
     # Sequential games
@@ -155,9 +160,7 @@ class TestOpenSpiel:
     @pytest.mark.parametrize("return_state", [False, True])
     @pytest.mark.parametrize("categorical_actions", [False, True])
     def test_wrapper(self, game_string, return_state, categorical_actions):
-        import pyspiel
-
-        base_env = pyspiel.load_game(game_string).new_initial_state()
+        base_env = OpenSpielWrapper.lib.load_game(game_string).new_initial_state()
         env_torchrl = OpenSpielWrapper(
             base_env, categorical_actions=categorical_actions, return_state=return_state
         )
@@ -195,12 +198,62 @@ class TestOpenSpiel:
             td = env.reset()
             assert (td == td_init).all()
 
-    def test_chance_not_implemented(self):
+    def test_chance_nodes_supported(self):
+        # Verify that games with chance nodes now load successfully
+        env = OpenSpielEnv("bridge")
+        assert not env._env.is_chance_node()
+        td = env.reset()
+        assert not env._env.is_chance_node()
+        assert td.shape == torch.Size([])
+
+    def test_chance_nodes_resolved_before_initial_step(self):
+        env = OpenSpielEnv("backgammon")
+        assert not env._env.is_chance_node()
+
+        td = env.rand_step()
+
+        assert not env._env.is_chance_node()
+        assert td["next", "done"].shape == torch.Size([1])
+
+    def test_chance_nodes_resolved_after_step(self):
+        env = OpenSpielEnv("backgammon")
+
+        env.reset()
+        td = env.step(env.full_action_spec.rand())
+
+        assert not env._env.is_chance_node()
+        assert td["next"].shape == torch.Size([])
+
+    def test_custom_chance_sampler(self):
+        samples = []
+
+        def chance_sampler(actions, probabilities):
+            samples.append((actions, probabilities))
+            return actions[0]
+
+        base_env = OpenSpielWrapper.lib.load_game("backgammon").new_initial_state()
+        env = OpenSpielWrapper(base_env, chance_sampler=chance_sampler)
+
+        assert samples
+        assert not env._env.is_chance_node()
+
+    def test_seeded_chance_sampler(self):
+        env0 = OpenSpielEnv("backgammon", return_state=True)
+        env0.set_seed(0)
+        td0 = env0.reset()
+
+        env1 = OpenSpielEnv("backgammon", return_state=True)
+        env1.set_seed(0)
+        td1 = env1.reset()
+
+        assert td0["state"] == td1["state"]
+
+    def test_chance_batch_size_not_supported(self):
         with pytest.raises(
-            NotImplementedError,
-            match="not yet supported",
+            ValueError,
+            match="OpenSpielWrapper only supports single-environment mode",
         ):
-            OpenSpielEnv("bridge")
+            OpenSpielEnv("backgammon", batch_size=torch.Size([4]))
 
 
 # NOTE: Each of the registered envs are around 180 MB, so only test a few.
@@ -357,13 +410,6 @@ class TestRayEvalWorker:
 
     def test_ray_eval_worker_basic(self):
         """Test submit/poll cycle with a simple environment."""
-        import torch.nn as nn
-
-        from tensordict import TensorDict
-        from tensordict.nn import TensorDictModule
-        from torchrl.collectors.distributed import RayEvalWorker
-
-        from torchrl.envs import GymEnv, StepCounter, TransformedEnv
 
         def make_env():
             return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))
@@ -402,13 +448,6 @@ class TestRayEvalWorker:
 
     def test_ray_eval_worker_from_name(self):
         """Test that from_name can reconnect to a named actor."""
-        import torch.nn as nn
-
-        from tensordict import TensorDict
-        from tensordict.nn import TensorDictModule
-        from torchrl.collectors.distributed import RayEvalWorker
-
-        from torchrl.envs import GymEnv, StepCounter, TransformedEnv
 
         def make_env():
             return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))

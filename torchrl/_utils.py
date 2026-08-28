@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import collections
+import contextvars
 import functools
+import importlib.metadata
 import inspect
 import logging
 import math
@@ -24,12 +26,20 @@ from typing import Any, cast, TypeVar
 
 import numpy as np
 import torch
+from packaging import version as _packaging_version
 
 from pyvers import implement_for  # noqa: F401
 from tensordict import unravel_key
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp, Tensor
 from torch.autograd.profiler import record_function
+
+from torchrl._comm.backends import (
+    _contextual_backend_error,
+    _get_service_backend,
+    _get_transport_backend,
+    _resolve_service_backend,
+)
 
 try:
     from torch.compiler import is_compiling
@@ -113,6 +123,20 @@ def _mp_sharing_strategy_for_spawn() -> str | None:
 @implement_for("torch", "2.8")
 def _mp_sharing_strategy_for_spawn() -> str | None:  # noqa: F811
     return None
+
+
+def _triton_version_at_least(minimum: str) -> bool:
+    """Return whether the installed triton distribution is at least ``minimum``.
+
+    The version is read from package metadata rather than by importing triton:
+    importing triton is expensive and can fail at probe time on older or
+    partial installs, and ``find_spec`` cannot report a version.
+    """
+    try:
+        triton_version = importlib.metadata.version("triton")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    return _packaging_version.parse(triton_version) >= _packaging_version.parse(minimum)
 
 
 def strtobool(val: Any) -> bool:
@@ -243,6 +267,7 @@ class timeit:
     """
 
     _REG = {}
+    _MARKS = {}
 
     def __init__(self, name):
         self.name = name
@@ -295,15 +320,28 @@ class timeit:
         """
         return time.time() - self.t0
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        t = self.elapsed()
-        val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
+    @classmethod
+    def _record(cls, name: str, elapsed: float) -> None:
+        val = cls._REG.setdefault(name, [0.0, 0.0, 0])
 
         count = val[2]
         N = count + 1
-        val[0] = val[0] * (count / N) + t / N
-        val[1] += t
+        val[0] = val[0] * (count / N) + elapsed / N
+        val[1] += elapsed
         val[2] = N
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self._record(self.name, self.elapsed())
+
+    @classmethod
+    def mark_start(cls, name: str) -> None:
+        """Mark the start of a named timed event."""
+        cls._MARKS[name] = time.time()
+
+    @classmethod
+    def mark_end(cls, name: str) -> None:
+        """Mark the end of a named timed event and record its elapsed time."""
+        cls._record(name, time.time() - cls._MARKS.pop(name))
 
     @staticmethod
     def print(prefix: str | None = None) -> str:  # noqa: T202
@@ -394,26 +432,43 @@ class timeit:
         cls.erase()
 
 
-# Global flag to enable detailed profiling instrumentation.
-# When False (default), _maybe_record_function returns nullcontext() immediately
-# to avoid overhead in hot code paths.
-_PROFILING_ENABLED = False
+# Profiling instrumentation is gated by the TORCHRL_PROFILING env var, read
+# once at import time. When unset, `_maybe_record_function_decorator` returns
+# an identity decorator with zero per-call overhead, so instrumentation can be
+# sprinkled across hot paths (collectors, envs, modules) without penalty in
+# production. When set to "1", the instrumentation is armed and can still be
+# toggled at runtime via :func:`set_profiling_enabled` for dynamic control
+# during a session (e.g. enabling profiling only around a specific iteration).
+_PROFILING_ALLOWED = os.environ.get("TORCHRL_PROFILING", "0") == "1"
+_PROFILING_ENABLED = _PROFILING_ALLOWED
 
 # Singleton nullcontext to avoid repeated object creation
 _NULL_CONTEXT = nullcontext()
 
 
 def set_profiling_enabled(enabled: bool) -> None:
-    """Enable or disable detailed profiling instrumentation.
+    """Enable or disable detailed profiling instrumentation at runtime.
 
-    When disabled (default), `_maybe_record_function` and `_maybe_timeit`
-    return immediately with minimal overhead. Enable only when actively
-    profiling to avoid performance regression.
+    Profiling must first be armed at import time by setting the
+    ``TORCHRL_PROFILING=1`` environment variable before importing torchrl.
+    When the env var is unset, decorators added via
+    :func:`_maybe_record_function_decorator` are pure identity functions and
+    cannot be toggled on after the fact — calling this with ``enabled=True``
+    in that case emits a warning and is a no-op.
 
     Args:
         enabled: If True, enable profiling instrumentation.
     """
     global _PROFILING_ENABLED
+    if enabled and not _PROFILING_ALLOWED:
+        warnings.warn(
+            "set_profiling_enabled(True) called but TORCHRL_PROFILING=1 was "
+            "not set before importing torchrl. Decorated functions are pure "
+            "identities and cannot be toggled on at runtime. Set the env var "
+            "before import and retry.",
+            stacklevel=2,
+        )
+        return
     _PROFILING_ENABLED = enabled
 
 
@@ -431,8 +486,9 @@ def _maybe_timeit(name):
 def _maybe_record_function(name):
     """Return record_function context if profiling enabled and not compiling.
 
-    When _PROFILING_ENABLED is False (default), returns immediately with
-    minimal overhead to avoid performance regression in hot code paths.
+    When profiling was not armed via ``TORCHRL_PROFILING=1`` at import, or was
+    disabled at runtime via :func:`set_profiling_enabled`, returns a shared
+    nullcontext with minimal overhead.
     """
     if not _PROFILING_ENABLED:
         return _NULL_CONTEXT
@@ -443,13 +499,21 @@ def _maybe_record_function(name):
 
 
 def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable]:
-    """Decorator version of :func:`_maybe_record_function`.
+    """Decorator form of :func:`_maybe_record_function`.
 
-    This is preferred over sprinkling many context managers in hot code paths,
-    as it reduces Python overhead while keeping a useful profiler structure.
+    Prefer this over sprinkling context managers in hot code paths: when
+    ``TORCHRL_PROFILING=1`` is not set at import time, the returned decorator
+    is a pure identity (``lambda f: f``) with zero per-call overhead. This
+    makes it safe to decorate collectors, envs, and modules methods for a
+    ready-to-ship profiler infrastructure.
 
-    When _PROFILING_ENABLED is False (default), the decorator is a no-op.
+    When the env var is set, the decorator wraps the function in a
+    ``record_function`` context, gated by the runtime
+    :func:`set_profiling_enabled` flag so the profiler timeline can be scoped
+    to specific regions of interest.
     """
+    if not _PROFILING_ALLOWED:
+        return _identity_decorator
 
     def decorator(fn: Callable) -> Callable:
         @wraps(fn)
@@ -462,6 +526,11 @@ def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable
         return wrapped
 
     return decorator
+
+
+def _identity_decorator(fn: Callable) -> Callable:
+    """Shared identity decorator used when profiling is not armed."""
+    return fn
 
 
 def _check_for_faulty_process(processes):
@@ -957,6 +1026,18 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logger.info(indent + os.path.basename(path))
 
 
+# Canonical end-of-trajectory signal keys in TED (TorchRL Episode Data)
+# format. A step can be marked as the last of its trajectory by any of these
+# entries (typically read under the "next" sub-tensordict); "done" is the
+# union of the other two, but datasets sometimes carry only a subset of the
+# entries, so consumers detecting trajectory ends from flags should use the
+# union of all three. Defined here (rather than in the replay-buffer layer)
+# so that envs and collectors can share it without importing replay-buffer
+# utilities; re-exported as torchrl.data.DEFAULT_DONE_KEYS, which is the
+# public path. Documented in the "Trajectory boundaries" section of the docs.
+DEFAULT_DONE_KEYS: tuple[NestedKey, ...] = ("done", "truncated", "terminated")
+
+
 def _ends_with(key, match):
     if isinstance(key, str):
         return key == match
@@ -1263,7 +1344,13 @@ class set_auto_unwrap_transformed_env(_DecoratorContextManager):
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _AUTO_UNWRAP
         _AUTO_UNWRAP = self._old_mode
-        os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
+        if _AUTO_UNWRAP is None:
+            # Restoring the unset state must remove the variable: writing
+            # str(None) would poison subprocesses spawned later, which parse
+            # the inherited value with strtobool.
+            os.environ.pop("AUTO_UNWRAP_TRANSFORMED_ENV", None)
+        else:
+            os.environ["AUTO_UNWRAP_TRANSFORMED_ENV"] = str(_AUTO_UNWRAP)
 
 
 def auto_unwrap_transformed_env(allow_none=False):
@@ -1301,11 +1388,182 @@ def safe_is_current_stream_capturing():
         return False
 
 
-class _RayServiceMetaClass(type):
-    """Metaclass that enables dynamic class selection based on use_ray_service parameter.
+_GB = 1024**3
+_EMPTY_CUDA_STATS = {
+    "allocated_gb": 0.0,
+    "reserved_gb": 0.0,
+    "max_allocated_gb": 0.0,
+    "max_reserved_gb": 0.0,
+}
 
-    This metaclass allows a class to dynamically return either itself or a Ray-based
-    alternative class when instantiated with use_ray_service=True.
+
+def _cuda_memory_device(device: torch.device | int | str | None) -> torch.device | None:
+    """Normalize a user CUDA memory device, or return ``None`` for no-op devices."""
+    if not torch.cuda.is_available():
+        return None
+    if device is None:
+        return _make_ordinal_device(torch.device("cuda"))
+    if isinstance(device, int):
+        return torch.device("cuda", device)
+    device = torch.device(device)
+    if device.type != "cuda":
+        return None
+    return _make_ordinal_device(device)
+
+
+def cuda_memory_stats(
+    device: torch.device | int | str | None = None,
+) -> dict[str, float]:
+    """Return current CUDA memory statistics for ``device`` in gigabytes.
+
+    Wraps :func:`torch.cuda.memory_allocated`, :func:`torch.cuda.memory_reserved`,
+    :func:`torch.cuda.max_memory_allocated` and :func:`torch.cuda.max_memory_reserved`
+    into a single dict suitable for logging or comparing phases of a training loop.
+
+    Args:
+        device: CUDA device to query. ``None`` (default) targets the current
+            CUDA device. CPU/MPS/unset devices return zeros (no warning) so the
+            helper can be called unconditionally from device-agnostic code.
+
+    Returns:
+        Mapping with keys ``"allocated_gb"``, ``"reserved_gb"``,
+        ``"max_allocated_gb"``, ``"max_reserved_gb"``. Values are floats in
+        gigabytes. When CUDA is not available, all values are ``0.0``.
+
+    Examples:
+        >>> from torchrl import cuda_memory_stats
+        >>> stats = cuda_memory_stats()
+        >>> sorted(stats)
+        ['allocated_gb', 'max_allocated_gb', 'max_reserved_gb', 'reserved_gb']
+
+    .. seealso::
+        :func:`reset_cuda_peak_stats`, :class:`cuda_memory_profile`.
+    """
+    dev = _cuda_memory_device(device)
+    if dev is None:
+        return dict(_EMPTY_CUDA_STATS)
+    return {
+        "allocated_gb": torch.cuda.memory_allocated(dev) / _GB,
+        "reserved_gb": torch.cuda.memory_reserved(dev) / _GB,
+        "max_allocated_gb": torch.cuda.max_memory_allocated(dev) / _GB,
+        "max_reserved_gb": torch.cuda.max_memory_reserved(dev) / _GB,
+    }
+
+
+def reset_cuda_peak_stats(
+    device: torch.device | int | str | None = None,
+) -> None:
+    """Reset the peak-memory counters for ``device``.
+
+    Thin wrapper around :func:`torch.cuda.reset_peak_memory_stats`. No-op when
+    CUDA is unavailable or ``device`` is non-CUDA.
+
+    Args:
+        device: CUDA device whose peaks should be cleared. ``None`` (default)
+            targets the current CUDA device.
+
+    Examples:
+        >>> from torchrl import reset_cuda_peak_stats
+        >>> reset_cuda_peak_stats()  # safe even without CUDA
+
+    .. seealso::
+        :func:`cuda_memory_stats`, :class:`cuda_memory_profile`.
+    """
+    dev = _cuda_memory_device(device)
+    if dev is None:
+        return
+    torch.cuda.reset_peak_memory_stats(dev)
+
+
+class cuda_memory_profile(_DecoratorContextManager):
+    """Context manager / decorator that reports CUDA memory deltas for a code block.
+
+    On ``__enter__`` (optionally) clears the peak-memory counters; on
+    ``__exit__`` reads :func:`cuda_memory_stats` and logs the delta (current -
+    pre-block) plus the new peaks. The collected stats are stored on the
+    ``stats`` attribute for programmatic access after the block exits.
+
+    Args:
+        label: Short identifier prepended to the log line and stored on the
+            instance for downstream metric routing.
+        device: CUDA device to profile. ``None`` (default) targets the current
+            CUDA device. On non-CUDA devices the manager is a no-op.
+        log: When ``True`` (default), emit a single ``INFO`` line via
+            :data:`torchrl.torchrl_logger` at exit. When ``False`` only the
+            ``stats`` attribute is populated.
+        reset_peaks: When ``True`` (default), reset peak counters on enter so
+            the reported ``max_*`` values reflect the block only.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl import cuda_memory_profile
+        >>> with cuda_memory_profile("warmup", log=False) as prof:
+        ...     if torch.cuda.is_available():
+        ...         _ = torch.zeros(1, device="cuda")
+        >>> sorted(prof.stats)
+        ['allocated_gb', 'max_allocated_gb', 'max_reserved_gb', 'reserved_gb']
+
+    .. seealso::
+        :func:`cuda_memory_stats`, :func:`reset_cuda_peak_stats`, :class:`timeit`.
+    """
+
+    def __init__(
+        self,
+        label: str,
+        *,
+        device: torch.device | int | str | None = None,
+        log: bool = True,
+        reset_peaks: bool = True,
+    ) -> None:
+        self.label = label
+        self.device = device
+        self.log = log
+        self.reset_peaks = reset_peaks
+        self.stats: dict[str, float] = dict(_EMPTY_CUDA_STATS)
+        self._pre: dict[str, float] = dict(_EMPTY_CUDA_STATS)
+
+    def clone(self) -> cuda_memory_profile:
+        return type(self)(
+            self.label,
+            device=self.device,
+            log=self.log,
+            reset_peaks=self.reset_peaks,
+        )
+
+    def __enter__(self) -> cuda_memory_profile:
+        if self.reset_peaks:
+            reset_cuda_peak_stats(self.device)
+        self._pre = cuda_memory_stats(self.device)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.stats = cuda_memory_stats(self.device)
+        if self.log:
+            delta_alloc = self.stats["allocated_gb"] - self._pre["allocated_gb"]
+            delta_reserved = self.stats["reserved_gb"] - self._pre["reserved_gb"]
+            logger.info(
+                "cuda_memory_profile[%s]: alloc=%.3f GB (Δ%+.3f), "
+                "reserved=%.3f GB (Δ%+.3f), max_alloc=%.3f GB, max_reserved=%.3f GB",
+                self.label,
+                self.stats["allocated_gb"],
+                delta_alloc,
+                self.stats["reserved_gb"],
+                delta_reserved,
+                self.stats["max_allocated_gb"],
+                self.stats["max_reserved_gb"],
+            )
+
+
+_SERVICE_BACKEND_DISPATCHING = contextvars.ContextVar(
+    "torchrl_service_backend_dispatching", default=None
+)
+
+
+class _RayServiceMetaClass(type):
+    """Metaclass that selects direct or service-backed implementations.
+
+    ``use_ray_service`` remains supported as a compatibility spelling for
+    ``service_backend="ray"`` until v0.16.
 
     Usage:
         >>> class MyRayClass():
@@ -1332,20 +1590,115 @@ class _RayServiceMetaClass(type):
             return True
         # If the instance wraps a class (e.g. RayLogger), check if the
         # wrapped class is a subclass of cls.
-        wrapped_cls = getattr(instance, "_logger_cls", None)
+        wrapped_cls = getattr(instance, "_service_cls", None)
+        if wrapped_cls is None:
+            wrapped_cls = getattr(instance, "_logger_cls", None)
         if wrapped_cls is not None:
             return issubclass(wrapped_cls, cls)
         return False
 
-    def __call__(cls, *args, use_ray_service=False, **kwargs):
+    def __call__(
+        cls,
+        *args,
+        use_ray_service=False,
+        service_backend=None,
+        service_backend_options=None,
+        **kwargs,
+    ):
         if use_ray_service:
-            if not hasattr(cls, "_RayServiceClass"):
+            if service_backend not in (None, "ray"):
                 raise ValueError(
-                    f"Class {cls.__name__} does not have a _RayServiceClass attribute"
+                    "use_ray_service=True conflicts with "
+                    f"service_backend={service_backend!r}."
                 )
-            return cls._RayServiceClass(*args, **kwargs)
-        else:
-            return super().__call__(*args, **kwargs)
+            warnings.warn(
+                "use_ray_service is deprecated and will be removed in v0.16. "
+                "Use service_backend='ray' instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            service_backend = "ray"
+
+        if service_backend is None and (
+            _SERVICE_BACKEND_DISPATCHING.get() == os.getpid()
+            or getattr(cls, "_service_backend_resolved", False)
+        ):
+            # A service factory may construct a wrapper that uses this same
+            # metaclass (for example RayReplayBuffer). The backend has already
+            # been resolved by the outer construction and must not dispatch a
+            # second time from the still-active context.
+            service_backend = "direct"
+        service_backend_from_context = (
+            service_backend is None and _get_service_backend() is not None
+        )
+        service_backend = _resolve_service_backend(service_backend, default="direct")
+        options = dict(service_backend_options or {})
+
+        transport_backend_from_context = False
+        if (
+            getattr(cls, "_accepts_transport_backend", False)
+            and kwargs.get("transport") is None
+        ):
+            # Only inject the scoped default: not every subclass accepts a
+            # ``transport`` keyword, and absent any context the constructor
+            # default is equivalent.
+            contextual_transport = _get_transport_backend()
+            if contextual_transport is not None:
+                transport_backend_from_context = True
+                kwargs["transport"] = contextual_transport
+
+        def construct(factory):
+            try:
+                return factory()
+            except ValueError as err:
+                message = str(err)
+                service_error = (
+                    service_backend_from_context and "service_backend" in message
+                )
+                transport_error = (
+                    transport_backend_from_context and "transport" in message
+                )
+                if not service_error and not transport_error:
+                    raise
+                raise ValueError(
+                    _contextual_backend_error(
+                        message,
+                        service=service_error,
+                        transport=transport_error,
+                    )
+                ) from err
+
+        if service_backend == "direct":
+            if options:
+                raise ValueError(
+                    "service_backend_options are only valid for non-direct services."
+                )
+            direct_constructor = super().__call__
+            return construct(lambda: direct_constructor(*args, **kwargs))
+
+        if hasattr(cls, "_ServiceClass"):
+            token = _SERVICE_BACKEND_DISPATCHING.set(os.getpid())
+            try:
+                return construct(
+                    lambda: cls._ServiceClass(
+                        service_backend,
+                        *args,
+                        service_backend_options=options,
+                        **kwargs,
+                    )
+                )
+            finally:
+                _SERVICE_BACKEND_DISPATCHING.reset(token)
+        if service_backend == "ray" and hasattr(cls, "_RayServiceClass"):
+            if options and "ray_actor_options" not in kwargs:
+                kwargs["ray_actor_options"] = options.get("actor_options", options)
+            return construct(lambda: cls._RayServiceClass(*args, **kwargs))
+        raise ValueError(
+            _contextual_backend_error(
+                f"{cls.__name__} does not support service_backend={service_backend!r}.",
+                service=service_backend_from_context,
+            )
+        )
 
 
 @classmethod
@@ -1363,6 +1716,23 @@ def as_remote(cls, remote_config: dict[str, Any] | None = None):
 
     if remote_config is None:
         remote_config = {}
+    else:
+        remote_config = dict(remote_config)
+
+    # Propagate TORCHRL_PROFILING to the remote actor so ``_maybe_record_function_decorator``
+    # is armed inside it. We must ensure the env var is set in the actor's process before
+    # torchrl is imported there — the decorator captures ``_PROFILING_ALLOWED`` at import.
+    profiling = os.environ.get("TORCHRL_PROFILING")
+    if profiling:
+        runtime_env = remote_config.get("runtime_env") or {}
+        if not isinstance(runtime_env, dict):
+            runtime_env = dict(runtime_env)
+        env_vars = runtime_env.get("env_vars") or {}
+        if not isinstance(env_vars, dict):
+            env_vars = dict(env_vars)
+        env_vars.setdefault("TORCHRL_PROFILING", profiling)
+        runtime_env["env_vars"] = env_vars
+        remote_config["runtime_env"] = runtime_env
 
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
@@ -1471,7 +1841,7 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
         runtime_env["env_vars"] = dict(runtime_env["env_vars"])
 
     # Auto-propagate common env vars to Ray workers
-    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME"):
+    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME", "TORCHRL_PROFILING"):
         val = os.environ.get(key)
         if val and key not in runtime_env["env_vars"]:
             runtime_env["env_vars"][key] = val

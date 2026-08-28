@@ -7,17 +7,34 @@ from __future__ import annotations
 import threading
 import time
 from collections import OrderedDict
+from functools import partial
+from pathlib import Path
 
 import pytest
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
+from torchrl.checkpoint import Checkpoint
 from torchrl.collectors import Evaluator
-from torchrl.collectors._evaluator import _freeze_vecnorm, _wrap_env_factory_frozen
+from torchrl.collectors._evaluator import (
+    _extract_metrics_from_trajectories,
+    _freeze_vecnorm,
+    _wrap_env_factory_frozen,
+)
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.transforms import RewardSum, StepCounter, VecNormV2
+from torchrl.envs.transforms import (
+    Compose,
+    RewardSum,
+    StepCounter,
+    Transform,
+    VecNormV2,
+)
+from torchrl.modules import RandomPolicy
+from torchrl.record import VideoRecorder
+from torchrl.record.loggers.process import ProcessLogger
+from torchrl.testing import AddPixelsTransform
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -38,7 +55,75 @@ def _make_policy(env=None):
     )
 
 
+class _DumpStep(Transform):
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self.path = path
+
+    def dump(self, suffix=None, step=None) -> None:
+        del suffix
+        Path(self.path).write_text(str(step))
+
+
+def _make_dump_env(path: str):
+    return TransformedEnv(_make_env(), Compose(_DumpStep(path)))
+
+
+class _VideoEventsLogger:
+    """Duck-typed logger that appends each ``log_video`` call to a file."""
+
+    def __init__(self, log_dir):
+        self.exp_name = "evaluator-video-test"
+        self.log_dir = str(log_dir)
+
+    def log_video(self, name, video, step=None, **kwargs):
+        del kwargs
+        with open(Path(self.log_dir) / "videos", "a") as file:
+            file.write(f"{name}:{step}:{video.shape[1]}\n")
+
+
+def _make_video_env(video_logger):
+    return TransformedEnv(
+        _make_env(),
+        Compose(
+            AddPixelsTransform(),
+            VideoRecorder(
+                video_logger,
+                tag="eval_video",
+                in_keys=["pixels"],
+                skip=1,
+                make_grid=False,
+            ),
+        ),
+    )
+
+
+def _read_video_events(log_dir):
+    lines = (Path(log_dir) / "videos").read_text().splitlines()
+    return [line.split(":") for line in lines]
+
+
 class TestEvaluatorSync:
+    def test_checkpoint_state(self, tmp_path):
+        evaluator = Evaluator(_make_env(), _make_policy(), max_steps=50)
+        restored = Evaluator(_make_env(), _make_policy(), max_steps=50)
+        try:
+            evaluator._step_counter = 12
+            restored.load_state_dict(evaluator.state_dict())
+            assert restored._step_counter == 12
+            path = tmp_path / "evaluator"
+            Checkpoint(evaluator=evaluator).save(path)
+            restored._ready_results.append(object())
+            result = Checkpoint(strict="ignore", evaluator=restored).load(path)
+            assert "pending, queued, or unread" in result.incompatible["evaluator"]
+            restored._ready_results.clear()
+            evaluator._async_requests.append((None, 13))
+            with pytest.raises(RuntimeError, match="pending, queued, or unread"):
+                evaluator.state_dict()
+        finally:
+            evaluator.shutdown()
+            restored.shutdown()
+
     def test_evaluate_basic(self):
         env = _make_env()
         policy = _make_policy(env)
@@ -64,6 +149,22 @@ class TestEvaluatorSync:
         finally:
             evaluator.shutdown()
 
+    def test_evaluate_plain_tensordict_weights_preserves_state_dict(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=5)
+        try:
+            weights = TensorDict.from_module(policy).data.detach().clone().cpu()
+            state_dict_keys = set(policy.state_dict())
+            assert state_dict_keys
+
+            evaluator.evaluate(weights=weights, step=0)
+            evaluator.evaluate(weights=weights, step=1)
+
+            assert set(policy.state_dict()) == state_dict_keys
+        finally:
+            evaluator.shutdown()
+
     def test_evaluate_with_module_weights(self):
         env = _make_env()
         policy = _make_policy(env)
@@ -72,6 +173,27 @@ class TestEvaluatorSync:
         try:
             metrics = evaluator.evaluate(weights=train_policy, step=0)
             assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_video_recorder_dump(self, tmp_path):
+        # Thread/same-process backend: the recorder is dumped locally by
+        # walking the env transform, once per eval at the requested step.
+        logger = _VideoEventsLogger(str(tmp_path))
+        env = _make_video_env(logger)
+        policy = _make_policy(env)
+        evaluator = Evaluator(
+            env, policy, num_trajectories=2, max_steps=10, dump_video=True
+        )
+        try:
+            evaluator.evaluate(step=11)
+            evaluator.evaluate(step=22)
+            records = _read_video_events(tmp_path)
+            assert [record[:2] for record in records] == [
+                ["eval_video", "11"],
+                ["eval_video", "22"],
+            ]
+            assert all(int(record[2]) > 0 for record in records)
         finally:
             evaluator.shutdown()
 
@@ -201,11 +323,25 @@ class TestEvaluatorAsync:
     def test_busy_policy_error(self):
         env = _make_env()
         policy = _make_policy(env)
-        evaluator = Evaluator(env, policy, max_steps=200)
+        evaluator = Evaluator(env, policy, max_steps=200, busy_policy="error")
         try:
-            evaluator.trigger_eval(step=0)
+            assert evaluator.trigger_eval(step=0)
             with pytest.raises(RuntimeError, match="busy_policy='queue'"):
                 evaluator.trigger_eval(step=1)
+        finally:
+            evaluator.shutdown()
+
+    def test_busy_policy_skip(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=200)
+        try:
+            assert evaluator.trigger_eval(step=0)
+            assert not evaluator.trigger_eval(step=1)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert result["eval/step"] == 0
+            assert evaluator.trigger_eval(step=2)
         finally:
             evaluator.shutdown()
 
@@ -214,8 +350,8 @@ class TestEvaluatorAsync:
         policy = _make_policy(env)
         evaluator = Evaluator(env, policy, max_steps=200, busy_policy="queue")
         try:
-            evaluator.trigger_eval(step=0)
-            evaluator.trigger_eval(step=1)
+            assert evaluator.trigger_eval(step=0)
+            assert evaluator.trigger_eval(step=1)
             result0 = evaluator.wait(timeout=30)
             result1 = evaluator.wait(timeout=30)
             assert result0 is not None
@@ -306,6 +442,7 @@ class TestEvaluatorAsync:
         assert elapsed < 10.0, f"Shutdown took {elapsed:.1f}s, expected < 10s"
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(
     not torch.cuda.is_available() or torch.cuda.device_count() < 2,
     reason="Requires 2+ CUDA devices",
@@ -570,6 +707,49 @@ class TestEvaluatorProcess:
         finally:
             evaluator.shutdown()
 
+    def test_video_recorder_dumps_to_process_logger(self, tmp_path):
+        # End-to-end: the eval env (with a VideoRecorder) lives in the
+        # collector worker process; the recorder logs through a picklable
+        # ProcessLogger client back to the parent-owned logger service.
+        process_logger = ProcessLogger(_VideoEventsLogger, str(tmp_path))
+        evaluator = Evaluator(
+            partial(_make_video_env, process_logger.client()),
+            policy_factory=_make_policy,
+            num_trajectories=2,
+            max_steps=10,
+            dump_video=True,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=3)
+            evaluator.evaluate(step=7)
+            process_logger.flush(timeout=30)
+            records = _read_video_events(tmp_path)
+            # exactly one worker-side dump per eval, at the requested step
+            assert [record[:2] for record in records] == [
+                ["eval_video", "3"],
+                ["eval_video", "7"],
+            ]
+            assert all(int(record[2]) > 0 for record in records)
+        finally:
+            evaluator.shutdown()
+            process_logger.shutdown(timeout=30)
+
+    def test_dump_video_dispatches_compose_dump_in_worker(self, tmp_path):
+        dump_path = tmp_path / "dump-step"
+        evaluator = Evaluator(
+            partial(_make_dump_env, str(dump_path)),
+            policy_factory=_make_policy,
+            max_steps=50,
+            dump_video=True,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=456)
+            assert dump_path.read_text() == "456"
+        finally:
+            evaluator.shutdown()
+
     def test_callback(self):
         results = []
 
@@ -687,6 +867,25 @@ class TestEvaluatorBatchedMetrics:
         finally:
             evaluator.shutdown()
 
+    def test_cat_traj_format_metrics(self):
+        """Evaluator metrics support flat trajectory batches."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(
+            env,
+            policy,
+            max_steps=20,
+            num_trajectories=3,
+            collector_kwargs={"traj_format": "cat"},
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert metrics["eval/num_episodes"] == 3
+            assert "eval/reward" in metrics
+            assert "eval/episode_length" in metrics
+        finally:
+            evaluator.shutdown()
+
     def test_episode_length_from_step_count(self):
         """With StepCounter, episode_length should come from step_count at done."""
         env = _make_batched_env(num_envs=4, max_steps=5)
@@ -698,6 +897,28 @@ class TestEvaluatorBatchedMetrics:
             assert 1 <= metrics["eval/episode_length"] <= 6
         finally:
             evaluator.shutdown()
+
+    def test_missing_traj_info_fallback_invokes_callback(self):
+        """Without mask/traj_ids the batch is one trajectory and the caller is told."""
+        num_steps = 6
+        batch = TensorDict(
+            {
+                ("next", "reward"): torch.ones(num_steps, 1),
+                ("next", "done"): torch.zeros(num_steps, 1, dtype=torch.bool),
+            },
+            batch_size=[num_steps],
+        )
+        calls = []
+        metrics = _extract_metrics_from_trajectories(
+            batch,
+            ("next", "reward"),
+            ("next", "done"),
+            None,
+            on_missing_traj_info=lambda: calls.append(1),
+        )
+        assert len(calls) == 1
+        assert metrics["num_episodes"] == 1
+        assert metrics["reward"] == pytest.approx(float(num_steps))
 
     def test_batched_async_metrics(self):
         """Async eval with batched env produces correct metrics."""
@@ -864,6 +1085,40 @@ class TestWeightStrategyExtraState:
         assert torch.allclose(dst.running_var, torch.tensor(2.0).expand(4))
         assert dst.count.item() == 50
 
+    def test_apply_extra_state_is_idempotent(self):
+        """apply_weights does not consume __extra_state__ from the input weights."""
+        src = _ModuleWithExtraState(dim=4)
+        src.running_mean.fill_(11.0)
+        src.count.fill_(9)
+        dst = _ModuleWithExtraState(dim=4)
+
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(src)
+
+        strategy.apply_weights(dst, weights, inplace=True)
+        dst.running_mean.zero_()
+        dst.count.zero_()
+        strategy.apply_weights(dst, weights, inplace=True)
+
+        assert "__extra_state__" in weights.keys()
+        assert torch.allclose(dst.running_mean, torch.tensor(11.0).expand(4))
+        assert dst.count.item() == 9
+
+    def test_apply_plain_tensor_weights_outofplace_preserves_state_dict(self):
+        """Out-of-place application casts plain tensors back to parameters."""
+        src = nn.Linear(4, 4)
+        dst = nn.Linear(4, 4)
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = TensorDict.from_module(src).data.detach().clone()
+        state_dict_keys = set(dst.state_dict())
+
+        strategy.apply_weights(dst, weights, inplace=False)
+        strategy.apply_weights(dst, weights, inplace=False)
+
+        assert set(dst.state_dict()) == state_dict_keys
+        assert torch.allclose(dst.weight, src.weight)
+        assert torch.allclose(dst.bias, src.bias)
+
     def test_apply_extra_state_outofplace(self):
         """apply_weights out-of-place also restores extra_state."""
         src = _ModuleWithExtraState(dim=4)
@@ -954,6 +1209,9 @@ class TestEvaluatorProcessBackendAsMultiCollector:
     def test_process_backend_with_weights(self):
         """Process backend with weight transfer works."""
         train_policy = _make_policy()
+        with torch.no_grad():
+            for parameter in train_policy.parameters():
+                parameter.fill_(1.25)
         evaluator = Evaluator(
             _make_env,
             policy_factory=_make_policy,
@@ -963,6 +1221,57 @@ class TestEvaluatorProcessBackendAsMultiCollector:
         try:
             metrics = evaluator.evaluate(weights=train_policy, step=0)
             assert "eval/reward" in metrics
+            worker_state = evaluator._backend._collector.state_dict()["worker0"][
+                "policy_state_dict"
+            ]
+            for key, value in train_policy.state_dict().items():
+                torch.testing.assert_close(worker_state[key], value)
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_stateless_policy_without_weights(self):
+        """A stateless process policy does not initialize weight transport."""
+        action_spec = _make_env().action_spec
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=partial(RandomPolicy, action_spec),
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert "eval/reward" in metrics
+            assert not evaluator._backend._collector._weight_sync_schemes
+            with pytest.raises(TypeError, match="requires an nn.Module policy"):
+                evaluator.evaluate(weights=TensorDict({"weight": torch.ones(())}))
+        finally:
+            evaluator.shutdown()
+
+    def test_process_backend_enables_weights_after_unweighted_eval(self):
+        """The first weight update rebuilds an unconfigured process collector."""
+        train_policy = _make_policy()
+        with torch.no_grad():
+            for parameter in train_policy.parameters():
+                parameter.fill_(1.25)
+        evaluator = Evaluator(
+            _make_env,
+            policy_factory=_make_policy,
+            max_steps=50,
+            backend="process",
+        )
+        try:
+            evaluator.evaluate(step=0)
+            unconfigured_collector = evaluator._backend._collector
+            assert not unconfigured_collector._weight_sync_schemes
+
+            evaluator.evaluate(weights=train_policy, step=1)
+
+            assert evaluator._backend._collector is not unconfigured_collector
+            worker_state = evaluator._backend._collector.state_dict()["worker0"][
+                "policy_state_dict"
+            ]
+            for key, value in train_policy.state_dict().items():
+                torch.testing.assert_close(worker_state[key], value)
         finally:
             evaluator.shutdown()
 
@@ -1012,8 +1321,6 @@ class TestEvaluatorVecNormFreeze:
 
     def test_freeze_vecnorm_nested(self):
         """_freeze_vecnorm handles nested Compose transforms."""
-        from torchrl.envs.transforms import Compose
-
         base = ContinuousActionVecMockEnv()
         vecnorm = VecNormV2(in_keys=["observation"], out_keys=["observation"])
         env = TransformedEnv(base, Compose(StepCounter(), vecnorm))

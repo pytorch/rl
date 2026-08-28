@@ -7,18 +7,28 @@
 #  - Labels are ONLY ADDED, never removed (preserves manual labels)
 #
 # Supported prefixes (supports common variations):
+#  - [Algorithm], [Algorithms] → new algo
+#  - [BE] → BE
+#  - [Benchmark], [Benchmarks] → Benchmarks
 #  - [BugFix], [Bugfix] → BugFix
+#  - [Example], [Examples] → Examples
 #  - [Feature], [Features] → Feature
 #  - [Doc], [Docs], [Documentation] → Documentation
 #  - [Refactor], [Refactoring] → Refactoring
 #  - [CI] → CI
 #  - [Test], [Tests] → Tests
+#  - [Trainer], [Trainers] → Trainers
 #  - [Environment], [Environments] → Environments
 #  - [Data] → Data
+#  - [LLM] → llm/
+#  - [Minor] → small change
 #  - [Performance], [Perf] → Performance
 #  - [BC-Breaking], [BCBreaking] → bc breaking
 #  - [Deprecation], [Deprecated] → Deprecation
+#  - [Algorithm], [Algorithms] → new algo
 #  - [Quality] → Quality
+#  - [Versioning] → versioning
+#  - [WIP] → WIP
 #------------------------------------------------------------
 
 name: PR Label
@@ -44,42 +54,45 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Build the help comment with printf (format string is fixed; the
+          # PR title is a %s argument, emitted byte-for-byte — never spliced
+          # into a program string). Static table via single-quoted heredoc.
           post_help_comment() {
-            local reason="$1"
-            local current_title="$2"
-            cat > /tmp/pr_comment.md << 'COMMENT_EOF'
-          ## ⚠️ PR Title Label Error
-
-          REASON_PLACEHOLDER
-
-          **Current title:** `TITLE_PLACEHOLDER`
-
+            {
+              printf '## ⚠️ PR Title Label Error\n\n%s\n\n**Current title:** `%s`\n\n' "$1" "$2"
+              cat <<'TABLE'
           ### Supported Prefixes (case-sensitive)
 
           Your PR title must start with **exactly** one of these prefixes:
 
           | Prefix | Label Applied | Example |
           |--------|---------------|---------|
+          | `[Algorithm]` | new algo | `[Algorithm] Add new RL objective` |
+          | `[BE]` | BE | `[BE] Improve error messages` |
+          | `[Benchmark]` or `[Benchmarks]` | Benchmarks | `[Benchmark] Add collector benchmark` |
           | `[BugFix]` | BugFix | `[BugFix] Fix memory leak in collector` |
+          | `[Example]` or `[Examples]` | Examples | `[Example] Add training script` |
           | `[Feature]` | Feature | `[Feature] Add new optimizer` |
           | `[Doc]` or `[Docs]` | Documentation | `[Doc] Update installation guide` |
           | `[Refactor]` | Refactoring | `[Refactor] Clean up module imports` |
           | `[CI]` | CI | `[CI] Fix workflow permissions` |
           | `[Test]` or `[Tests]` | Tests | `[Tests] Add unit tests for buffer` |
+          | `[Trainer]` or `[Trainers]` | Trainers | `[Trainer] Add trainer config` |
           | `[Environment]` or `[Environments]` | Environments | `[Environments] Add Gymnasium support` |
           | `[Data]` | Data | `[Data] Fix replay buffer sampling` |
+          | `[LLM]` | llm/ | `[LLM] Add reward model integration` |
+          | `[Minor]` | small change | `[Minor] Fix typo in error message` |
           | `[Performance]` or `[Perf]` | Performance | `[Performance] Optimize tensor ops` |
           | `[BC-Breaking]` | bc breaking | `[BC-Breaking] Remove deprecated API` |
           | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
+          | `[Algorithm]` or `[Algorithms]` | new algo | `[Algorithm] Add new objective` |
           | `[Quality]` | Quality | `[Quality] Fix typos and add codespell` |
+          | `[Versioning]` | versioning | `[Versioning] Bump release version` |
+          | `[WIP]` | WIP | `[WIP] Draft implementation` |
 
           **Note:** Common variations like singular/plural are supported (e.g., `[Doc]` or `[Docs]`).
-          COMMENT_EOF
-            # Strip leading spaces from heredoc (YAML indentation artifact)
-            sed -i 's/^          //' /tmp/pr_comment.md
-            sed -i "s/REASON_PLACEHOLDER/$reason/" /tmp/pr_comment.md
-            sed -i "s|TITLE_PLACEHOLDER|$current_title|" /tmp/pr_comment.md
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
+          TABLE
+            } | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
           }
 
           echo "PR Title: $PR_TITLE"
@@ -98,8 +111,20 @@ jobs:
 
           # Map prefixes to GitHub label names (supports common variations)
           case "$PREFIX" in
+            Algorithm|Algorithms|algorithm|algorithms)
+              LABEL="new algo"
+              ;;
+            BE|be)
+              LABEL="BE"
+              ;;
+            Benchmark|Benchmarks|benchmark|benchmarks)
+              LABEL="Benchmarks"
+              ;;
             BugFix|Bugfix|bugfix)
               LABEL="BugFix"
+              ;;
+            Example|Examples|example|examples)
+              LABEL="Examples"
               ;;
             Feature|Features|feature|features)
               LABEL="Feature"
@@ -116,11 +141,20 @@ jobs:
             Test|Tests|test|tests)
               LABEL="Tests"
               ;;
+            Trainer|Trainers|trainer|trainers)
+              LABEL="Trainers"
+              ;;
             Environment|Environments|environment|environments)
               LABEL="Environments"
               ;;
             Data|data)
               LABEL="Data"
+              ;;
+            LLM|llm)
+              LABEL="llm/"
+              ;;
+            Minor|minor)
+              LABEL="small change"
               ;;
             Performance|Perf|performance|perf)
               LABEL="Performance"
@@ -131,8 +165,17 @@ jobs:
             Deprecation|Deprecated|deprecation|deprecated)
               LABEL="Deprecation"
               ;;
+            Algorithm|Algorithms|algorithm|algorithms)
+              LABEL="new algo"
+              ;;
             Quality|quality)
               LABEL="Quality"
+              ;;
+            Versioning|versioning)
+              LABEL="versioning"
+              ;;
+            WIP|wip)
+              LABEL="WIP"
               ;;
             *)
               echo "::error::Unknown or invalid prefix '[$PREFIX]'."

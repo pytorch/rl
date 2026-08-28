@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
+
 import pytest
 import torch
 
@@ -32,6 +34,8 @@ from torchrl.testing.mocking_classes import (
     HeterogeneousCountingEnv,
     NestedCountingEnv,
 )
+
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
 
 @pytest.mark.filterwarnings("error")

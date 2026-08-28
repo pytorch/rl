@@ -80,7 +80,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 # 5. Install habitat-sim from source (conda packages don't support Python 3.10+)
 # Install build dependencies
-pip3 install ninja numpy
+pip3 install ninja numpy scikit-build-core
 
 # Clone and build habitat-sim from source
 cd "${root_dir}"

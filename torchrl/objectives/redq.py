@@ -17,22 +17,17 @@ from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.modules.distributions.utils import rsample_and_log_prob
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class REDQLoss(LossModule):
@@ -531,11 +526,9 @@ class REDQLoss(LossModule):
             sample_key = self.tensor_keys.action
             sample_key_lp = self.tensor_keys.sample_log_prob
             tensordict_actor_dist = self.actor_network.build_dist_from_params(td_params)
-            tensordict_actor.set(sample_key, tensordict_actor_dist.rsample())
-            tensordict_actor.set(
-                sample_key_lp,
-                tensordict_actor_dist.log_prob(tensordict_actor.get(sample_key)),
-            )
+            sample, sample_log_prob = rsample_and_log_prob(tensordict_actor_dist)
+            tensordict_actor.set(sample_key, sample)
+            tensordict_actor.set(sample_key_lp, sample_log_prob)
 
         # repeat tensordict_actor to match the qvalue size
         _actor_loss_td = (
@@ -627,7 +620,6 @@ class REDQLoss(LossModule):
                 "next.state_value": next_state_value.detach(),
                 "target_value": target_value.detach(),
             }
-            td_out = TensorDict(out, [])
         else:
             out = {
                 "loss_actor": loss_actor,
@@ -640,17 +632,17 @@ class REDQLoss(LossModule):
                 "next.state_value": next_state_value.detach(),
                 "target_value": target_value.detach(),
             }
-            td_out = TensorDict(out, [])
-            if self.reduction != "none":
-                td_out = td_out.named_apply(
-                    lambda name, value: _reduce(value, reduction=self.reduction)
-                    if name.startswith("loss_")
-                    else value,
-                )
-            elif self.scalar_output_mode == "non_tensor":
-                # Move scalars to non-tensor after creation
-                td_out.set_non_tensor("alpha", td_out.pop("alpha"))
-                td_out.set_non_tensor("entropy", td_out.pop("entropy"))
+        td_out = TensorDict(out, [])
+        loss_tensordict = tensordict.unsqueeze(0)
+        td_out = td_out.named_apply(
+            lambda name, value: self._reduce_loss(value, loss_tensordict)
+            if name.startswith("loss_")
+            else value,
+        )
+        if self.reduction == "none" and self.scalar_output_mode == "non_tensor":
+            # Move scalars to non-tensor after creation
+            td_out.set_non_tensor("alpha", td_out.pop("alpha"))
+            td_out.set_non_tensor("entropy", td_out.pop("entropy"))
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -684,39 +676,31 @@ class REDQLoss(LossModule):
             log_alpha_det = log_alpha.detach()
         return log_alpha - log_alpha_det + log_alpha_clamp
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        # we do not need a value network bc the next state value is already passed
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=None, **hp)
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=None, **hp)
-        elif value_type == ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=None, **hp)
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        # REDQ does not need a value network — the next state value is read
+        # straight from the input tensordict at forward time.
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=None,
+            **hyperparams,
+        )

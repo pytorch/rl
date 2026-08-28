@@ -21,7 +21,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
-from torchrl.collectors import MultiSyncCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms.module import ModuleTransform
@@ -71,8 +71,10 @@ def main():
         "env.transform[0].module": MultiProcessWeightSyncScheme(strategy="tensordict"),
     }
 
-    collector = MultiSyncCollector(
-        create_env_fn=[make_env, make_env],
+    collector = Collector(
+        create_env_fn=make_env,
+        num_collectors=2,
+        sync=True,
         policy_factory=policy_factory,
         total_frames=2000,
         max_frames_per_traj=50,
@@ -82,7 +84,7 @@ def main():
         storing_device="cpu",
         weight_sync_schemes=weight_sync_schemes,
         replay_buffer=rb,
-        # extend_buffer=True is the default for MultiSyncCollector
+        # extend_buffer=True is the default for process-backed Collector
     )
 
     policy_weights = TensorDict.from_module(policy).data

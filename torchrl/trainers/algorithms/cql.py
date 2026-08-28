@@ -8,13 +8,15 @@ from __future__ import annotations
 import pathlib
 import warnings
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from functools import partial
+from typing import Any
 
 from tensordict import TensorDict, TensorDictBase
 from torch import optim
 
+from torchrl.checkpoint import Checkpoint, CheckpointRotation
 from torchrl.collectors import BaseCollector
 
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
@@ -96,6 +98,9 @@ class CQLTrainer(Trainer):
         save_trainer_interval: int = 10000,
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_rotation: CheckpointRotation | None = None,
+        checkpoint_metadata: Callable[[Trainer], Mapping[str, Any]] | None = None,
         replay_buffer: ReplayBuffer | None = None,
         enable_logging: bool = True,
         log_rewards: bool = True,
@@ -142,6 +147,9 @@ class CQLTrainer(Trainer):
             save_trainer_interval=save_trainer_interval,
             log_interval=log_interval,
             save_trainer_file=save_trainer_file,
+            checkpoint=checkpoint,
+            checkpoint_rotation=checkpoint_rotation,
+            checkpoint_metadata=checkpoint_metadata,
             async_collection=async_collection,
             log_timings=log_timings,
             auto_log_optim_steps=auto_log_optim_steps,
@@ -163,6 +171,7 @@ class CQLTrainer(Trainer):
             self.register_op("process_optim_batch", rb_trainer.sample)
             self.register_op("post_loss", rb_trainer.update_priority)
 
+        self.target_net_updater = target_net_updater
         self.register_op("post_optim", TargetNetUpdaterHook(target_net_updater))
 
         policy_weights_getter = partial(

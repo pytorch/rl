@@ -8,14 +8,35 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import inspect
 
 import pytest
 import torch
+import torchrl.weight_update.llm.sglang_nccl as sglang_nccl
+from torch.distributed.distributed_c10d import _new_process_group_helper
 from torchrl._utils import logger
+from torchrl.weight_update.llm import (
+    get_sglang_model_metadata,
+    SGLangCollectiveTransport,
+    SGLangWeightSender,
+    SGLangWeightSyncScheme,
+)
+from torchrl.weight_update.llm.sglang_nccl import (
+    _process_group_options_kwargs,
+    _SGLANG_FLUSH_CACHE_ENV,
+)
 
 # Check for dependencies
 _has_sglang = importlib.util.find_spec("sglang") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
+
+
+def test_process_group_options_kwargs_match_torch_signature():
+    kwargs = _process_group_options_kwargs()
+
+    assert len(kwargs) == 1
+    assert next(iter(kwargs)) in inspect.signature(_new_process_group_helper).parameters
+    assert next(iter(kwargs.values())) is None
 
 
 @pytest.mark.gpu
@@ -32,8 +53,6 @@ class TestSGLangWeightSyncScheme:
 
     def test_scheme_initialization(self):
         """Test SGLangWeightSyncScheme initialization with valid parameters."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -52,24 +71,17 @@ class TestSGLangWeightSyncScheme:
 
     def test_scheme_auto_port(self):
         """Test that master_port is auto-assigned when not provided."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=2,
         )
 
         assert scheme.master_port > 0
-        assert scheme.master_port < 65536
+        assert scheme.master_port <= 55535
         assert scheme.world_size == 3  # 1 trainer + 2 gpus
 
     def test_create_transport(self):
         """Test transport creation from scheme."""
-        from torchrl.weight_update.llm import (
-            SGLangCollectiveTransport,
-            SGLangWeightSyncScheme,
-        )
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -83,8 +95,6 @@ class TestSGLangWeightSyncScheme:
 
     def test_create_sender(self):
         """Test sender creation from scheme."""
-        from torchrl.weight_update.llm import SGLangWeightSender, SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -95,8 +105,6 @@ class TestSGLangWeightSyncScheme:
 
     def test_create_receiver_returns_none(self):
         """Test that create_receiver returns None (SGLang manages receivers)."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -104,6 +112,116 @@ class TestSGLangWeightSyncScheme:
 
         receiver = scheme.create_receiver()
         assert receiver is None
+
+
+class TestSGLangFlushCacheFlag:
+    """CPU-only tests for the flush_cache_on_update flag (no server needed)."""
+
+    def _make_transport(self, **kwargs):
+        return SGLangCollectiveTransport(
+            server_url="http://localhost:30000",
+            master_address="localhost",
+            master_port=29500,
+            rank=0,
+            world_size=2,
+            **kwargs,
+        )
+
+    def test_scheme_flush_default_threads_to_transport(self):
+        scheme = SGLangWeightSyncScheme(server_url="http://localhost:30000", num_gpus=1)
+        assert scheme.flush_cache_on_update is None
+        assert scheme.create_transport().flush_cache_on_update is None
+
+        scheme_off = SGLangWeightSyncScheme(
+            server_url="http://localhost:30000",
+            num_gpus=1,
+            flush_cache_on_update=False,
+        )
+        assert scheme_off.create_transport().flush_cache_on_update is False
+
+        scheme_abort = SGLangWeightSyncScheme(
+            server_url="http://localhost:30000",
+            num_gpus=1,
+            flush_cache_on_update=True,
+            pause_mode="abort",
+        )
+        transport = scheme_abort.create_transport()
+        assert transport.flush_cache_on_update is True
+        assert transport.pause_mode == "abort"
+
+    def test_flush_requires_abort_pause_mode(self):
+        # SGLang only flushes when idle; retract/in_place leave requests queued.
+        with pytest.raises(ValueError, match="pause_mode='abort'"):
+            SGLangWeightSyncScheme(
+                server_url="http://localhost:30000",
+                num_gpus=1,
+                flush_cache_on_update=True,
+                pause_mode="retract",
+            )
+        with pytest.raises(ValueError, match="pause_mode='abort'"):
+            self._make_transport(flush_cache_on_update=True, pause_mode="retract")
+        # The default (env-resolved) pause mode is retract: explicit True
+        # without an abort pause mode fails fast at transport creation.
+        with pytest.raises(ValueError, match="pause_mode='abort'"):
+            self._make_transport(flush_cache_on_update=True)
+
+    def test_update_payload_flush_follows_pause_mode(self, monkeypatch):
+        monkeypatch.delenv(_SGLANG_FLUSH_CACHE_ENV, raising=False)
+
+        # Default pause mode (retract) cannot honor a flush: off.
+        payload = self._make_transport()._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is False
+        assert payload["abort_all_requests"] is False
+        assert payload["names"] == ["w"]
+
+        # Abort pause mode guarantees an idle scheduler: flush by default.
+        payload = self._make_transport(pause_mode="abort")._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is True
+
+        # Explicit off wins even under abort.
+        payload = self._make_transport(
+            flush_cache_on_update=False, pause_mode="abort"
+        )._build_update_payload(["w"], ["bfloat16"], [[2]])
+        assert payload["flush_cache"] is False
+
+    def test_update_payload_env_override(self, monkeypatch):
+        # The env var overrides the configured flag but cannot force a flush
+        # the pause mode cannot honor.
+        monkeypatch.setenv(_SGLANG_FLUSH_CACHE_ENV, "0")
+        payload = self._make_transport(pause_mode="abort")._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is False
+
+        monkeypatch.setenv(_SGLANG_FLUSH_CACHE_ENV, "1")
+        payload = self._make_transport(pause_mode="abort")._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is True
+
+        # Env-forced flush under retract is downgraded, not honored.
+        payload = self._make_transport()._build_update_payload(
+            ["w"], ["bfloat16"], [[2]]
+        )
+        assert payload["flush_cache"] is False
+
+    def test_flush_downgrade_warning_emitted_once(self, monkeypatch):
+        monkeypatch.setenv(_SGLANG_FLUSH_CACHE_ENV, "1")
+        warnings_seen = []
+        monkeypatch.setattr(
+            sglang_nccl.torchrl_logger,
+            "warning",
+            lambda msg, *args, **kwargs: warnings_seen.append(msg),
+        )
+        transport = self._make_transport()  # default retract pause mode
+        transport._build_update_payload(["w"], ["bfloat16"], [[2]])
+        transport._build_update_payload(["w"], ["bfloat16"], [[2]])
+        assert len(warnings_seen) == 1
+        assert "Skipping the SGLang radix-cache flush" in warnings_seen[0]
 
 
 @pytest.mark.gpu
@@ -143,8 +261,6 @@ class TestSGLangWeightSender:
 
     def test_register_model(self, source_model):
         """Test model registration."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -159,8 +275,6 @@ class TestSGLangWeightSender:
 
     def test_get_model_metadata(self, source_model):
         """Test model metadata extraction utility."""
-        from torchrl.weight_update.llm import get_sglang_model_metadata
-
         metadata = get_sglang_model_metadata(source_model)
 
         assert isinstance(metadata, dict)
@@ -174,8 +288,6 @@ class TestSGLangWeightSender:
 
     def test_update_weights_requires_init(self, source_model):
         """Test that update_weights fails if transport not initialized."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -190,8 +302,6 @@ class TestSGLangWeightSender:
 
     def test_update_weights_requires_model(self):
         """Test that update_weights fails if no model registered."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -217,8 +327,6 @@ class TestSGLangCollectiveTransport:
 
     def test_transport_initialization(self):
         """Test transport initialization with valid parameters."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -237,8 +345,6 @@ class TestSGLangCollectiveTransport:
 
     def test_transport_device_parsing(self):
         """Test device specification parsing."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         # Test string device
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
@@ -274,8 +380,6 @@ class TestSGLangCollectiveTransport:
 
     def test_check_connection_before_init(self):
         """Test that check_connection returns False before init."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -288,8 +392,6 @@ class TestSGLangCollectiveTransport:
 
     def test_send_weights_requires_init(self):
         """Test that send_weights fails if not initialized."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -304,8 +406,6 @@ class TestSGLangCollectiveTransport:
 
     def test_init_requires_rank_zero(self):
         """Test that init_all_workers_group only works for rank 0."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",

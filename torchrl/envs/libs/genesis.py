@@ -159,6 +159,10 @@ class GenesisWrapper(EnvBase):
 
     git_url = "https://github.com/Genesis-Embodied-AI/Genesis"
     libname = "genesis"
+    # Genesis loops over ``self._frame_skip`` physics substeps in its own
+    # ``_step`` and sums the reward, so frame skipping is implemented natively
+    # and the ``EnvBase`` metaclass must not auto-append a ``FrameSkipTransform``.
+    _has_frame_skip: bool = True
 
     _lib = None
 
@@ -451,7 +455,7 @@ class GenesisWrapper(EnvBase):
 
 
 class _GenesisEnvMeta(_EnvPostInit):
-    """Return a lazy ParallelEnv when ``num_workers > 1``."""
+    """Return a ParallelEnv when ``num_workers > 1``."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
         if num_workers is None:
@@ -473,7 +477,7 @@ class _GenesisEnvMeta(_EnvPostInit):
             def make_env(_env_name=env_name, _task_name=task_name, _kwargs=env_kwargs):
                 return cls(_env_name, _task_name, num_workers=1, **_kwargs)
 
-            return ParallelEnv(num_workers, make_env)
+            return ParallelEnv(num_workers, make_env, metadata_from_workers=True)
 
         return super().__call__(*args, **kwargs)
 
@@ -485,9 +489,9 @@ class GenesisEnv(GenesisWrapper, metaclass=_GenesisEnvMeta):
         env_name (str): registered environment name. Currently one of
             ``'franka_reach'`` or ``'franka_grab'``.
         task_name (str, optional): task name; unused by the built-in configs.
-        num_workers (int, optional): when ``> 1``, returns a lazy
+        num_workers (int, optional): when ``> 1``, returns a
             :class:`~torchrl.envs.ParallelEnv` wrapping per-worker Genesis envs.
-            Defaults to ``1``.
+            Workers report metadata directly to the parent. Defaults to ``1``.
         max_steps (int, optional): truncation horizon. Defaults to ``1000``.
         frame_skip (int, optional): physics steps per env step. Defaults to ``1``.
         from_pixels (bool, optional): if ``True``, a default camera is added

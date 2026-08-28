@@ -25,7 +25,7 @@ else:
 
 
 from .mappings import biased_softplus, inv_softplus, mappings
-from .utils import get_primers_from_module
+from .utils import get_env_transforms_from_module, get_primers_from_module
 
 __all__ = [
     "OrderedDict",
@@ -34,5 +34,6 @@ __all__ = [
     "biased_softplus",
     "inv_softplus",
     "mappings",
+    "get_env_transforms_from_module",
     "get_primers_from_module",
 ]

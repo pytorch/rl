@@ -34,10 +34,15 @@ from torchrl.testing.llm_mocks import (
     MockTransformerModel,
     MockTransformerOutput,
 )
-from torchrl.testing.mocking_classes import FastImageEnv
+from torchrl.testing.mocking_classes import (
+    AddPixelsTransform,
+    CountingVecNormV2,
+    FastImageEnv,
+)
 from torchrl.testing.modules import (
     BiasModule,
     call_value_nets,
+    CatLinear,
     LSTMNet,
     NonSerializableBiasModule,
 )
@@ -84,10 +89,13 @@ __all__ = [
     "MockTransformerModel",
     "MockTransformerOutput",
     # Mocking classes
+    "AddPixelsTransform",
+    "CountingVecNormV2",
     "FastImageEnv",
     # Modules
     "BiasModule",
     "call_value_nets",
+    "CatLinear",
     "LSTMNet",
     "NonSerializableBiasModule",
     # Ray helpers

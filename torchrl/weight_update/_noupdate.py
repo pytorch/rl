@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from torchrl.weight_update.weight_sync_schemes import TransportBackend, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    register_weight_sync_backend,
+    TransportBackend,
+    WeightSyncScheme,
+)
 
 
+@register_weight_sync_backend("none")
 class NoWeightSyncScheme(WeightSyncScheme):
     """No-op weight synchronization scheme.
 

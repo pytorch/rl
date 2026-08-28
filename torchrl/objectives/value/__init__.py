@@ -5,6 +5,7 @@
 
 from .advantages import (
     GAE,
+    MultiAgentGAE,
     TD0Estimate,
     TD0Estimator,
     TD1Estimate,
@@ -17,6 +18,7 @@ from .advantages import (
 
 __all__ = [
     "GAE",
+    "MultiAgentGAE",
     "TD0Estimate",
     "TD0Estimator",
     "TD1Estimate",

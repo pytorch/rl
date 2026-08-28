@@ -325,6 +325,7 @@ Environment Library Configurations
     JumanjiEnvConfig
     MeltingpotEnvConfig
     MOGymEnvConfig
+    MJLabEnvConfig
     MultiThreadedEnvConfig
     OpenEnvEnvConfig
     OpenMLEnvConfig
@@ -455,6 +456,7 @@ Replay Buffer and Storage Configurations
 
     ReplayBufferConfig
     TensorDictReplayBufferConfig
+    ConsumingSamplerConfig
     RandomSamplerConfig
     SamplerWithoutReplacementConfig
     PrioritizedSamplerConfig
@@ -479,12 +481,17 @@ Training and Optimization Configurations
     :template: rl_template_class.rst
 
     TrainerConfig
+    OnPolicyTrainerConfig
+    A2CTrainerConfig
     PPOTrainerConfig
+    ReinforceTrainerConfig
     SACTrainerConfig
+    OfflineToOnlineTrainerConfig
     DQNTrainerConfig
     DDPGTrainerConfig
     IQLTrainerConfig
     CQLTrainerConfig
+    TD3TrainerConfig
 
 Trainer Hook Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -512,12 +519,15 @@ Trainer Hook Configurations
     :template: rl_template_class.rst
 
     LossConfig
+    A2CLossConfig
     PPOLossConfig
+    ReinforceLossConfig
     SACLossConfig
     DQNLossConfig
     DDPGLossConfig
     IQLLossConfig
     CQLLossConfig
+    TD3LossConfig
     GAEConfig
     TargetNetUpdaterConfig
     SoftUpdateConfig
@@ -598,11 +608,15 @@ Supported Algorithms
 
 TorchRL currently provides configuration-driven trainers for the following algorithms:
 
+- **A2C** (on-policy): ``A2CTrainerConfig``, ``A2CLossConfig``
 - **PPO** (on-policy): ``PPOTrainerConfig``, ``PPOLossConfig``
+- **REINFORCE** (on-policy): ``ReinforceTrainerConfig``, ``ReinforceLossConfig``
 - **SAC** (off-policy, continuous): ``SACTrainerConfig``, ``SACLossConfig``
+- **Offline-to-online SAC**: ``OfflineToOnlineTrainerConfig``, ``SACLossConfig``
 - **DQN** (off-policy, discrete): ``DQNTrainerConfig``, ``DQNLossConfig``
 - **DDPG** (off-policy, continuous): ``DDPGTrainerConfig``, ``DDPGLossConfig``
 - **IQL** (offline): ``IQLTrainerConfig``, ``IQLLossConfig``
 - **CQL** (offline): ``CQLTrainerConfig``, ``CQLLossConfig``
+- **TD3** (off-policy, continuous): ``TD3TrainerConfig``, ``TD3LossConfig``
 
 The modular design ensures easy integration of additional algorithms while maintaining backward compatibility.

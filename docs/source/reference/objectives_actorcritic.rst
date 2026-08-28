@@ -11,6 +11,7 @@ Loss modules for actor-critic algorithms.
 
     DDPGLoss
     SACLoss
+    TQCLoss
     DiscreteSACLoss
     TD3Loss
     REDQLoss

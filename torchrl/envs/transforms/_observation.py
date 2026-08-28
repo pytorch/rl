@@ -8,12 +8,12 @@ from __future__ import annotations
 import warnings
 from collections.abc import Sequence
 from copy import copy
-from typing import Any, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
 from tensordict import set_lazy_legacy, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict, expand_as_right, expand_right, NestedKey
+from tensordict.utils import _zip_strict, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import ContinuousBox, TensorSpec
 from torchrl.envs.transforms import functional as F
@@ -44,6 +44,7 @@ __all__ = [
     "Crop",
     "FlattenObservation",
     "GrayScale",
+    "NextObservationDelta",
     "PermuteTransform",
     "Resize",
     "SqueezeTransform",
@@ -895,6 +896,27 @@ class CatFrames(ObservationTransform):
             and raises an exception otherwise.
         done_key (NestedKey, optional): the done key to be used as partial
             done indicator. Must be unique. If not provided, defaults to ``"done"``.
+        future (bool, optional): if ``True``, each step's window gathers the
+            ``N`` *upcoming* frames ``[t, t + 1, ..., t + N - 1]`` instead of
+            the ``N`` most recent ones ``[t - N + 1, ..., t]``. With
+            ``padding="same"`` the slots that run past the end of the
+            trajectory repeat the last in-trajectory frame. Forward-looking
+            windows require the full trajectory, so this mode is only
+            available offline (replay buffer / data pipelines): attaching the
+            transform to an environment raises a ``RuntimeError`` on the step
+            path. Defaults to ``False``.
+
+            .. versionadded:: 0.14
+        mask_key (NestedKey, optional): if provided, the offline (forward /
+            unfolding) path also writes a boolean mask of shape
+            ``[*batch, time, N]`` flagging, for each window, the slots that
+            were fabricated by padding (``True`` = padded slot, either out of
+            the trajectory or out of the sampled window). This is the
+            convention of the ``action_is_pad`` entry of chunked-action
+            datasets. The mask is not available on the online (env step)
+            path. Defaults to ``None`` (no mask is written).
+
+            .. versionadded:: 0.14
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -964,6 +986,11 @@ class CatFrames(ObservationTransform):
         - A modified version of the transform suitable for use in replay buffers
         - A corresponding :class:`SliceSampler` to use with the buffer
 
+    .. seealso:: The offline (contiguous trajectory slice) windowing performed
+        by this transform is also available as a pure functional,
+        :func:`torchrl.envs.transforms.functional.cat_frames`, which operates
+        directly on a plain tensor.
+
     """
 
     inplace = False
@@ -972,6 +999,10 @@ class CatFrames(ObservationTransform):
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "constant", "zeros"}
+    # class-level defaults double as fallbacks for instances pickled before
+    # these options existed
+    future = False
+    mask_key = None
 
     def __init__(
         self,
@@ -984,6 +1015,8 @@ class CatFrames(ObservationTransform):
         as_inverse=False,
         reset_key: NestedKey | None = None,
         done_key: NestedKey | None = None,
+        future: bool = False,
+        mask_key: NestedKey | None = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -991,6 +1024,8 @@ class CatFrames(ObservationTransform):
             out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
+        self.future = bool(future)
+        self.mask_key = mask_key
         if dim >= 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.dim = dim
@@ -1071,6 +1106,8 @@ class CatFrames(ObservationTransform):
             as_inverse=False,
             reset_key=self.reset_key,
             done_key=self.done_key,
+            future=self.future,
+            mask_key=self.mask_key,
         )
         sampler = SliceSampler(slice_len=self.N, **sampler_kwargs)
         sampler._batch_size_multiplier = self.N
@@ -1128,6 +1165,25 @@ class CatFrames(ObservationTransform):
 
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        tensordict_reset = tensordict_reset.copy()
+        for in_key in self.in_keys:
+            buffer_name = f"_cat_buffers_{in_key}"
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                continue
+            data = tensordict_reset.get(in_key)
+            if data.size(self.dim) != buffer.size(self.dim):
+                continue
+            d = data.size(self.dim) // self.N
+            dim = data.ndim + self.dim if self.dim < 0 else self.dim
+            index = [slice(None, None) for _ in range(data.ndim)]
+            index[dim] = slice(-d, None)
+            tensordict_reset.set(in_key, data[tuple(index)])
+        return self._reset(tensordict, tensordict_reset)
+
     def _make_missing_buffer(self, data, buffer_name):
         shape = list(data.shape)
         d = shape[self.dim]
@@ -1150,6 +1206,19 @@ class CatFrames(ObservationTransform):
 
     def _call(self, next_tensordict: TensorDictBase, _reset=None) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
+        if self.future:
+            raise RuntimeError(
+                "CatFrames(future=True) cannot run on the environment step "
+                "path: forward-looking windows require the full trajectory "
+                "and are only available offline (replay buffer / data "
+                "pipelines)."
+            )
+        if self.mask_key is not None:
+            raise RuntimeError(
+                "CatFrames(mask_key=...) is only available offline (forward "
+                "/ unfolding): the online step path does not build "
+                "per-window validity masks."
+            )
         _just_reset = _reset is not None
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             # Lazy init of buffers
@@ -1216,6 +1285,13 @@ class CatFrames(ObservationTransform):
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if self.future:
+            raise RuntimeError(
+                "CatFrames(future=True) cannot be attached to an "
+                "environment: forward-looking windows require the full "
+                "trajectory and are only available offline (replay buffer / "
+                "data pipelines)."
+            )
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.low = torch.cat([space.low] * self.N, self.dim)
@@ -1234,29 +1310,8 @@ class CatFrames(ObservationTransform):
             return self.unfolding(tensordict)
 
     def _apply_same_padding(self, dim, data, done_mask):
-        d = data.ndim + dim - 1
-        res = data.clone()
-        num_repeats_per_sample = done_mask.sum(dim=-1)
-
-        if num_repeats_per_sample.dim() > 2:
-            extra_dims = num_repeats_per_sample.dim() - 2
-            num_repeats_per_sample = num_repeats_per_sample.flatten(0, extra_dims)
-            res_flat_series = res.flatten(0, extra_dims)
-        else:
-            extra_dims = 0
-            res_flat_series = res
-
-        if d - 1 > extra_dims:
-            res_flat_series_flat_batch = res_flat_series.flatten(1, d - 1)
-        else:
-            res_flat_series_flat_batch = res_flat_series[:, None]
-
-        for sample_idx, num_repeats in enumerate(num_repeats_per_sample):
-            if num_repeats > 0:
-                res_slice = res_flat_series_flat_batch[sample_idx]
-                res_slice[:, :num_repeats] = res_slice[:, num_repeats : num_repeats + 1]
-
-        return res
+        # Kept for backward compatibility; delegates to the functional core.
+        return F._apply_same_padding(dim, data, done_mask)
 
     @set_lazy_legacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1297,9 +1352,14 @@ class CatFrames(ObservationTransform):
 
         def unfold_done(done, N):
             prefix = (slice(None),) * (tensordict.ndim - 1)
+            # the leading no-reset block is built explicitly rather than by
+            # slicing ``done`` (which would cap it at the time length and
+            # break windows longer than the trajectory, N > T)
+            zeros_shape = list(done.shape)
+            zeros_shape[tensordict.ndim - 1] = self.N - 1
             reset = torch.cat(
                 [
-                    torch.zeros_like(done[prefix + (slice(self.N - 1),)]),
+                    torch.zeros(zeros_shape, dtype=done.dtype, device=done.device),
                     torch.ones_like(done[prefix + (slice(1),)]),
                     done[prefix + (slice(None, -1),)],
                 ],
@@ -1316,8 +1376,42 @@ class CatFrames(ObservationTransform):
             reset[prefix + (0,)] = 1
             return reset_unfold, reset
 
-        done = tensordict.get(("next", self.done_key))
+        # The time axis is the last batch dim of (the possibly transposed)
+        # ``tensordict``; the same index addresses it in every entry since the
+        # batch dims lead the tensors.
+        tdim = tensordict.ndim - 1
+        done = tensordict.get(("next", self.done_key), default=None)
+        if done is None:
+            if not self.future:
+                raise KeyError(
+                    f"CatFrames.unfolding requires the {('next', self.done_key)} "
+                    "entry to delimit trajectories. Make sure the sampled data "
+                    "carries its done state, or use forward-looking windows "
+                    "(future=True) to treat each batch row as a single "
+                    "contiguous trajectory."
+                )
+            # Absent done in future mode: each batch row is one contiguous
+            # trajectory and only the windows that run past its end are padded.
+            done = torch.zeros(
+                (*tensordict.shape, 1),
+                dtype=torch.bool,
+                device=tensordict.get(keys[0][0]).device,
+            )
+        if self.future:
+            # Forward windows are backward windows of the time-reversed data:
+            # the chunk ``[t, ..., t + N - 1]`` is the reversed window at
+            # ``T - 1 - t`` read backwards. A boundary between steps ``t`` and
+            # ``t + 1`` (``done[t]``) sits between reversed steps ``T - 2 - t``
+            # and ``T - 1 - t``, hence the flip + shift; the rolled-in last
+            # entry is never read (``unfold_done`` drops the final done).
+            done = done.flip(tdim).roll(-1, dims=tdim)
         done_mask, reset = unfold_done(done, self.N)
+
+        if self.mask_key is not None:
+            mask = done_mask
+            if self.future:
+                mask = mask.flip(tdim).flip(-1)
+            tensordict.set(self.mask_key, mask.reshape(*tensordict.shape, self.N))
 
         for in_key, out_key in keys:
             # check if we have an obs in "next" that has already been processed.
@@ -1336,41 +1430,44 @@ class CatFrames(ObservationTransform):
                     first_val = prev_val.unflatten(
                         data.ndim + self.dim, (self.N, n_feat)
                     )
-
-            idx = [slice(None)] * (tensordict.ndim - 1) + [0]
-            data0 = [
-                torch.full_like(data[tuple(idx)], self.padding_value).unsqueeze(
-                    tensordict.ndim - 1
+            if first_val is not None and self.future:
+                raise NotImplementedError(
+                    "CatFrames(future=True) does not support processing a "
+                    "('next', key) entry alongside its root counterpart: the "
+                    "one-step-offset fixup is only implemented for "
+                    "history (backward) windows."
                 )
-            ] * (self.N - 1)
 
-            data = torch.cat(data0 + [data], tensordict.ndim - 1)
-
-            data = data.unfold(tensordict.ndim - 1, self.N, 1)
-
-            # Place -1 dim at self.dim place before squashing
-            done_mask_expand = done_mask.view(
-                *done_mask.shape[: tensordict.ndim],
-                *(1,) * (data.ndim - 1 - tensordict.ndim),
-                done_mask.shape[-1],
+            # The time axis sits at ``tensordict.ndim - 1`` within ``data`` (the
+            # tensordict batch dims lead the tensor). Expressed relative to
+            # ``data`` it is the following negative ``time_dim``. Delegate the
+            # pure padding + sliding-window + done-mask concatenation to the
+            # ``cat_frames`` functional so that the offline transform stays
+            # byte-for-byte identical to its stateless core.
+            time_dim = (tensordict.ndim - 1) - data.ndim
+            if self.future:
+                data = data.flip(tdim)
+            data = F._cat_frames_windows(
+                data,
+                self.N,
+                self.dim,
+                padding=self.padding,
+                padding_value=self.padding_value,
+                time_dim=time_dim,
+                done_mask=done_mask,
             )
-            done_mask_expand = expand_as_right(done_mask_expand, data)
-            data = data.permute(
-                *range(0, data.ndim + self.dim - 1),
-                -1,
-                *range(data.ndim + self.dim - 1, data.ndim - 1),
-            )
-            done_mask_expand = done_mask_expand.permute(
-                *range(0, done_mask_expand.ndim + self.dim - 1),
-                -1,
-                *range(done_mask_expand.ndim + self.dim - 1, done_mask_expand.ndim - 1),
-            )
-            if self.padding != "same":
-                data = torch.where(done_mask_expand, self.padding_value, data)
-            else:
-                data = self._apply_same_padding(self.dim, data, done_mask)
+            if self.future:
+                # Back to forward time, windows read oldest-to-newest: undo
+                # the time reversal and flip the window axis (which
+                # ``_cat_frames_windows`` placed just before the cat axis).
+                data = data.flip(tdim).flip(data.ndim + self.dim - 1)
 
             if first_val is not None:
+                data0_pad = torch.full_like(
+                    data_orig[tuple([slice(None)] * (tensordict.ndim - 1) + [0])],
+                    self.padding_value,
+                ).unsqueeze(tensordict.ndim - 1)
+                data0 = [data0_pad] * (self.N - 1)
                 # Aggregate reset along last dim
                 reset_any = reset.any(-1, False)
                 rexp = expand_right(
@@ -1418,4 +1515,285 @@ class CatFrames(ObservationTransform):
         return (
             f"{self.__class__.__name__}(N={self.N}, dim"
             f"={self.dim}, keys={self.in_keys})"
+        )
+
+
+class NextObservationDelta(Transform):
+    """Stores ``("next", obs)`` as a low-precision delta in a sibling key.
+
+    A single transform handles both sides of the compression:
+
+    - **Env side** (``_step`` + ``_post_step_mdp_hooks``): for each
+      in-key ``k``, write ``(next_obs - obs).to(delta_dtype)`` under
+      the sibling key ``("next", "delta", k)``, then drop the full
+      ``("next", k)`` from the post-step tensordict that the collector
+      stacks. The full slot survives only long enough for
+      :func:`~torchrl.envs.utils.step_mdp` to promote it to root, so the
+      policy sees a full-precision observation on the next step.
+    - **RB side** (``forward``): on
+      :meth:`~torchrl.data.ReplayBuffer.sample`, reconstruct
+      ``("next", k) = data[k] + data[("next", "delta", k)]`` and
+      (optionally) drop the delta key. Unlike
+      :class:`~torchrl.envs.transforms.NextStateReconstructor`, the
+      delta encodes the actual transition, so trajectory-boundary
+      transitions reconstruct exactly within the round-trip precision
+      of ``delta_dtype`` rather than falling back to ``NaN``.
+
+    Use the **same instance** (or two instances with matching ``in_keys``)
+    on the env and on the replay buffer; the env-side and RB-side methods
+    are dispatched automatically.
+
+    Args:
+        in_keys (sequence of NestedKey, optional): observation keys to
+            compress. Defaults to ``None``, in which case the transform
+            lazily walks ``parent.observation_spec`` and picks every
+            floating-point leaf whose dtype is not in ``excluded_dtypes``.
+            When the transform is used on a replay buffer (no env parent),
+            ``in_keys`` must be passed explicitly.
+
+    Keyword Args:
+        delta_dtype (torch.dtype, optional): dtype in which the delta is
+            stored. Must be a floating dtype. Defaults to ``torch.float16``.
+        restore_dtype (torch.dtype or ``"root"``, optional): dtype of the
+            reconstructed ``("next", k)`` on the RB side. ``"root"``
+            (default) matches the dtype of the corresponding root key in
+            the sampled batch.
+        drop_delta (bool, optional): if ``True`` (default), the
+            ``("next", "delta", k)`` entry is removed from the sampled
+            tensordict after RB-side reconstruction so downstream consumers
+            see the same key layout as an uncompressed pipeline.
+        excluded_dtypes (tuple of torch.dtype, optional): dtypes to skip
+            when auto-inferring ``in_keys``. Defaults to the integer +
+            bool family.
+
+    .. warning::
+        The compression is **lossy**: round-tripping through ``delta_dtype``
+        loses precision, particularly for unnormalized observations whose
+        magnitudes exceed the dtype range or fall below its smallest
+        representable step.
+
+    .. warning::
+        The transform must live **outside** any batched env
+        (``TransformedEnv(ParallelEnv(N, factory), NextObservationDelta())``).
+        Building a :class:`~torchrl.envs.SerialEnv` /
+        :class:`~torchrl.envs.ParallelEnv` whose worker contains a
+        ``NextObservationDelta`` raises at construction time.
+
+    Example:
+        >>> import torch
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> from torchrl.envs.transforms import NextObservationDelta
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), NextObservationDelta())
+        >>> td_root = env.reset()
+        >>> _ = td_root.set("action", env.action_spec.rand())
+        >>> td, td_ = env.step_and_maybe_reset(td_root)
+        >>> td["next", "delta", "observation"].dtype
+        torch.float16
+        >>> ("next", "observation") in td.keys(True, True)
+        False
+        >>> td_["observation"].dtype
+        torch.float32
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey] | None = None,
+        *,
+        delta_dtype: torch.dtype = torch.float16,
+        restore_dtype: torch.dtype | Literal["root"] = "root",
+        drop_delta: bool = True,
+        excluded_dtypes: tuple[torch.dtype, ...] = (
+            torch.uint8,
+            torch.int8,
+            torch.int16,
+            torch.int32,
+            torch.int64,
+            torch.bool,
+        ),
+    ):
+        if not delta_dtype.is_floating_point:
+            raise ValueError(
+                f"delta_dtype must be a floating-point dtype, got {delta_dtype}."
+            )
+        if restore_dtype != "root" and not (
+            isinstance(restore_dtype, torch.dtype) and restore_dtype.is_floating_point
+        ):
+            raise ValueError(
+                f"restore_dtype must be a floating-point dtype or 'root', got "
+                f"{restore_dtype!r}."
+            )
+        self.delta_dtype = delta_dtype
+        self.restore_dtype = restore_dtype
+        self.drop_delta = drop_delta
+        self.excluded_dtypes = tuple(excluded_dtypes)
+        super().__init__(in_keys=in_keys, out_keys=in_keys)
+
+    @property
+    def in_keys(self) -> Sequence[NestedKey] | None:
+        in_keys = self.__dict__.get("_in_keys", None)
+        if in_keys is None:
+            parent = self.parent
+            if parent is None:
+                return None
+            in_keys = []
+            for key, spec in parent.observation_spec.items(True, True):
+                dtype = spec.dtype
+                if dtype is None:
+                    continue
+                if dtype in self.excluded_dtypes:
+                    continue
+                if not dtype.is_floating_point:
+                    continue
+                in_keys.append(unravel_key(key))
+            self._in_keys = in_keys
+            if self.__dict__.get("_out_keys", None) is None:
+                self._out_keys = copy(in_keys)
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value: Sequence[NestedKey] | None) -> None:
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(v) for v in value]
+        self._in_keys = value
+
+    @property
+    def out_keys(self) -> Sequence[NestedKey] | None:
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys is None:
+            in_keys = self.in_keys
+            if in_keys is None:
+                return None
+            out_keys = self._out_keys = copy(in_keys)
+        return out_keys
+
+    @out_keys.setter
+    def out_keys(self, value: Sequence[NestedKey] | None) -> None:
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(v) for v in value]
+        self._out_keys = value
+
+    @staticmethod
+    def _as_key_tuple(key: NestedKey) -> tuple[str, ...]:
+        if isinstance(key, str):
+            return (key,)
+        return tuple(key)
+
+    def _delta_key(self, key: NestedKey) -> tuple[str, ...]:
+        # `key` is a root-level observation key; the delta lives under
+        # ("next", "delta", *key).
+        return ("delta",) + self._as_key_tuple(key)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        in_keys = self.in_keys
+        if not in_keys:
+            return next_tensordict
+        for key in in_keys:
+            obs = tensordict.get(key, default=None)
+            next_obs = next_tensordict.get(key, default=None)
+            if obs is None or next_obs is None:
+                continue
+            # Subtract in the source (typically full-precision) dtype, then
+            # cast once. This loses fewer significant bits than casting each
+            # operand to ``delta_dtype`` first and subtracting in low precision
+            # (which would risk catastrophic cancellation for nearby values).
+            delta = (next_obs - obs).to(self.delta_dtype)
+            # Store the delta in a sibling sub-tensordict so a downstream
+            # consumer cannot mistake it for a full-precision observation.
+            next_tensordict.set(self._delta_key(key), delta)
+        return next_tensordict
+
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
+        # ``step_mdp`` has already promoted the still-full ``("next", k)`` to
+        # root in ``tensordict_`` (because the delta key is not in the env's
+        # observation spec, step_mdp leaves it alone). So the flowing td needs
+        # no further work for ``k``. We just drop the full ``("next", k)``
+        # from the post-step td so only the compressed delta survives into
+        # the stacked rollout.
+        in_keys = self.in_keys
+        if not in_keys:
+            return tensordict, tensordict_
+        next_td = tensordict.get("next", default=None)
+        if next_td is None:
+            return tensordict, tensordict_
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            if key_tuple in next_td.keys(include_nested=True, leaves_only=True):
+                next_td.pop(key_tuple)
+        return tensordict, tensordict_
+
+    def _check_batched_worker_compat(self) -> None:
+        raise RuntimeError(
+            f"{type(self).__name__} cannot live inside a SerialEnv/ParallelEnv "
+            "worker: the post-step-mdp delta key drop relies on the outer "
+            "env's `step_and_maybe_reset` invoking the hook, but a batched "
+            "env's `step_and_maybe_reset` does not propagate the worker's "
+            "transform hook. Place the transform OUTSIDE the batched env "
+            "instead, e.g. `TransformedEnv(ParallelEnv(N, base_env_factory), "
+            f"{type(self).__name__}(...))`."
+        )
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        # The runtime tensordict produced by `_step` + `_post_step_mdp_hooks`
+        # has ``("next", "delta", k)`` (delta_dtype) and no ``("next", k)``.
+        # Mirror that here so spec-vs-runtime key checks match.
+        in_keys = self.in_keys
+        if not in_keys:
+            return fake_tensordict
+        next_td = fake_tensordict.get("next", default=None)
+        if next_td is None:
+            return fake_tensordict
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            leaf = next_td.get(key_tuple, default=None)
+            if leaf is None:
+                continue
+            next_td.set(("delta",) + key_tuple, leaf.to(self.delta_dtype))
+            next_td.pop(key_tuple)
+        return fake_tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Reconstruct ``("next", k)`` from the stored delta at sample time.
+
+        Invoked by :meth:`~torchrl.data.ReplayBuffer.sample` when this
+        transform is appended to a replay buffer. Reads ``data[k]`` (root
+        observation at step ``i``) and ``data[("next", "delta", k)]`` (the
+        casted delta produced on the env side), writes
+        ``data[("next", k)] = (data[k] + delta).to(restore_dtype)``, and
+        (when ``drop_delta=True``, the default) removes the delta key.
+        Keys for which either side is missing are silently skipped.
+        """
+        in_keys = self.in_keys
+        if in_keys is None:
+            # No env parent in RB context: explicit in_keys are required
+            # so we know what to reconstruct.
+            return tensordict
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            delta_key = ("next", "delta") + key_tuple
+            obs = tensordict.get(key_tuple, default=None)
+            delta = tensordict.get(delta_key, default=None)
+            if obs is None or delta is None:
+                continue
+            dtype = obs.dtype if self.restore_dtype == "root" else self.restore_dtype
+            tensordict.set(("next",) + key_tuple, obs.to(dtype) + delta.to(dtype))
+            if self.drop_delta:
+                tensordict.pop(delta_key)
+        return tensordict
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(in_keys={self.__dict__.get('_in_keys', None)}, "
+            f"delta_dtype={self.delta_dtype})"
         )
