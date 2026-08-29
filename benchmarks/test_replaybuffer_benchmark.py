@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import functools
+import itertools
 import os
 
 import pytest
@@ -20,6 +21,7 @@ from torchrl.data import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.replay_buffers import (
+    GeometricTrajectoryWindowSampler,
     PrioritizedSampler,
     PromptGroupSampler,
     RandomSampler,
@@ -541,6 +543,55 @@ def test_prompt_group_sampler_cached_sample(benchmark, size):
     )
     rb.sample()
     benchmark(sample, rb)
+
+
+@pytest.mark.parametrize("size", [1_000, 100_000])
+@pytest.mark.parametrize("write_before_sample", [False, True])
+def test_geometric_trajectory_window_sampler_sample(
+    benchmark, size, write_before_sample
+):
+    trajectory_length = 128
+    trajectory = torch.arange(size) // trajectory_length
+    step = torch.arange(size) % trajectory_length
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(size),
+        sampler=GeometricTrajectoryWindowSampler(
+            history=8,
+            max_future=32,
+            continuation_probability=0.9,
+            trajectory_key="trajectory",
+            step_key="step",
+        ),
+        batch_size=64,
+    )
+    rb.extend(
+        TensorDict(
+            {"trajectory": trajectory, "step": step, "value": torch.arange(size)},
+            batch_size=[size],
+        )
+    )
+    rb.sample()
+
+    if write_before_sample:
+        write_cursor = itertools.count()
+
+        def write_and_sample():
+            position = next(write_cursor) % size
+            rb.add(
+                TensorDict(
+                    {
+                        "trajectory": torch.tensor(position // trajectory_length),
+                        "step": torch.tensor(position % trajectory_length),
+                        "value": torch.tensor(position),
+                    },
+                    batch_size=[],
+                )
+            )
+            return rb.sample()
+
+        benchmark(write_and_sample)
+    else:
+        benchmark(sample, rb)
 
 
 class TestPrioritizedReplayBufferBenchmark:
