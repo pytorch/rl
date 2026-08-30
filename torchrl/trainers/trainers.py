@@ -1051,8 +1051,9 @@ class Trainer:
         self.loss_module.load_state_dict(model_state_dict)
         self.collector.load_state_dict(collector_state_dict)
         optimizer = self._checkpoint_optimizer()
-        if optimizer is not None:
-            optimizer.load_state_dict(state_dict["optimizer"])
+        optimizer_state_dict = state_dict.get("optimizer")
+        if optimizer is not None and optimizer_state_dict:
+            optimizer.load_state_dict(optimizer_state_dict)
         for key, item in self._modules.items():
             if key == "optimizer":
                 continue
@@ -1122,7 +1123,9 @@ class Trainer:
             # Non-tensor values (scalars, bools, nested dicts) are wrapped in
             # NonTensorData automatically by _state_dict_to_td, so no pickle
             # dependency is needed.
-            for key in ("loss_module", "collector", "optimizer", *self._modules):
+            for key in dict.fromkeys(
+                ("loss_module", "collector", "optimizer", *self._modules)
+            ):
                 if key not in state:
                     continue
                 sd = state[key]
@@ -1267,7 +1270,9 @@ class Trainer:
         elif _CKPT_BACKEND == "memmap":
             path = pathlib.Path(file)
             state: dict = {}
-            for key in ("loss_module", "collector", "optimizer", *self._modules):
+            for key in dict.fromkeys(
+                ("loss_module", "collector", "optimizer", *self._modules)
+            ):
                 key_path = path / key
                 if key_path.exists():
                     state[key] = _td_to_state_dict(
