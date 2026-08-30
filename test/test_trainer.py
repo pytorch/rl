@@ -1269,6 +1269,66 @@ class TestSubSampler:
         assert (td0 == td1).all()
 
 
+class TestTrainerCheckpointComponents:
+    def test_state_dict_roundtrips_optimizer_state(self):
+        model = nn.Linear(2, 1)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.25)
+        trainer = mocking_trainer(optimizer=optimizer)
+        model.weight.grad = torch.ones_like(model.weight)
+        model.bias.grad = torch.ones_like(model.bias)
+        optimizer.step()
+        state = trainer.state_dict()
+
+        model2 = nn.Linear(2, 1)
+        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.01)
+        trainer2 = mocking_trainer(optimizer=optimizer2)
+        trainer2.load_state_dict(state)
+        state2 = optimizer2.state_dict()
+        state1 = optimizer.state_dict()
+        assert state2["param_groups"] == state1["param_groups"]
+        assert state2["state"].keys() == state1["state"].keys()
+        for key in state1["state"]:
+            for field in state1["state"][key]:
+                torch.testing.assert_close(
+                    state2["state"][key][field], state1["state"][key][field]
+                )
+
+    def test_optimizer_hook_roundtrips_optimizer_state(self):
+        model = nn.Linear(2, 1)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.25)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer)
+        hook.register(trainer)
+        model.weight.grad = torch.ones_like(model.weight)
+        model.bias.grad = torch.ones_like(model.bias)
+        optimizer.step()
+        state = trainer.state_dict()
+
+        model2 = nn.Linear(2, 1)
+        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.01)
+        trainer2 = mocking_trainer(optimizer=None)
+        hook2 = OptimizerHook(optimizer2)
+        hook2.register(trainer2)
+        trainer2.load_state_dict(state)
+        state2 = optimizer2.state_dict()
+        state1 = optimizer.state_dict()
+        assert state2["param_groups"] == state1["param_groups"]
+        assert state2["state"].keys() == state1["state"].keys()
+        for key in state1["state"]:
+            for field in state1["state"][key]:
+                torch.testing.assert_close(
+                    state2["state"][key][field], state1["state"][key][field]
+                )
+
+    def test_checkpoint_registers_optimizer(self):
+        model = nn.Linear(2, 1)
+        trainer = mocking_trainer(
+            optimizer=torch.optim.Adam(model.parameters()),
+            checkpoint=Checkpoint(),
+        )
+        assert "optimizer" in trainer.checkpoint.components
+
+
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 @pytest.mark.skipif(

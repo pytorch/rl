@@ -891,6 +891,17 @@ class Trainer:
                 return policy
         return None
 
+    def _checkpoint_optimizer(self) -> Any | None:
+        """Return the optimizer owned by the Trainer or a legacy hook."""
+        optimizer = self.optimizer
+        if self._is_checkpointable(optimizer):
+            return optimizer
+        optimizer_hook = self._modules.get("optimizer")
+        hook_optimizer = getattr(optimizer_hook, "optimizer", optimizer_hook)
+        if self._is_checkpointable(hook_optimizer):
+            return hook_optimizer
+        return None
+
     def _sync_checkpoint_components(
         self, checkpoint: Checkpoint | None = None
     ) -> Checkpoint:
@@ -932,16 +943,7 @@ class Trainer:
         register("policy", self._checkpoint_policy())
         register("loss_module", self.loss_module)
 
-        optimizer = self.optimizer
-        if not self._is_checkpointable(optimizer):
-            optimizer_hook = self._modules.get("optimizer")
-            hook_optimizer = getattr(optimizer_hook, "optimizer", optimizer_hook)
-            optimizer = (
-                hook_optimizer
-                if self._is_checkpointable(hook_optimizer)
-                else optimizer_hook
-            )
-        register("optimizer", optimizer)
+        register("optimizer", self._checkpoint_optimizer())
 
         register("collector", self.collector)
         replay_buffer = getattr(self, "replay_buffer", None)
@@ -1014,22 +1016,32 @@ class Trainer:
 
     @property
     def app_state(self):
+        optimizer = self._checkpoint_optimizer()
         self._app_state = {
             "state": StateDict(**self._get_state()),
             "collector": self.collector,
             "loss_module": self.loss_module,
-            **{k: item for k, item in self._modules.items()},
+            **({"optimizer": optimizer} if optimizer is not None else {}),
+            **{k: item for k, item in self._modules.items() if k != "optimizer"},
         }
         return self._app_state
 
     def state_dict(self) -> dict:
         state = self._get_state()
-        state_dict = OrderedDict(
+        state_dict: OrderedDict[str, Any] = OrderedDict(
             collector=self.collector.state_dict(),
             loss_module=self.loss_module.state_dict(),
             state=state,
-            **{k: item.state_dict() for k, item in self._modules.items()},
         )
+        optimizer = self._checkpoint_optimizer()
+        if optimizer is not None:
+            state_dict["optimizer"] = optimizer.state_dict()
+        for key, item in self._modules.items():
+            # The standard optimizer component is emitted above, while a
+            # legacy OptimizerHook may also be registered under this name.
+            if key == "optimizer":
+                continue
+            state_dict[key] = item.state_dict()
         return state_dict
 
     def load_state_dict(self, state_dict: dict) -> None:
@@ -1038,7 +1050,12 @@ class Trainer:
 
         self.loss_module.load_state_dict(model_state_dict)
         self.collector.load_state_dict(collector_state_dict)
+        optimizer = self._checkpoint_optimizer()
+        if optimizer is not None:
+            optimizer.load_state_dict(state_dict["optimizer"])
         for key, item in self._modules.items():
+            if key == "optimizer":
+                continue
             item.load_state_dict(state_dict[key])
 
         self.collected_frames = state_dict["state"]["collected_frames"]
@@ -1105,7 +1122,9 @@ class Trainer:
             # Non-tensor values (scalars, bools, nested dicts) are wrapped in
             # NonTensorData automatically by _state_dict_to_td, so no pickle
             # dependency is needed.
-            for key in ("loss_module", "collector", *self._modules):
+            for key in ("loss_module", "collector", "optimizer", *self._modules):
+                if key not in state:
+                    continue
                 sd = state[key]
                 if sd:
                     _state_dict_to_td(sd).dumps(str(path / key))
@@ -1248,7 +1267,7 @@ class Trainer:
         elif _CKPT_BACKEND == "memmap":
             path = pathlib.Path(file)
             state: dict = {}
-            for key in ("loss_module", "collector", *self._modules):
+            for key in ("loss_module", "collector", "optimizer", *self._modules):
                 key_path = path / key
                 if key_path.exists():
                     state[key] = _td_to_state_dict(
@@ -2271,10 +2290,13 @@ class OptimizerHook(TrainerHookBase):
         return losses_td
 
     def state_dict(self) -> dict[str, Any]:
-        return {}
+        state_dict = getattr(self.optimizer, "state_dict", None)
+        return state_dict() if callable(state_dict) else {}
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        pass
+        load_state_dict = getattr(self.optimizer, "load_state_dict", None)
+        if state_dict and callable(load_state_dict):
+            load_state_dict(state_dict)
 
     def register(self, trainer, name="optimizer") -> None:
         trainer.register_op("optimizer", self)
