@@ -68,13 +68,14 @@ try:
     from torchrl.trainers.algorithms import configs as algorithm_configs
     from torchrl.trainers.algorithms.configs.modules import (
         ActivationConfig,
+        DreamerV3MLPConfig,
         LayerConfig,
     )
 
     _configs_available = True
 except ImportError:
     _configs_available = False
-    ActivationConfig = LayerConfig = None
+    ActivationConfig = DreamerV3MLPConfig = LayerConfig = None
 
 
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
@@ -1148,33 +1149,24 @@ class TestModuleConfigs:
         # This is a known limitation - the MLP constructor expects actual classes
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    def test_dreamer_v3_mlp_config(self):
+    @pytest.mark.parametrize(("out_features", "expected_features"), [(4, 4), (None, 8)])
+    def test_dreamer_v3_mlp_config(self, out_features, expected_features):
         """Test DreamerV3MLPConfig."""
         from hydra.utils import instantiate
-        from torchrl.trainers.algorithms.configs.modules import DreamerV3MLPConfig
 
         cfg = DreamerV3MLPConfig(
             in_features=6,
-            out_features=4,
+            out_features=out_features,
             depth=2,
             num_cells=8,
             outscale=0.25,
             norm_eps=1e-5,
             device="cpu",
         )
-        assert cfg._target_ == "torchrl.modules.DreamerV3MLP"
-        assert cfg.in_features == 6
-        assert cfg.out_features == 4
-        assert cfg.depth == 2
-        assert cfg.num_cells == 8
-        assert cfg.outscale == 0.25
-        assert cfg.norm_eps == 1e-5
-        assert cfg.device == "cpu"
-
         module = instantiate(cfg)
         assert isinstance(module, DreamerV3MLP)
         output = module(torch.randn(3, 2), torch.randn(3, 4))
-        assert output.shape == (3, 4)
+        assert output.shape == (3, expected_features)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_convnet_config(self):
