@@ -200,7 +200,13 @@ class CubeBowlEnv(MujocoEnv):
     # XML loading and construction-time scene randomization.
     # ------------------------------------------------------------------
 
-    def _load_xml(self, xml_path: str | Path | None) -> str:
+    def _load_xml(
+        self,
+        xml_path: str | Path | None,
+        *,
+        patch_xml: bool = True,
+    ) -> str:
+        del patch_xml
         if xml_path is not None:
             raise ValueError(
                 "CubeBowlEnv composes a MuJoCo Menagerie UR5e scene; pass "

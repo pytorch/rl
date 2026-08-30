@@ -187,6 +187,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
 
     Args:
         xml_path: optional override for the XML asset (path or URL).
+        patch_xml: if ``True`` (default), load the XML as text and apply
+            :meth:`_patch_xml`. If ``False``, pass a local ``xml_path`` to
+            MuJoCo unchanged so relative includes, meshes, textures, and other
+            assets resolve from the model directory. Remote URLs are still
+            loaded as text and therefore must be self-contained.
         backend: ``"mujoco-torch"`` (default), ``"mjx"``, or ``"mujoco"``.
         num_envs: batch size; the env's ``batch_size`` is ``(num_envs,)``.
         device: torch device for observations / rewards / actions.
@@ -255,6 +260,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         self,
         *,
         xml_path: str | Path | None = None,
+        patch_xml: bool = True,
         backend: Literal["mujoco-torch", "mjx", "mujoco"] = "mujoco-torch",
         num_envs: int = 1,
         device: torch.device | None = None,
@@ -296,10 +302,10 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         self._render_counter = 0
         self.camera_id = int(camera_id)
 
-        xml_string = self._load_xml(xml_path)
+        source = self._load_xml(xml_path, patch_xml=patch_xml)
         self._backend: _PhysicsBackend = make_backend(
             backend,
-            xml_string,
+            source,
             num_envs=num_envs,
             device=self.device,
             compile_step=compile_step,
@@ -317,7 +323,27 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     # XML resolution + patching
     # ------------------------------------------------------------------
 
-    def _load_xml(self, xml_path: str | Path | None) -> str:
+    def _resolve_xml_candidate(
+        self,
+        candidate: str | Path,
+        *,
+        patch_xml: bool,
+    ) -> str | Path:
+        value = str(candidate)
+        if not patch_xml and not value.startswith(("http://", "https://")):
+            path = Path(candidate).expanduser()
+            if not path.is_file():
+                raise FileNotFoundError(path)
+            return path.resolve()
+        xml = resolve_xml_string(candidate)
+        return self._patch_xml(xml) if patch_xml else xml
+
+    def _load_xml(
+        self,
+        xml_path: str | Path | None,
+        *,
+        patch_xml: bool = True,
+    ) -> str | Path:
         # An explicit ``xml_path=...`` is treated as a hard request: if
         # it can't be resolved, surface the error rather than silently
         # falling back to the class-level defaults. Subclass-level
@@ -325,7 +351,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         # the last failure preserved as ``__cause__``.
         if xml_path is not None:
             try:
-                return self._patch_xml(resolve_xml_string(xml_path))
+                return self._resolve_xml_candidate(xml_path, patch_xml=patch_xml)
             except OSError as e:
                 raise FileNotFoundError(
                     f"{type(self).__name__}: explicit xml_path={xml_path!r} "
@@ -348,8 +374,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         last_exc: Exception | None = None
         for cand in candidates:
             try:
-                xml_string = resolve_xml_string(cand)
-                return self._patch_xml(xml_string)
+                return self._resolve_xml_candidate(cand, patch_xml=patch_xml)
             except OSError as e:
                 last_exc = e
         raise FileNotFoundError(
