@@ -28,31 +28,187 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import math
+import time
+import xml.etree.ElementTree as ET
 from collections.abc import Sequence
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict.nn import (
+    NormalParamExtractor,
+    TensorDictModule,
+    TensorDictSequential,
+)
 from torch import nn
 
 from torchrl import torchrl_logger
-from torchrl.data import Bounded, Composite, Unbounded
+from torchrl.collectors import Collector
+from torchrl.data import (
+    Bounded,
+    Composite,
+    LazyTensorStorage,
+    SliceSampler,
+    TensorDictReplayBuffer,
+    Unbounded,
+)
 from torchrl.envs import EnvBase, ExplorationType, MujocoEnv, set_exploration_type
 from torchrl.envs.utils import step_mdp
-from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules import (
+    GRUModule,
+    ProbabilisticActor,
+    TanhNormal,
+    ValueOperator,
+    set_recurrent_mode,
+)
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
+from torchrl.record import WandbLogger
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
+_has_mujoco_torch = importlib.util.find_spec("mujoco_torch") is not None
+_has_mjx = importlib.util.find_spec("mujoco.mjx") is not None
+_has_psutil = importlib.util.find_spec("psutil") is not None
+_psutil_process = None
 
 Backend = Literal["mujoco", "mjx", "mujoco-torch"]
 NUM_JOINTS = 14
 OBSERVATION_DIM = 3 + 3 + 2 + NUM_JOINTS * 3
 VELOCITY_TRACKING_STD = 0.25
 STAND_POSE_COMMAND_STD = 0.1
+DEFAULT_COMMANDS = (-0.3, 0.0, 0.3)
+MAX_EPISODE_STEPS = 500
+DEFAULT_REPLAY_CAPACITY = 16_384
+
+
+class _CompleteTrajectoryReplayBuffer(TensorDictReplayBuffer):
+    """Reject a trajectory rather than partially overwriting an on-policy batch."""
+
+    def __init__(self, *args: Any, collection_capacity: int, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.collection_capacity = collection_capacity
+        self.collection_full = False
+        self._validate_single_trajectory = True
+
+    def extend(
+        self,
+        data: TensorDictBase,
+        *,
+        update_priority: bool | None = None,
+    ) -> torch.Tensor:
+        if self._validate_single_trajectory:
+            done = data.get(("next", "done"))
+            if data.ndim != 1 or not bool(done[-1].all()) or bool(done[:-1].any()):
+                raise RuntimeError(
+                    "The collector must write one complete trajectory per replay "
+                    "buffer extend call."
+                )
+            if (
+                self.collection_full
+                or len(self) + data.numel() > self.collection_capacity
+            ):
+                self.collection_full = True
+                return torch.zeros((0, 1), dtype=torch.long)
+        return super().extend(data, update_priority=update_priority)
+
+    def replace_with_processed_batch(self, batch: TensorDictBase) -> None:
+        """Replace raw collection data by the same data augmented with GAE targets."""
+        self.empty()
+        self._validate_single_trajectory = False
+        try:
+            self.extend(batch)
+        finally:
+            self._validate_single_trajectory = True
+            self.collection_full = False
+
+    def empty(self, empty_write_count: bool = True) -> None:
+        super().empty(empty_write_count=empty_write_count)
+        self.collection_full = False
+
+
+def _metric_float(value: torch.Tensor | float) -> float:
+    if isinstance(value, torch.Tensor):
+        value = value.detach().float().mean().cpu()
+    return float(value)
+
+
+def _telemetry_metrics(device: torch.device) -> dict[str, float]:
+    global _psutil_process
+    metrics = {}
+    if _has_psutil:
+        import psutil
+
+        if _psutil_process is None:
+            _psutil_process = psutil.Process()
+        memory = _psutil_process.memory_info()
+        system_memory = psutil.virtual_memory()
+        metrics.update(
+            {
+                "telemetry/process_rss_gb": memory.rss / 1e9,
+                "telemetry/process_cpu_percent": _psutil_process.cpu_percent(),
+                "telemetry/process_threads": float(_psutil_process.num_threads()),
+                "telemetry/system_memory_percent": float(system_memory.percent),
+                "telemetry/system_memory_available_gb": system_memory.available / 1e9,
+            }
+        )
+    if device.type == "cuda":
+        metrics.update(
+            {
+                "telemetry/device_allocated_gb": torch.cuda.memory_allocated(device)
+                / 1e9,
+                "telemetry/device_reserved_gb": torch.cuda.memory_reserved(device)
+                / 1e9,
+                "telemetry/device_max_allocated_gb": torch.cuda.max_memory_allocated(
+                    device
+                )
+                / 1e9,
+            }
+        )
+    elif device.type == "mps" and hasattr(torch.mps, "current_allocated_memory"):
+        metrics["telemetry/device_allocated_gb"] = (
+            torch.mps.current_allocated_memory() / 1e9
+        )
+        metrics["telemetry/device_driver_allocated_gb"] = (
+            torch.mps.driver_allocated_memory() / 1e9
+        )
+    return metrics
+
+
+def _collection_metrics(batch: TensorDictBase) -> tuple[dict[str, float], int]:
+    rewards = batch.get(("next", "reward")).squeeze(-1)
+    done = batch.get(("next", "done")).squeeze(-1).bool()
+    terminated = batch.get(("next", "terminated")).squeeze(-1).bool()
+    commands = batch["commanded_x_velocity"].squeeze(-1)
+    measured_velocity = batch["observation"][..., 6]
+    ends = done.nonzero(as_tuple=False).squeeze(-1).tolist()
+    starts = [0, *(end + 1 for end in ends[:-1])]
+    returns = torch.stack(
+        [rewards[start : end + 1].sum() for start, end in zip(starts, ends)]
+    )
+    lengths = torch.tensor(
+        [end - start + 1 for start, end in zip(starts, ends)], dtype=torch.float32
+    )
+    end_indices = torch.tensor(ends, dtype=torch.long, device=terminated.device)
+    metrics = {
+        "collection/reward_mean": _metric_float(rewards.mean()),
+        "collection/reward_std": _metric_float(rewards.std(unbiased=False)),
+        "collection/tracking_error_mean": _metric_float(
+            (measured_velocity - commands).abs().mean()
+        ),
+        "episode/return_mean": _metric_float(returns.mean()),
+        "episode/return_std": _metric_float(returns.std(unbiased=False)),
+        "episode/length_mean": _metric_float(lengths.mean()),
+        "episode/length_min": _metric_float(lengths.min()),
+        "episode/length_max": _metric_float(lengths.max()),
+        "episode/survival_rate": _metric_float(
+            (~terminated[end_indices]).float().mean()
+        ),
+    }
+    return metrics, len(ends)
 
 
 def resolve_microduck_scene(
@@ -104,6 +260,99 @@ def resolve_microduck_scene(
         "Could not find MicroDuck's scene_walk.xml. Pass --microduck-root or "
         "install microduck_rl. Tried:\n" + detail
     )
+
+
+@contextmanager
+def _low_cost_collision_scene(scene_path: Path):
+    """Replace detailed collision meshes with tight box proxies at load time.
+
+    The upstream walking asset reuses render meshes for the feet and
+    self-collision geoms. Accelerated MuJoCo implementations expand every pair
+    of convex-hull edges, which makes the two roughly 10,000-edge soles
+    prohibitively expensive to compile or step in a batch. Visual meshes stay
+    untouched; only geoms explicitly assigned to the ``collision`` or
+    ``self_collision_only`` classes are replaced.
+
+    Direct, self-contained MJCF files without an ``<include>`` are yielded
+    unchanged. This keeps small fixtures and custom MicroDuck-compatible files
+    working without imposing the upstream asset layout.
+    """
+    scene_tree = ET.parse(scene_path)
+    include = scene_tree.getroot().find("include")
+    if include is None or include.get("file") is None:
+        yield scene_path
+        return
+
+    robot_path = (scene_path.parent / include.get("file")).resolve()
+    if not robot_path.is_file():
+        yield scene_path
+        return
+
+    import mujoco
+
+    model = mujoco.MjModel.from_xml_path(str(scene_path))
+    robot_tree = ET.parse(robot_path)
+    robot_root = robot_tree.getroot()
+    proxy_count = 0
+    for geom in robot_root.iter("geom"):
+        if geom.get("class") not in {"collision", "self_collision_only"}:
+            continue
+        mesh_name = geom.get("mesh")
+        if mesh_name is None:
+            continue
+        mesh_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_MESH, mesh_name)
+        if mesh_id < 0:
+            raise ValueError(f"Could not resolve collision mesh {mesh_name!r}.")
+        vertex_start = int(model.mesh_vertadr[mesh_id])
+        vertex_count = int(model.mesh_vertnum[mesh_id])
+        vertices = torch.from_numpy(
+            model.mesh_vert[vertex_start : vertex_start + vertex_count].copy()
+        )
+        lower = vertices.amin(dim=0)
+        upper = vertices.amax(dim=0)
+        center = (lower + upper) / 2
+        half_size = ((upper - lower) / 2).clamp_min(1e-4)
+
+        position = torch.tensor(
+            [float(value) for value in geom.get("pos", "0 0 0").split()]
+        )
+        quaternion = torch.tensor(
+            [float(value) for value in geom.get("quat", "1 0 0 0").split()]
+        )
+        quaternion = quaternion / quaternion.norm().clamp_min(1e-8)
+        w = quaternion[0]
+        vector = quaternion[1:]
+        rotated_center = (
+            center
+            + 2 * w * torch.cross(vector, center, dim=0)
+            + 2 * torch.cross(vector, torch.cross(vector, center, dim=0), dim=0)
+        )
+        position = position + rotated_center
+
+        geom.set("type", "box")
+        geom.set("pos", " ".join(f"{value:.9g}" for value in position.tolist()))
+        geom.set("size", " ".join(f"{value:.9g}" for value in half_size.tolist()))
+        del geom.attrib["mesh"]
+        proxy_count += 1
+
+    if not proxy_count:
+        yield scene_path
+        return
+
+    compiler = robot_root.find("compiler")
+    if compiler is not None:
+        for attribute in ("meshdir", "texturedir"):
+            directory = compiler.get(attribute)
+            if directory is not None and not Path(directory).is_absolute():
+                compiler.set(attribute, str((robot_path.parent / directory).resolve()))
+
+    with TemporaryDirectory(prefix="torchrl-microduck-") as directory:
+        directory = Path(directory)
+        patched_robot = directory / robot_path.name
+        patched_scene = directory / scene_path.name
+        robot_tree.write(patched_robot, encoding="unicode")
+        scene_tree.write(patched_scene, encoding="unicode")
+        yield patched_scene
 
 
 def _load_stand_metadata(scene_path: Path) -> tuple[torch.Tensor, ...]:
@@ -214,12 +463,13 @@ class MicroDuckVelocityEnv(MujocoEnv):
     ):
         scene_path = resolve_microduck_scene(microduck_root)
         home_qpos, home_ctrl, joint_low, joint_high = _load_stand_metadata(scene_path)
-        super().__init__(
-            xml_path=scene_path,
-            patch_xml=False,
-            backend=backend,
-            **kwargs,
-        )
+        with _low_cost_collision_scene(scene_path) as physics_scene:
+            super().__init__(
+                xml_path=physics_scene,
+                patch_xml=False,
+                backend=backend,
+                **kwargs,
+            )
         self.scene_path = scene_path
         self.action_scale = float(action_scale)
         self._home_qpos = home_qpos.to(device=self.device, dtype=self.dtype)
@@ -325,7 +575,7 @@ class MicroDuckVelocityEnv(MujocoEnv):
         self,
         tensordict: TensorDictBase | None,
     ) -> torch.Tensor:
-        if tensordict is not None and "commanded_x_velocity" in tensordict.keys():
+        if tensordict is not None and "commanded_x_velocity" in tensordict:
             command = tensordict["commanded_x_velocity"].to(
                 device=self.device, dtype=self.dtype
             )
@@ -500,33 +750,50 @@ def make_models(
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
     initial_policy_scale: float = 0.2,
-) -> tuple[ProbabilisticActor, ValueOperator]:
-    """Create the actor and critic used by the compact PPO example.
+) -> tuple[ProbabilisticActor, ValueOperator, TensorDictSequential]:
+    """Create a GRU actor and value head sharing the recurrent backbone.
 
     The actor starts with zero deterministic actions and a modest exploration
-    scale so its initial rollouts stay near the ``STAND`` actuator targets.
+    scale so its initial rollouts stay near the ``STAND`` actuator targets. The
+    third returned module is the complete recurrent value network used by GAE
+    and PPO; the second is its non-shared value head.
     """
     if not math.isfinite(initial_policy_scale) or initial_policy_scale <= 0:
         raise ValueError("initial_policy_scale must be finite and positive.")
     device = torch.device(device)
     action_dim = env.action_spec_unbatched.shape[-1]
+    embed = TensorDictModule(
+        nn.Sequential(
+            nn.LazyLinear(hidden_size, device=device),
+            nn.Tanh(),
+        ),
+        in_keys=["observation"],
+        out_keys=["embed"],
+    )
+    gru = GRUModule(
+        input_size=hidden_size,
+        hidden_size=hidden_size,
+        num_layers=1,
+        in_keys=["embed", "recurrent_state", "is_init"],
+        out_keys=["gru_out", ("next", "recurrent_state")],
+        device=device,
+    )
+    backbone = TensorDictSequential(embed, gru)
     actor_output = nn.Linear(hidden_size, 2 * action_dim, device=device)
     nn.init.zeros_(actor_output.weight)
     nn.init.zeros_(actor_output.bias)
-    actor_net = nn.Sequential(
-        nn.LazyLinear(hidden_size, device=device),
-        nn.Tanh(),
-        nn.Linear(hidden_size, hidden_size, device=device),
-        nn.Tanh(),
-        actor_output,
-        NormalParamExtractor(scale_mapping=f"biased_softplus_{initial_policy_scale}"),
+    actor_head = TensorDictModule(
+        nn.Sequential(
+            actor_output,
+            NormalParamExtractor(
+                scale_mapping=f"biased_softplus_{initial_policy_scale}"
+            ),
+        ),
+        in_keys=["gru_out"],
+        out_keys=["loc", "scale"],
     )
     actor = ProbabilisticActor(
-        module=TensorDictModule(
-            actor_net,
-            in_keys=["observation"],
-            out_keys=["loc", "scale"],
-        ),
+        module=TensorDictSequential(backbone, actor_head),
         spec=env.action_spec,
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
@@ -536,21 +803,69 @@ def make_models(
         },
         return_log_prob=True,
     ).to(device)
+    value_feature = TensorDictModule(
+        nn.Identity(), in_keys=["gru_out"], out_keys=["value_gru_out"]
+    )
     critic = ValueOperator(
-        nn.Sequential(
-            nn.LazyLinear(hidden_size, device=device),
-            nn.Tanh(),
-            nn.Linear(hidden_size, hidden_size, device=device),
-            nn.Tanh(),
-            nn.Linear(hidden_size, 1, device=device),
-        ),
-        in_keys=["observation"],
+        nn.Linear(hidden_size, 1, device=device),
+        in_keys=["value_gru_out"],
     ).to(device)
+    full_value = TensorDictSequential(backbone, value_feature, critic)
     with torch.no_grad():
         fake_tensordict = env.fake_tensordict().to(device)
+        fake_tensordict.set(
+            "is_init",
+            torch.ones(
+                *fake_tensordict.batch_size,
+                1,
+                dtype=torch.bool,
+                device=device,
+            ),
+        )
+        fake_tensordict.set(
+            "recurrent_state",
+            torch.zeros(
+                *fake_tensordict.batch_size,
+                1,
+                hidden_size,
+                device=device,
+            ),
+        )
         actor(fake_tensordict)
-        critic(fake_tensordict)
-    return actor, critic
+        full_value(fake_tensordict)
+    return actor, critic, full_value
+
+
+def _prepare_recurrent_reset(
+    tensordict: TensorDictBase, policy: ProbabilisticActor
+) -> TensorDictBase:
+    """Add the zero recurrent state expected on a manually-driven reset."""
+    if "is_init" in tensordict:
+        return tensordict
+    gru = next(
+        (module for module in policy.modules() if isinstance(module, GRUModule)), None
+    )
+    if gru is None:
+        return tensordict
+    tensordict.set(
+        "is_init",
+        torch.ones(
+            *tensordict.batch_size,
+            1,
+            dtype=torch.bool,
+            device=tensordict.device,
+        ),
+    )
+    tensordict.set(
+        gru.in_keys[1],
+        torch.zeros(
+            *tensordict.batch_size,
+            gru.gru.num_layers,
+            gru.gru.hidden_size,
+            device=tensordict.device,
+        ),
+    )
+    return tensordict
 
 
 @torch.no_grad()
@@ -604,7 +919,9 @@ def evaluate_policy(
                         batch_size=env.batch_size,
                         device=env.device,
                     )
-                    tensordict = env.reset(reset_input)
+                    tensordict = _prepare_recurrent_reset(
+                        env.reset(reset_input), policy
+                    )
                     start_state = env.get_state()
                     start_qpos = start_state["qpos"][0].to(env.dtype)
                     initial_forward = _body_forward_vector(start_qpos[3:7])
@@ -648,38 +965,78 @@ def evaluate_policy(
     return results
 
 
+def _evaluation_metrics(evaluation: list[dict[str, float]]) -> dict[str, float]:
+    metrics = {}
+    fields = (
+        "episode_return",
+        "tracking_error",
+        "survived",
+        "episode_length",
+        "signed_displacement",
+    )
+    for field in fields:
+        metrics[f"evaluation/{field}"] = sum(row[field] for row in evaluation) / len(
+            evaluation
+        )
+    for command in sorted({row["commanded_x_velocity"] for row in evaluation}):
+        rows = [row for row in evaluation if row["commanded_x_velocity"] == command]
+        command_name = f"{command:+.2f}".replace("+", "plus_").replace("-", "minus_")
+        for field in fields:
+            metrics[f"evaluation/{command_name}/{field}"] = sum(
+                row[field] for row in rows
+            ) / len(rows)
+    return metrics
+
+
 def train_ppo(
     env: EnvBase,
     actor: ProbabilisticActor,
     critic: ValueOperator,
+    full_value: TensorDictSequential,
     *,
-    iterations: int = 10,
-    rollout_steps: int = 64,
-    epochs: int = 4,
-    minibatch_size: int = 128,
+    total_transitions: int = 10_000_000,
+    replay_capacity: int = DEFAULT_REPLAY_CAPACITY,
+    epochs: int = 10,
+    minibatch_trajectories: int = 8,
     learning_rate: float = 3e-4,
     entropy_coeff: float = 1e-3,
     critic_coeff: float = 1.0,
     anneal_learning_rate: bool = False,
+    max_grad_norm: float = 1.0,
     evaluation_env: MicroDuckVelocityEnv | None = None,
     evaluation_interval: int | None = None,
-    evaluation_commands: Sequence[float] = (-0.3, 0.0, 0.3),
+    evaluation_commands: Sequence[float] = DEFAULT_COMMANDS,
     evaluation_seeds: Sequence[int] = (0, 1, 2),
-    evaluation_steps: int = 500,
+    evaluation_steps: int = MAX_EPISODE_STEPS,
     best_checkpoint_path: str | Path | None = None,
+    experiment_logger: WandbLogger | None = None,
 ) -> list[dict[str, float]]:
-    """Train ``actor`` and ``critic`` with a small synchronous PPO loop.
+    """Train recurrent PPO from complete on-policy trajectories.
 
-    The function is intentionally compact enough for a notebook. It returns
-    per-iteration metrics instead of owning an experiment tracker. When an
-    evaluation environment and interval are supplied, deterministic fixed-
-    command evaluation selects and restores the best policy. The same best
-    actor and critic state can optionally be persisted to disk.
+    A collector writes only finished episodes to a roughly 16K-transition
+    replay buffer. ``SliceSampler`` draws whole episodes for recurrent PPO,
+    the buffer is replayed for ``epochs`` passes, and is then erased before
+    collecting with the updated policy. Collection stops after at least
+    ``total_transitions`` complete-trajectory transitions.
     """
-    if min(iterations, rollout_steps, epochs, minibatch_size) < 1:
-        raise ValueError("PPO loop sizes must all be positive.")
+    if (
+        min(
+            total_transitions,
+            replay_capacity,
+            epochs,
+            minibatch_trajectories,
+        )
+        < 1
+    ):
+        raise ValueError("PPO transition and replay sizes must all be positive.")
+    if replay_capacity < MAX_EPISODE_STEPS:
+        raise ValueError(
+            f"replay_capacity must be at least {MAX_EPISODE_STEPS} transitions."
+        )
     if learning_rate <= 0 or not math.isfinite(learning_rate):
         raise ValueError("learning_rate must be finite and positive.")
+    if max_grad_norm <= 0 or not math.isfinite(max_grad_norm):
+        raise ValueError("max_grad_norm must be finite and positive.")
     if min(entropy_coeff, critic_coeff) < 0 or not all(
         math.isfinite(value) for value in (entropy_coeff, critic_coeff)
     ):
@@ -690,17 +1047,43 @@ def train_ppo(
         raise ValueError("evaluation_interval requires an evaluation_env.")
     if best_checkpoint_path is not None and evaluation_interval is None:
         raise ValueError("best_checkpoint_path requires periodic evaluation.")
+
     device = next(actor.parameters()).device
+    sampler = SliceSampler(
+        num_slices=minibatch_trajectories,
+        end_key=("next", "done"),
+        strict_length=False,
+        cache_values=True,
+    )
+    replay_buffer = _CompleteTrajectoryReplayBuffer(
+        storage=LazyTensorStorage(replay_capacity, ndim=1),
+        sampler=sampler,
+        collection_capacity=replay_capacity,
+    )
+    frames_per_batch = max(1, env.batch_size.numel())
+    collector = Collector(
+        env,
+        actor,
+        frames_per_batch=frames_per_batch,
+        total_frames=-1,
+        replay_buffer=replay_buffer,
+        trajs_per_batch=1,
+        trajs_per_write=1,
+        storing_device="cpu",
+        auto_register_policy_transforms=True,
+    )
     advantage = GAE(
         gamma=0.99,
         lmbda=0.95,
-        value_network=critic,
-        average_gae=True,
+        value_network=full_value,
+        average_gae=False,
+        shifted=True,
+        deactivate_vmap=True,
         device=device,
     )
     loss_module = ClipPPOLoss(
         actor_network=actor,
-        critic_network=critic,
+        critic_network=full_value,
         clip_epsilon=0.2,
         entropy_bonus=True,
         entropy_coeff=entropy_coeff,
@@ -708,32 +1091,32 @@ def train_ppo(
         loss_critic_type="smooth_l1",
         normalize_advantage=True,
     )
-    optimizer = torch.optim.Adam(loss_module.parameters(), lr=learning_rate)
+    parameters = list(actor.parameters()) + list(critic.parameters())
+    optimizer = torch.optim.Adam(parameters, lr=learning_rate)
     history = []
+    collected_transitions = 0
+    collection_iteration = 0
     best_evaluation_return = -float("inf")
     best_actor_state = None
     best_critic_state = None
     checkpoint_path = (
         Path(best_checkpoint_path) if best_checkpoint_path is not None else None
     )
-    if evaluation_interval is not None:
-        initial_evaluation = evaluate_policy(
+
+    def run_evaluation() -> tuple[list[dict[str, float]], dict[str, float]]:
+        evaluation = evaluate_policy(
             evaluation_env,
             actor,
             commanded_x_velocities=evaluation_commands,
             seeds=evaluation_seeds,
             steps=evaluation_steps,
         )
-        best_evaluation_return = sum(
-            row["episode_return"] for row in initial_evaluation
-        ) / len(initial_evaluation)
-        best_actor_state = deepcopy(actor.state_dict())
-        best_critic_state = deepcopy(critic.state_dict())
-        for row in initial_evaluation:
+        for row in evaluation:
             torchrl_logger.info(
-                "MicroDuck evaluation iteration=0 command=%+.3f seed=%d: "
+                "MicroDuck evaluation transitions=%d command=%+.3f seed=%d: "
                 "return=%+.4f tracking_error=%.4f survived=%d "
                 "length=%d displacement=%+.4f",
+                collected_transitions,
                 row["commanded_x_velocity"],
                 int(row["seed"]),
                 row["episode_return"],
@@ -742,11 +1125,22 @@ def train_ppo(
                 int(row["episode_length"]),
                 row["signed_displacement"],
             )
+        return evaluation, _evaluation_metrics(evaluation)
+
+    if evaluation_interval is not None:
+        initial_evaluation, initial_metrics = run_evaluation()
+        best_evaluation_return = initial_metrics["evaluation/episode_return"]
+        best_actor_state = deepcopy(actor.state_dict())
+        best_critic_state = deepcopy(critic.state_dict())
+        if experiment_logger is not None:
+            experiment_logger.log_metrics(
+                initial_metrics, step=0, override_global_step=True
+            )
         if checkpoint_path is not None:
             checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {
-                    "iteration": 0,
+                    "transitions": 0,
                     "evaluation_return": best_evaluation_return,
                     "evaluation": initial_evaluation,
                     "actor": best_actor_state,
@@ -754,112 +1148,151 @@ def train_ppo(
                 },
                 checkpoint_path,
             )
-    for iteration in range(iterations):
-        current_learning_rate = learning_rate
-        if anneal_learning_rate:
-            current_learning_rate *= 1.0 - iteration / iterations
-            for group in optimizer.param_groups:
-                group["lr"] = current_learning_rate
-        with torch.no_grad():
-            batch = env.rollout(
-                rollout_steps,
-                actor,
-                auto_reset=True,
-                break_when_any_done=False,
-                return_contiguous=True,
-            ).to(device)
-            advantage(batch)
-        flat_batch = batch.reshape(-1)
-        losses = []
-        for _ in range(epochs):
-            order = torch.randperm(flat_batch.numel(), device=device)
-            for indices in order.split(minibatch_size):
-                sample = flat_batch[indices]
-                loss_values = loss_module(sample)
-                total_loss = (
-                    loss_values["loss_objective"]
-                    + loss_values["loss_critic"]
-                    + loss_values["loss_entropy"]
+
+    collector_iterator = iter(collector)
+    try:
+        while collected_transitions < total_transitions:
+            collection_iteration += 1
+            collection_start = time.perf_counter()
+            while not replay_buffer.collection_full:
+                next(collector_iterator)
+            collection_time = time.perf_counter() - collection_start
+            collected = replay_buffer[:]
+            collection_size = collected.numel()
+            if not collection_size:
+                raise RuntimeError(
+                    "The complete-trajectory collector did not fit an episode in "
+                    "the replay buffer."
                 )
-                optimizer.zero_grad(set_to_none=True)
-                total_loss.backward()
-                nn.utils.clip_grad_norm_(loss_module.parameters(), 1.0)
-                optimizer.step()
-                losses.append(total_loss.detach())
-        metrics = {
-            "iteration": float(iteration + 1),
-            "reward": float(batch["next", "reward"].mean()),
-            "loss": float(torch.stack(losses).mean()),
-            "learning_rate": current_learning_rate,
-        }
-        should_evaluate = evaluation_interval is not None and (
-            (iteration + 1) % evaluation_interval == 0 or iteration + 1 == iterations
-        )
-        if should_evaluate:
-            evaluation = evaluate_policy(
-                evaluation_env,
-                actor,
-                commanded_x_velocities=evaluation_commands,
-                seeds=evaluation_seeds,
-                steps=evaluation_steps,
+            collected_transitions += collection_size
+            metrics, num_trajectories = _collection_metrics(collected)
+            metrics.update(
+                {
+                    "collection/iteration": float(collection_iteration),
+                    "collection/transitions": float(collection_size),
+                    "collection/trajectories": float(num_trajectories),
+                    "collection/replay_fill_fraction": collection_size
+                    / replay_capacity,
+                    "throughput/inference_transitions_per_second": collection_size
+                    / collection_time,
+                    "throughput/collection_seconds": collection_time,
+                }
             )
-            mean_return = sum(row["episode_return"] for row in evaluation) / len(
-                evaluation
+            with torch.no_grad(), set_recurrent_mode(True):
+                processed = collected.to(device).clone().refine_names("time")
+                advantage(processed)
+            replay_buffer.replace_with_processed_batch(processed.cpu())
+
+            current_learning_rate = learning_rate
+            if anneal_learning_rate:
+                current_learning_rate *= max(
+                    0.0, 1.0 - collected_transitions / total_transitions
+                )
+                for group in optimizer.param_groups:
+                    group["lr"] = current_learning_rate
+            updates_per_epoch = max(
+                1, math.ceil(num_trajectories / minibatch_trajectories)
+            )
+            training_start = time.perf_counter()
+            training_transitions = 0
+            update_count = 0
+            update_metrics: dict[str, float] = {}
+            for _ in range(epochs):
+                for _ in range(updates_per_epoch):
+                    sample = replay_buffer.sample(
+                        minibatch_trajectories * MAX_EPISODE_STEPS
+                    ).to(device)
+                    sample.refine_names("time")
+                    optimizer.zero_grad(set_to_none=True)
+                    with set_recurrent_mode(True):
+                        loss_values = loss_module(sample)
+                    total_loss = (
+                        loss_values["loss_objective"]
+                        + loss_values["loss_critic"]
+                        + loss_values["loss_entropy"]
+                    )
+                    total_loss.backward()
+                    grad_norm = nn.utils.clip_grad_norm_(parameters, max_grad_norm)
+                    optimizer.step()
+                    training_transitions += sample.numel()
+                    update_count += 1
+                    for key, value in loss_values.items():
+                        metric_name = f"ppo/{key}"
+                        update_metrics[metric_name] = update_metrics.get(
+                            metric_name, 0.0
+                        ) + _metric_float(value)
+                    update_metrics["ppo/loss_total"] = update_metrics.get(
+                        "ppo/loss_total", 0.0
+                    ) + _metric_float(total_loss)
+                    update_metrics["ppo/grad_norm"] = update_metrics.get(
+                        "ppo/grad_norm", 0.0
+                    ) + _metric_float(grad_norm)
+            training_time = time.perf_counter() - training_start
+            metrics.update(
+                {key: value / update_count for key, value in update_metrics.items()}
             )
             metrics.update(
                 {
-                    "evaluation_return": mean_return,
-                    "evaluation_tracking_error": sum(
-                        row["tracking_error"] for row in evaluation
-                    )
-                    / len(evaluation),
-                    "evaluation_survival_rate": sum(
-                        row["survived"] for row in evaluation
-                    )
-                    / len(evaluation),
-                    "evaluation_episode_length": sum(
-                        row["episode_length"] for row in evaluation
-                    )
-                    / len(evaluation),
+                    "training/epochs": float(epochs),
+                    "training/updates": float(update_count),
+                    "training/learning_rate": current_learning_rate,
+                    "throughput/training_transitions_per_second": training_transitions
+                    / training_time,
+                    "throughput/training_seconds": training_time,
+                    "progress/transitions": float(collected_transitions),
+                    "progress/target_transitions": float(total_transitions),
                 }
             )
-            for row in evaluation:
-                torchrl_logger.info(
-                    "MicroDuck evaluation iteration=%d command=%+.3f seed=%d: "
-                    "return=%+.4f tracking_error=%.4f survived=%d "
-                    "length=%d displacement=%+.4f",
-                    iteration + 1,
-                    row["commanded_x_velocity"],
-                    int(row["seed"]),
-                    row["episode_return"],
-                    row["tracking_error"],
-                    int(row["survived"]),
-                    int(row["episode_length"]),
-                    row["signed_displacement"],
+            metrics.update(_telemetry_metrics(device))
+
+            should_evaluate = evaluation_interval is not None and (
+                collection_iteration % evaluation_interval == 0
+                or collected_transitions >= total_transitions
+            )
+            if should_evaluate:
+                evaluation, evaluation_metrics = run_evaluation()
+                metrics.update(evaluation_metrics)
+                mean_return = evaluation_metrics["evaluation/episode_return"]
+                if mean_return > best_evaluation_return:
+                    best_evaluation_return = mean_return
+                    best_actor_state = deepcopy(actor.state_dict())
+                    best_critic_state = deepcopy(critic.state_dict())
+                    if checkpoint_path is not None:
+                        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+                        torch.save(
+                            {
+                                "transitions": collected_transitions,
+                                "evaluation_return": mean_return,
+                                "evaluation": evaluation,
+                                "actor": best_actor_state,
+                                "critic": best_critic_state,
+                            },
+                            checkpoint_path,
+                        )
+            history.append(metrics)
+            if experiment_logger is not None:
+                experiment_logger.log_metrics(
+                    metrics,
+                    step=collected_transitions,
+                    override_global_step=True,
                 )
-            if mean_return > best_evaluation_return:
-                best_evaluation_return = mean_return
-                best_actor_state = deepcopy(actor.state_dict())
-                best_critic_state = deepcopy(critic.state_dict())
-                if checkpoint_path is not None:
-                    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-                    torch.save(
-                        {
-                            "iteration": iteration + 1,
-                            "evaluation_return": mean_return,
-                            "evaluation": evaluation,
-                            "actor": best_actor_state,
-                            "critic": best_critic_state,
-                        },
-                        checkpoint_path,
-                    )
-        history.append(metrics)
-        torchrl_logger.info(
-            "MicroDuck PPO iteration %d: reward=%+.4f loss=%.4f",
-            iteration + 1,
-            metrics["reward"],
-            metrics["loss"],
-        )
+            torchrl_logger.info(
+                "MicroDuck PPO transitions=%d/%d trajectories=%d "
+                "reward=%+.4f return=%+.3f inference=%.0f/s training=%.0f/s",
+                collected_transitions,
+                total_transitions,
+                num_trajectories,
+                metrics["collection/reward_mean"],
+                metrics["episode/return_mean"],
+                metrics["throughput/inference_transitions_per_second"],
+                metrics["throughput/training_transitions_per_second"],
+            )
+            replay_buffer.empty()
+            collector.update_policy_weights_()
+            collector.reset()
+    finally:
+        replay_buffer.empty()
+        collector.shutdown()
     if best_actor_state is not None and best_critic_state is not None:
         actor.load_state_dict(best_actor_state)
         critic.load_state_dict(best_critic_state)
@@ -889,7 +1322,7 @@ def collect_qpos_trajectory(
         batch_size=env.batch_size,
         device=env.device,
     )
-    tensordict = env.reset(reset_input)
+    tensordict = _prepare_recurrent_reset(env.reset(reset_input), policy)
     qpos = [env.get_state()["qpos"].squeeze(0).cpu()]
     for _ in range(steps):
         policy(tensordict)
@@ -911,12 +1344,16 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         default="mujoco",
     )
     parser.add_argument("--device", default="cpu")
-    parser.add_argument("--num-envs", type=int, default=4)
-    parser.add_argument("--iterations", type=int, default=10)
-    parser.add_argument("--rollout-steps", type=int, default=64)
+    parser.add_argument("--num-envs", type=int, default=8)
+    parser.add_argument("--total-transitions", type=int, default=10_000_000)
+    parser.add_argument("--replay-capacity", type=int, default=DEFAULT_REPLAY_CAPACITY)
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--minibatch-trajectories", type=int, default=8)
+    parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--entropy-coeff", type=float, default=1e-3)
     parser.add_argument("--critic-coeff", type=float, default=1.0)
+    parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--anneal-learning-rate", action="store_true")
     parser.add_argument("--initial-policy-scale", type=float, default=0.2)
     parser.add_argument(
@@ -932,10 +1369,23 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--evaluation-interval",
         type=int,
-        help="Run deterministic fixed-command evaluation every N iterations.",
+        default=25,
+        help="Run deterministic fixed-command evaluation every N collections.",
     )
     parser.add_argument("--evaluation-steps", type=int, default=500)
-    parser.add_argument("--best-checkpoint-path", type=Path)
+    parser.add_argument(
+        "--best-checkpoint-path",
+        type=Path,
+        default=Path("microduck_ppo_best.pt"),
+    )
+    parser.add_argument("--wandb-project", default="torchrl-microduck-ppo")
+    parser.add_argument("--wandb-entity")
+    parser.add_argument("--wandb-name")
+    parser.add_argument(
+        "--wandb-mode",
+        choices=("online", "offline", "disabled"),
+        default="online",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--smoke", action="store_true")
     return parser.parse_args(args)
@@ -943,12 +1393,16 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(args: argparse.Namespace) -> None:
     if args.smoke:
-        args.iterations = 1
-        args.rollout_steps = 8
+        args.total_transitions = 500
+        args.replay_capacity = 600
+        args.epochs = 1
+        args.minibatch_trajectories = 1
         args.num_envs = 1
         args.evaluation_interval = None
+        args.best_checkpoint_path = None
+        args.wandb_mode = "disabled"
     torch.manual_seed(args.seed)
-    commands = args.commanded_x_velocities or (-0.3, 0.0, 0.3)
+    commands = args.commanded_x_velocities or DEFAULT_COMMANDS
     env = make_env(
         args.microduck_root,
         backend=args.backend,
@@ -958,10 +1412,12 @@ def main(args: argparse.Namespace) -> None:
         seed=args.seed,
     )
     evaluation_env = None
+    experiment_logger = None
     try:
-        actor, critic = make_models(
+        actor, critic, full_value = make_models(
             env,
             device=args.device,
+            hidden_size=args.hidden_size,
             initial_policy_scale=args.initial_policy_scale,
         )
         if args.evaluation_interval is not None:
@@ -972,28 +1428,61 @@ def main(args: argparse.Namespace) -> None:
                 num_envs=1,
                 device=torch.device(args.device),
                 seed=args.seed,
-                max_episode_steps=500,
+                max_episode_steps=MAX_EPISODE_STEPS,
+            )
+        if args.wandb_mode != "disabled":
+            experiment_logger = WandbLogger(
+                exp_name=args.wandb_name
+                or f"microduck-{args.backend}-seed-{args.seed}",
+                project=args.wandb_project,
+                entity=args.wandb_entity,
+                offline=args.wandb_mode == "offline",
+            )
+            experiment_logger.log_hparams(
+                {
+                    "backend": args.backend,
+                    "device": args.device,
+                    "num_envs": args.num_envs,
+                    "commands": list(commands),
+                    "total_transitions": args.total_transitions,
+                    "replay_capacity": args.replay_capacity,
+                    "epochs": args.epochs,
+                    "minibatch_trajectories": args.minibatch_trajectories,
+                    "hidden_size": args.hidden_size,
+                    "learning_rate": args.learning_rate,
+                    "entropy_coeff": args.entropy_coeff,
+                    "critic_coeff": args.critic_coeff,
+                    "seed": args.seed,
+                }
             )
         train_ppo(
             env,
             actor,
             critic,
-            iterations=args.iterations,
-            rollout_steps=args.rollout_steps,
+            full_value,
+            total_transitions=args.total_transitions,
+            replay_capacity=args.replay_capacity,
+            epochs=args.epochs,
+            minibatch_trajectories=args.minibatch_trajectories,
             learning_rate=args.learning_rate,
             entropy_coeff=args.entropy_coeff,
             critic_coeff=args.critic_coeff,
             anneal_learning_rate=args.anneal_learning_rate,
+            max_grad_norm=args.max_grad_norm,
             evaluation_env=evaluation_env,
             evaluation_interval=args.evaluation_interval,
             evaluation_commands=commands,
             evaluation_steps=args.evaluation_steps,
             best_checkpoint_path=args.best_checkpoint_path,
+            experiment_logger=experiment_logger,
         )
     finally:
+        if experiment_logger is not None:
+            experiment_logger.experiment.finish()
         if evaluation_env is not None:
             evaluation_env.close()
-        env.close()
+        if not env.is_closed:
+            env.close()
 
 
 if __name__ == "__main__":

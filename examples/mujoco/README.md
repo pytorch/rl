@@ -24,13 +24,64 @@ gait. Velocity error does not terminate an episode; only a physical fall or
 non-finite state does. The normalized 14-joint position action and its
 `0.35`-radian scale are unchanged from the stand feasibility task.
 
+The upstream walking MJCF uses detailed render meshes for foot and
+self-collision geoms. Convex collision preprocessing for the two roughly
+10,000-edge soles creates about 107 million edge pairs per environment and was
+the source of the accelerated-backend memory blow-up. At load time, the task
+now replaces only collision-class meshes with tight axis-aligned box proxies;
+visual meshes and the source checkout remain unchanged. The same patched
+physics scene is passed to all three backends.
+
+The same script trains every command combination. Its long-run defaults are 10
+million complete-trajectory transitions, a 16,384-transition replay buffer, 10
+PPO epochs, an actor/value model with a shared GRU backbone, deterministic
+evaluation, and best-checkpoint retention. The collector is attached directly
+to the replay buffer: it holds incomplete episodes internally and writes each
+finished episode as one contiguous sequence. `SliceSampler` then samples whole
+episodes for the recurrent update, and the on-policy buffer is erased after the
+10 epochs.
+
+```bash
+uv run --with mujoco --with wandb --with psutil \
+  python examples/mujoco/ppo_microduck.py \
+  --microduck-root /path/to/microduck_rl
+```
+
+Repeat `--commanded-x-velocity` to select the reset command distribution; the
+default is `-0.3`, `0.0`, and `0.3` m/s. W&B records collection/inference and
+training throughput, process and device telemetry, reward and episodic return,
+tracking error, survival and episode length, gradient norm, ESS, clip fraction,
+KL, entropy, and all PPO losses. Use `--wandb-mode disabled` for a local run
+without tracking.
+
+On an Apple-silicon CPU after the collision fix, a zero-action physics-only
+benchmark measured the following steady-state rates. These figures select
+native MuJoCo as the default laptop training backend; they are not
+cross-hardware simulator benchmarks.
+
+| backend | environments | transitions/s |
+| --- | ---: | ---: |
+| native MuJoCo | 1 | 4,236 |
+| native MuJoCo | 8 | 3,731 |
+| MJX | 4 | 1,069 |
+| MJX | 8 | 1,221 |
+| `mujoco-torch` | 8 | 39 |
+
+The `mujoco-torch` measurement used its current main branch because release
+0.2.0 does not import with the current MuJoCo enum layout. It used less memory
+than MJX in the isolated check, but was much slower in eager CPU execution.
+With the 128-unit GRU included, native MuJoCo collection measured about 974,
+1,777, 1,969, and 1,866 transitions/s for 1, 4, 8, and 16 environments,
+respectively. Eight environments are therefore the script default on this
+machine; increasing the batch further did not improve end-to-end collection.
+
 The accompanying [`microduck_ppo.ipynb`](microduck_ppo.ipynb) trains the task
 locally and renders the policy with native MuJoCo or the interactive MuJoCo
 WASM viewer. `evaluate_policy()` runs deterministic fixed-command episodes over
 multiple seeds and reports return, tracking error, survival, episode length,
 and signed displacement. Passing `evaluation_env` and `evaluation_interval` to
 `train_ppo()` retains the best evaluated actor and critic; optionally pass
-`best_checkpoint_path` to persist them. Iteration 0 is eligible so a regressing
+`best_checkpoint_path` to persist them. Transition 0 is eligible so a regressing
 training run cannot overwrite a better initial policy. The actor starts with
 zero deterministic actions and a `0.2` exploration scale.
 
@@ -50,7 +101,7 @@ to 24. This is not a benchmark, and the compact defaults are not validated
 training hyperparameters.
 
 No standing, forward-walking, or backward-walking policy is claimed solved by
-the compact defaults. Train and evaluate all three fixed commands before using
+the current defaults. Train and evaluate all three fixed commands before using
 the example as locomotion evidence.
 
 A fixed zero-command feasibility run used eight native MuJoCo CPU environments,

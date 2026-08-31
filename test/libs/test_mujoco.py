@@ -14,14 +14,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from tensordict import TensorDict
 
 from examples.mujoco.ppo_microduck import (
-    evaluate_policy as evaluate_microduck_policy,
-    make_models as make_microduck_models,
     MicroDuckVelocityEnv,
+    _low_cost_collision_scene,
+    _prepare_recurrent_reset,
+)
+from examples.mujoco.ppo_microduck import (
+    evaluate_policy as evaluate_microduck_policy,
+)
+from examples.mujoco.ppo_microduck import (
+    make_models as make_microduck_models,
+)
+from examples.mujoco.ppo_microduck import (
     train_ppo as train_microduck_ppo,
 )
-from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
     Compose,
@@ -36,10 +44,10 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
-    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
+    set_exploration_type,
 )
 from torchrl.envs.custom.mujoco._backends import (
     _has_jax,
@@ -279,6 +287,51 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
+    def test_microduck_collision_meshes_use_runtime_proxies(self, tmp_path):
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "foot.obj").write_text(
+            "v -1 -2 -3\n"
+            "v 1 -2 -3\n"
+            "v 0 2 -3\n"
+            "v 0 0 3\n"
+            "f 1 3 2\n"
+            "f 1 2 4\n"
+            "f 2 3 4\n"
+            "f 3 1 4\n"
+        )
+        (tmp_path / "robot.xml").write_text(
+            "<mujoco><compiler meshdir='assets'/>"
+            "<default>"
+            "<default class='visual'><geom contype='0' conaffinity='0'/></default>"
+            "<default class='collision'><geom contype='1' conaffinity='1'/></default>"
+            "</default>"
+            "<asset><mesh name='foot' file='foot.obj'/></asset>"
+            "<worldbody><body><freejoint/>"
+            "<geom name='visual' class='visual' type='mesh' mesh='foot' mass='1'/>"
+            "<geom name='collision' class='collision' type='mesh' mesh='foot'/>"
+            "</body></worldbody></mujoco>"
+        )
+        scene = tmp_path / "scene.xml"
+        scene.write_text("<mujoco><include file='robot.xml'/></mujoco>")
+
+        original_model = mujoco.MjModel.from_xml_path(str(scene))
+        mesh_id = mujoco.mj_name2id(
+            original_model, mujoco.mjtObj.mjOBJ_MESH, "foot"
+        )
+        start = original_model.mesh_vertadr[mesh_id]
+        stop = start + original_model.mesh_vertnum[mesh_id]
+        vertices = original_model.mesh_vert[start:stop]
+        expected_half_size = (vertices.max(axis=0) - vertices.min(axis=0)) / 2
+        with _low_cost_collision_scene(scene) as patched_scene:
+            model = mujoco.MjModel.from_xml_path(str(patched_scene))
+        visual_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "visual")
+        collision_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "collision")
+        assert model.geom_type[visual_id] == mujoco.mjtGeom.mjGEOM_MESH
+        assert model.geom_type[collision_id] == mujoco.mjtGeom.mjGEOM_BOX
+        np.testing.assert_allclose(model.geom_size[collision_id], expected_half_size)
+
+    @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_ppo_updates_policy(self, tmp_path):
         scene = self._write_microduck_fixture(tmp_path)
         env = MicroDuckVelocityEnv(
@@ -294,9 +347,9 @@ class TestMujoco:
             reset_noise_scale=0.0,
             seed=1,
         )
-        actor, critic = make_microduck_models(env, hidden_size=16)
+        actor, critic, full_value = make_microduck_models(env, hidden_size=16)
         with set_exploration_type(ExplorationType.DETERMINISTIC):
-            initial = env.reset()
+            initial = _prepare_recurrent_reset(env.reset(), actor)
             actor(initial)
         torch.testing.assert_close(
             initial["action"], torch.zeros_like(initial["action"])
@@ -335,12 +388,15 @@ class TestMujoco:
             env,
             actor,
             critic,
-            iterations=1,
-            rollout_steps=4,
+            full_value,
+            total_transitions=500,
+            replay_capacity=500,
             epochs=1,
-            minibatch_size=4,
+            minibatch_trajectories=1,
         )
-        assert torch.isfinite(torch.tensor(update_history[0]["loss"]))
+        assert torch.isfinite(torch.tensor(update_history[0]["ppo/loss_total"]))
+        assert update_history[0]["collection/replay_fill_fraction"] <= 1.0
+        assert update_history[0]["collection/trajectories"] > 1
         assert any(
             not torch.equal(before, after)
             for before, after in zip(parameters_before, actor.parameters())
@@ -350,10 +406,11 @@ class TestMujoco:
             env,
             actor,
             critic,
-            iterations=1,
-            rollout_steps=4,
+            full_value,
+            total_transitions=500,
+            replay_capacity=500,
             epochs=1,
-            minibatch_size=4,
+            minibatch_trajectories=1,
             evaluation_env=evaluation_env,
             evaluation_interval=1,
             evaluation_commands=(0.0,),
@@ -361,8 +418,8 @@ class TestMujoco:
             evaluation_steps=2,
             best_checkpoint_path=checkpoint_path,
         )
-        assert torch.isfinite(torch.tensor(history[0]["loss"]))
-        assert "evaluation_tracking_error" in history[0]
+        assert torch.isfinite(torch.tensor(history[0]["ppo/loss_total"]))
+        assert "evaluation/tracking_error" in history[0]
         checkpoint = torch.load(checkpoint_path, weights_only=False)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, checkpoint["actor"][name])
