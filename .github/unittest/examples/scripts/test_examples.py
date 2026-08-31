@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT_DIR = Path(__file__).parents[4]
 EXAMPLES_DIR = ROOT_DIR / "examples"
 
@@ -338,6 +337,7 @@ EXCLUDED_EXAMPLES = {
     "examples/memmap/memmap_speed_distributed.py": "manual multi-rank benchmark",
     "examples/memmap/memmap_td_distributed.py": "manual multi-rank benchmark",
     "examples/mjlab/ppo_microduck.py": "requires MicroDuck, MJLab, and CUDA",
+    "examples/mujoco/ppo_microduck.py": "requires the external MicroDuck MJCF assets",
     "examples/mujoco_macros/_viewer.py": "viewer helper module",
     "examples/replay-buffers/compressed_replay_buffer.py": "requires nvCOMP and Atari assets",
     "examples/replay-buffers/compressed_replay_buffer_checkpoint.py": "requires nvCOMP",
