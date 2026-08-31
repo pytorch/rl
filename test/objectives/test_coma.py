@@ -204,6 +204,34 @@ def test_normalize_advantage_zero_centres_the_actor_signal():
     torch.testing.assert_close(norm_loss["loss_actor"], torch.tensor(0.0), atol=1e-5, rtol=0)
 
 
+def test_normalize_advantage_uses_effective_mask_with_population_std():
+    """Padded positions must not pollute the normalisation statistics, and a
+    single valid element must not produce NaN: Bessel's correction (the
+    default) divides by ``n - 1 == 0``, but the population estimator
+    (``correction=0``) used here does not."""
+    loss = _make_loss(normalize_advantage=True)
+    action = _one_hot([[0, 2]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(1, 2, 4),
+            ("agents", "action"): action,
+            "value_target": torch.zeros(1, 2, 1),
+            ("collector", "mask"): torch.tensor([[True, False]]),
+        },
+        batch_size=[1],
+    )
+    add_action_without_self(tensordict)
+
+    loss_values = loss(tensordict)
+
+    assert torch.isfinite(loss_values["loss_actor"])
+    # The only valid (unmasked) advantage is standardised against itself:
+    # its mean equals its own value, so it normalises to exactly 0.
+    torch.testing.assert_close(
+        loss_values["advantage"], torch.tensor(0.0), atol=1e-4, rtol=0
+    )
+
+
 def test_diagnostics_report_q_contrast_measures():
     """Flat-critic instrumentation: own-action spread, others-sensitivity,
     and empirical target contrast by chosen action."""
@@ -290,6 +318,44 @@ def test_compute_value_target_marks_non_terminal_tail_as_invalid():
     expected_valid = torch.tensor(
         [[[[True], [True]], [[True], [True]], [[False], [False]]]]
     )
+    torch.testing.assert_close(tensordict["shifted_valid"], expected_valid)
+
+
+def test_compute_value_target_invalidates_bootstrap_across_reset_boundary():
+    """``done=True`` with ``terminated=False`` (a truncation) still means row
+    ``t + 1`` is a *different*, unrelated episode -- an auto-reset collector
+    writes its first step right there. Shifting that row's chosen-action
+    value in as the bootstrap silently mixes two trajectories, and must not
+    happen regardless of ``terminated``; the truncated row itself is then
+    invalid (no real bootstrap is available for it)."""
+    loss = _make_loss(gamma=0.5, n_step=1)
+    actions = _one_hot([[0], [2]], n_actions=3)
+    tensordict = TensorDict(
+        {
+            ("agents", "observation"): torch.zeros(2, 1, 4),
+            ("agents", "action"): actions,
+            "next": {
+                "agents": {
+                    "reward": torch.tensor([[[0.5]], [[1.0]]]),
+                    "done": torch.tensor([[[True]], [[False]]]),
+                    "terminated": torch.zeros(2, 1, 1, dtype=torch.bool),
+                }
+            },
+        },
+        batch_size=[2],
+    )
+    add_action_without_self(tensordict)
+
+    loss.compute_value_target(tensordict)
+
+    # chosen_action_value = [1, 4] (actions 0 and 2 under FixedActionValue).
+    # Without the fix, the truncated row's target picks up the next
+    # (unrelated) episode's action value: 0.5 + 0.5 * 4 = 2.5 instead of 0.5.
+    expected = torch.tensor([[[0.5]], [[1.0]]])
+    torch.testing.assert_close(tensordict["value_target"], expected)
+    # Neither row is trustworthy: row 0 is a truncation (no real bootstrap
+    # available), row 1 is the non-terminated tail of the window.
+    expected_valid = torch.tensor([[[False]], [[False]]])
     torch.testing.assert_close(tensordict["shifted_valid"], expected_valid)
 
 

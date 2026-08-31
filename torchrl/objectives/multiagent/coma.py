@@ -245,7 +245,12 @@ class COMALoss(LossModule):
         if self.normalize_advantage:
             # MAPPO-style per-batch standardisation: same counterfactual
             # advantage, rescaled so the actor step size is batch-invariant.
-            advantage = (advantage - advantage.mean()) / advantage.std().clamp_min(1e-6)
+            # Restricted to the effective loss mask so padded/invalid
+            # transitions don't skew the statistics; population std
+            # (correction=0) avoids NaN when a single valid element remains,
+            # which Bessel's correction (the default) divides by zero.
+            adv_mean, adv_std = self._advantage_norm_stats(tensordict, advantage)
+            advantage = (advantage - adv_mean) / adv_std.clamp_min(1e-6)
 
         log_prob = dist.log_prob(td_copy.get(self.tensor_keys.action))
 
@@ -290,10 +295,10 @@ class COMALoss(LossModule):
     ) -> TensorDictBase:
         """Write the n-step Q-value target before flattening rollout data.
 
-        Targets follow the recursion ``G_k(t) = r(t) + gamma * (1 -
-        terminated(t)) * G_{k-1}(t+1)`` with ``G_0`` the target-network
-        chosen-action Q-values, applied ``n_step`` times along the rollout's
-        time dimension. The time dimension is resolved via
+        Targets follow the recursion ``G_k(t) = r(t) + gamma * (1 - done(t))
+        * G_{k-1}(t+1)`` with ``G_0`` the target-network chosen-action
+        Q-values, applied ``n_step`` times along the rollout's time
+        dimension. The time dimension is resolved via
         :func:`~torchrl.objectives.multiagent.coma._resolve_time_dim` (the
         dimension named ``"time"`` if any, otherwise the last batch
         dimension), so a ``[T]`` rollout from an unbatched collector, a ``[B,
@@ -301,19 +306,23 @@ class COMALoss(LossModule):
         shift the correct axis. ``n_step=1`` is the TD(0) target;
         ``n_step=10`` matches EPyMARL's ``q_nstep: 10`` within episodes.
 
-        Bootstrapping is gated on ``terminated`` rather than ``done``: a
-        ``done`` flag raised by truncation (time-limit, or the sampled window
-        simply ending mid-episode) must not zero the return, since the
-        trajectory continues past the sampled window. But that also means the
-        true bootstrap value at those positions -- the target Q at the real
-        next transition -- can fall outside the rollout handed to this
-        method. Rather than fabricate one from a zero-filled shift, this
-        writes a ``"shifted_valid"`` mask (picked up automatically by
+        The shift itself is gated on ``done``, not ``terminated``: whenever a
+        rollout ends -- whether by real termination or by truncation --
+        row ``t + 1`` in the same window is a fresh, unrelated episode (an
+        auto-reset collector writes its first step right after), so reusing
+        its chosen-action Q-value as the bootstrap for row ``t`` would silently
+        mix the two trajectories. ``terminated`` only decides *why* the
+        bootstrap is missing there: for a true terminal state it is
+        legitimately zero (an absorbing state has no future value), so the
+        row is valid as-is; for a truncation (``done`` but not ``terminated``)
+        the real bootstrap -- the target Q at the actual next transition --
+        is simply not available in this window, and rather than fabricate one,
+        this writes a ``"shifted_valid"`` mask (picked up automatically by
         :meth:`~torchrl.objectives.common.LossModule._reduce_loss`, see
         :data:`~torchrl.objectives.common.AUTO_LOSS_MASK_KEYS`) that excludes
-        the tail transitions -- up to ``n_step`` of them at every
-        non-terminated rollout end -- whose target would otherwise be
-        silently biased low.
+        it -- along with the tail transitions at a non-terminated rollout end,
+        up to ``n_step`` of them -- from the loss instead of silently biasing
+        the target.
         """
         if params is None:
             params = self.target_qvalue_network_params
@@ -329,19 +338,22 @@ class COMALoss(LossModule):
         time_dim = _resolve_time_dim(tensordict)
 
         reward = tensordict.get(("next", self.tensor_keys.reward))
-        done = tensordict.get(("next", self.tensor_keys.done)).to(chosen_action_value.dtype)
+        done = tensordict.get(("next", self.tensor_keys.done)).to(torch.bool)
         terminated = tensordict.get(
             ("next", self.tensor_keys.terminated), default=done
-        ).to(chosen_action_value.dtype)
-        not_terminated = 1.0 - terminated
+        ).to(torch.bool)
+        not_done = (~done).to(chosen_action_value.dtype)
 
         value_target = chosen_action_value
-        valid = torch.ones_like(terminated, dtype=torch.bool)
+        valid = torch.ones_like(done, dtype=torch.bool)
         for _ in range(self.n_step):
             next_value = _shift_time(value_target, time_dim, fill_value=0.0)
             next_valid = _shift_time(valid, time_dim, fill_value=False)
-            value_target = reward + self.gamma * not_terminated * next_value
-            valid = terminated.to(torch.bool) | next_valid
+            value_target = reward + self.gamma * not_done * next_value
+            # terminated: always valid, the zeroed bootstrap above is correct.
+            # truncated: never valid, no real bootstrap is available.
+            # otherwise: valid iff the shifted-in value itself was.
+            valid = terminated | (~done & next_valid)
 
         tensordict.set(self.tensor_keys.value_target, value_target.detach())
         tensordict.set("shifted_valid", valid)
@@ -414,6 +426,26 @@ class COMALoss(LossModule):
         action_value = tensordict.get(self.tensor_keys.action_value)
         counterfactual_baseline = (action_prob * action_value).sum(dim=-1, keepdim=True)
         return chosen_action_value - counterfactual_baseline
+
+    def _advantage_norm_stats(
+        self, tensordict: TensorDictBase, advantage: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Mean/std of ``advantage``, restricted to the effective loss mask.
+
+        Padded or otherwise invalid positions (``("collector", "mask")``,
+        ``"shifted_valid")``) must not skew the normalisation statistics.
+        ``correction=0`` (population std) avoids ``NaN`` when a single valid
+        element remains, which the default Bessel's correction divides by
+        zero.
+        """
+        mask = None
+        for mask_key in self._loss_mask_keys():
+            tensordict_mask = tensordict.get(mask_key, default=None)
+            if tensordict_mask is not None:
+                tensordict_mask = self._expand_loss_mask(tensordict_mask, advantage)
+                mask = tensordict_mask if mask is None else mask & tensordict_mask
+        valid_advantage = advantage[mask] if mask is not None else advantage
+        return valid_advantage.mean(), valid_advantage.std(correction=0)
 
 
 def add_action_without_self(tensordict: TensorDictBase) -> TensorDictBase:
