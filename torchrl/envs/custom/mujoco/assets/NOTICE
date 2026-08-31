@@ -24,4 +24,6 @@ To avoid vendoring assets you'd rather not redistribute, most
 :class:`~torchrl.envs.custom.mujoco.MujocoEnv` subclasses accept an
 ``xml_path=`` constructor kwarg that may be a local path *or* an
 ``http(s)://`` URL. Override :attr:`MujocoEnv.XML_PATH` /
-:attr:`MujocoEnv.XML_URL` on a custom subclass to point elsewhere.
+:attr:`MujocoEnv.XML_URL` on a custom subclass to point elsewhere. For local
+models with relative includes or assets, pass ``patch_xml=False`` so the model
+directory remains available to MuJoCo's resource loader.

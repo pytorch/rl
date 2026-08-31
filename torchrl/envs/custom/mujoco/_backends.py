@@ -35,6 +35,15 @@ _has_mjx = _has_mujoco and importlib.util.find_spec("mujoco.mjx") is not None
 
 
 BackendName = Literal["mujoco-torch", "mjx", "mujoco"]
+ModelSource = str | Path
+
+
+def _load_mujoco_model(source: ModelSource):
+    import mujoco
+
+    if isinstance(source, Path):
+        return mujoco.MjModel.from_xml_path(str(source))
+    return mujoco.MjModel.from_xml_string(source)
 
 
 def _get_tensorclass_leaf(obj: Any, key: str | tuple[str, ...]) -> Any:
@@ -121,17 +130,17 @@ class _PhysicsBackend(abc.ABC):
     actuator_ctrllimited: torch.Tensor
 
     def __init__(
-        self, xml_string: str, *, num_envs: int, device: torch.device | None
+        self, source: ModelSource, *, num_envs: int, device: torch.device | None
     ) -> None:
         self.num_envs = num_envs
         self.device = (
             torch.device(device) if device is not None else torch.device("cpu")
         )
-        self._init_model(xml_string)
+        self._init_model(source)
 
     @abc.abstractmethod
-    def _init_model(self, xml_string: str) -> None:
-        """Parse XML and prepare the batched data state.
+    def _init_model(self, source: ModelSource) -> None:
+        """Load the model source and prepare the batched data state.
 
         Populates ``nq, nv, nu, timestep, qpos0, qvel0, actuator_lo,
         actuator_hi`` from the parsed model.
@@ -232,7 +241,7 @@ class _TorchBackend(_PhysicsBackend):
 
     def __init__(
         self,
-        xml_string: str,
+        source: ModelSource,
         *,
         num_envs: int,
         device: torch.device | None,
@@ -246,13 +255,13 @@ class _TorchBackend(_PhysicsBackend):
             )
         self._compile_step = compile_step
         self._compile_kwargs = compile_kwargs or {}
-        super().__init__(xml_string, num_envs=num_envs, device=device)
+        super().__init__(source, num_envs=num_envs, device=device)
 
-    def _init_model(self, xml_string: str) -> None:
+    def _init_model(self, source: ModelSource) -> None:
         import mujoco
         import mujoco_torch
 
-        m_mj = mujoco.MjModel.from_xml_string(xml_string)
+        m_mj = _load_mujoco_model(source)
         d_mj = mujoco.MjData(m_mj)
         mujoco.mj_forward(m_mj, d_mj)
         self._m_mj = m_mj
@@ -468,7 +477,7 @@ class _MujocoBackend(_PhysicsBackend):
 
     def __init__(
         self,
-        xml_string: str,
+        source: ModelSource,
         *,
         num_envs: int,
         device: torch.device | None,
@@ -485,12 +494,12 @@ class _MujocoBackend(_PhysicsBackend):
                 "(MujocoEnv does this automatically when num_workers>1 "
                 "or num_envs>1 is passed)."
             )
-        super().__init__(xml_string, num_envs=num_envs, device=device)
+        super().__init__(source, num_envs=num_envs, device=device)
 
-    def _init_model(self, xml_string: str) -> None:
+    def _init_model(self, source: ModelSource) -> None:
         import mujoco
 
-        m_mj = mujoco.MjModel.from_xml_string(xml_string)
+        m_mj = _load_mujoco_model(source)
         d_mj = mujoco.MjData(m_mj)
         mujoco.mj_forward(m_mj, d_mj)
 
@@ -645,7 +654,7 @@ class _MJXBackend(_PhysicsBackend):
 
     def __init__(
         self,
-        xml_string: str,
+        source: ModelSource,
         *,
         num_envs: int,
         device: torch.device | None,
@@ -655,14 +664,13 @@ class _MJXBackend(_PhysicsBackend):
                 "backend='mjx' requires `mujoco>=3.0` (with mjx) and `jax`. "
                 "Install with `pip install mujoco-mjx jax`."
             )
-        super().__init__(xml_string, num_envs=num_envs, device=device)
+        super().__init__(source, num_envs=num_envs, device=device)
 
-    def _init_model(self, xml_string: str) -> None:
+    def _init_model(self, source: ModelSource) -> None:
         import jax
-        import mujoco
         from mujoco import mjx
 
-        m_mj = mujoco.MjModel.from_xml_string(xml_string)
+        m_mj = _load_mujoco_model(source)
         mx = mjx.put_model(m_mj)
         dx0_single = mjx.make_data(mx)
         dx0_single = mjx.forward(mx, dx0_single)
@@ -860,7 +868,7 @@ class _MJXBackend(_PhysicsBackend):
 
 def make_backend(
     name: BackendName,
-    xml_string: str,
+    source: ModelSource,
     *,
     num_envs: int,
     device: torch.device | None,
@@ -876,16 +884,16 @@ def make_backend(
     """
     if name == "mujoco-torch":
         return _TorchBackend(
-            xml_string,
+            source,
             num_envs=num_envs,
             device=device,
             compile_step=compile_step,
             compile_kwargs=compile_kwargs,
         )
     if name == "mjx":
-        return _MJXBackend(xml_string, num_envs=num_envs, device=device)
+        return _MJXBackend(source, num_envs=num_envs, device=device)
     if name == "mujoco":
-        return _MujocoBackend(xml_string, num_envs=num_envs, device=device)
+        return _MujocoBackend(source, num_envs=num_envs, device=device)
     raise ValueError(
         f"unknown backend {name!r}; expected one of 'mujoco-torch', 'mjx', 'mujoco'"
     )

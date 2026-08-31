@@ -323,7 +323,11 @@ A family of MuJoCo-backed envs sharing one base class
 native-torch engine, ``"mjx"`` -- JAX-vectorized, or ``"mujoco"`` --
 official C-bindings). For envs with a standalone XML asset, the XML can be a
 local path or an ``http(s)`` URL, so users can point at remote models without
-vendoring them. Subclasses describe the *task* by overriding
+vendoring them. Pass ``patch_xml=False`` for directory-based local models that
+use relative ``<include>`` entries, meshes, textures, or other assets; the
+model path is then preserved across all three backends so MuJoCo resolves
+resources relative to its directory. Subclasses describe the *task* by
+overriding
 :meth:`~torchrl.envs.MujocoEnv._compute_reward` and
 :meth:`~torchrl.envs.MujocoEnv._compute_done`.
 

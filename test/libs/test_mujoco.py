@@ -1708,21 +1708,33 @@ class TestMujoco:
         )
         env.close()
 
-    def test_xml_path_kwarg_overrides_class_attr(self, tmp_path):
-        """Custom ``xml_path=`` overrides the class-level :attr:`XML_PATH`."""
-        backend = _AVAILABLE_BACKENDS[0]
-        # A trivial single-hinge model -- pure-XML, no external mesh deps.
-        xml = (
-            "<mujoco><worldbody>"
-            "<body name='b' pos='0 0 1'>"
-            "<joint name='j' type='hinge'/>"
-            "<geom size='0.1' mass='1'/>"
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_xml_path_preserves_relative_assets(self, tmp_path, backend):
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "tetrahedron.obj").write_text(
+            "v 0 0 0\n"
+            "v 0.1 0 0\n"
+            "v 0 0.1 0\n"
+            "v 0 0 0.1\n"
+            "f 1 3 2\n"
+            "f 1 2 4\n"
+            "f 1 4 3\n"
+            "f 2 3 4\n"
+        )
+        (tmp_path / "robot.xml").write_text(
+            "<mujoco><compiler meshdir='assets'/>"
+            "<asset><mesh name='tetrahedron' file='tetrahedron.obj'/></asset>"
+            "<worldbody><body name='body' pos='0 0 1'>"
+            "<joint name='joint' type='hinge'/>"
+            "<geom type='sphere' size='0.1' mass='1'/>"
+            "<geom type='mesh' mesh='tetrahedron' contype='0' conaffinity='0'/>"
             "</body></worldbody>"
-            "<actuator><motor name='a' joint='j' gear='1' ctrlrange='-1 1'/></actuator>"
+            "<actuator><motor joint='joint' ctrlrange='-1 1'/></actuator>"
             "</mujoco>"
         )
-        path = tmp_path / "tiny.xml"
-        path.write_text(xml)
+        path = tmp_path / "scene.xml"
+        path.write_text("<mujoco><include file='robot.xml'/></mujoco>")
 
         class TinyEnv(MujocoEnv):
             FRAME_SKIP = 2
@@ -1735,10 +1747,18 @@ class TestMujoco:
                     self.num_envs, 1, dtype=torch.bool, device=self.device
                 )
 
-        env = TinyEnv(xml_path=str(path), backend=backend, num_envs=1, seed=0)
+        num_envs = 1 if backend == "mujoco" else 2
+        env = TinyEnv(
+            xml_path=path,
+            patch_xml=False,
+            backend=backend,
+            num_envs=num_envs,
+            seed=0,
+        )
         check_env_specs(env)
         td = env.rollout(3)
-        assert td.shape == torch.Size([1, 3])
+        assert td.shape == torch.Size([num_envs, 3])
+        assert torch.isfinite(td.get(("next", "observation"))).all()
 
 
 if __name__ == "__main__":
