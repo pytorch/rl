@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
 from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -51,6 +52,7 @@ Backend = Literal["mujoco", "mjx", "mujoco-torch"]
 NUM_JOINTS = 14
 OBSERVATION_DIM = 3 + 3 + 2 + NUM_JOINTS * 3
 VELOCITY_TRACKING_STD = 0.25
+STAND_POSE_COMMAND_STD = 0.1
 
 
 def resolve_microduck_scene(
@@ -182,7 +184,8 @@ class MicroDuckVelocityEnv(MujocoEnv):
     angular velocity, measured and commanded body-frame longitudinal velocity,
     joint-position error, joint velocity, and the previous action. The reward
     prioritizes signed velocity tracking while uprightness and target height
-    stabilize the motion.
+    stabilize the motion. A nominal-pose reward applies only near a zero
+    command and smoothly vanishes before locomotion commands.
 
     Args:
         microduck_root: ``microduck_rl`` checkout, package directory, or
@@ -374,6 +377,12 @@ class MicroDuckVelocityEnv(MujocoEnv):
         height_reward = torch.exp(
             -((qpos[..., 2] - self._target_height) / 0.03).square()
         )
+        pose_reward = torch.exp(
+            -((qpos[..., 7:] - self._home_qpos[7:]) / 0.35).square().mean(dim=-1)
+        )
+        stand_pose_gate = torch.exp(
+            -(self._commanded_x_velocity.squeeze(-1) / STAND_POSE_COMMAND_STD).square()
+        )
         lateral_velocity_cost = body_velocity[..., 1].square()
         roll_yaw_velocity_cost = qvel[..., [3, 5]].square().mean(dim=-1)
         joint_velocity_cost = qvel[..., 6:].square().mean(dim=-1)
@@ -382,6 +391,7 @@ class MicroDuckVelocityEnv(MujocoEnv):
             2.0 * velocity_tracking_reward
             + 0.5 * upright_reward
             + 0.25 * height_reward
+            + 0.5 * stand_pose_gate * pose_reward
             - 0.1 * lateral_velocity_cost
             - 0.02 * roll_yaw_velocity_cost
             - 0.002 * joint_velocity_cost
@@ -489,17 +499,27 @@ def make_models(
     *,
     device: torch.device | str = "cpu",
     hidden_size: int = 128,
+    initial_policy_scale: float = 0.2,
 ) -> tuple[ProbabilisticActor, ValueOperator]:
-    """Create the actor and critic used by the compact PPO example."""
+    """Create the actor and critic used by the compact PPO example.
+
+    The actor starts with zero deterministic actions and a modest exploration
+    scale so its initial rollouts stay near the ``STAND`` actuator targets.
+    """
+    if not math.isfinite(initial_policy_scale) or initial_policy_scale <= 0:
+        raise ValueError("initial_policy_scale must be finite and positive.")
     device = torch.device(device)
     action_dim = env.action_spec_unbatched.shape[-1]
+    actor_output = nn.Linear(hidden_size, 2 * action_dim, device=device)
+    nn.init.zeros_(actor_output.weight)
+    nn.init.zeros_(actor_output.bias)
     actor_net = nn.Sequential(
         nn.LazyLinear(hidden_size, device=device),
         nn.Tanh(),
         nn.Linear(hidden_size, hidden_size, device=device),
         nn.Tanh(),
-        nn.Linear(hidden_size, 2 * action_dim, device=device),
-        NormalParamExtractor(),
+        actor_output,
+        NormalParamExtractor(scale_mapping=f"biased_softplus_{initial_policy_scale}"),
     )
     actor = ProbabilisticActor(
         module=TensorDictModule(
@@ -638,6 +658,9 @@ def train_ppo(
     epochs: int = 4,
     minibatch_size: int = 128,
     learning_rate: float = 3e-4,
+    entropy_coeff: float = 1e-3,
+    critic_coeff: float = 1.0,
+    anneal_learning_rate: bool = False,
     evaluation_env: MicroDuckVelocityEnv | None = None,
     evaluation_interval: int | None = None,
     evaluation_commands: Sequence[float] = (-0.3, 0.0, 0.3),
@@ -655,6 +678,12 @@ def train_ppo(
     """
     if min(iterations, rollout_steps, epochs, minibatch_size) < 1:
         raise ValueError("PPO loop sizes must all be positive.")
+    if learning_rate <= 0 or not math.isfinite(learning_rate):
+        raise ValueError("learning_rate must be finite and positive.")
+    if min(entropy_coeff, critic_coeff) < 0 or not all(
+        math.isfinite(value) for value in (entropy_coeff, critic_coeff)
+    ):
+        raise ValueError("PPO loss coefficients must be finite and non-negative.")
     if evaluation_interval is not None and evaluation_interval < 1:
         raise ValueError("evaluation_interval must be positive when provided.")
     if evaluation_interval is not None and evaluation_env is None:
@@ -674,8 +703,8 @@ def train_ppo(
         critic_network=critic,
         clip_epsilon=0.2,
         entropy_bonus=True,
-        entropy_coeff=0.001,
-        critic_coeff=1.0,
+        entropy_coeff=entropy_coeff,
+        critic_coeff=critic_coeff,
         loss_critic_type="smooth_l1",
         normalize_advantage=True,
     )
@@ -687,7 +716,50 @@ def train_ppo(
     checkpoint_path = (
         Path(best_checkpoint_path) if best_checkpoint_path is not None else None
     )
+    if evaluation_interval is not None:
+        initial_evaluation = evaluate_policy(
+            evaluation_env,
+            actor,
+            commanded_x_velocities=evaluation_commands,
+            seeds=evaluation_seeds,
+            steps=evaluation_steps,
+        )
+        best_evaluation_return = sum(
+            row["episode_return"] for row in initial_evaluation
+        ) / len(initial_evaluation)
+        best_actor_state = deepcopy(actor.state_dict())
+        best_critic_state = deepcopy(critic.state_dict())
+        for row in initial_evaluation:
+            torchrl_logger.info(
+                "MicroDuck evaluation iteration=0 command=%+.3f seed=%d: "
+                "return=%+.4f tracking_error=%.4f survived=%d "
+                "length=%d displacement=%+.4f",
+                row["commanded_x_velocity"],
+                int(row["seed"]),
+                row["episode_return"],
+                row["tracking_error"],
+                int(row["survived"]),
+                int(row["episode_length"]),
+                row["signed_displacement"],
+            )
+        if checkpoint_path is not None:
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(
+                {
+                    "iteration": 0,
+                    "evaluation_return": best_evaluation_return,
+                    "evaluation": initial_evaluation,
+                    "actor": best_actor_state,
+                    "critic": best_critic_state,
+                },
+                checkpoint_path,
+            )
     for iteration in range(iterations):
+        current_learning_rate = learning_rate
+        if anneal_learning_rate:
+            current_learning_rate *= 1.0 - iteration / iterations
+            for group in optimizer.param_groups:
+                group["lr"] = current_learning_rate
         with torch.no_grad():
             batch = env.rollout(
                 rollout_steps,
@@ -718,6 +790,7 @@ def train_ppo(
             "iteration": float(iteration + 1),
             "reward": float(batch["next", "reward"].mean()),
             "loss": float(torch.stack(losses).mean()),
+            "learning_rate": current_learning_rate,
         }
         should_evaluate = evaluation_interval is not None and (
             (iteration + 1) % evaluation_interval == 0 or iteration + 1 == iterations
@@ -752,9 +825,10 @@ def train_ppo(
             )
             for row in evaluation:
                 torchrl_logger.info(
-                    "MicroDuck evaluation command=%+.3f seed=%d: "
+                    "MicroDuck evaluation iteration=%d command=%+.3f seed=%d: "
                     "return=%+.4f tracking_error=%.4f survived=%d "
                     "length=%d displacement=%+.4f",
+                    iteration + 1,
                     row["commanded_x_velocity"],
                     int(row["seed"]),
                     row["episode_return"],
@@ -840,6 +914,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--num-envs", type=int, default=4)
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--rollout-steps", type=int, default=64)
+    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--entropy-coeff", type=float, default=1e-3)
+    parser.add_argument("--critic-coeff", type=float, default=1.0)
+    parser.add_argument("--anneal-learning-rate", action="store_true")
+    parser.add_argument("--initial-policy-scale", type=float, default=0.2)
     parser.add_argument(
         "--commanded-x-velocity",
         action="append",
@@ -880,7 +959,11 @@ def main(args: argparse.Namespace) -> None:
     )
     evaluation_env = None
     try:
-        actor, critic = make_models(env, device=args.device)
+        actor, critic = make_models(
+            env,
+            device=args.device,
+            initial_policy_scale=args.initial_policy_scale,
+        )
         if args.evaluation_interval is not None:
             evaluation_env = MicroDuckVelocityEnv(
                 args.microduck_root,
@@ -897,6 +980,10 @@ def main(args: argparse.Namespace) -> None:
             critic,
             iterations=args.iterations,
             rollout_steps=args.rollout_steps,
+            learning_rate=args.learning_rate,
+            entropy_coeff=args.entropy_coeff,
+            critic_coeff=args.critic_coeff,
+            anneal_learning_rate=args.anneal_learning_rate,
             evaluation_env=evaluation_env,
             evaluation_interval=args.evaluation_interval,
             evaluation_commands=commands,

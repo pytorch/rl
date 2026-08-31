@@ -26,6 +26,7 @@ from torchrl.envs import (
     AntEnv,
     Compose,
     CubeBowlEnv,
+    ExplorationType,
     HopperEnv,
     HumanoidEnv,
     MacroPrimitive,
@@ -35,6 +36,7 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
+    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
@@ -219,6 +221,15 @@ class TestMujoco:
             matching_reward = env._compute_reward(state, action, matching)
             mismatched_reward = env._compute_reward(state, action, mismatched)
             assert (matching_reward > mismatched_reward).all()
+            pose_offset = matching.clone()
+            pose_offset["qpos"][..., 7:] += 0.35
+            pose_cost = matching_reward - env._compute_reward(
+                state, action, pose_offset
+            )
+            if command:
+                assert (pose_cost < 1e-3).all()
+            else:
+                assert (pose_cost > 0.1).all()
             if command:
                 stationary_reward = env._compute_reward(state, action, state)
                 assert (matching_reward > stationary_reward).all()
@@ -284,6 +295,12 @@ class TestMujoco:
             seed=1,
         )
         actor, critic = make_microduck_models(env, hidden_size=16)
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            initial = env.reset()
+            actor(initial)
+        torch.testing.assert_close(
+            initial["action"], torch.zeros_like(initial["action"])
+        )
         evaluation = evaluate_microduck_policy(
             evaluation_env,
             actor,
@@ -314,6 +331,21 @@ class TestMujoco:
             parameter.detach().clone() for parameter in actor.parameters()
         ]
         checkpoint_path = tmp_path / "microduck-best.pt"
+        update_history = train_microduck_ppo(
+            env,
+            actor,
+            critic,
+            iterations=1,
+            rollout_steps=4,
+            epochs=1,
+            minibatch_size=4,
+        )
+        assert torch.isfinite(torch.tensor(update_history[0]["loss"]))
+        assert any(
+            not torch.equal(before, after)
+            for before, after in zip(parameters_before, actor.parameters())
+        )
+
         history = train_microduck_ppo(
             env,
             actor,
@@ -331,10 +363,6 @@ class TestMujoco:
         )
         assert torch.isfinite(torch.tensor(history[0]["loss"]))
         assert "evaluation_tracking_error" in history[0]
-        assert any(
-            not torch.equal(before, after)
-            for before, after in zip(parameters_before, actor.parameters())
-        )
         checkpoint = torch.load(checkpoint_path, weights_only=False)
         for name, parameter in actor.state_dict().items():
             torch.testing.assert_close(parameter, checkpoint["actor"][name])

@@ -18,9 +18,11 @@ computing the observation, tracking reward, or lateral-drift cost.
 
 The reward prioritizes smooth signed velocity tracking and uses uprightness and
 height only as stabilizers. It penalizes lateral drift, roll/yaw rate, joint
-velocity, and action rate. Velocity error does not terminate an episode; only a
-physical fall or non-finite state does. The normalized 14-joint position action
-and its `0.35`-radian scale are unchanged from the stand feasibility task.
+velocity, and action rate. A nominal-pose reward is smoothly gated to zero away
+from the zero-velocity command, so it supports standing without fighting a
+gait. Velocity error does not terminate an episode; only a physical fall or
+non-finite state does. The normalized 14-joint position action and its
+`0.35`-radian scale are unchanged from the stand feasibility task.
 
 The accompanying [`microduck_ppo.ipynb`](microduck_ppo.ipynb) trains the task
 locally and renders the policy with native MuJoCo or the interactive MuJoCo
@@ -28,7 +30,9 @@ WASM viewer. `evaluate_policy()` runs deterministic fixed-command episodes over
 multiple seeds and reports return, tracking error, survival, episode length,
 and signed displacement. Passing `evaluation_env` and `evaluation_interval` to
 `train_ppo()` retains the best evaluated actor and critic; optionally pass
-`best_checkpoint_path` to persist them.
+`best_checkpoint_path` to persist them. Iteration 0 is eligible so a regressing
+training run cannot overwrite a better initial policy. The actor starts with
+zero deterministic actions and a `0.2` exploration scale.
 
 [Watch the local PPO before/after rollout](assets/microduck_ppo_before_after.mp4).
 This earlier stand-only feasibility video uses native MuJoCo on CPU, an
@@ -48,3 +52,12 @@ training hyperparameters.
 No standing, forward-walking, or backward-walking policy is claimed solved by
 the compact defaults. Train and evaluate all three fixed commands before using
 the example as locomotion evidence.
+
+A fixed zero-command feasibility run used eight native MuJoCo CPU environments,
+240 iterations of 128 steps, two PPO epochs, 256-sample minibatches, linear
+learning-rate decay from `1e-4`, an entropy coefficient of `1e-4`, and a critic
+coefficient of `0.5`. The best checkpoint was iteration 120. Across controlled
+seeds 100–103, episode lengths were 122, 330, 251, and 459 steps: 0/4 survived
+the 500-step horizon. This is evidence that the revised initialization and
+zero-command pose gate improve some standing rollouts, but standing is not yet
+robust, so fixed-command walking training has not started.
