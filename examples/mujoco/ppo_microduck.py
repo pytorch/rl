@@ -998,10 +998,10 @@ def train_ppo(
     replay_capacity: int = DEFAULT_REPLAY_CAPACITY,
     epochs: int = 10,
     minibatch_trajectories: int = 8,
-    learning_rate: float = 3e-4,
+    learning_rate: float = 1e-4,
     entropy_coeff: float = 1e-3,
     critic_coeff: float = 1.0,
-    anneal_learning_rate: bool = False,
+    anneal_learning_rate: bool = True,
     max_grad_norm: float = 1.0,
     evaluation_env: MicroDuckVelocityEnv | None = None,
     evaluation_interval: int | None = None,
@@ -1164,6 +1164,7 @@ def train_ppo(
                     "The complete-trajectory collector did not fit an episode in "
                     "the replay buffer."
                 )
+            previous_transitions = collected_transitions
             collected_transitions += collection_size
             metrics, num_trajectories = _collection_metrics(collected)
             metrics.update(
@@ -1186,7 +1187,7 @@ def train_ppo(
             current_learning_rate = learning_rate
             if anneal_learning_rate:
                 current_learning_rate *= max(
-                    0.0, 1.0 - collected_transitions / total_transitions
+                    0.0, 1.0 - previous_transitions / total_transitions
                 )
                 for group in optimizer.param_groups:
                     group["lr"] = current_learning_rate
@@ -1350,11 +1351,15 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--minibatch-trajectories", type=int, default=8)
     parser.add_argument("--hidden-size", type=int, default=128)
-    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--entropy-coeff", type=float, default=1e-3)
     parser.add_argument("--critic-coeff", type=float, default=1.0)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
-    parser.add_argument("--anneal-learning-rate", action="store_true")
+    parser.add_argument(
+        "--anneal-learning-rate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     parser.add_argument("--initial-policy-scale", type=float, default=0.2)
     parser.add_argument(
         "--commanded-x-velocity",
@@ -1450,6 +1455,7 @@ def main(args: argparse.Namespace) -> None:
                     "minibatch_trajectories": args.minibatch_trajectories,
                     "hidden_size": args.hidden_size,
                     "learning_rate": args.learning_rate,
+                    "anneal_learning_rate": args.anneal_learning_rate,
                     "entropy_coeff": args.entropy_coeff,
                     "critic_coeff": args.critic_coeff,
                     "seed": args.seed,

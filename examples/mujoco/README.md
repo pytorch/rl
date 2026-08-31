@@ -34,12 +34,12 @@ physics scene is passed to all three backends.
 
 The same script trains every command combination. Its long-run defaults are 10
 million complete-trajectory transitions, a 16,384-transition replay buffer, 10
-PPO epochs, an actor/value model with a shared GRU backbone, deterministic
-evaluation, and best-checkpoint retention. The collector is attached directly
-to the replay buffer: it holds incomplete episodes internally and writes each
-finished episode as one contiguous sequence. `SliceSampler` then samples whole
-episodes for the recurrent update, and the on-policy buffer is erased after the
-10 epochs.
+PPO epochs, linear learning-rate decay from `1e-4`, an actor/value model with a
+shared GRU backbone, deterministic evaluation, and best-checkpoint retention.
+The collector is attached directly to the replay buffer: it holds incomplete
+episodes internally and writes each finished episode as one contiguous
+sequence. `SliceSampler` then samples whole episodes for the recurrent update,
+and the on-policy buffer is erased after the 10 epochs.
 
 ```bash
 uv run --with mujoco --with wandb --with psutil \
