@@ -14,9 +14,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+
 from examples.mujoco.ppo_microduck import (
+    evaluate_policy as evaluate_microduck_policy,
     make_models as make_microduck_models,
-    MicroDuckStandEnv,
+    MicroDuckVelocityEnv,
     train_ppo as train_microduck_ppo,
 )
 from tensordict import TensorDict
@@ -182,9 +184,9 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
-    def test_microduck_stand_task_reward_and_termination(self, tmp_path, backend):
+    def test_microduck_velocity_task_reward_and_termination(self, tmp_path, backend):
         num_envs = 1 if backend == "mujoco" else 2
-        env = MicroDuckStandEnv(
+        env = MicroDuckVelocityEnv(
             self._write_microduck_fixture(tmp_path),
             backend=backend,
             num_envs=num_envs,
@@ -197,36 +199,121 @@ class TestMujoco:
             reset["observation"][..., :3],
             torch.tensor([[0.0, 0.0, -1.0]]).expand(num_envs, -1),
         )
-
-        state = env.get_state()
         action = torch.zeros_like(env.action_spec.rand())
-        home_reward = env._compute_reward(state, action, state)
-        torch.testing.assert_close(home_reward, torch.full_like(home_reward, 3.0))
-        assert not env._compute_done(state, state).any()
+        for command in (-0.3, 0.0, 0.3):
+            command_tensor = torch.full((num_envs, 1), command)
+            reset = env.reset(
+                TensorDict(
+                    {"commanded_x_velocity": command_tensor},
+                    batch_size=(num_envs,),
+                )
+            )
+            torch.testing.assert_close(reset["commanded_x_velocity"], command_tensor)
+            torch.testing.assert_close(reset["observation"][..., 7:8], command_tensor)
+
+            state = env.get_state()
+            matching = state.clone()
+            matching["qvel"][..., 0] = command
+            mismatched = state.clone()
+            mismatched["qvel"][..., 0] = -command if command else 0.3
+            matching_reward = env._compute_reward(state, action, matching)
+            mismatched_reward = env._compute_reward(state, action, mismatched)
+            assert (matching_reward > mismatched_reward).all()
+            if command:
+                stationary_reward = env._compute_reward(state, action, state)
+                assert (matching_reward > stationary_reward).all()
+            assert not env._compute_done(state, mismatched).any()
+
+        yawed = state.clone()
+        yawed["qpos"][..., 3:7] = torch.tensor([2**-0.5, 0.0, 0.0, 2**-0.5])
+        body_forward = yawed.clone()
+        body_forward["qvel"][..., 1] = 0.3
+        fixed_world_x = yawed.clone()
+        fixed_world_x["qvel"][..., 0] = 0.3
+        assert (
+            env._compute_reward(state, action, body_forward)
+            > env._compute_reward(state, action, fixed_world_x)
+        ).all()
 
         fallen = state.clone()
         fallen["qpos"][..., 2] = 0.01
         fallen["qpos"][..., 3:7] = torch.tensor([0.0, 1.0, 0.0, 0.0])
-        assert (env._compute_reward(state, action, fallen) < home_reward).all()
         assert env._compute_done(state, fallen).all()
 
         action.fill_(0.25)
         transition = env.step(reset.set("action", action))
         torch.testing.assert_close(transition["next", "observation"][..., -14:], action)
+        if num_envs > 1:
+            reset = env.reset(
+                TensorDict(
+                    {
+                        "commanded_x_velocity": torch.tensor([[-0.3], [0.3]]),
+                    },
+                    batch_size=(num_envs,),
+                )
+            )
+            partial_reset = env.reset(
+                TensorDict(
+                    {
+                        "_reset": torch.tensor([True, False]),
+                        "commanded_x_velocity": torch.tensor([[0.0], [0.3]]),
+                    },
+                    batch_size=(num_envs,),
+                )
+            )
+            torch.testing.assert_close(
+                partial_reset["commanded_x_velocity"],
+                torch.tensor([[0.0], [0.3]]),
+            )
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_ppo_updates_policy(self, tmp_path):
-        env = MicroDuckStandEnv(
-            self._write_microduck_fixture(tmp_path),
+        scene = self._write_microduck_fixture(tmp_path)
+        env = MicroDuckVelocityEnv(
+            scene,
             backend="mujoco",
             num_envs=1,
             seed=0,
         )
+        evaluation_env = MicroDuckVelocityEnv(
+            scene,
+            backend="mujoco",
+            num_envs=1,
+            reset_noise_scale=0.0,
+            seed=1,
+        )
         actor, critic = make_microduck_models(env, hidden_size=16)
+        evaluation = evaluate_microduck_policy(
+            evaluation_env,
+            actor,
+            commanded_x_velocities=(-0.3, 0.3),
+            seeds=(0, 1),
+            steps=2,
+        )
+        assert [(row["commanded_x_velocity"], row["seed"]) for row in evaluation] == [
+            (-0.3, 0.0),
+            (-0.3, 1.0),
+            (0.3, 0.0),
+            (0.3, 1.0),
+        ]
+        assert all(
+            torch.isfinite(
+                torch.tensor(
+                    [
+                        row["episode_return"],
+                        row["tracking_error"],
+                        row["signed_displacement"],
+                    ]
+                )
+            ).all()
+            for row in evaluation
+        )
+
         parameters_before = [
             parameter.detach().clone() for parameter in actor.parameters()
         ]
+        checkpoint_path = tmp_path / "microduck-best.pt"
         history = train_microduck_ppo(
             env,
             actor,
@@ -235,12 +322,23 @@ class TestMujoco:
             rollout_steps=4,
             epochs=1,
             minibatch_size=4,
+            evaluation_env=evaluation_env,
+            evaluation_interval=1,
+            evaluation_commands=(0.0,),
+            evaluation_seeds=(0,),
+            evaluation_steps=2,
+            best_checkpoint_path=checkpoint_path,
         )
         assert torch.isfinite(torch.tensor(history[0]["loss"]))
+        assert "evaluation_tracking_error" in history[0]
         assert any(
             not torch.equal(before, after)
             for before, after in zip(parameters_before, actor.parameters())
         )
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
+        for name, parameter in actor.state_dict().items():
+            torch.testing.assert_close(parameter, checkpoint["actor"][name])
+        evaluation_env.close()
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
