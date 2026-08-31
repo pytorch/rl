@@ -40,7 +40,6 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 from torch import nn
-
 from torchrl import timeit
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -49,10 +48,10 @@ from torchrl.envs import (
     Compose,
     ExplorationType,
     RewardSum,
+    set_exploration_type,
     StepCounter,
     TransformedEnv,
     VecNormV2,
-    set_exploration_type,
 )
 from torchrl.envs.libs.mjlab import MJLabWrapper
 from torchrl.modules import IndependentNormal, ProbabilisticActor, ValueOperator
