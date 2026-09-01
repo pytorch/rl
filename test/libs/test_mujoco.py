@@ -405,12 +405,16 @@ class TestMujoco:
             full_value,
             total_transitions=500,
             replay_capacity=500,
-            epochs=1,
+            epochs=3,
             minibatch_trajectories=1,
+            target_kl=1e-12,
         )
         assert torch.isfinite(torch.tensor(update_history[0]["ppo/loss_total"]))
         assert update_history[0]["collection/replay_fill_fraction"] <= 1.0
         assert update_history[0]["collection/trajectories"] > 1
+        assert update_history[0]["policy/scale_mean"] > 0
+        assert update_history[0]["training/epochs"] < 3
+        assert update_history[0]["training/stopped_on_kl"] == 1
         assert any(
             not torch.equal(before, after)
             for before, after in zip(parameters_before, actor.parameters())

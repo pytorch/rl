@@ -209,6 +209,15 @@ def _collection_metrics(batch: TensorDictBase) -> tuple[dict[str, float], int]:
             (~terminated[end_indices]).float().mean()
         ),
     }
+    policy_scale = batch.get("scale")
+    if policy_scale is not None:
+        metrics.update(
+            {
+                "policy/scale_mean": _metric_float(policy_scale.mean()),
+                "policy/scale_min": _metric_float(policy_scale.min()),
+                "policy/scale_max": _metric_float(policy_scale.max()),
+            }
+        )
     return metrics, len(ends)
 
 
@@ -1053,6 +1062,7 @@ def train_ppo(
     learning_rate: float = 1e-4,
     entropy_coeff: float = 1e-3,
     critic_coeff: float = 1.0,
+    target_kl: float | None = None,
     anneal_learning_rate: bool = True,
     max_grad_norm: float = 1.0,
     evaluation_env: MicroDuckVelocityEnv | None = None,
@@ -1067,9 +1077,11 @@ def train_ppo(
 
     A collector writes only finished episodes to a roughly 16K-transition
     replay buffer. ``SliceSampler`` draws whole episodes for recurrent PPO,
-    the buffer is replayed for ``epochs`` passes, and is then erased before
-    collecting with the updated policy. Collection stops after at least
-    ``total_transitions`` complete-trajectory transitions.
+    the buffer is replayed for up to ``epochs`` passes, and is then erased
+    before collecting with the updated policy. When ``target_kl`` is provided,
+    an update stops after the first epoch whose mean approximate-KL magnitude
+    exceeds that threshold. Collection stops after at least ``total_transitions``
+    complete-trajectory transitions.
     """
     if (
         min(
@@ -1093,6 +1105,8 @@ def train_ppo(
         math.isfinite(value) for value in (entropy_coeff, critic_coeff)
     ):
         raise ValueError("PPO loss coefficients must be finite and non-negative.")
+    if target_kl is not None and (target_kl <= 0 or not math.isfinite(target_kl)):
+        raise ValueError("target_kl must be finite and positive when provided.")
     if evaluation_interval is not None and evaluation_interval < 1:
         raise ValueError("evaluation_interval must be positive when provided.")
     if evaluation_interval is not None and evaluation_env is None:
@@ -1250,7 +1264,10 @@ def train_ppo(
             training_transitions = 0
             update_count = 0
             update_metrics: dict[str, float] = {}
-            for _ in range(epochs):
+            epochs_completed = 0
+            stopped_on_kl = False
+            for epoch in range(epochs):
+                epoch_kl = 0.0
                 for _ in range(updates_per_epoch):
                     sample = replay_buffer.sample(
                         minibatch_trajectories * MAX_EPISODE_STEPS
@@ -1269,6 +1286,7 @@ def train_ppo(
                     optimizer.step()
                     training_transitions += sample.numel()
                     update_count += 1
+                    epoch_kl += _metric_float(loss_values["kl_approx"])
                     for key, value in loss_values.items():
                         metric_name = f"ppo/{key}"
                         update_metrics[metric_name] = update_metrics.get(
@@ -1280,13 +1298,22 @@ def train_ppo(
                     update_metrics["ppo/grad_norm"] = update_metrics.get(
                         "ppo/grad_norm", 0.0
                     ) + _metric_float(grad_norm)
+                epochs_completed = epoch + 1
+                if (
+                    target_kl is not None
+                    and abs(epoch_kl / updates_per_epoch) > target_kl
+                ):
+                    stopped_on_kl = True
+                    break
             training_time = time.perf_counter() - training_start
             metrics.update(
                 {key: value / update_count for key, value in update_metrics.items()}
             )
             metrics.update(
                 {
-                    "training/epochs": float(epochs),
+                    "training/epochs": float(epochs_completed),
+                    "training/epochs_configured": float(epochs),
+                    "training/stopped_on_kl": float(stopped_on_kl),
                     "training/updates": float(update_count),
                     "training/learning_rate": current_learning_rate,
                     "throughput/training_transitions_per_second": training_transitions
@@ -1406,6 +1433,15 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--entropy-coeff", type=float, default=1e-3)
     parser.add_argument("--critic-coeff", type=float, default=1.0)
+    parser.add_argument(
+        "--target-kl",
+        type=float,
+        default=0.01,
+        help=(
+            "Stop each PPO update after an epoch whose mean KL magnitude exceeds "
+            "this value."
+        ),
+    )
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument(
         "--anneal-learning-rate",
@@ -1521,6 +1557,7 @@ def main(args: argparse.Namespace) -> None:
                     "anneal_learning_rate": args.anneal_learning_rate,
                     "entropy_coeff": args.entropy_coeff,
                     "critic_coeff": args.critic_coeff,
+                    "target_kl": args.target_kl,
                     "seed": args.seed,
                 }
             )
@@ -1536,6 +1573,7 @@ def main(args: argparse.Namespace) -> None:
             learning_rate=args.learning_rate,
             entropy_coeff=args.entropy_coeff,
             critic_coeff=args.critic_coeff,
+            target_kl=args.target_kl,
             anneal_learning_rate=args.anneal_learning_rate,
             max_grad_norm=args.max_grad_norm,
             evaluation_env=evaluation_env,

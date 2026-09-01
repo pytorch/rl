@@ -33,9 +33,10 @@ visual meshes and the source checkout remain unchanged. The same patched
 physics scene is passed to all three backends.
 
 The same script trains every command combination. Its long-run defaults are 10
-million complete-trajectory transitions, a 16,384-transition replay buffer, 10
-PPO epochs, linear learning-rate decay from `1e-4`, an actor/value model with a
-shared GRU backbone, deterministic evaluation, and best-checkpoint retention.
+million complete-trajectory transitions, a 16,384-transition replay buffer, up
+to 10 PPO epochs with a `0.01` approximate-KL stopping threshold, linear
+learning-rate decay from `1e-4`, an actor/value model with a shared GRU
+backbone, deterministic evaluation, and best-checkpoint retention.
 The collector is attached directly to the replay buffer: it holds incomplete
 episodes internally and writes each finished episode as one contiguous
 sequence. `SliceSampler` then samples whole episodes for the recurrent update,
@@ -52,9 +53,10 @@ Repeat `--commanded-x-velocity` to select the reset command distribution; the
 default is `-0.3`, `0.0`, and `0.3` m/s. W&B records collection/inference and
 training throughput, process and device telemetry, reward and episodic return,
 tracking error, survival and episode length, gradient norm, ESS, clip fraction,
-KL, entropy, and all PPO losses. Use `--wandb-mode disabled` for a local run
-without tracking. When logging is enabled, `--wandb-entity` is required so W&B
-cannot silently fall back to a different default team or personal workspace.
+KL, entropy, policy distribution scale, completed PPO epochs, and all PPO
+losses. Use `--wandb-mode disabled` for a local run without tracking. When
+logging is enabled, `--wandb-entity` is required so W&B cannot silently fall
+back to a different default team or personal workspace.
 
 The best checkpoint can be rendered directly into a Jupyter-native MuJoCo-WASM
 notebook while training continues. The checkpoint stores the actor under the
