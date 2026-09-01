@@ -432,6 +432,10 @@ class AsyncBatchedCollector(BaseCollector):
         self._env_pool = AsyncEnvPool(
             self._create_env_fn,
             backend=self._env_backend,
+            # Pinned to the current default so the pool's default-change
+            # FutureWarning is not emitted from library code; switching the
+            # collector to the shm exchange is a deliberate follow-up.
+            exchange="queue",
             **kwargs,
         )
 
