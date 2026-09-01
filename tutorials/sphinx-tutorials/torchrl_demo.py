@@ -30,7 +30,10 @@ warnings.filterwarnings("ignore")
 from torch import multiprocessing
 
 if multiprocessing.get_start_method(allow_none=True) is None:
-    multiprocessing.set_start_method("fork")
+    try:
+        multiprocessing.set_start_method("fork")
+    except ValueError:
+        pass
 # sphinx_gallery_end_ignore
 
 ###############################################################################
@@ -323,6 +326,7 @@ collector = Collector(
     policy=actor,
     frames_per_batch=200,  # Collect 200 frames per iteration
     total_frames=1000,  # Stop after 1000 total frames
+    auto_register_policy_transforms=True,
 )
 
 for batch in collector:
@@ -453,6 +457,7 @@ collector = Collector(
     policy=policy,
     frames_per_batch=100,
     total_frames=2000,
+    auto_register_policy_transforms=True,
 )
 
 # 4. Create a replay buffer

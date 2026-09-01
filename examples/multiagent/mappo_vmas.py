@@ -129,9 +129,9 @@ def main(args: argparse.Namespace) -> None:
         ),
     )
 
-    actor = make_actor(env)
+    actor = make_actor(env).to(device)
     centralised = args.algo == "mappo"
-    critic = make_critic(env, centralized=centralised)
+    critic = make_critic(env, centralized=centralised).to(device)
 
     LossCls = MAPPOLoss if args.algo == "mappo" else IPPOLoss
     value_norm = (
@@ -144,15 +144,12 @@ def main(args: argparse.Namespace) -> None:
         clip_epsilon=0.2,
         entropy_coeff=0.01,
     )
-    # VMAS uses per-agent done/terminated flags, so we need to tell the loss
-    # where to find them. The team-shared reward / done broadcasting that
-    # MultiAgentGAE does is for envs that use root-level (team) signals.
+    # VMAS keeps rewards per agent and termination signals at the root. The
+    # multi-agent value estimator broadcasts the latter across agents.
     loss_module.set_keys(
         value=("agents", "state_value"),
         action=env.action_key,
         reward=env.reward_key,
-        done=("agents", "done"),
-        terminated=("agents", "terminated"),
     )
 
     collector = Collector(
@@ -162,6 +159,7 @@ def main(args: argparse.Namespace) -> None:
         storing_device=device,
         frames_per_batch=args.frames_per_batch,
         total_frames=args.frames,
+        auto_register_policy_transforms=True,
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -199,7 +197,7 @@ def main(args: argparse.Namespace) -> None:
                 optim.step()
 
         collector.update_policy_weights_()
-        ep_reward = td.get(("next", "episode_reward")).mean().item()
+        ep_reward = td.get(("next", "agents", "episode_reward")).mean().item()
         print(
             f"[{args.algo}] iter={it:03d} frames={total_frames:>7d} "
             f"reward={ep_reward:+.3f} elapsed={time.time() - start:5.1f}s"

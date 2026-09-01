@@ -945,9 +945,12 @@ class TestAsyncEnvPool:
     def test_shared_memory_deadline_batching(self, make_envs):
         env = AsyncEnvPool(make_envs, backend="multiprocessing", exchange="shm")
         try:
-            env.async_reset_send(env_index=list(range(env.num_envs)))
-            first = env.async_reset_recv(min_get=1, max_get=4, timeout=0.0)
-            remaining = env.async_reset_recv(min_get=3, max_get=3, timeout=0.1)
+            # Only env 0 is commanded, so the first recv returns a partial
+            # batch (1 of max_get=4) when its deadline expires.
+            env.async_reset_send(env_index=[0])
+            first = env.async_reset_recv(min_get=1, max_get=4, timeout=1.0)
+            env.async_reset_send(env_index=[1, 2, 3])
+            remaining = env.async_reset_recv(min_get=3, max_get=3, timeout=10.0)
             assert first.shape[0] == 1
             assert remaining.shape[0] == 3
             stats = env.stats(reset=True)
@@ -967,10 +970,44 @@ class TestAsyncEnvPool:
         env = AsyncEnvPool(make_envs, backend=backend)
         try:
             env.async_reset_send(env_index=list(range(env.num_envs)))
-            first = env.async_reset_recv(min_get=1, max_get=1, timeout=0.0)
-            remaining = env.async_reset_recv(min_get=3, max_get=3, timeout=0.1)
+            first = env.async_reset_recv(min_get=1, max_get=1, timeout=10.0)
+            remaining = env.async_reset_recv(min_get=3, max_get=3, timeout=10.0)
             assert first.shape[0] == 1
             assert remaining.shape[0] == 3
+        finally:
+            env._maybe_shutdown()
+
+    @pytest.mark.parametrize(
+        "backend,exchange",
+        [
+            ("multiprocessing", "queue"),
+            ("multiprocessing", "shm"),
+            ("threading", "queue"),
+        ],
+    )
+    @set_capture_non_tensor_stack(False)
+    def test_recv_timeout_bounds_whole_call(self, backend, exchange):
+        """The recv deadline covers the wait for min_get, without losing results.
+
+        One env steps immediately, the other takes ~1s. A recv asking for both
+        with a 0.2s deadline must raise TimeoutError instead of blocking until
+        the slow env finishes, and the fast env's result must remain available
+        to the next call.
+        """
+        makers = [
+            partial(_DelayedCountingEnv, delay=0.0, max_steps=1000),
+            partial(_DelayedCountingEnv, delay=1.0, max_steps=1000),
+        ]
+        kwargs = {"exchange": exchange} if backend == "multiprocessing" else {}
+        env = AsyncEnvPool(makers, backend=backend, **kwargs)
+        try:
+            reset = env.reset()
+            reset.set("action", torch.ones(reset.shape + (1,)))
+            env.async_step_send(reset)
+            with pytest.raises(TimeoutError, match="timed out"):
+                env.async_step_recv(min_get=2, timeout=0.2)
+            result = env.async_step_recv(min_get=2, timeout=60.0)
+            assert result.shape[0] == 2
         finally:
             env._maybe_shutdown()
 

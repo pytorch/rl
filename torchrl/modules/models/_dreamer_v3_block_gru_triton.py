@@ -46,17 +46,152 @@ def _activation(value: torch.Tensor, code: int) -> torch.Tensor:
 
 
 def _block_weight_grad(
-    value: torch.Tensor, grad_output: torch.Tensor, weight: torch.Tensor
+    value: torch.Tensor,
+    grad_output: torch.Tensor,
+    weight: torch.Tensor,
+    *,
+    value_shared_across_blocks: bool = False,
 ) -> torch.Tensor:
     num_blocks, block_in, block_out = weight.shape
-    value = value.reshape(-1, num_blocks, block_in).float()
-    grad_output = grad_output.reshape(-1, num_blocks, block_out).float()
-    return torch.einsum("nbi,nbo->bio", value, grad_output)
+    sample_count = grad_output.numel() // (num_blocks * block_out)
+    split_count = min(64, max(1, triton.cdiv(sample_count, 1024)))
+    partial = torch.empty(
+        num_blocks,
+        block_in,
+        block_out,
+        split_count,
+        device=value.device,
+        dtype=torch.float32,
+    )
+
+    def grid(_):
+        input_tiles = triton.cdiv(block_in, 16)
+        output_tiles = triton.cdiv(block_out, 16)
+        return num_blocks, input_tiles * output_tiles, split_count
+
+    _block_weight_grad_kernel[grid](
+        value,
+        grad_output,
+        partial,
+        sample_count,
+        NUM_BLOCKS=num_blocks,
+        INPUT_SIZE=block_in,
+        OUTPUT_SIZE=block_out,
+        SPLIT_COUNT=split_count,
+        VALUE_SHARED=value_shared_across_blocks,
+        COMPUTE_BF16=value.dtype is torch.bfloat16,
+    )
+    if split_count == 1:
+        return partial[..., 0]
+    return partial.sum(-1)
 
 
 if _has_triton:
     import triton
     import triton.language as tl
+
+    _REDUCTION_CONFIGS = [
+        triton.Config(
+            {"INPUT_TILE": 16, "OUTPUT_TILE": 16, "REDUCTION_TILE": 32},
+            num_warps=2,
+            num_stages=1,
+        ),
+        triton.Config(
+            {"INPUT_TILE": 16, "OUTPUT_TILE": 32, "REDUCTION_TILE": 32},
+            num_warps=4,
+            num_stages=1,
+        ),
+        triton.Config(
+            {"INPUT_TILE": 32, "OUTPUT_TILE": 32, "REDUCTION_TILE": 64},
+            num_warps=4,
+            num_stages=1,
+        ),
+    ]
+
+    @triton.autotune(
+        configs=_REDUCTION_CONFIGS,
+        key=[
+            "SAMPLE_COUNT",
+            "NUM_BLOCKS",
+            "INPUT_SIZE",
+            "OUTPUT_SIZE",
+            "SPLIT_COUNT",
+            "VALUE_SHARED",
+            "COMPUTE_BF16",
+        ],
+    )
+    @triton.jit
+    def _block_weight_grad_kernel(
+        value_ptr,
+        grad_output_ptr,
+        partial_ptr,
+        SAMPLE_COUNT,
+        NUM_BLOCKS: tl.constexpr,
+        INPUT_SIZE: tl.constexpr,
+        OUTPUT_SIZE: tl.constexpr,
+        SPLIT_COUNT: tl.constexpr,
+        VALUE_SHARED: tl.constexpr,
+        COMPUTE_BF16: tl.constexpr,
+        INPUT_TILE: tl.constexpr,
+        OUTPUT_TILE: tl.constexpr,
+        REDUCTION_TILE: tl.constexpr,
+    ):
+        block = tl.program_id(0)
+        tile = tl.program_id(1)
+        split = tl.program_id(2)
+        input_tiles = tl.cdiv(INPUT_SIZE, INPUT_TILE)
+        input_tile = tile % input_tiles
+        output_tile = tile // input_tiles
+        input_offset = input_tile * INPUT_TILE + tl.arange(0, INPUT_TILE)
+        output_offset = output_tile * OUTPUT_TILE + tl.arange(0, OUTPUT_TILE)
+        accumulator = tl.zeros((INPUT_TILE, OUTPUT_TILE), tl.float32)
+        sample_start = split * REDUCTION_TILE
+        while sample_start < SAMPLE_COUNT:
+            sample_offset = sample_start + tl.arange(0, REDUCTION_TILE)
+            if VALUE_SHARED:
+                value_offset = (
+                    sample_offset[:, None] * INPUT_SIZE + input_offset[None, :]
+                )
+            else:
+                value_offset = (
+                    sample_offset[:, None] * (NUM_BLOCKS * INPUT_SIZE)
+                    + block * INPUT_SIZE
+                    + input_offset[None, :]
+                )
+            grad_output_offset = (
+                sample_offset[:, None] * (NUM_BLOCKS * OUTPUT_SIZE)
+                + block * OUTPUT_SIZE
+                + output_offset[None, :]
+            )
+            value = tl.load(
+                value_ptr + value_offset,
+                mask=(sample_offset[:, None] < SAMPLE_COUNT)
+                & (input_offset[None, :] < INPUT_SIZE),
+                other=0.0,
+            )
+            grad_output = tl.load(
+                grad_output_ptr + grad_output_offset,
+                mask=(sample_offset[:, None] < SAMPLE_COUNT)
+                & (output_offset[None, :] < OUTPUT_SIZE),
+                other=0.0,
+            )
+            if COMPUTE_BF16:
+                accumulator += tl.dot(tl.trans(value), grad_output)
+            else:
+                accumulator += tl.dot(
+                    tl.trans(value), grad_output, input_precision="ieee"
+                )
+            sample_start += SPLIT_COUNT * REDUCTION_TILE
+        partial_offset = (
+            (block * INPUT_SIZE + input_offset[:, None]) * OUTPUT_SIZE
+            + output_offset[None, :]
+        ) * SPLIT_COUNT + split
+        tl.store(
+            partial_ptr + partial_offset,
+            accumulator,
+            mask=(input_offset[:, None] < INPUT_SIZE)
+            & (output_offset[None, :] < OUTPUT_SIZE),
+        )
 
     _CONFIGS = [
         triton.Config({"BLOCK_B": 1, "BLOCK_K": 16}, num_warps=1, num_stages=1),
@@ -1204,64 +1339,130 @@ class _DreamerV3BlockGRUTritonFunction(torch.autograd.Function):
                 COMPUTE_BF16=outputs.dtype is torch.bfloat16,
             )
 
-        previous = torch.cat((initial_hidden.unsqueeze(1), outputs[:, :-1]), 1)
-        previous = torch.where(is_init.unsqueeze(-1), 0, previous)
-        flat_previous = previous.flatten(0, 1).float()
-        flat_hidden_pre = grad_hidden_pre.flatten(0, 1).float()
-        grad_hidden_weight = flat_hidden_pre.t() @ flat_previous
-        grad_hidden_bias = flat_hidden_pre.sum(0)
-        grad_hidden_norm_weight = grad_hidden_norm_contrib.float().sum((0, 1))
+        # Input order: projected_input, initial_hidden, is_init, hidden_weight,
+        # hidden_bias, hidden_norm_weight, 3 dynamic params per layer,
+        # gate_weight, gate_bias, then the 6 non-tensor arguments.
+        needs_input_grad = ctx.needs_input_grad
+        first_weight_index = 6
+        gate_weight_index = first_weight_index + 3 * num_layers
+        previous = None
+        if needs_input_grad[3] or needs_input_grad[first_weight_index]:
+            previous = torch.cat((initial_hidden.unsqueeze(1), outputs[:, :-1]), 1)
+            previous = torch.where(is_init.unsqueeze(-1), 0, previous)
+        if needs_input_grad[3]:
+            grad_hidden_weight = (
+                _block_weight_grad(
+                    previous,
+                    grad_hidden_pre,
+                    hidden_weight.t().unsqueeze(0),
+                    value_shared_across_blocks=True,
+                )
+                .squeeze(0)
+                .t()
+                .contiguous()
+            )
+        else:
+            grad_hidden_weight = None
+        grad_hidden_bias = (
+            grad_hidden_pre.sum((0, 1), dtype=torch.float32)
+            if needs_input_grad[4]
+            else None
+        )
+        grad_hidden_norm_weight = (
+            grad_hidden_norm_contrib.sum((0, 1), dtype=torch.float32)
+            if needs_input_grad[5]
+            else None
+        )
 
-        hidden_features = _activation(
-            hidden_normalized * hidden_norm_weight.to(outputs.dtype),
-            ctx.activation_code,
-        )
-        grouped_previous = previous.unflatten(-1, (ctx.num_blocks, block_size))
-        repeated_projected = projected_input.unsqueeze(-2).expand(
-            batch, time, ctx.num_blocks, projected_size
-        )
-        repeated_hidden = hidden_features.unsqueeze(-2).expand_as(repeated_projected)
-        first_input = torch.cat(
-            (grouped_previous, repeated_projected, repeated_hidden), -1
-        ).flatten(-2)
+        # The forward kernel applies the fp32 norm scales to fp32 normalized
+        # values and activates in fp32 before rounding to the compute dtype,
+        # so the recomputed activations here must do the same.
         dynamic_grads = []
         for layer_index, (weight, _, _) in enumerate(dynamic):
             grad_pre = grad_dynamic_pre[layer_index]
-            layer_input = (
-                first_input
-                if layer_index == 0
-                else _activation(
-                    dynamic_normalized[layer_index - 1]
-                    * dynamic[layer_index - 1][2].to(outputs.dtype),
+            weight_index = first_weight_index + 3 * layer_index
+            if not needs_input_grad[weight_index]:
+                grad_weight = None
+            elif layer_index == 0:
+                hidden_features = _activation(
+                    hidden_normalized.float() * hidden_norm_weight.float(),
                     ctx.activation_code,
+                ).to(outputs.dtype)
+                grad_weight = torch.cat(
+                    (
+                        _block_weight_grad(
+                            previous,
+                            grad_pre,
+                            weight[:, :block_size],
+                        ),
+                        _block_weight_grad(
+                            projected_input,
+                            grad_pre,
+                            weight[
+                                :,
+                                block_size : block_size + projected_size,
+                            ],
+                            value_shared_across_blocks=True,
+                        ),
+                        _block_weight_grad(
+                            hidden_features,
+                            grad_pre,
+                            weight[:, block_size + projected_size :],
+                            value_shared_across_blocks=True,
+                        ),
+                    ),
+                    1,
                 )
-            )
+            else:
+                layer_input = _activation(
+                    dynamic_normalized[layer_index - 1].float()
+                    * dynamic[layer_index - 1][2].float(),
+                    ctx.activation_code,
+                ).to(outputs.dtype)
+                grad_weight = _block_weight_grad(layer_input, grad_pre, weight)
             dynamic_grads.extend(
                 (
-                    _block_weight_grad(layer_input, grad_pre, weight),
-                    grad_pre.float().sum((0, 1)),
-                    grad_dynamic_norm_contrib[layer_index].float().sum((0, 1)),
+                    grad_weight,
+                    grad_pre.sum((0, 1), dtype=torch.float32)
+                    if needs_input_grad[weight_index + 1]
+                    else None,
+                    grad_dynamic_norm_contrib[layer_index].sum(
+                        (0, 1), dtype=torch.float32
+                    )
+                    if needs_input_grad[weight_index + 2]
+                    else None,
                 )
             )
-        first_grad_blocks = (
-            grad_dynamic_pre[0].reshape(-1, ctx.num_blocks, block_size).transpose(0, 1)
+        if needs_input_grad[0]:
+            first_weight = dynamic[0][0].to(outputs.dtype)
+            input_weight = first_weight[:, block_size : block_size + projected_size]
+            # The flat GEMM's reduction dimension sums over the blocks.
+            grad_projected = (
+                (
+                    grad_dynamic_pre[0].reshape(batch * time, hidden_size)
+                    @ input_weight.transpose(1, 2).reshape(hidden_size, projected_size)
+                )
+                .reshape_as(projected_input)
+                .to(projected_input.dtype)
+            )
+        else:
+            grad_projected = None
+        if needs_input_grad[gate_weight_index]:
+            gate_input = _activation(
+                dynamic_normalized[-1].float() * dynamic[-1][2].float(),
+                ctx.activation_code,
+            ).to(outputs.dtype)
+            grad_gate_weight = _block_weight_grad(gate_input, grad_gate, gate_weight)
+        else:
+            grad_gate_weight = None
+        grad_gate_bias = (
+            grad_gate.sum((0, 1), dtype=torch.float32)
+            if needs_input_grad[gate_weight_index + 1]
+            else None
         )
-        first_weight = dynamic[0][0].to(outputs.dtype)
-        input_weight = first_weight[:, block_size : block_size + projected_size]
-        grad_projected = (
-            torch.bmm(first_grad_blocks, input_weight.transpose(1, 2))
-            .sum(0)
-            .reshape_as(projected_input)
-        )
-        gate_input = _activation(
-            dynamic_normalized[-1] * dynamic[-1][2].to(outputs.dtype),
-            ctx.activation_code,
-        )
-        grad_gate_weight = _block_weight_grad(gate_input, grad_gate, gate_weight)
-        grad_gate_bias = grad_gate.float().sum((0, 1))
         tensor_grads = (
-            grad_projected.to(projected_input.dtype),
-            grad_initial.to(initial_hidden.dtype),
+            grad_projected,
+            grad_initial.to(initial_hidden.dtype) if needs_input_grad[1] else None,
             None,
             grad_hidden_weight,
             grad_hidden_bias,

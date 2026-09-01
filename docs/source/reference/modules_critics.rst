@@ -13,6 +13,7 @@ Value networks estimate the value of states or state-action pairs.
     ValueNorm
     PopArtValueNorm
     RunningValueNorm
+    PercentileValueNorm
     DuelingCnnDQNet
     DistributionalDQNnet
     ConvNet

@@ -39,6 +39,8 @@ from .gym_like import default_info_dict_reader, GymLikeEnv
 from .libs import (
     BraxEnv,
     BraxWrapper,
+    CraftGroundEnv,
+    CraftGroundWrapper,
     DMControlEnv,
     DMControlWrapper,
     GenesisEnv,
@@ -216,6 +218,8 @@ __all__ = [
     "ChessEnv",
     "ClipTransform",
     "Compose",
+    "CraftGroundEnv",
+    "CraftGroundWrapper",
     "ConditionalSkip",
     "Crop",
     "DMControlEnv",

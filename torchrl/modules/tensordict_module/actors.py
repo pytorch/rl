@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 
 import torch
 from tensordict import TensorDictBase, unravel_key
@@ -529,6 +530,11 @@ class QValueModule(TensorDictModuleBase):
             If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
+        strict_shape (bool or "auto", optional): Controls action-shape validation
+            against ``spec``. ``True`` raises on a mismatch, ``"auto"`` attempts
+            to reshape the action, and ``False`` disables validation. ``None`` is
+            accepted for compatibility and behaves like ``True``. Defaults to
+            ``True``.
 
     Returns:
         if the input is a single tensor, a triplet containing the chosen action,
@@ -570,7 +576,7 @@ class QValueModule(TensorDictModuleBase):
         var_nums: int | None = None,
         spec: TensorSpec | None = None,
         safe: bool = False,
-        strict_shape: bool | str | None = None,
+        strict_shape: bool | Literal["auto"] | None = True,
     ):
         if isinstance(action_space, TensorSpec):
             raise TypeError("Using specs in action_space is deprecated")
@@ -661,13 +667,18 @@ class QValueModule(TensorDictModuleBase):
             else None
         )
         if action_spec is not None and self.strict_shape is not False:
-            composite_batch_ndim = len(self.spec.shape)
+            action_key = unravel_key(action_key)
+            if isinstance(action_key, tuple):
+                action_spec_parent = self.spec[action_key[:-1]]
+            else:
+                action_spec_parent = self.spec
+            composite_batch_ndim = len(action_spec_parent.shape)
             per_sample_shape = action_spec.shape[composite_batch_ndim:]
             batch_shape = action_values.shape[:-1]
             target_shape = torch.Size(list(batch_shape) + list(per_sample_shape))
 
             if action.shape != target_shape:
-                if self.strict_shape is True:
+                if self.strict_shape is True or self.strict_shape is None:
                     raise RuntimeError(
                         f"Action shape {action.shape} does not match expected shape {target_shape} "
                         f"(per-sample spec shape: {per_sample_shape}). "
@@ -680,19 +691,6 @@ class QValueModule(TensorDictModuleBase):
                         raise RuntimeError(
                             f"Cannot reshape action from {action.shape} to {target_shape}."
                         )
-                elif self.strict_shape is None:
-                    import warnings
-
-                    warnings.warn(
-                        f"Action shape {action.shape} does not match expected shape {target_shape} "
-                        f"(per-sample spec shape: {per_sample_shape}). "
-                        f"In v0.14, this will raise an error. "
-                        f"Set strict_shape='auto' to automatically reshape, "
-                        f"strict_shape=True to raise immediately, "
-                        f"or strict_shape=False to silence this warning.",
-                        FutureWarning,
-                        stacklevel=2,
-                    )
 
         tensordict.update(
             dict(zip(self.out_keys, (action, action_values, chosen_action_value)))
@@ -1149,6 +1147,11 @@ class QValueActor(SafeSequential):
             the selected action value. Defaults to ``"chosen_action_value"``.
         action_mask_key (str or tuple of str, optional): The input key
             representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
+        strict_shape (bool or "auto", optional): Controls action-shape validation
+            against ``spec``. ``True`` raises on a mismatch, ``"auto"`` attempts
+            to reshape the action, and ``False`` disables validation. ``None`` is
+            accepted for compatibility and behaves like ``True``. Defaults to
+            ``True``.
 
     .. note::
         ``out_keys`` cannot be passed. If the module is a :class:`tensordict.nn.TensorDictModule`
@@ -1209,7 +1212,7 @@ class QValueActor(SafeSequential):
         action_key: NestedKey | None = None,
         chosen_action_value_key: NestedKey | None = None,
         action_mask_key: NestedKey | None = None,
-        strict_shape: bool | str | None = None,
+        strict_shape: bool | Literal["auto"] | None = True,
     ):
         if isinstance(action_space, TensorSpec):
             raise RuntimeError(

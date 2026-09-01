@@ -155,6 +155,7 @@ class PPOLossConfig(LossConfig):
     loss_critic_type: str = "smooth_l1"
     normalize_advantage: bool = False
     normalize_advantage_exclude_dims: tuple = ()
+    advantage_norm: Any = None
     gamma: float | None = None
     separate_losses: bool = False
     advantage_key: str | None = None
@@ -184,6 +185,10 @@ class PPOLossConfig(LossConfig):
 def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     loss_type = kwargs.pop("loss_type", "clip")
     gamma = kwargs.pop("gamma", None)
+    # Instantiate the advantage normaliser if it is a config object
+    advantage_norm = kwargs.get("advantage_norm")
+    if advantage_norm is not None and hasattr(advantage_norm, "_target_"):
+        kwargs["advantage_norm"] = advantage_norm()
     # Drop kwargs that don't apply to the chosen loss flavor so each class
     # receives only what its __init__ accepts.
     clip_only = {"clip_epsilon"}
@@ -238,6 +243,7 @@ class A2CLossConfig(LossConfig):
     entropy_coeff: float | None = None
     critic_coeff: float = 1.0
     loss_critic_type: str = "smooth_l1"
+    advantage_norm: Any = None
     gamma: float | None = None
     separate_losses: bool = False
     advantage_key: Any = None
@@ -268,6 +274,9 @@ def _make_onpolicy_loss(loss_cls, *args, **kwargs):
         kwargs["actor_network"] = actor_network()
     if critic_network is not None and hasattr(critic_network, "_target_"):
         kwargs["critic_network"] = critic_network()
+    advantage_norm = kwargs.get("advantage_norm")
+    if advantage_norm is not None and hasattr(advantage_norm, "_target_"):
+        kwargs["advantage_norm"] = advantage_norm()
 
     loss = loss_cls(*args, **kwargs)
     if gamma is not None:

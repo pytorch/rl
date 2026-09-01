@@ -47,6 +47,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.utils import check_env_specs
+from torchrl.objectives.value.functional import reward2go
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
@@ -817,10 +818,10 @@ class TestRewardSum(TransformBase):
 class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
-    @pytest.mark.parametrize("done_flags", [1, 5])
+    @pytest.mark.parametrize("done_count", [1, 5], ids=["single_done", "multiple_done"])
     @pytest.mark.parametrize("t", [3, 20])
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
-    def test_transform_rb(self, done_flags, gamma, t, device, rbclass):
+    def test_transform_rb(self, done_count, gamma, t, device, rbclass):
         batch = 10
         batch_size = [batch, t]
         torch.manual_seed(0)
@@ -828,9 +829,11 @@ class TestReward2Go(TransformBase):
         r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
         rb = rbclass(storage=LazyTensorStorage(batch), transform=r2g)
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
-        for i in range(batch):
-            while not done[i].any():
-                done[i] = done[i].bernoulli_(0.1)
+        done_count = min(done_count, t)
+        done_indices = (
+            torch.arange(1, done_count + 1, device=device) * t // done_count - 1
+        )
+        done[:, done_indices] = True
         reward = torch.randn(*batch_size, 1, device=device)
         misc = torch.randn(*batch_size, 1, device=device)
 
@@ -842,35 +845,8 @@ class TestReward2Go(TransformBase):
         rb.extend(td)
         sample = rb.sample(13)
         assert sample[out_key].shape == (13, t, 1)
-        assert (sample[out_key] != 0).all()
-
-    @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize("gamma", [0.99, 1.0])
-    @pytest.mark.parametrize("done_flags", [1, 5])
-    @pytest.mark.parametrize("t", [3, 20])
-    def test_transform_offline_rb(self, done_flags, gamma, t, device):
-        batch = 10
-        batch_size = [batch, t]
-        torch.manual_seed(0)
-        out_key = "reward2go"
-        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
-        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
-        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
-        for i in range(batch):
-            while not done[i].any():
-                done[i] = done[i].bernoulli_(0.1)
-        reward = torch.randn(*batch_size, 1, device=device)
-        misc = torch.randn(*batch_size, 1, device=device)
-
-        td = TensorDict(
-            {"misc": misc, "next": {"done": done, "reward": reward}},
-            batch_size,
-            device=device,
-        )
-        rb.extend(td)
-        sample = rb.sample(13)
-        assert sample[out_key].shape == (13, t, 1)
-        assert (sample[out_key] != 0).all()
+        expected = reward2go(sample["next", "reward"], sample["next", "done"], gamma)
+        torch.testing.assert_close(sample[out_key], expected)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
@@ -894,8 +870,8 @@ class TestReward2Go(TransformBase):
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
-    @pytest.mark.parametrize("done_flags", [1, 5])
-    def test_transform_inverse(self, gamma, done_flags, device):
+    @pytest.mark.parametrize("done_count", [1, 5], ids=["single_done", "multiple_done"])
+    def test_transform_inverse(self, gamma, done_count, device):
         batch = 10
         t = 20
         batch_size = [batch, t]
@@ -903,9 +879,10 @@ class TestReward2Go(TransformBase):
         out_key = "reward2go"
         r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
-        for i in range(batch):
-            while not done[i].any():
-                done[i] = done[i].bernoulli_(0.1)
+        done_indices = (
+            torch.arange(1, done_count + 1, device=device) * t // done_count - 1
+        )
+        done[:, done_indices] = True
         reward = torch.randn(*batch_size, 1, device=device)
         misc = torch.randn(*batch_size, 1, device=device)
 
@@ -914,13 +891,13 @@ class TestReward2Go(TransformBase):
             batch_size,
             device=device,
         )
+        expected = reward2go(reward, done, gamma)
         td = r2g.inv(td)
         assert td[out_key].shape == (batch, t, 1)
-        assert (td[out_key] != 0).all()
+        torch.testing.assert_close(td[out_key], expected)
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
-    @pytest.mark.parametrize("done_flags", [1, 5])
-    def test_transform(self, gamma, done_flags):
+    def test_transform(self, gamma):
         device = "cpu"
         batch = 10
         t = 20
@@ -928,9 +905,7 @@ class TestReward2Go(TransformBase):
         torch.manual_seed(0)
         r2g = Reward2GoTransform(gamma=gamma)
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
-        for i in range(batch):
-            while not done[i].any():
-                done[i] = done[i].bernoulli_(0.1)
+        done[..., -1, :] = True
         reward = torch.randn(*batch_size, 1, device=device)
         misc = torch.randn(*batch_size, 1, device=device)
 

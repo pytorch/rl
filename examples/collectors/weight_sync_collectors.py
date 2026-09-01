@@ -14,6 +14,9 @@ The examples show different synchronization strategies and use cases including
 single collectors, multiple collectors, multiple models, and no synchronization.
 """
 
+import argparse
+
+import torch.multiprocessing as mp
 import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
@@ -25,7 +28,7 @@ from torchrl.weight_update import (
 )
 
 
-def example_single_collector_multiprocess():
+def example_single_collector_multiprocess(smoke: bool = False):
     """Example 1: Single collector with multiprocess scheme."""
     print("\n" + "=" * 70)
     print("Example 1: Single Collector with Multiprocess Scheme")
@@ -43,15 +46,18 @@ def example_single_collector_multiprocess():
     env.close()
 
     # Create weight sync scheme
-    scheme = MultiProcessWeightSyncScheme(strategy="state_dict")
+    scheme = MultiProcessWeightSyncScheme(strategy="tensordict")
 
     print("Creating collector with multiprocess weight sync...")
     collector = Collector(
         create_env_fn=lambda: GymEnv("CartPole-v1"),
+        num_collectors=1,
+        sync=True,
         policy=policy,
-        frames_per_batch=64,
-        total_frames=200,
+        frames_per_batch=16 if smoke else 64,
+        total_frames=16 if smoke else 200,
         weight_sync_schemes={"policy": scheme},
+        auto_register_policy_transforms=True,
     )
 
     # Collect data and update weights periodically
@@ -61,18 +67,18 @@ def example_single_collector_multiprocess():
 
         # Update policy weights every 2 iterations
         if i % 2 == 0:
-            new_weights = policy.state_dict()
+            new_weights = TensorDict.from_module(policy)
             collector.update_policy_weights_(new_weights)
             print("  → Updated policy weights")
 
-        if i >= 2:  # Just run a few iterations for demo
+        if smoke or i >= 2:  # Just run a few iterations for demo
             break
 
     collector.shutdown()
     print("✓ Single collector example completed!\n")
 
 
-def example_multi_collector_shared_memory():
+def example_multi_collector_shared_memory(smoke: bool = False):
     """Example 2: Multiple collectors with shared memory."""
     print("\n" + "=" * 70)
     print("Example 2: Multiple Collectors with Shared Memory")
@@ -95,12 +101,13 @@ def example_multi_collector_shared_memory():
     print("Creating multi-collector with shared memory...")
     collector = Collector(
         create_env_fn=lambda: GymEnv("CartPole-v1"),
-        num_collectors=3,
+        num_collectors=2 if smoke else 3,
         sync=True,
         policy=policy,
-        frames_per_batch=192,
-        total_frames=400,
+        frames_per_batch=32 if smoke else 192,
+        total_frames=32 if smoke else 400,
         weight_sync_schemes={"policy": scheme},
+        auto_register_policy_transforms=True,
     )
 
     # Workers automatically see weight updates via shared memory
@@ -112,30 +119,28 @@ def example_multi_collector_shared_memory():
         collector.update_policy_weights_(TensorDict.from_module(policy))
         print("  → Updated policy weights via shared memory")
 
-        if i >= 1:  # Just run a couple iterations for demo
+        if smoke or i >= 1:  # Just run a couple iterations for demo
             break
 
     collector.shutdown()
     print("✓ Multi-collector with shared memory example completed!\n")
 
 
-def main():
+def main(smoke: bool = False):
     """Run all examples."""
     print("\n" + "=" * 70)
     print("Weight Synchronization Schemes - Collector Integration Examples")
     print("=" * 70)
 
     # Set multiprocessing start method
-    import torch.multiprocessing as mp
-
     try:
         mp.set_start_method("spawn")
     except RuntimeError:
         pass  # Already set
 
     # Run examples
-    example_single_collector_multiprocess()
-    example_multi_collector_shared_memory()
+    example_single_collector_multiprocess(smoke=smoke)
+    example_multi_collector_shared_memory(smoke=smoke)
 
     print("\n" + "=" * 70)
     print("All examples completed successfully!")
@@ -149,4 +154,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--smoke", action="store_true")
+    main(smoke=parser.parse_args().smoke)

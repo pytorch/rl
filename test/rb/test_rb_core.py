@@ -2610,6 +2610,15 @@ class TestUpdateIfPresent:
         assert result.stale_count == 0
         torch.testing.assert_close(rb[:]["obs"], patch["obs"])
 
+    def test_update_invalidates_derived_caches(self):
+        # Caches keyed on the storage revision (boundary caches, the
+        # fragmented trajectory index) must see conditional patches.
+        rb, _, index, generation = self._make_rb()
+        revision = rb._storage._mutation_revision
+        patch = {"obs": torch.full((10, 3), 42.0)}
+        rb.update_if_present(index=index, generation=generation, patch=patch)
+        assert rb._storage._mutation_revision > revision
+
     def test_stale_records_skipped_and_unmodified(self):
         rb, _, index, generation = self._make_rb()
         overwrite = TensorDict(

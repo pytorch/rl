@@ -10,9 +10,11 @@ To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
 """
 import time
+from tempfile import TemporaryDirectory
 
 import hydra
 import torch
+from _smoke import make_prompt_loader, make_tiny_transformer
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import logger as torchrl_logger
@@ -43,7 +45,9 @@ def create_loss_estimator(eval_iters, ctx):
 
 @hydra.main(version_base="1.3", config_path="config", config_name="train")
 def main(cfg):
-    loss_logger = get_file_logger("loss_logger", "transformer_loss_logger.log")
+    loss_logger = None
+    if not cfg.smoke:
+        loss_logger = get_file_logger("loss_logger", "transformer_loss_logger.log")
 
     data_cfg = cfg.data
     model_cfg = cfg.model
@@ -65,22 +69,33 @@ def main(cfg):
 
     ctx = setup(cfg.sys)
 
-    train_loader = get_dataloader(
-        data_cfg.batch_size,
-        data_cfg.block_size,
-        PromptData,
-        device,
-        dataset_name="CarperAI/openai_summarize_tldr",
-        split="train",
-    )
-    val_loader = get_dataloader(
-        data_cfg.batch_size,
-        data_cfg.block_size,
-        PromptData,
-        device,
-        dataset_name="CarperAI/openai_summarize_tldr",
-        split="valid",
-    )
+    smoke_model_dir = None
+    if cfg.smoke:
+        train_loader = make_prompt_loader(
+            data_cfg.batch_size, data_cfg.block_size, device
+        )
+        val_loader = make_prompt_loader(
+            data_cfg.batch_size, data_cfg.block_size, device
+        )
+        smoke_model_dir = TemporaryDirectory()
+        model_cfg.name_or_path = str(make_tiny_transformer(smoke_model_dir.name))
+    else:
+        train_loader = get_dataloader(
+            data_cfg.batch_size,
+            data_cfg.block_size,
+            PromptData,
+            device,
+            dataset_name="CarperAI/openai_summarize_tldr",
+            split="train",
+        )
+        val_loader = get_dataloader(
+            data_cfg.batch_size,
+            data_cfg.block_size,
+            PromptData,
+            device,
+            dataset_name="CarperAI/openai_summarize_tldr",
+            split="valid",
+        )
 
     model = init_transformer(
         resolve_name_or_path(model_cfg.name_or_path),
@@ -88,6 +103,7 @@ def main(cfg):
         device,
         compile_model=compile_,
     )
+    del smoke_model_dir
     optimizer = torch.optim.AdamW(model.parameters(), **train_cfg.optimizer)
     scheduler = None
     if train_cfg.decay_lr:
@@ -136,20 +152,23 @@ def main(cfg):
             val_loss = estimate_loss(model, val_loader)
             msg = f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}"
             torchrl_logger.info(msg)
-            loss_logger.info(msg)
+            if loss_logger is not None:
+                loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
                     msg = f"saving checkpoint to {out_dir}"
                     torchrl_logger.info(msg)
-                    loss_logger.info(msg)
+                    if loss_logger is not None:
+                        loss_logger.info(msg)
                     model.module.save_pretrained(out_dir)
         elif it % log_interval == 0:
             # loss as float. note: this is a CPU-GPU sync point
             loss = batch.loss.item()
             msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt * 1000:.2f}ms"
             torchrl_logger.info(msg)
-            loss_logger.info(msg)
+            if loss_logger is not None:
+                loss_logger.info(msg)
 
 
 if __name__ == "__main__":

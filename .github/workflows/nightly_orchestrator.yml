@@ -89,6 +89,15 @@ jobs:
       id-token: write
       contents: read
 
+  test-linux-examples:
+    needs: config
+    if: needs.config.outputs.run_tests == 'true'
+    uses: ./.github/workflows/test-linux-examples.yml
+    secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
+
   test-linux-sota:
     needs: config
     if: needs.config.outputs.run_tests == 'true'
@@ -230,6 +239,7 @@ jobs:
       - test-linux-llm
       - test-linux-habitat
       - test-linux-tutorials
+      - test-linux-examples
       - test-linux-sota
       - test-linux-libs
       - test-windows-optdepts

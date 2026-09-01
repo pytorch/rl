@@ -1,0 +1,27 @@
+# Core dependencies for tensordict/torchrl (installed with --no-deps)
+numpy
+pyvers>=0.2.3
+packaging
+cloudpickle
+
+# Test dependencies
+pytest
+pytest-xdist
+pytest-instafail
+pytest-error-for-skips
+coverage
+
+# CraftGround's Gradle-driven native build needs a recent CMake; the apt
+# cmake on ubuntu22.04 (3.22) is too old, so take the pip one (installed in
+# the venv, which is active when the tests run).
+cmake
+ninja
+
+# CraftGround dependencies, except torch (torch is installed in install.sh
+# and craftground itself is installed there with --no-deps to avoid pinning
+# a stable torch in the cached environment)
+gymnasium
+Pillow
+protobuf>=5.0.0
+typing_extensions
+psutil

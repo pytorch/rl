@@ -28,6 +28,7 @@ from torchrl.data import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    SamplerWithoutReplacement,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
@@ -40,6 +41,7 @@ from torchrl.trainers.algorithms.a2c import A2CTrainer
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
+from torchrl.trainers.algorithms.grpo import GRPOTrainer
 from torchrl.trainers.algorithms.iql import IQLTrainer
 from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 from torchrl.trainers.algorithms.ppo import PPOTrainer
@@ -58,6 +60,7 @@ from torchrl.trainers.trainers import (
     LogScalar,
     LRSchedulerHook,
     mask_batch,
+    MixedPrecisionOptimizationStepper,
     OptimizationStepper,
     OptimizerHook,
     ReplayBufferTrainer,
@@ -160,6 +163,7 @@ _mocking_optim = MockingOptim()
 def mocking_trainer(
     file=None,
     optimizer=_mocking_optim,
+    optimization_stepper=None,
     checkpoint=None,
     checkpoint_rotation=None,
     checkpoint_metadata=None,
@@ -177,6 +181,7 @@ def mocking_trainer(
         optim_steps_per_batch=None,
         loss_module=loss_module,
         optimizer=optimizer,
+        optimization_stepper=optimization_stepper,
         logger=logger,
         save_trainer_file=file,
         checkpoint=checkpoint,
@@ -1266,6 +1271,83 @@ class TestSubSampler:
         assert (td0 == td1).all()
 
 
+class TestTrainerCheckpointComponents:
+    def test_torch_checkpoint_roundtrips_optimizer_state(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CKPT_BACKEND", "torch")
+        checkpoint = tmp_path / "trainer.pt"
+        model = nn.Linear(2, 1)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.25)
+        trainer = mocking_trainer(
+            file=checkpoint,
+            optimizer=optimizer,
+            optimization_stepper=DefaultOptimizationStepper(),
+        )
+        model.weight.grad = torch.ones_like(model.weight)
+        model.bias.grad = torch.ones_like(model.bias)
+        optimizer.step()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trainer.save_trainer(force_save=True)
+
+        model2 = nn.Linear(2, 1)
+        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.01)
+        trainer2 = mocking_trainer(
+            optimizer=optimizer2,
+            optimization_stepper=DefaultOptimizationStepper(),
+        )
+        trainer2.load_from_file(checkpoint)
+        torch.testing.assert_close(optimizer2.state_dict(), optimizer.state_dict())
+
+    def test_load_state_dict_accepts_checkpoint_without_optimizer(self):
+        trainer = mocking_trainer(
+            optimizer=torch.optim.Adam(nn.Linear(2, 1).parameters()),
+            optimization_stepper=DefaultOptimizationStepper(),
+        )
+        state = trainer.state_dict()
+        del state["optimizer"]
+
+        optimizer = torch.optim.Adam(nn.Linear(2, 1).parameters(), lr=0.01)
+        expected_state = deepcopy(optimizer.state_dict())
+        trainer2 = mocking_trainer(
+            optimizer=optimizer,
+            optimization_stepper=DefaultOptimizationStepper(),
+        )
+        trainer2.load_state_dict(state)
+
+        torch.testing.assert_close(optimizer.state_dict(), expected_state)
+
+    def test_optimizer_hook_roundtrips_optimizer_state(self):
+        model = nn.Linear(2, 1)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.25)
+        trainer = mocking_trainer(optimizer=None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            hook = OptimizerHook(optimizer)
+        hook.register(trainer)
+        model.weight.grad = torch.ones_like(model.weight)
+        model.bias.grad = torch.ones_like(model.bias)
+        optimizer.step()
+        state = trainer.state_dict()
+
+        model2 = nn.Linear(2, 1)
+        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.01)
+        trainer2 = mocking_trainer(optimizer=None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            hook2 = OptimizerHook(optimizer2)
+        hook2.register(trainer2)
+        trainer2.load_state_dict(state)
+        torch.testing.assert_close(optimizer2.state_dict(), optimizer.state_dict())
+
+    def test_checkpoint_registers_optimizer(self):
+        model = nn.Linear(2, 1)
+        trainer = mocking_trainer(
+            optimizer=torch.optim.Adam(model.parameters()),
+            checkpoint=Checkpoint(),
+        )
+        assert "optimizer" in trainer.checkpoint.components
+
+
 @pytest.mark.skipif(not _has_gym, reason="No gym library")
 @pytest.mark.skipif(not _has_tb, reason="No tensorboard library")
 @pytest.mark.skipif(
@@ -2164,6 +2246,323 @@ class TestEarlyStopping:
         assert trainer.collected_frames < trainer.total_frames
         assert trainer._stop_training
         assert collector.shutdown_calls == 1
+
+
+class _GRPORegressionLoss(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, batch):
+        prediction = self.model(batch["input"])
+        loss = nn.functional.mse_loss(prediction, batch["target"])
+        return TensorDict(
+            {
+                "loss_objective": loss,
+                "kl_to_ref": loss.new_tensor(0.25),
+                "kl_to_inference": loss.new_tensor(0.5),
+            },
+            [],
+        )
+
+
+class _RecordingLogger:
+    def __init__(self):
+        self.records = {}
+
+    def log_scalar(self, name, value, step):
+        if isinstance(value, torch.Tensor):
+            value = value.item()
+        self.records.setdefault(name, []).append((step, value))
+
+
+class _CountingWeightSender:
+    def __init__(self):
+        self.update_calls = 0
+
+    def update_weights(self):
+        self.update_calls += 1
+
+
+def _make_grpo_batch(reward_offset=0.0):
+    return TensorDict(
+        {
+            "input": torch.tensor([[1.0], [2.0]]),
+            "target": torch.tensor([[2.0], [4.0]]),
+            ("next", "reward"): torch.tensor(
+                [1.0 + reward_offset, 3.0 + reward_offset]
+            ),
+        },
+        [2],
+    )
+
+
+class _BufferWritingCollector:
+    """Mimics an LLM collector created with a replay_buffer: it writes each
+    collected batch to the buffer directly and yields None."""
+
+    def __init__(self, batches, replay_buffer):
+        self._batches = batches
+        self.replay_buffer = replay_buffer
+        self.init_random_frames = 0
+        self.shutdown_calls = 0
+
+    def __iter__(self):
+        for batch in self._batches:
+            self.replay_buffer.extend(batch)
+            yield None
+
+    def shutdown(self):
+        self.shutdown_calls += 1
+
+
+class TestGRPOTrainer:
+    def test_train_updates_policy_syncs_weights_and_logs_metrics(self):
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        collector = MockingIterableCollector(
+            [_make_grpo_batch(reward_offset=float(i)) for i in range(4)]
+        )
+        collector.init_random_frames = 0
+        logger = _RecordingLogger()
+        sender = _CountingWeightSender()
+
+        with pytest.warns(UserWarning, match="experimental"):
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=8,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=_GRPORegressionLoss(model),
+                optimizer=torch.optim.SGD(model.parameters(), lr=0.05),
+                weight_sync_sender=sender,
+                gradient_accumulation_steps=2,
+                logger=logger,
+                log_interval=0,
+                progress_bar=False,
+            )
+
+        trainer.train()
+
+        assert not torch.equal(model.weight, initial_weight)
+        # Sync mode pushes weights once per collected batch.
+        assert sender.update_calls == 4
+        assert collector.shutdown_calls == 1
+        assert logger.records["reward_mean"] == [
+            (2, 2.0),
+            (4, 3.0),
+            (6, 4.0),
+            (8, 5.0),
+        ]
+        assert logger.records["kl_to_ref"][-1] == (8, pytest.approx(0.25))
+        assert logger.records["kl_to_inference"][-1] == (8, pytest.approx(0.5))
+
+    def test_update_weights_optim_step_cadence(self):
+        # UpdateWeights with interval_unit="optim_steps" fires at the
+        # post_optim stage every `update_weights_interval` optimizer steps,
+        # discounting gradient-accumulation micro-steps.
+        model = nn.Linear(1, 1, bias=False)
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.05),
+            gradient_accumulation_steps=2,
+        )
+        collector = MockingIterableCollector([_make_grpo_batch() for _ in range(4)])
+        collector.init_random_frames = 0
+        sender = _CountingWeightSender()
+        trainer = Trainer(
+            collector=collector,
+            total_frames=8,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(model),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+        UpdateWeights(
+            update_weights_interval=2,
+            trainer=trainer,
+            sender=sender,
+            interval_unit="optim_steps",
+        ).register(trainer)
+
+        trainer.train()
+
+        # 4 micro-steps with accumulation 2 -> 2 optimizer steps -> 1 push.
+        assert stepper.optimizer_step_count == 2
+        assert sender.update_calls == 1
+
+    def test_buffer_writing_collector_trains_from_replay_buffer(self):
+        # LLM collectors created with a replay_buffer write to it directly and
+        # yield None; the trainer must sample from the buffer and track frames
+        # via its write count.
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        replay_buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(100),
+            sampler=SamplerWithoutReplacement(),
+            batch_size=2,
+        )
+        collector = _BufferWritingCollector(
+            [_make_grpo_batch(reward_offset=float(i)) for i in range(4)],
+            replay_buffer,
+        )
+        logger = _RecordingLogger()
+
+        with pytest.warns(UserWarning, match="experimental"):
+            trainer = GRPOTrainer(
+                collector=collector,
+                total_frames=8,
+                frame_skip=1,
+                optim_steps_per_batch=None,
+                loss_module=_GRPORegressionLoss(model),
+                optimizer=torch.optim.SGD(model.parameters(), lr=0.05),
+                replay_buffer=replay_buffer,
+                logger=logger,
+                log_interval=0,
+                progress_bar=False,
+            )
+
+        trainer.train()
+
+        assert not torch.equal(model.weight, initial_weight)
+        assert collector.shutdown_calls == 1
+        assert trainer.collected_frames == 8
+        # Rewards are logged from the optimization sub-batches, at the
+        # write-count steps of each collection iteration.
+        assert [step for step, _ in logger.records["reward_mean"]] == [2, 4, 6, 8]
+
+    def test_gradient_accumulation_matches_a_full_batch_update(self):
+        accumulated_model = nn.Linear(1, 1, bias=False)
+        full_batch_model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(accumulated_model.weight)
+        full_batch_model.load_state_dict(accumulated_model.state_dict())
+
+        accumulated_stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(accumulated_model.parameters(), lr=0.1),
+            gradient_accumulation_steps=2,
+        )
+        accumulated_trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(accumulated_model),
+            optimization_stepper=accumulated_stepper,
+            progress_bar=False,
+        )
+        full_batch_stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(full_batch_model.parameters(), lr=0.1)
+        )
+        full_batch_trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(full_batch_model),
+            optimization_stepper=full_batch_stepper,
+            progress_bar=False,
+        )
+        batch = _make_grpo_batch()
+        micro_batches = batch.unbind(0)
+        initial_weight = accumulated_model.weight.detach().clone()
+
+        accumulated_stepper.step(accumulated_trainer, micro_batches[0])
+        assert torch.equal(accumulated_model.weight, initial_weight)
+
+        accumulated_stepper.step(accumulated_trainer, micro_batches[1])
+        full_batch_stepper.step(full_batch_trainer, batch)
+
+        torch.testing.assert_close(
+            accumulated_model.weight,
+            full_batch_model.weight,
+        )
+
+    def test_nonfinite_loss_skips_the_accumulation_window(self):
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.1),
+            gradient_accumulation_steps=2,
+        )
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=2,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(model),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+        batch = _make_grpo_batch()
+
+        stepper.step(trainer, batch)
+        bad_batch = batch.clone()
+        bad_batch["target"] = bad_batch["target"] * float("inf")
+        stepper.step(trainer, bad_batch)
+
+        # The non-finite micro-batch drops the accumulated gradients and
+        # restarts the accumulation window: no optimizer step has happened.
+        assert stepper.optimizer_step_count == 0
+        assert stepper._skipped_nonfinite_steps == 1
+        assert torch.equal(model.weight, initial_weight)
+        assert all(p.grad is None for p in model.parameters())
+
+    def test_nonfinite_grad_norm_skips_the_optimizer_step(self):
+        model = nn.Linear(1, 1, bias=False)
+        nn.init.zeros_(model.weight)
+        initial_weight = model.weight.detach().clone()
+        model.weight.register_hook(lambda grad: grad * float("inf"))
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.1),
+        )
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=1,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=_GRPORegressionLoss(model),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+
+        metrics = stepper.step(trainer, _make_grpo_batch())
+
+        assert stepper.optimizer_step_count == 0
+        assert stepper._skipped_nonfinite_steps == 1
+        assert torch.equal(model.weight, initial_weight)
+        assert metrics["grad_norm"] == 0.0
+
+    @pytest.mark.parametrize("gradient_accumulation_steps", [0, -1])
+    def test_rejects_invalid_gradient_accumulation(self, gradient_accumulation_steps):
+        model = nn.Linear(1, 1)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        with pytest.raises(ValueError, match="must be >= 1"):
+            MixedPrecisionOptimizationStepper(
+                optimizer,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+            )
+
+    def test_rejects_loss_outputs_without_an_optimization_objective(self):
+        model = nn.Linear(1, 1)
+        stepper = MixedPrecisionOptimizationStepper(
+            torch.optim.SGD(model.parameters(), lr=0.1)
+        )
+        trainer = Trainer(
+            collector=MockingCollector(),
+            total_frames=1,
+            frame_skip=1,
+            optim_steps_per_batch=1,
+            loss_module=nn.Identity(),
+            optimization_stepper=stepper,
+            progress_bar=False,
+        )
+
+        with pytest.raises(RuntimeError, match="no 'loss_\\*' keys"):
+            stepper.step(trainer, _make_grpo_batch())
 
 
 if __name__ == "__main__":

@@ -1054,3 +1054,30 @@ def _maybe_add_or_extend_key(
         tensor_keys.append(key_or_list_of_keys)
     else:
         tensor_keys.extend(key_or_list_of_keys)
+
+
+def _valid_value_target_rows(
+    value_target: torch.Tensor,
+    tensordict: TensorDictBase,
+    mask_keys: Iterable[NestedKey],
+) -> torch.Tensor:
+    """Drop value-target rows marked invalid by the validity masks.
+
+    Looks up every mask key found in ``tensordict`` (the same convention as
+    :meth:`LossModule._reduce_loss`), ANDs them, and returns only the rows
+    where the combined mask is ``True``. Padding or boundary-crossing rows
+    would otherwise pollute running value statistics.
+    """
+    mask = None
+    for mask_key in mask_keys:
+        entry = tensordict.get(mask_key, default=None)
+        if entry is None:
+            continue
+        entry = entry.bool()
+        # Validity masks conventionally carry a trailing singleton dimension.
+        while entry.ndim >= value_target.ndim and entry.shape[-1] == 1:
+            entry = entry.squeeze(-1)
+        mask = entry if mask is None else mask & entry
+    if mask is None:
+        return value_target
+    return value_target[mask]

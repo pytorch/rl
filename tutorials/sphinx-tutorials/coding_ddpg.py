@@ -73,7 +73,10 @@ warnings.filterwarnings("ignore")
 from torch import multiprocessing
 
 if multiprocessing.get_start_method(allow_none=True) is None:
-    multiprocessing.set_start_method("fork")
+    try:
+        multiprocessing.set_start_method("fork")
+    except ValueError:
+        pass
 
 # sphinx_gallery_end_ignore
 
@@ -866,6 +869,7 @@ collector = Collector(
     split_trajs=False,
     device=collector_device,
     exploration_type=ExplorationType.RANDOM,
+    auto_register_policy_transforms=True,
 )
 
 ###############################################################################

@@ -75,6 +75,7 @@ parser.add_argument(
     default="ALE/Pong-v5",
     help="Gym environment to be run.",
 )
+parser.add_argument("--smoke", action="store_true", help="Collect one batch and exit.")
 if __name__ == "__main__":
     args = parser.parse_args()
     num_workers = args.num_workers
@@ -143,11 +144,15 @@ if __name__ == "__main__":
     for i, data in enumerate(collector):
         pbar.update(data.numel())
         pbar.set_description(f"data shape: {data.shape}, data device: {data.device}")
+        if args.smoke:
+            break
         if i >= 10:
             counter += data.numel()
         if i == 10:
             t0 = time.time()
     collector.shutdown()
+    if args.smoke:
+        raise SystemExit
     t1 = time.time()
     torchrl_logger.info(f"time elapsed: {t1 - t0}s, rate: {counter / (t1 - t0)} fps")
     exit()

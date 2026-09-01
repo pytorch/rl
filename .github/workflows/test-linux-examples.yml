@@ -1,0 +1,57 @@
+name: Examples Tests on Linux
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: test-linux-examples-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python_version: ["3.12"]
+        cuda_arch_version: ["13.0"]
+        shard: ["1", "2"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      runner: linux.g5.4xlarge.nvidia.gpu
+      repository: pytorch/rl
+      docker-image: "nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
+      timeout: 120
+      upload-artifact: test-results-examples-shard-${{ matrix.shard }}
+      script: |
+        export PYTHON_VERSION=${{ matrix.python_version }}
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+        export EXAMPLES_SHARD=${{ matrix.shard }}
+        export EXAMPLES_NUM_SHARDS=2
+
+        ref_name="${GITHUB_BASE_REF:-${GITHUB_REF_NAME:-}}"
+        if [[ -z "${ref_name}" && -n "${GITHUB_REF:-}" ]]; then
+          ref_name="${GITHUB_REF#refs/heads/}"
+        fi
+        if [[ "${ref_name}" == release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        bash .github/unittest/examples/scripts/run_all.sh

@@ -82,6 +82,8 @@ Available wrappers
 
     BraxEnv
     BraxWrapper
+    CraftGroundEnv
+    CraftGroundWrapper
     DMControlEnv
     DMControlWrapper
     GenesisEnv
@@ -126,6 +128,19 @@ Available wrappers
     gym_backend
     set_gym_backend
     register_gym_spec_conversion
+
+.. note:: **Minecraft licensing** (:class:`~torchrl.envs.CraftGroundEnv`,
+    :class:`~torchrl.envs.CraftGroundWrapper`): TorchRL does not ship or
+    redistribute Minecraft. The CraftGround backend downloads the Minecraft
+    client from Mojang's servers onto the user's machine at first launch and
+    runs it in offline mode. Users are expected to own a valid Minecraft:
+    Java Edition license, and usage is subject to the
+    `Minecraft EULA <https://www.minecraft.net/eula>`_, including its
+    restrictions on commercial exploitation. The downloaded game files must
+    never be redistributed (e.g. inside public Docker images). See the
+    `knowledge_base/MINECRAFT.md
+    <https://github.com/pytorch/rl/blob/main/knowledge_base/MINECRAFT.md>`_
+    entry for installation and licensing details.
 
 Auto-resetting Environments
 ---------------------------

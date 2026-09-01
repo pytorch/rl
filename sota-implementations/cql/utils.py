@@ -312,7 +312,7 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
 def make_discretecql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
-    action_spec = train_env.action_spec
+    action_spec = train_env.action_spec_unbatched
 
     actor_net_kwargs = {
         "num_cells": model_cfg.hidden_sizes,

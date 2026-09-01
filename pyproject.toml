@@ -140,6 +140,10 @@ offline-data = [
     "pillow",
 ]
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
+# Requires OpenJDK 21 at runtime and a Minecraft: Java Edition license
+# (Minecraft is downloaded from Mojang at first launch, never redistributed);
+# see knowledge_base/MINECRAFT.md
+craftground = ["craftground"]
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
 mujoco_playground = ["jax>=0.7.0; python_version>='3.11'", "playground; python_version>='3.11'"]

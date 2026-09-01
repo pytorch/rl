@@ -53,6 +53,7 @@ TRACKED_WORKFLOWS: dict[str, str] = {
     "test-linux-habitat.yml": "Habitat",
     "test-linux-llm.yml": "LLM tests",
     "test-linux-tutorials.yml": "Tutorials tests",
+    "test-linux-examples.yml": "Examples tests",
     "test-linux-mujoco.yml": "MuJoCo custom envs",
     "lint.yml": "Lint",
 }

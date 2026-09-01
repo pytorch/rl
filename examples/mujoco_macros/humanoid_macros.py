@@ -76,7 +76,10 @@ def pose_macros(action_spec: TensorSpec) -> list[HumanoidMacroAction]:
 
 def main() -> None:
     args = _parse_args()
-    ensure_mjpython_for_passive_viewer()
+    if args.smoke and args.max_rollouts is None:
+        args.max_rollouts = 1
+    if not args.smoke:
+        ensure_mjpython_for_passive_viewer()
     base_env = HumanoidEnv(
         seed=0,
         backend="mujoco",
@@ -97,7 +100,12 @@ def main() -> None:
     # open-loop list of ``HumanoidMacroAction`` objects, so we hand them straight
     # to ``env.rollout(actions=...)`` -- no bespoke stepping loop needed.
     rollout_count = 0
-    with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
+    with MujocoViewerLoop(
+        base_env,
+        enabled=not args.smoke,
+        realtime=not args.smoke,
+        speed=args.speed,
+    ) as viewer:
         while viewer.is_running() and (
             args.max_rollouts is None or rollout_count < args.max_rollouts
         ):

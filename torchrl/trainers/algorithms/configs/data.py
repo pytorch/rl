@@ -173,6 +173,8 @@ class SliceSamplerConfig(SamplerConfig):
     end_key: Any = None
     end_keys: Any = None
     traj_key: Any = None
+    step_key: Any = "step_count"
+    fragmented: bool = False
     ends: Any = None
     trajectories: Any = None
     cache_values: bool = False

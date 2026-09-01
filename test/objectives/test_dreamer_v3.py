@@ -934,40 +934,35 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         not (_has_hydra and _has_omegaconf),
         reason="requires hydra and omegaconf",
     )
-    def test_dreamer_v3_sota_shares_imagination_parameters(self, device):
+    def test_dreamer_v3_sota_shares_imagination_parameters(self, device, monkeypatch):
         from omegaconf import OmegaConf
 
         repo_root = Path(__file__).parents[2]
+        example_dir = repo_root / "sota-implementations/dreamer_v3"
+        monkeypatch.syspath_prepend(str(example_dir))
         example = runpy.run_path(
             repo_root / "sota-implementations/dreamer_v3/train.py",
             run_name="dreamer_v3_test",
         )
         cfg = OmegaConf.load(repo_root / "sota-implementations/dreamer_v3/config.yaml")
         cfg.networks.num_reward_bins = self.num_reward_bins
-        (
-            world_model,
-            observation_encoder,
-            prior,
-            posterior,
-            reward_head,
-            reward_decoder,
-            continuation_head,
-        ) = example["build_world_model"](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
+        (world_model, prior, reward_net, reward_decoder, continuation_net,) = example[
+            "build_world_model"
+        ](cfg=cfg, obs_dim=3, action_dim=self.action_dim)
+        posterior = world_model[1].rssm_posterior.module
         imagination_model = example["build_imagination_model"](
             prior_net=prior,
-            reward_net=reward_head,
+            reward_net=reward_net,
             reward_decoder=reward_decoder,
         ).to(device)
         continuation_model = example["build_continuation_model"](
-            continuation_net=continuation_head
+            continuation_net=continuation_net
         ).to(device)
         actor_model = example["build_actor"](cfg=cfg, action_dim=self.action_dim).to(
             device
         )
-        real_actor = example["build_real_actor"](
-            observation_encoder=observation_encoder,
-            posterior_net=posterior,
-            prior_net=prior,
+        real_actor = example["build_real_world_actor"](
+            world_model=world_model,
             actor_model=actor_model,
         ).to(device)
         world_model = world_model.to(device)
@@ -996,7 +991,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             symlog(world_input["next", "reco_pixels"]),
             world_input["next", "reco_symlog_observation"],
         )
-        shared_parameters = tuple(prior.parameters()) + tuple(reward_head.parameters())
+        shared_parameters = tuple(prior.parameters()) + tuple(reward_net.parameters())
         world_parameters = tuple(world_model.parameters())
         imagination_parameters = tuple(imagination_model.parameters())
         assert all(
@@ -1009,7 +1004,7 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             and any(
                 parameter is candidate for candidate in continuation_model.parameters()
             )
-            for parameter in continuation_head.parameters()
+            for parameter in continuation_net.parameters()
         )
 
         observation = torch.tensor(
@@ -1018,7 +1013,10 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         real_input = TensorDict(
             {
                 "observation": observation,
+                "state": torch.zeros(1, self.state_dim, device=device),
                 "belief": torch.zeros(1, cfg.networks.rnn_hidden_dim, device=device),
+                "previous_action": torch.zeros(1, self.action_dim, device=device),
+                "is_init": torch.zeros(1, 1, dtype=torch.bool, device=device),
             },
             [1],
         )
@@ -1042,11 +1040,6 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         continuation_model(reward_td)
         assert reward_td["continuation"].shape == (2, 1)
 
-        parameter = nn.Parameter(torch.tensor([3.0, 4.0], device=device))
-        parameter.grad = torch.tensor([30.0, 40.0], device=device)
-        example["adaptive_grad_clip_"]([parameter], clip=0.3)
-        assert parameter.grad.norm().item() == pytest.approx(1.5)
-
     @pytest.mark.skipif(not _has_omegaconf, reason="requires omegaconf")
     def test_dreamer_v3_dmc_benchmark_aggregation(self, device, tmp_path):
         from omegaconf import OmegaConf
@@ -1059,19 +1052,26 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         )
         paths = []
         for seed, returns in enumerate(([1.0, 4.0], [3.0, 6.0], [2.0, 5.0])):
-            path = tmp_path / f"seed_{seed}.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "seed": seed,
-                        "environment_steps": [100, 200],
-                        "evaluation_returns": returns,
-                    }
-                )
+            path = tmp_path / f"seed_{seed}.jsonl"
+            records = [
+                {
+                    "type": "train_episode",
+                    "environment_steps": step,
+                    "score": score,
+                }
+                for step, score in zip((100, 200), returns)
+            ]
+            records.append(
+                {
+                    "type": "summary",
+                    "seed": seed,
+                    "total_environment_steps": 200,
+                }
             )
+            path.write_text("\n".join(map(json.dumps, records)) + "\n")
             paths.append(path)
 
-        summary = benchmark["aggregate_runs"](paths)
+        summary = benchmark["aggregate_runs"](paths, window_size=100)
         assert summary["environment_steps"] == [100, 200]
         assert summary["median_return"] == [2.0, 5.0]
         assert summary["lower_quartile_return"] == [1.5, 4.5]
@@ -1499,6 +1499,61 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             torch.tensor(10.0, device=device),
         )
 
+    def test_dreamer_v3_reparam_return_normalization(self, device):
+        """The reparameterization branch must divide the objective by the
+        EMA return-percentile span, like the REINFORCE branch."""
+        actor_model = self._create_actor_model().to(device)
+        value_model = self._create_value_model().to(device)
+        loss_module = DreamerV3ActorLoss(
+            actor_model,
+            value_model,
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            discount_loss=False,
+            entropy_bonus=0.0,
+            use_reinforce=False,
+        ).to(device)
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_module.return_low.fill_(-2.0)
+        loss_module.return_high.fill_(8.0)
+        loss_module.eval()
+
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        expected = -(fake_data["lambda_target"] / 10.0).mean()
+        torch.testing.assert_close(loss_td["loss_actor"], expected)
+        torch.testing.assert_close(
+            loss_td["return_scale"], torch.tensor(10.0, device=device)
+        )
+
+    def test_dreamer_v3_reparam_return_statistics_update(self, device):
+        """Training-mode forward in the reparameterization branch must update
+        the EMA return statistics."""
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            entropy_bonus=0.0,
+            use_reinforce=False,
+            return_normalization_rate=0.01,
+        ).to(device)
+        loss_module.make_value_estimator(ValueEstimators.TDLambda)
+        loss_td, fake_data = loss_module(
+            self._create_actor_data().to(device).reshape(-1)
+        )
+        expected_low, expected_high = torch.quantile(
+            fake_data["lambda_target"].detach(),
+            torch.tensor([0.05, 0.95], device=device),
+        )
+        torch.testing.assert_close(loss_module.return_low, 0.01 * expected_low)
+        torch.testing.assert_close(loss_module.return_high, 0.01 * expected_high)
+        torch.testing.assert_close(
+            loss_td["return_scale"],
+            (loss_module.return_high - loss_module.return_low).clamp_min(1.0),
+        )
+
     def test_dreamer_v3_return_statistics_checkpoint(self, device):
         loss_module = DreamerV3ActorLoss(
             self._create_actor_model_with_log_prob().to(device),
@@ -1544,6 +1599,32 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
         loss_module(self._create_actor_data().to(device).reshape(-1))
         torch.testing.assert_close(loss_module.return_low, expected_statistics[0])
         torch.testing.assert_close(loss_module.return_high, expected_statistics[1])
+
+    def test_dreamer_v3_legacy_retnorm_checkpoint_migrates(self, device):
+        """Checkpoints written before the retnorm refactor stored 0-dim
+        ``return_low`` / ``return_high`` buffers; loading them must fill the
+        ``retnorm`` statistics without strict-mode key errors."""
+        loss_module = DreamerV3ActorLoss(
+            self._create_actor_model_with_log_prob().to(device),
+            self._create_value_model().to(device),
+            self._create_mb_env().to(device),
+            imagination_horizon=3,
+            use_reinforce=True,
+        ).to(device)
+        legacy_checkpoint = {
+            key: value.detach().clone()
+            for key, value in loss_module.state_dict().items()
+            if key not in ("retnorm.low", "retnorm.high")
+        }
+        legacy_checkpoint["return_low"] = torch.tensor(-2.5, device=device)
+        legacy_checkpoint["return_high"] = torch.tensor(7.5, device=device)
+        loss_module.load_state_dict(legacy_checkpoint)
+        torch.testing.assert_close(
+            loss_module.retnorm.low, torch.tensor([-2.5], device=device)
+        )
+        torch.testing.assert_close(
+            loss_module.retnorm.high, torch.tensor([7.5], device=device)
+        )
 
     def test_dreamer_v3_value_loss_sync_gamma(self, device):
         """sync_gamma_with_actor_loss must pull gamma from the actor's value estimator."""

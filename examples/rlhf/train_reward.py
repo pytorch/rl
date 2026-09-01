@@ -3,9 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import time
+from tempfile import TemporaryDirectory
 
 import hydra
 import torch
+from _smoke import make_pairwise_loader, make_tiny_transformer
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl._utils import logger as torchrl_logger
@@ -47,7 +49,9 @@ def create_loss_estimator(eval_iters, ctx):
 
 @hydra.main(version_base="1.3", config_path="config", config_name="train_reward")
 def main(cfg):
-    loss_logger = get_file_logger("loss_logger", "reward_loss_logger.log")
+    loss_logger = None
+    if not cfg.smoke:
+        loss_logger = get_file_logger("loss_logger", "reward_loss_logger.log")
 
     data_cfg = cfg.data
     model_cfg = cfg.model
@@ -67,22 +71,33 @@ def main(cfg):
 
     ctx = setup(cfg.sys)
 
-    train_loader = get_dataloader(
-        data_cfg.batch_size,
-        data_cfg.block_size,
-        PairwiseDataset,
-        device,
-        dataset_name="CarperAI/openai_summarize_comparisons",
-        split="train",
-    )
-    val_loader = get_dataloader(
-        data_cfg.batch_size,
-        data_cfg.block_size,
-        PairwiseDataset,
-        device,
-        dataset_name="CarperAI/openai_summarize_comparisons",
-        split="valid1",
-    )
+    smoke_model_dir = None
+    if cfg.smoke:
+        train_loader = make_pairwise_loader(
+            data_cfg.batch_size, data_cfg.block_size, device
+        )
+        val_loader = make_pairwise_loader(
+            data_cfg.batch_size, data_cfg.block_size, device
+        )
+        smoke_model_dir = TemporaryDirectory()
+        model_cfg.name_or_path = str(make_tiny_transformer(smoke_model_dir.name))
+    else:
+        train_loader = get_dataloader(
+            data_cfg.batch_size,
+            data_cfg.block_size,
+            PairwiseDataset,
+            device,
+            dataset_name="CarperAI/openai_summarize_comparisons",
+            split="train",
+        )
+        val_loader = get_dataloader(
+            data_cfg.batch_size,
+            data_cfg.block_size,
+            PairwiseDataset,
+            device,
+            dataset_name="CarperAI/openai_summarize_comparisons",
+            split="valid1",
+        )
 
     if reward_model_cfg.init_from == "resume":
         model = init_reward_model(
@@ -96,6 +111,7 @@ def main(cfg):
             device=device,
             compile_model=compile_,
         )
+    del smoke_model_dir
     # Freeze the first 70% of the hidden layers of the reward model backbone
     layers = model.transformer.h
     num_layers = len(layers)
@@ -142,13 +158,15 @@ def main(cfg):
                 f"{train_acc=:.4f}, {val_acc=:.4f}"
             )
             torchrl_logger.info(msg)
-            loss_logger.info(msg)
+            if loss_logger is not None:
+                loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
                     msg = f"saving checkpoint to {reward_out_dir}"
                     torchrl_logger.info(msg)
-                    loss_logger.info(msg)
+                    if loss_logger is not None:
+                        loss_logger.info(msg)
                     model.module.save_pretrained(reward_out_dir)
         elif it % log_interval == 0:
             loss = loss.item()
@@ -157,7 +175,8 @@ def main(cfg):
             )
             msg = f"TRAIN: {it=}: {loss=:.4f}, {acc=:.4f} time={dt * 1000:.2f}ms"
             torchrl_logger.info(msg)
-            loss_logger.info(msg)
+            if loss_logger is not None:
+                loss_logger.info(msg)
 
 
 if __name__ == "__main__":

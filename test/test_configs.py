@@ -859,6 +859,8 @@ class TestDataConfigs:
             slice_len=None,  # Only set one of num_slices or slice_len
             end_key=("next", "done"),
             traj_key="episode",
+            step_key="step_count",
+            fragmented=False,
             cache_values=True,
             truncated_key=("next", "truncated"),
             strict_length=True,
@@ -871,6 +873,8 @@ class TestDataConfigs:
         assert cfg.slice_len is None
         assert cfg.end_key == ("next", "done")
         assert cfg.traj_key == "episode"
+        assert cfg.step_key == "step_count"
+        assert cfg.fragmented is False
         assert cfg.cache_values is True
         assert cfg.truncated_key == ("next", "truncated")
         assert cfg.strict_length is True
