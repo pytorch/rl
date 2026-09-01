@@ -76,13 +76,17 @@ uv run --extra rendering --with mujoco rlrender \
   --format ipynb \
   --out /tmp/microduck_policy_wasm.ipynb \
   --notebook-render-backend mujoco-wasm \
+  --notebook-rollout-mode both \
   --mujoco-model-path "$MICRODUCK_RL_ROOT/src/mjlab_microduck/robot/microduck/scene_walk.xml" \
   --mujoco-qpos-key qpos \
   --overwrite
 ```
 
-Change `commanded_x_velocity` to `-0.3`, `0.0`, or `0.3` to render backward,
-standing, or forward behavior from the same policy checkpoint.
+The generated notebook initializes `live_env_kwargs` from the command above.
+Set `live_env_kwargs["commanded_x_velocity"]` to `-0.3`, `0.0`, or `0.3`, then
+rerun the collection and playback cells to generate backward, standing, or
+forward behavior from the same policy checkpoint without rebuilding the
+notebook.
 
 On an Apple-silicon CPU after the collision fix, a zero-action physics-only
 benchmark measured the following steady-state rates. These figures select
