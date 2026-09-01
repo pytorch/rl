@@ -104,6 +104,12 @@ class Storage:
             cursor = cursor[-1] if cursor.numel() else -1
         elif isinstance(cursor, range):
             cursor = int(cursor[-1]) if len(cursor) else -1
+        elif isinstance(cursor, slice):
+            # Resolve against the addressable range: set() records the cursor
+            # before writing, so len(self) may still be 0 and only max_size
+            # bounds the slice reliably.
+            cursor_range = range(*cursor.indices(self.max_size))
+            cursor = int(cursor_range[-1]) if len(cursor_range) else -1
         elif isinstance(cursor, (tuple, list)):
             time_cursor = cursor[0]
             if isinstance(time_cursor, torch.Tensor):

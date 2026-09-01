@@ -387,6 +387,23 @@ class TestStorages:
         torch.testing.assert_close(storage[:75], data.repeat(3, 1))
 
     @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
+    def test_set_slice_cursor(self, storage_type):
+        """set() accepts a slice cursor and records the last written index.
+
+        Regression test: _set_last_cursor used to fall through to int(cursor)
+        for slices and raise TypeError, breaking any slice-indexed write.
+        """
+        storage = storage_type(20)
+        data = TensorDict(a=torch.arange(10).unsqueeze(-1), batch_size=[10])
+        storage.set(slice(0, 10), data)
+        assert len(storage) == 10
+        assert storage._last_cursor_index == 9
+        torch.testing.assert_close(storage[:10]["a"], data["a"])
+        # A slice with a step lands on the last actually-written index.
+        storage.set(slice(10, 20, 2), TensorDict(a=torch.zeros(5, 1), batch_size=[5]))
+        assert storage._last_cursor_index == 18
+
+    @pytest.mark.parametrize("storage_type", [LazyMemmapStorage, LazyTensorStorage])
     def test_extend_lazystack(self, storage_type):
         rb = ReplayBuffer(
             storage=storage_type(6),
