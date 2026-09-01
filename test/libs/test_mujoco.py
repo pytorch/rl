@@ -8,36 +8,32 @@ satellite) across the three physics backends."""
 from __future__ import annotations
 
 import argparse
+import math
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-from tensordict import TensorDict
 
+from examples.mujoco.heuristic_microduck import (
+    microduck_heuristic_action,
+    MicroDuckGaitConfig,
+)
 from examples.mujoco.ppo_microduck import (
-    MicroDuckVelocityEnv,
     _low_cost_collision_scene,
     _prepare_recurrent_reset,
-)
-from examples.mujoco.ppo_microduck import (
     evaluate_policy as evaluate_microduck_policy,
-)
-from examples.mujoco.ppo_microduck import main as main_microduck
-from examples.mujoco.ppo_microduck import (
+    main as main_microduck,
     make_env as make_microduck_env,
-)
-from examples.mujoco.ppo_microduck import (
     make_models as make_microduck_models,
-)
-from examples.mujoco.ppo_microduck import (
     make_render_policy as make_microduck_render_policy,
-)
-from examples.mujoco.ppo_microduck import parse_args as parse_microduck_args
-from examples.mujoco.ppo_microduck import (
+    MicroDuckVelocityEnv,
+    parse_args as parse_microduck_args,
     train_ppo as train_microduck_ppo,
 )
+from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
     Compose,
@@ -52,10 +48,10 @@ from torchrl.envs import (
     RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
+    set_exploration_type,
     TransformedEnv,
     URScriptPrimitiveTransform,
     Walker2dEnv,
-    set_exploration_type,
 )
 from torchrl.envs.custom.mujoco._backends import (
     _has_jax,
@@ -73,7 +69,7 @@ from torchrl.envs.custom.mujoco._math import (
     random_unit_quat,
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.render import RenderConfig, render_policy
+from torchrl.render import render_policy, RenderConfig
 
 if _has_mujoco:
     import mujoco
@@ -295,6 +291,44 @@ class TestMujoco:
             )
         env.close()
 
+    def test_microduck_heuristic_action_balance_and_gait_symmetry(self):
+        config = MicroDuckGaitConfig(ramp_duration_s=0.0)
+        qpos = np.zeros(21)
+        qpos[3] = 1.0
+        qvel = np.zeros(20)
+        action = microduck_heuristic_action(config, qpos, qvel, 0.0)
+        half_cycle_action = microduck_heuristic_action(
+            config,
+            qpos,
+            qvel,
+            0.5 / config.frequency_hz,
+        )
+        permutation = np.asarray([9, 10, 11, 12, 13, 5, 6, 7, 8, 0, 1, 2, 3, 4])
+        signs = np.asarray([-1, -1, -1, -1, -1, 1, 1, -1, -1] + [-1] * 5)
+        np.testing.assert_allclose(
+            half_cycle_action,
+            action[permutation] * signs,
+            atol=1e-12,
+        )
+
+        pitch = 0.1
+        qpos[3] = math.cos(pitch / 2.0)
+        qpos[5] = math.sin(pitch / 2.0)
+        balance_action = microduck_heuristic_action(
+            replace(
+                config,
+                hip_amplitude=0.0,
+                knee_amplitude=0.0,
+                ankle_amplitude=0.0,
+                lateral_amplitude=0.0,
+            ),
+            qpos,
+            qvel,
+            0.0,
+        )
+        assert balance_action[2] > 0.0
+        assert balance_action[11] < 0.0
+
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_collision_meshes_use_runtime_proxies(self, tmp_path):
         assets = tmp_path / "assets"
@@ -325,9 +359,7 @@ class TestMujoco:
         scene.write_text("<mujoco><include file='robot.xml'/></mujoco>")
 
         original_model = mujoco.MjModel.from_xml_path(str(scene))
-        mesh_id = mujoco.mj_name2id(
-            original_model, mujoco.mjtObj.mjOBJ_MESH, "foot"
-        )
+        mesh_id = mujoco.mj_name2id(original_model, mujoco.mjtObj.mjOBJ_MESH, "foot")
         start = original_model.mesh_vertadr[mesh_id]
         stop = start + original_model.mesh_vertnum[mesh_id]
         vertices = original_model.mesh_vert[start:stop]

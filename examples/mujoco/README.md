@@ -42,6 +42,38 @@ episodes internally and writes each finished episode as one contiguous
 sequence. `SliceSampler` then samples whole episodes for the recurrent update,
 and the on-policy buffer is erased after the 10 epochs.
 
+## MicroDuck closed-form feasibility controller
+
+[`heuristic_microduck.py`](heuristic_microduck.py) provides a no-gradient
+locomotion baseline for the same model, collision proxies, position-control
+interface, reset perturbations, and fall conditions. The controller is a
+bilateral phase oscillator over hip, knee, ankle, and lateral targets plus
+proportional-derivative pitch feedback. Its action remains an offset around the
+MJCF `STAND` target, exactly like the PPO policy.
+
+The default parameters completed all 100 fixed 500-step evaluation rollouts
+with `0.02` reset noise. Every rollout moved forward: mean signed displacement
+was `0.047 m` over four seconds and the minimum was `0.027 m`. This is a slow
+forward shuffle rather than `0.3 m/s` command tracking, but it demonstrates a
+stable moving solution and rules out an intrinsically impossible control task.
+
+```bash
+uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
+  --microduck-root /path/to/microduck_rl \
+  --num-seeds 100
+```
+
+The script can also perform survival-constrained random search around the
+validated gait. Candidates are ranked by worst-case and mean episode length
+before forward speed, preventing a fast forward fall from winning the search:
+
+```bash
+uv run --with mujoco python examples/mujoco/heuristic_microduck.py \
+  --microduck-root /path/to/microduck_rl \
+  --search-candidates 128 \
+  --search-num-seeds 8
+```
+
 ```bash
 uv run --with mujoco --with wandb --with psutil \
   python examples/mujoco/ppo_microduck.py \
