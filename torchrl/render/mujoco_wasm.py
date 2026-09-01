@@ -436,8 +436,8 @@ def _find_package_manager() -> str:
             return candidate
     raise RuntimeError(
         "MuJoCo WASM viewer startup requires Node.js and pnpm or npm on PATH. "
-        "Install Node.js, or when using uv add `--with nodejs-wheel` to the "
-        "command that launches Python."
+        "Install Node.js, or when using uv launch Python with "
+        "`--extra rendering`."
     )
 
 
