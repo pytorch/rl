@@ -11,6 +11,7 @@ from typing import Any
 import torch
 from tensordict import is_tensor_collection
 from tensordict.utils import NestedKey, unravel_key
+
 from torchrl._utils import _replace_last, logger
 from torchrl.data.replay_buffers.storages import Storage, TensorStorage
 from torchrl.data.replay_buffers.utils import (
@@ -19,6 +20,7 @@ from torchrl.data.replay_buffers.utils import (
     _ReplayBoundaryIndex,
 )
 
+from ._trajectory import _FragmentedTrajectoryIndex
 from .base import Sampler
 
 
@@ -65,6 +67,31 @@ class SliceSampler(Sampler):
             ``end_key``. Defaults to ``None`` (use ``end_key``).
         traj_key (NestedKey, optional): the key indicating the trajectories.
             Defaults to ``"episode"`` (commonly used across datasets in TorchRL).
+        step_key (NestedKey, optional): key containing a non-negative integer step
+            number for each item. Used only when ``fragmented=True`` and defaults
+            to ``"step_count"``.
+        fragmented (bool, optional): if ``True``, reconstructs logical trajectory
+            slices from ``traj_key`` and ``step_key`` even when consecutive steps
+            occupy non-adjacent storage positions. Missing logical steps split a
+            trajectory into separate sampleable runs. This mode currently supports
+            single-dimensional TensorDict-backed storages and sampling with
+            replacement. Trajectory ids and step numbers must be scalar integer
+            tensors, and every live trajectory-step pair must be unique:
+            reusing trajectory ids (for instance a recreated collector
+            restarting ``("collector", "traj_ids")`` at zero while episodes
+            from a previous run are still stored) raises an error at sampling
+            time. Defaults to ``False``. The ``span`` and ``compile`` options
+            are not currently supported in fragmented mode.
+
+            .. warning:: The fragmented index tracks storage writes through
+                the storage's mutation revision. Buffers shared at process
+                spawn time keep that counter shared, so writes from other
+                processes are detected. A buffer transferred by plain
+                pickling (queues, cloudpickle, ``torch.save``) receives a
+                snapshot of the counter instead: writes made by another
+                process afterwards are not detected, even when the storage
+                data itself is shared (e.g. memory-mapped storages), and the
+                sampler keeps serving the transfer-time layout.
         ends (torch.Tensor, optional): a 1d boolean tensor containing the end of run signals.
             To be used whenever the ``end_key`` or ``traj_key`` is expensive to get,
             or when this signal is readily available. Must be used with ``cache_values=True``
@@ -147,6 +174,9 @@ class SliceSampler(Sampler):
 
         To avoid this, either:
 
+        - set ``fragmented=True`` and provide both ``traj_key`` and ``step_key``
+          so that logical adjacency is reconstructed independently of storage
+          order,
         - set ``trajs_per_batch`` on the collector so that only **complete**
           trajectories (each ending with ``done=True``) are written to the
           buffer (use ``ndim=1`` on the storage — ``ndim >= 2`` is
@@ -334,6 +364,12 @@ class SliceSampler(Sampler):
     # We use this whenever we need to sample N times too many transitions to then select only a 1/N fraction of them
     _batch_size_multiplier: int | None = 1
 
+    # Class-level defaults keep samplers pickled by earlier torchrl versions
+    # (whose __dict__ lacks these attributes) working after an upgrade.
+    fragmented: bool = False
+    step_key: NestedKey | None = "step_count"
+    _fragmented_index: _FragmentedTrajectoryIndex | None = None
+
     def __init__(
         self,
         *,
@@ -342,6 +378,8 @@ class SliceSampler(Sampler):
         end_key: NestedKey | None = None,
         end_keys: Sequence[NestedKey] | None = None,
         traj_key: NestedKey | None = None,
+        step_key: NestedKey | None = "step_count",
+        fragmented: bool = False,
         ends: torch.Tensor | None = None,
         trajectories: torch.Tensor | None = None,
         cache_values: bool = False,
@@ -352,8 +390,38 @@ class SliceSampler(Sampler):
         span: bool | int | tuple[bool | int, bool | int] = False,
         use_gpu: torch.device | bool = False,
     ):
+        if isinstance(span, (bool, int)):
+            span = (span, span)
+        if fragmented:
+            if type(self).sample is not SliceSampler.sample:
+                raise NotImplementedError(
+                    "fragmented=True currently supports SliceSampler with "
+                    "replacement only."
+                )
+            if step_key is None:
+                raise ValueError("step_key must be provided when fragmented=True.")
+            if ends is not None:
+                raise ValueError(
+                    "fragmented=True requires trajectory and step identifiers; "
+                    "the static ends argument cannot reconstruct interleaved "
+                    "trajectories."
+                )
+            if trajectories is not None:
+                raise ValueError(
+                    "The static trajectories argument is not supported with "
+                    "fragmented=True; provide traj_key and step_key."
+                )
+            if any(span):
+                raise NotImplementedError("span is not supported with fragmented=True.")
+            if compile:
+                raise NotImplementedError(
+                    "compile is not supported with fragmented=True."
+                )
         self.num_slices = num_slices
         self.slice_len = slice_len
+        self.step_key = step_key
+        self.fragmented = fragmented
+        self._fragmented_index: _FragmentedTrajectoryIndex | None = None
         if end_keys is not None and end_key is not None:
             raise RuntimeError(
                 "`end_key` and `end_keys` are exclusive arguments: pass the "
@@ -390,8 +458,6 @@ class SliceSampler(Sampler):
             )
         )
 
-        if isinstance(span, (bool, int)):
-            span = (span, span)
         self.span = span
 
         if trajectories is not None:
@@ -470,14 +536,27 @@ class SliceSampler(Sampler):
         return state
 
     def extend(self, index: torch.Tensor) -> None:
+        if self.fragmented:
+            return
         super().extend(index)
         if self.cache_values:
             self._cache.clear()
 
     def add(self, index: torch.Tensor) -> None:
+        if self.fragmented:
+            return
         super().add(index)
         if self.cache_values:
             self._cache.clear()
+
+    def mark_update(
+        self, index: int | torch.Tensor, *, storage: Storage | None = None
+    ) -> None:
+        if self.fragmented and self._fragmented_index is not None:
+            self._fragmented_index.mark_update(index, storage=storage)
+        # Delegate cooperatively so classes mixing SliceSampler with e.g.
+        # PrioritizedSampler keep their write hook.
+        super().mark_update(index, storage=storage)
 
     def __repr__(self):
         return (
@@ -486,6 +565,8 @@ class SliceSampler(Sampler):
             f"end_key={self.end_key}, "
             f"end_keys={getattr(self, 'end_keys', None)}, "
             f"traj_key={self.traj_key}, "
+            f"step_key={self.step_key}, "
+            f"fragmented={self.fragmented}, "
             f"truncated_key={self.truncated_key}, "
             f"strict_length={self.strict_length}, "
             f"pad_output={getattr(self, 'pad_output', False)})"
@@ -757,6 +838,8 @@ class SliceSampler(Sampler):
     def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
         if self._batch_size_multiplier is not None:
             batch_size = batch_size * self._batch_size_multiplier
+        if self.fragmented:
+            return self._sample_fragmented(storage, batch_size)
         # pick up as many trajs as we need
         start_idx, stop_idx, lengths = self._get_stop_and_length(storage)
         # we have to make sure that the number of dims of the storage
@@ -777,6 +860,106 @@ class SliceSampler(Sampler):
             seq_length,
             num_slices,
             storage_length=storage_length,
+            storage=storage,
+        )
+
+    def _sample_fragmented(
+        self, storage: Storage, batch_size: int
+    ) -> tuple[tuple[torch.Tensor, ...], dict[str, Any]]:
+        if len(storage) == 0:
+            raise RuntimeError("Cannot sample from an empty storage.")
+        if getattr(self, "_traj_key_auto", False):
+            self._resolve_traj_key(storage)
+        if not self._fetch_traj or self.traj_key is None:
+            raise RuntimeError(
+                "fragmented=True requires a trajectory identifier under traj_key; "
+                "end-of-trajectory flags alone cannot reconstruct interleaved data."
+            )
+        indexer = self._fragmented_index
+        if (
+            indexer is None
+            or indexer.trajectory_key != self.traj_key
+            or indexer.step_key != self.step_key
+        ):
+            indexer = self._fragmented_index = _FragmentedTrajectoryIndex(
+                self.traj_key, self.step_key
+            )
+        indexer.refresh(storage)
+        ordered_slots, run_offsets, lengths = indexer.runs()
+        if not lengths.numel():
+            raise RuntimeError("No logical trajectory runs are available for sampling.")
+
+        seq_length, num_slices = self._adjusted_batch_size(batch_size)
+        if self.strict_length:
+            eligible = lengths >= seq_length
+            if not eligible.any():
+                raise RuntimeError(
+                    "Did not find a single fragmented trajectory run with "
+                    f"sufficient length (length range: {lengths.min()} - "
+                    f"{lengths.max()} / required={seq_length})."
+                )
+            run_offsets = run_offsets[eligible]
+            lengths = lengths[eligible]
+            run_idx = torch.randint(
+                lengths.shape[0],
+                (num_slices,),
+                device=lengths.device,
+                generator=self._rng,
+            )
+            sampled_lengths: int | torch.Tensor = seq_length
+            target_seq_length = None
+        else:
+            run_idx = torch.randint(
+                lengths.shape[0],
+                (num_slices,),
+                device=lengths.device,
+                generator=self._rng,
+            )
+            sampled_lengths = lengths[run_idx].clamp_max(seq_length)
+            target_seq_length = seq_length if self.pad_output else None
+
+        selected_run_lengths = lengths[run_idx]
+        available_starts = selected_run_lengths - sampled_lengths + 1
+        relative_starts = (
+            (
+                torch.rand(num_slices, device=lengths.device, generator=self._rng)
+                * available_starts
+            )
+            .floor()
+            .to(run_offsets.dtype)
+        )
+        packed_starts = run_offsets[run_idx] + relative_starts
+
+        if target_seq_length is not None:
+            offsets = torch.arange(target_seq_length, device=lengths.device)
+            real_mask = offsets.unsqueeze(0) < sampled_lengths.unsqueeze(1)
+            offsets = torch.minimum(
+                offsets.unsqueeze(0), (sampled_lengths - 1).unsqueeze(1)
+            )
+            packed_indices = packed_starts.unsqueeze(1) + offsets
+            index = ordered_slots[packed_indices].reshape(-1, 1)
+            mask_flat = real_mask.reshape(-1)
+        elif isinstance(sampled_lengths, int):
+            offsets = torch.arange(sampled_lengths, device=lengths.device)
+            packed_indices = packed_starts.unsqueeze(1) + offsets
+            index = ordered_slots[packed_indices].reshape(-1, 1)
+            mask_flat = None
+        else:
+            packed_indices = torch.cat(
+                [
+                    torch.arange(length, device=lengths.device) + start
+                    for start, length in zip(packed_starts, sampled_lengths)
+                ]
+            )
+            index = ordered_slots[packed_indices].reshape(-1, 1)
+            mask_flat = None
+
+        return self._finalize_index(
+            index=index,
+            num_slices=num_slices,
+            seq_length=sampled_lengths,
+            target_seq_length=target_seq_length,
+            mask_flat=mask_flat,
             storage=storage,
         )
 
@@ -988,6 +1171,25 @@ class SliceSampler(Sampler):
             )
             mask_flat = None
 
+        return self._finalize_index(
+            index=index,
+            num_slices=num_slices,
+            seq_length=seq_length,
+            target_seq_length=target_seq_length,
+            mask_flat=mask_flat,
+            storage=storage,
+        )
+
+    def _finalize_index(
+        self,
+        *,
+        index: torch.Tensor,
+        num_slices: int,
+        seq_length: int | torch.Tensor,
+        target_seq_length: int | None,
+        mask_flat: torch.Tensor | None,
+        storage: Storage,
+    ) -> tuple[tuple[torch.Tensor, ...], dict[str, Any]]:
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
             done_key = _replace_last(truncated_key, "done")
@@ -1109,7 +1311,8 @@ class SliceSampler(Sampler):
         self.__dict__["__used_end_key"] = value
 
     def _empty(self):
-        pass
+        if self._fragmented_index is not None:
+            self._fragmented_index.clear()
 
     def dumps(self, path):
         # no op - cache does not need to be saved
@@ -1123,4 +1326,5 @@ class SliceSampler(Sampler):
         return {}
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
-        ...
+        if self._fragmented_index is not None:
+            self._fragmented_index.clear()
