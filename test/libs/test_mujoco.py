@@ -24,9 +24,11 @@ from examples.mujoco.ppo_microduck import (
 from examples.mujoco.ppo_microduck import (
     evaluate_policy as evaluate_microduck_policy,
 )
+from examples.mujoco.ppo_microduck import main as main_microduck
 from examples.mujoco.ppo_microduck import (
     make_models as make_microduck_models,
 )
+from examples.mujoco.ppo_microduck import parse_args as parse_microduck_args
 from examples.mujoco.ppo_microduck import (
     train_ppo as train_microduck_ppo,
 )
@@ -330,6 +332,11 @@ class TestMujoco:
         assert model.geom_type[visual_id] == mujoco.mjtGeom.mjGEOM_MESH
         assert model.geom_type[collision_id] == mujoco.mjtGeom.mjGEOM_BOX
         np.testing.assert_allclose(model.geom_size[collision_id], expected_half_size)
+
+    def test_microduck_wandb_requires_explicit_entity(self):
+        args = parse_microduck_args(["--wandb-mode", "online"])
+        with pytest.raises(ValueError, match="--wandb-entity"):
+            main_microduck(args)
 
     @pytest.mark.skipif(not _has_mujoco, reason="MuJoCo is not installed")
     def test_microduck_ppo_updates_policy(self, tmp_path):

@@ -44,7 +44,8 @@ and the on-policy buffer is erased after the 10 epochs.
 ```bash
 uv run --with mujoco --with wandb --with psutil \
   python examples/mujoco/ppo_microduck.py \
-  --microduck-root /path/to/microduck_rl
+  --microduck-root /path/to/microduck_rl \
+  --wandb-entity YOUR_ENTITY
 ```
 
 Repeat `--commanded-x-velocity` to select the reset command distribution; the
@@ -52,7 +53,8 @@ default is `-0.3`, `0.0`, and `0.3` m/s. W&B records collection/inference and
 training throughput, process and device telemetry, reward and episodic return,
 tracking error, survival and episode length, gradient norm, ESS, clip fraction,
 KL, entropy, and all PPO losses. Use `--wandb-mode disabled` for a local run
-without tracking.
+without tracking. When logging is enabled, `--wandb-entity` is required so W&B
+cannot silently fall back to a different default team or personal workspace.
 
 On an Apple-silicon CPU after the collision fix, a zero-action physics-only
 benchmark measured the following steady-state rates. These figures select
@@ -84,6 +86,28 @@ and signed displacement. Passing `evaluation_env` and `evaluation_interval` to
 `best_checkpoint_path` to persist them. Transition 0 is eligible so a regressing
 training run cannot overwrite a better initial policy. The actor starts with
 zero deterministic actions and a `0.2` exploration scale.
+
+A native MuJoCo CPU run completed 10,005,235 complete-trajectory transitions in
+617 approximately 16K-transition collection/update cycles. The last cycle
+measured 2,161 collected transitions/s, 14,913 recurrent PPO training
+transitions/s, and 2.30 GB process RSS. Periodic deterministic evaluation
+selected the checkpoint at 1,634,584 transitions; later policies improved
+stochastic episode lengths but collapsed toward forward motion for every
+command, so retaining the earlier checkpoint was necessary.
+
+Across controlled reset-noise seeds 0–7, the selected checkpoint moved backward
+for all 8 negative-command rollouts and forward for 5 of 8 positive-command
+rollouts. Mean episode lengths were 90.6, 153.2, and 117.0 steps for backward,
+stand, and forward commands, respectively; no rollout survived the 500-step
+horizon. Mean signed displacements were -0.088, -0.055, and -0.008 m, and mean
+absolute tracking errors were 0.194, 0.075, and 0.304 m/s. The broader audit
+therefore does not support a solved multi-command locomotion claim.
+
+[Watch the selected commanded-policy rollout](assets/microduck_commanded_ppo.mp4).
+This synchronized native MuJoCo video uses one identical zero-noise `STAND`
+reset for all commands. The backward and forward panels displace -0.090 and
++0.031 m in the requested directions before falling at steps 90 and 130. The
+zero-command panel drifts -0.085 m and falls at step 148.
 
 [Watch the local PPO before/after rollout](assets/microduck_ppo_before_after.mp4).
 This earlier stand-only feasibility video uses native MuJoCo on CPU, an

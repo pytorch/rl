@@ -1384,7 +1384,13 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         default=Path("microduck_ppo_best.pt"),
     )
     parser.add_argument("--wandb-project", default="torchrl-microduck-ppo")
-    parser.add_argument("--wandb-entity")
+    parser.add_argument(
+        "--wandb-entity",
+        help=(
+            "Explicit W&B entity. Required whenever W&B logging is enabled to "
+            "avoid falling back to an unintended default workspace."
+        ),
+    )
     parser.add_argument("--wandb-name")
     parser.add_argument(
         "--wandb-mode",
@@ -1406,6 +1412,11 @@ def main(args: argparse.Namespace) -> None:
         args.evaluation_interval = None
         args.best_checkpoint_path = None
         args.wandb_mode = "disabled"
+    if args.wandb_mode != "disabled" and not args.wandb_entity:
+        raise ValueError(
+            "W&B logging requires an explicit --wandb-entity to avoid writing "
+            "to an unintended default workspace."
+        )
     torch.manual_seed(args.seed)
     commands = args.commanded_x_velocities or DEFAULT_COMMANDS
     env = make_env(
